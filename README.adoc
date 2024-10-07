@@ -23,7 +23,8 @@ https://scorecard.dev/viewer/?uri=github.com/janderssonse/gommitlint[image:https
 
 == What can this tool do for you?
 
-*Gommitlint* is a CLI-tool for validating commit messages.
+*Gommitlint* will be a CLI-tool for validating commit messages.
+At the moment it is not ready for usage.
 
 Example validations are:
 
