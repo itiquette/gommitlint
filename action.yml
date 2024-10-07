@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: Josef Andersson
+#
+# SPDX-License-Identifier: CC0-1.0
+
+name: "Gommitlint"
+description: "Commit validation"
+branding:
+  icon: "check-square"
+  color: "orange"
+inputs:
+  token:
+    description: "The GitHub token. Must have repo:status access. Can be specified by using {{ secrets.GITHUB_TOKEN }}"
+    required: false
+  comparebranch:
+    description: "The branch that you are comparing to."
+    required: false
+    default: "main"
+runs:
+  using: "docker"
+  image: "docker://ghcr.io/janderssonse/gommitlint:v0.0.1"
+  args:
+    - validate --base-branch $h{{ inputs.comparebranch }}

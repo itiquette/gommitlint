@@ -1,0 +1,112 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:best-practices",
+    ":gitSignOff",
+    ":maintainLockFilesWeekly",
+    ":automergeMinor",
+    ":semanticCommits"
+  ],
+  "semanticCommitType": "build",
+  "semanticCommitScope": "deps",
+  "commitMessageLowerCase": "auto",
+  "commitBody": "Signed-off-by: {{{gitAuthor}}}",
+  "vulnerabilityAlerts": {
+    "labels": [
+      "security"
+    ],
+    "enabled": true,
+    "automerge": true
+  },
+  "packageRules": [
+    {
+      "matchManagers": [
+        "github-actions"
+      ],
+      "addLabels": [
+        "actions"
+      ]
+    },
+    {
+      "matchManagers": [
+        "gomod"
+      ],
+      "addLabels": [
+        "go",
+        "dependencies"
+      ]
+    },
+    {
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "addLabels": [
+        "major-update"
+      ]
+    },
+    {
+      "groupName": "github dependencies",
+      "matchPackageNames": [
+        "/^github.com//"
+      ]
+    },
+    {
+      "groupName": "golang standard library",
+      "matchPackageNames": [
+        "/^golang.org/x//"
+      ]
+    },
+    {
+      "matchPackageNames": [
+        "github.com/knadh/koanf"
+      ],
+      "groupName": "koanf dependencies"
+    },
+    {
+      "matchPackageNames": [
+        "go"
+      ],
+      "matchDepTypes": [
+        "golang"
+      ],
+      "rangeStrategy": "bump"
+    },
+    {
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchPackageNames": [
+        "slsa-framework/slsa-github-generator",
+      ],
+      "pinDigests": false
+    },
+    {
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "matchManagers": [
+        "github-actions"
+      ],
+      "groupName": "github actions minor and patch updates",
+      "automerge": true
+    },
+    {
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "matchManagers": [
+        "gomod"
+      ],
+      "groupName": "go dependencies minor and patch updates",
+      "automerge": true,
+      "matchPackageNames": [
+        "!go"
+      ]
+    }
+  ]
+}

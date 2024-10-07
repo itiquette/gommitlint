@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: Josef Andersson
+#
+# SPDX-License-Identifier: CC0-1.0
+
+---
+name: Pull Request Workflow
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  commitlint:
+    uses: itiquette/.github/.github/workflows/commit-lint.yml@main
+  dependencyreviewlint:
+    uses: itiquette/.github/.github/workflows/dependency-review.yml@main
+  licenselint:
+    uses: itiquette/.github/.github/workflows/license-lint.yml@main
+  misclint:
+    permissions:
+      contents: read
+      security-events: write
+    uses: itiquette/.github/.github/workflows/mega-lint.yml@main
+  golint:
+    uses: ./.github/workflows/golint.yml
+  test:
+    permissions:
+      contents: read
+    if: ${{ !failure() }}
+    needs: [licenselint, commitlint, dependencyreviewlint, golint, misclint]
+    uses: ./.github/workflows/test.yml
