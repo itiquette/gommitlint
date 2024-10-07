@@ -1,0 +1,97 @@
+// SPDX-FileCopyrightText: Josef Andersson
+//
+// SPDX-License-Identifier: CC0-1.0
+
+= Gommitlint
+:revdate: {docdatetime}
+:doctype: article
+:imagesdir: assets
+:source-highlighter: rouge
+
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+
+image:https://img.shields.io/github/v/tag/itiquette/gommitlint?style=for-the-badge&color=yellow[Tag,link=https://github.com/itiquette/gommitlint/tags]
+
+https://scorecard.dev/viewer/?uri=github.com/itiquette/gommitlint[image:https://api.scorecard.dev/projects/github.com/itiquette/gommitlint/badge?style=for-the-badge[OpenSSF Scorecard]]
+
+link:LICENSE[image:https://img.shields.io/badge/MPL-Mozilla%20Public%20Licence%201.2-librarygreen?style=for-the-badge[MPL 2.0]]
+image:https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.reuse.software%2Fstatus%2Fgithub.com%2Fitiquette%2Fgommitlint&query=status&style=for-the-badge&label=REUSE[REUSE,link=https://api.reuse.software/info/github.com/itiquette/gommitlint]
+
+== What can this tool do for you?
+
+*Gommitlint* will be a CLI-tool for validating commit messages.
+At the moment it is not ready for usage.
+
+Example validations are:
+
+** Commit message header length
+** Developer Certificate of Origin
+** GPG signature
+** GPG signature identity check
+** Imperative mood
+** Jira issue check
+** Maximum of one commit ahead of `master`
+** Require a commit body
+** Spell check
+** https://www.conventionalcommits.org[Conventional Commits]
+
+== Where can you use it?
+
+* As a CLI-tool
+* In your CI/CD-pipelines
+
+== Getting Started
+
+TODO
+//1. Check out the link:docs/usage.adoc[Usage Guide] for a quick start.
+// 2. The link:INSTALL.adoc[Installation Guide] will get you up and running.
+
+== Make Gommitlint better?
+
+ED: Currently I'm not reading PRs as there is few base things to fix before that.
+
+Here's how you can contribute:
+
+* Found a bug or have a great idea? Let us know in our https://github.com/itiquette/gommitlint/issues[Issue Tracker]
+* Want to contribute code? Check out our link:CONTRIBUTING.md[Contribution Guide] to get started.
+
+== For developers
+
+TODO
+//If you're interested in how it works, see the link:DEVELOPMENT.adoc[Development Guide].
+
+== What's next?
+
+Check out our https://github.com/itiquette/gommitlint/issues[Issues page].
+
+== A friendly reminder
+
+**Please Note**: Gommitlint is currently in Alpha. This means:
+
+* Things might change in breaking ways.
+* Feel free to share ideas on how we can make it better.
+
+Gommitlint will slowly getting stable and reliable.
+But as with any tool in early stages, it's always good to be careful!
+
+== Credits & History
+
+Gommitlint is a hard fork of Sidero Labs https://github.com/siderolabs/conform[Conform tool].
+All the heavy base work was made by them, so many creds and thanks for that. 
+
+That also means that the whole project will continue to be under the Mozila Public License, as that is the license of the most of the code base.
+I'm not planning to rewrite the code 100% just to be able to use another license.
+
+== Legal Stuff
+
+Gommitlint is licensed under the Mozilla Public License 2.0.
+
+Most of the non-code bits are under Creative Commons CC0-1.0.
+
+For all the details, check out our link:LICENSE[LICENSE] file and the headers in each file.

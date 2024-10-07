@@ -1,0 +1,73 @@
+// SPDX-FileCopyrightText: Josef Andersson
+//
+// SPDX-License-Identifier: CC0-1.0
+
+== Getting Started
+
+To install gommitlint you can download a https://github.com/itiquette/gommitlint/releases[release], or build it locally (go must be installed):
+
+[source,bash]
+----
+go install github.com/itiquette/gommitlint/cmd@latest
+----
+
+Third option is to run it as a container:
+
+[source,bash]
+----
+podman run --rm -it -v $PWD:/src -w /src ghcr.io/itiquette/gommitlint:<version>
+----
+
+
+Now, create a file named `.gommitlint.yaml` with the following contents:
+
+[source,yaml]
+----
+policies:
+  - type: commit
+    spec:
+      header:
+        length: 89
+        imperative: true
+        case: lower
+        invalidLastCharacters: .
+        jira:
+          keys:
+          - PROJ
+          - JIRA
+      body:
+        required: true
+      dco: true
+      gpg:
+        required: false
+        identity:
+          gitHubOrganization: some-organization
+      spellcheck:
+        locale: US
+      maximumOfOneCommit: true
+      conventional:
+        types:
+          - "type"
+        scopes:
+          - "scope"
+        descriptionLength: 72
+----
+
+In the same directory, run:
+
+[source,bash]
+----
+$ gommitlint validate
+CHECK                        STATUS        MESSAGE
+Header Length                PASS          Header is 43 characters
+Imperative Mood              PASS          Commit begins with imperative verb
+Header Case                  PASS          Header case is valid
+Header Last Character        PASS          Header last character is valid
+DCO                          PASS          Developer Certificate of Origin was found
+GPG                          PASS          GPG signature found
+GPG Identity                 PASS          Signed by "Someone <someone@example.com>"
+Conventional Commit          PASS          Commit message is a valid conventional commit
+Spellcheck                   PASS          Commit contains 0 misspellings
+Number of Commits            PASS          HEAD is 0 commit(s) ahead of refs/heads/main
+Commit Body                  PASS          Commit body is valid
+----
