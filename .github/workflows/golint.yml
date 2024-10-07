@@ -32,7 +32,6 @@ jobs:
         run: |
           go install github.com/vektra/mockery/v2@v2.46.0
           go mod tidy
-          ./scripts/generatemock.sh
 
       - name: golangci-Lint analysis
         uses: golangci/golangci-lint-action@aaa42aa0628b4ae2578232a66b541047968fac86 #v6.1.0
