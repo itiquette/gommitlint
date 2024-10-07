@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: Josef Andersson
+#
+# SPDX-License-Identifier: CC0-1.0
+
+name: "Gommitlint Action"
+description: "Commit validation for your pipelines."
+branding:
+  icon: "check-circle"
+  color: "gray-dark"
+inputs:
+  token:
+    description: "The GitHub token. Must have repo:status access. Can be specified by using {{ secrets.GITHUB_TOKEN }}"
+    required: true
+runs:
+  using: "docker"
+  image: "docker://ghcr.io/janderssonse/gommitlint:v0.9.0"
+  args:
+    - "validate"
