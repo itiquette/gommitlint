@@ -26,6 +26,6 @@ go.work
 .vscode
 /dist
 ./.env
-/gomittlint.yaml
+.gommitlint.yaml
 generated
 /gommitlint

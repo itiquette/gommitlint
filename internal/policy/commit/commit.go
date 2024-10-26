@@ -16,6 +16,28 @@ import (
 	"github.com/janderssonse/gommitlint/internal/policy"
 )
 
+// Commit implements the policy.Policy interface and enforces commit
+// messages to gommitlint the Conventional Commit standard.
+type Commit struct {
+	// SpellCheck enforces correct spelling.
+	SpellCheck *SpellCheck `mapstructure:"spellcheck"`
+	// Conventional is the user specified settings for conventional commits.
+	Conventional *Conventional `mapstructure:"conventional"`
+	// Header is the user specified settings for the header of each commit.
+	Header *HeaderChecks `mapstructure:"header"`
+	// Header is the user specified settings for the body of each commit.
+	Body *BodyChecks `mapstructure:"body"`
+	// DCO enables the Developer Certificate of Origin check.
+	DCO bool `mapstructure:"dco"`
+	// GPG is the user specified settings for the GPG signature check.
+	GPG *GPG `mapstructure:"gpg"`
+	// MaximumOfOneCommit enforces that the current commit is only one commit
+	// ahead of a specified ref.
+	MaximumOfOneCommit bool `mapstructure:"maximumOfOneCommit"`
+
+	msg string
+}
+
 // HeaderChecks is the configuration for checks on the header of a commit.
 type HeaderChecks struct {
 	// Length is the maximum length of the commit subject.
@@ -52,31 +74,6 @@ type GPG struct {
 		// of one of the organization public members.
 		GitHubOrganization string `mapstructure:"gitHubOrganization"`
 	} `mapstructure:"identity"`
-}
-
-// Commit implements the policy.Policy interface and enforces commit
-// messages to gommitlint the Conventional Commit standard.
-type Commit struct {
-	// SpellCheck enforces correct spelling.
-	SpellCheck *SpellCheck `mapstructure:"spellcheck"`
-	// Conventional is the user specified settings for conventional commits.
-	Conventional *Conventional `mapstructure:"conventional"`
-	// Header is the user specified settings for the header of each commit.
-	Header *HeaderChecks `mapstructure:"header"`
-	// Header is the user specified settings for the body of each commit.
-	Body *BodyChecks `mapstructure:"body"`
-	// DCO enables the Developer Certificate of Origin check.
-	DCO bool `mapstructure:"dco"`
-	// GPG is the user specified settings for the GPG signature check.
-	GPG *GPG `mapstructure:"gpg"`
-	// GPGSignatureGitHubOrganization enforces that GPG signature should come from
-	// one of the members of the GitHub org.
-	GPGSignatureGitHubOrganization string `mapstructure:"gpgSignatureGitHubOrg"`
-	// MaximumOfOneCommit enforces that the current commit is only one commit
-	// ahead of a specified ref.
-	MaximumOfOneCommit bool `mapstructure:"maximumOfOneCommit"`
-
-	msg string
 }
 
 // FirstWordRegex is theregular expression used to find the first word in a
