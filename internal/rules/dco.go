@@ -2,15 +2,14 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-package commit
+package rules
 
 import (
 	"regexp"
 	"strings"
 
+	"github.com/janderssonse/gommitlint/internal/interfaces"
 	"github.com/pkg/errors"
-
-	"github.com/janderssonse/gommitlint/internal/policy"
 )
 
 // DCORegex is the regular expression used for Developer Certificate of Origin.
@@ -22,8 +21,8 @@ type DCOCheck struct {
 	errors []error
 }
 
-// Name returns the name of the check.
-func (d DCOCheck) Name() string {
+// Status returns the name of the check.
+func (d DCOCheck) Status() string {
 	return "DCO"
 }
 
@@ -42,10 +41,10 @@ func (d DCOCheck) Errors() []error {
 }
 
 // ValidateDCO checks the commit message for a Developer Certificate of Origin.
-func (commit Commit) ValidateDCO() policy.Check { //nolint:ireturn
+func ValidateDCO(message string) interfaces.Check { //nolint:ireturn
 	check := &DCOCheck{}
 
-	for _, line := range strings.Split(commit.msg, "\n") {
+	for _, line := range strings.Split(message, "\n") {
 		if DCORegex.MatchString(strings.TrimSpace(line)) {
 			return check
 		}

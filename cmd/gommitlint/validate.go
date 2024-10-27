@@ -9,10 +9,8 @@ import (
 	"fmt"
 
 	git "github.com/go-git/go-git/v5"
+	"github.com/janderssonse/gommitlint/internal/configuration"
 	"github.com/spf13/cobra"
-
-	"github.com/janderssonse/gommitlint/internal/policy"
-	validator "github.com/janderssonse/gommitlint/internal/validator"
 )
 
 func newValidateCmd() *cobra.Command {
@@ -28,36 +26,42 @@ func newValidateCmd() *cobra.Command {
 			// after this point
 			cmd.SilenceUsage = true
 
-			newValidator, err := validator.New()
+			gommitLintConf, err := configuration.New()
 			if err != nil {
 				return fmt.Errorf("failed to create validator: %w", err)
 			}
 
-			opts := []policy.Option{}
+			opts := []configuration.Option{}
 
 			if commitMsgFile := cmd.Flags().Lookup("commit-msg-file").Value.String(); commitMsgFile != "" {
-				opts = append(opts, policy.WithCommitMsgFile(&commitMsgFile))
+				opts = append(opts, configuration.WithCommitMsgFile(&commitMsgFile))
 			}
 
 			if commitRef := cmd.Flags().Lookup("commit-ref").Value.String(); commitRef != "" {
-				opts = append(opts, policy.WithCommitRef(commitRef))
+				opts = append(opts, configuration.WithCommitRef(commitRef))
 			} else {
 				mainBranch, err := detectMainBranch()
 				if err != nil {
 					return fmt.Errorf("failed to detect main branch: %w", err)
 				}
 				if mainBranch != "" {
-					opts = append(opts, policy.WithCommitRef("refs/heads/"+mainBranch))
+					opts = append(opts, configuration.WithCommitRef("refs/heads/"+mainBranch))
 				}
 			}
 
 			if baseBranch := cmd.Flags().Lookup("base-branch").Value.String(); baseBranch != "" {
-				opts = append(opts, policy.WithRevisionRange(baseBranch+"..HEAD"))
+				opts = append(opts, configuration.WithRevisionRange(baseBranch+"..HEAD"))
 			} else if revisionRange := cmd.Flags().Lookup("revision-range").Value.String(); revisionRange != "" {
-				opts = append(opts, policy.WithRevisionRange(revisionRange))
+				opts = append(opts, configuration.WithRevisionRange(revisionRange))
 			}
 
-			return newValidator.Validate(opts...)
+			s := configuration.NewDefaultOptions(opts...)
+			report, err := configuration.Compliance(s, gommitLintConf.GommitConf)
+			if err != nil {
+				return err
+			}
+
+			return configuration.Validate(report.Checks())
 		},
 	}
 

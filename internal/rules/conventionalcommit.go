@@ -2,24 +2,15 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-package commit
+package rules
 
 import (
 	"regexp"
 	"strings"
 
+	"github.com/janderssonse/gommitlint/internal/interfaces"
 	"github.com/pkg/errors"
-
-	"github.com/janderssonse/gommitlint/internal/policy"
 )
-
-// Conventional implements the policy.Policy interface and enforces commit
-// messages to gommitlint the Conventional Commit standard.
-type Conventional struct {
-	Types             []string `mapstructure:"types"`
-	Scopes            []string `mapstructure:"scopes"`
-	DescriptionLength int      `mapstructure:"descriptionLength"`
-}
 
 // HeaderRegex is the regular expression used for Conventional Commits 1.0.0.
 var HeaderRegex = regexp.MustCompile(`^(\w*)(\(([^)]+)\))?(!)?:\s{1}(.*)($|\n{2})`)
@@ -40,8 +31,8 @@ type ConventionalCommitCheck struct {
 	errors []error
 }
 
-// Name returns the name of the check.
-func (c ConventionalCommitCheck) Name() string {
+// Status returns the name of the check.
+func (c ConventionalCommitCheck) Status() string {
 	return "Conventional Commit"
 }
 
@@ -60,12 +51,12 @@ func (c ConventionalCommitCheck) Errors() []error {
 }
 
 // ValidateConventionalCommit returns the commit type.
-func (commit Commit) ValidateConventionalCommit() policy.Check { //nolint:ireturn
+func ValidateConventionalCommit(message string, types []string, scopes []string, descLength int) interfaces.Check { //nolint:ireturn
 	check := &ConventionalCommitCheck{}
-	groups := parseHeader(commit.msg)
+	groups := parseHeader(message)
 
 	if len(groups) != 7 {
-		check.errors = append(check.errors, errors.Errorf("Invalid conventional commits format: %q", commit.msg))
+		check.errors = append(check.errors, errors.Errorf("Invalid conventional commits format: %q", message))
 
 		return check
 	}
@@ -75,17 +66,17 @@ func (commit Commit) ValidateConventionalCommit() policy.Check { //nolint:iretur
 	ccScope := groups[3]
 	ccDesc := groups[5]
 
-	commit.Conventional.Types = append(commit.Conventional.Types, TypeFeat, TypeFix)
+	types = append(types, TypeFeat, TypeFix)
 	typeIsValid := false
 
-	for _, t := range commit.Conventional.Types {
+	for _, t := range types {
 		if t == ccType {
 			typeIsValid = true
 		}
 	}
 
 	if !typeIsValid {
-		check.errors = append(check.errors, errors.Errorf("Invalid type %q: allowed types are %v", groups[1], commit.Conventional.Types))
+		check.errors = append(check.errors, errors.Errorf("Invalid type %q: allowed types are %v", groups[1], types))
 
 		return check
 	}
@@ -94,7 +85,7 @@ func (commit Commit) ValidateConventionalCommit() policy.Check { //nolint:iretur
 	if ccScope != "" {
 		scopeIsValid := false
 
-		for _, scope := range commit.Conventional.Scopes {
+		for _, scope := range scopes {
 			re := regexp.MustCompile(scope)
 			if re.MatchString(ccScope) {
 				scopeIsValid = true
@@ -104,18 +95,18 @@ func (commit Commit) ValidateConventionalCommit() policy.Check { //nolint:iretur
 		}
 
 		if !scopeIsValid {
-			check.errors = append(check.errors, errors.Errorf("Invalid scope %q: allowed scopes are %v", groups[3], commit.Conventional.Scopes))
+			check.errors = append(check.errors, errors.Errorf("Invalid scope %q: allowed scopes are %v", groups[3], scopes))
 
 			return check
 		}
 	}
 
 	// Provide a good default value for DescriptionLength
-	if commit.Conventional.DescriptionLength == 0 {
-		commit.Conventional.DescriptionLength = 72
+	if descLength == 0 {
+		descLength = 72
 	}
 
-	if len(ccDesc) <= commit.Conventional.DescriptionLength && len(ccDesc) != 0 {
+	if len(ccDesc) <= descLength && len(ccDesc) != 0 {
 		return check
 	}
 
@@ -125,7 +116,7 @@ func (commit Commit) ValidateConventionalCommit() policy.Check { //nolint:iretur
 }
 
 func parseHeader(msg string) []string {
-	// To circumvent any policy violation due to the leading \n that GitHub
+	// To circumvent any commit violation due to the leading \n that GitHub
 	// prefixes to the commit message on a squash merge, we remove it from the
 	// message.
 	header := strings.Split(strings.TrimPrefix(msg, "\n"), "\n")[0]

@@ -2,15 +2,14 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-package commit
+package rules
 
 import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/janderssonse/gommitlint/internal/interfaces"
 	"github.com/pkg/errors"
-
-	"github.com/janderssonse/gommitlint/internal/policy"
 )
 
 // HeaderCaseCheck enforces the case of the first word in the header.
@@ -19,8 +18,8 @@ type HeaderCaseCheck struct {
 	errors     []error
 }
 
-// Name returns the name of the check.
-func (h HeaderCaseCheck) Name() string {
+// Status returns the name of the check.
+func (h HeaderCaseCheck) Status() string {
 	return "Header Case"
 }
 
@@ -39,10 +38,10 @@ func (h HeaderCaseCheck) Errors() []error {
 }
 
 // ValidateHeaderCase checks the header length.
-func (commit Commit) ValidateHeaderCase() policy.Check { //nolint:ireturn
-	check := &HeaderCaseCheck{headerCase: commit.Header.Case}
+func ValidateHeaderCase(isConventional bool, message string, caseChoice string) interfaces.Check { //nolint:ireturn
+	check := &HeaderCaseCheck{headerCase: caseChoice}
 
-	firstWord, err := commit.firstWord()
+	firstWord, err := firstWord(isConventional, message)
 	if err != nil {
 		check.errors = append(check.errors, err)
 
@@ -58,19 +57,19 @@ func (commit Commit) ValidateHeaderCase() policy.Check { //nolint:ireturn
 
 	var valid bool
 
-	switch commit.Header.Case {
+	switch caseChoice {
 	case "upper":
 		valid = unicode.IsUpper(first)
 	case "lower":
 		valid = unicode.IsLower(first)
 	default:
-		check.errors = append(check.errors, errors.Errorf("Invalid configured case %s", commit.Header.Case))
+		check.errors = append(check.errors, errors.Errorf("Invalid configured case %s", caseChoice))
 
 		return check
 	}
 
 	if !valid {
-		check.errors = append(check.errors, errors.Errorf("Commit header case is not %s", commit.Header.Case))
+		check.errors = append(check.errors, errors.Errorf("Commit header case is not %s", caseChoice))
 	}
 
 	return check

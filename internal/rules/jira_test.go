@@ -4,18 +4,21 @@
 
 //
 //nolint:testpackage
-package commit
+package rules_test
 
 import (
 	"testing"
+
+	"github.com/janderssonse/gommitlint/internal/configuration"
+	"github.com/janderssonse/gommitlint/internal/rules"
 )
 
 func TestCommit_ValidateJiraCheck(t *testing.T) {
 	type fields struct {
-		SpellCheck         *SpellCheck
-		Conventional       *Conventional
-		Header             *HeaderChecks
-		Body               *BodyChecks
+		SpellCheck         *configuration.SpellCheck
+		Conventional       *configuration.Conventional
+		Header             *configuration.HeaderChecks
+		Body               *configuration.BodyChecks
 		DCO                bool
 		GPG                bool
 		MaximumOfOneCommit bool
@@ -34,8 +37,8 @@ func TestCommit_ValidateJiraCheck(t *testing.T) {
 		{
 			name: "Missing jira issue no type",
 			fields: fields{
-				Header: &HeaderChecks{
-					Jira: &JiraChecks{
+				Header: &configuration.HeaderChecks{
+					Jira: &configuration.JiraChecks{
 						Keys: []string{"JIRA", "PROJ"},
 					},
 				},
@@ -46,8 +49,8 @@ func TestCommit_ValidateJiraCheck(t *testing.T) {
 		{
 			name: "Missing jira issue with type",
 			fields: fields{
-				Header: &HeaderChecks{
-					Jira: &JiraChecks{
+				Header: &configuration.HeaderChecks{
+					Jira: &configuration.JiraChecks{
 						Keys: []string{"JIRA", "PROJ"},
 					},
 				},
@@ -58,8 +61,8 @@ func TestCommit_ValidateJiraCheck(t *testing.T) {
 		{
 			name: "Valid commit",
 			fields: fields{
-				Header: &HeaderChecks{
-					Jira: &JiraChecks{
+				Header: &configuration.HeaderChecks{
+					Jira: &configuration.JiraChecks{
 						Keys: []string{"JIRA", "PROJ"},
 					},
 				},
@@ -70,8 +73,8 @@ func TestCommit_ValidateJiraCheck(t *testing.T) {
 		{
 			name: "Valid commit 2",
 			fields: fields{
-				Header: &HeaderChecks{
-					Jira: &JiraChecks{
+				Header: &configuration.HeaderChecks{
+					Jira: &configuration.JiraChecks{
 						Keys: []string{"JIRA", "PROJ"},
 					},
 				},
@@ -82,8 +85,8 @@ func TestCommit_ValidateJiraCheck(t *testing.T) {
 		{
 			name: "Invalid jira project",
 			fields: fields{
-				Header: &HeaderChecks{
-					Jira: &JiraChecks{
+				Header: &configuration.HeaderChecks{
+					Jira: &configuration.JiraChecks{
 						Keys: []string{"JIRA", "PROJ"},
 					},
 				},
@@ -94,8 +97,8 @@ func TestCommit_ValidateJiraCheck(t *testing.T) {
 		{
 			name: "Invalid jira issue number",
 			fields: fields{
-				Header: &HeaderChecks{
-					Jira: &JiraChecks{
+				Header: &configuration.HeaderChecks{
+					Jira: &configuration.JiraChecks{
 						Keys: []string{"JIRA", "PROJ"},
 					},
 				},
@@ -106,8 +109,8 @@ func TestCommit_ValidateJiraCheck(t *testing.T) {
 		{
 			name: "Valid commit with scope",
 			fields: fields{
-				Header: &HeaderChecks{
-					Jira: &JiraChecks{
+				Header: &configuration.HeaderChecks{
+					Jira: &configuration.JiraChecks{
 						Keys: []string{"JIRA", "PROJ"},
 					},
 				},
@@ -118,8 +121,8 @@ func TestCommit_ValidateJiraCheck(t *testing.T) {
 		{
 			name: "Valid commit without square brackets",
 			fields: fields{
-				Header: &HeaderChecks{
-					Jira: &JiraChecks{
+				Header: &configuration.HeaderChecks{
+					Jira: &configuration.JiraChecks{
 						Keys: []string{"JIRA", "PROJ"},
 					},
 				},
@@ -131,19 +134,19 @@ func TestCommit_ValidateJiraCheck(t *testing.T) {
 	for _, tt := range tests {
 		tabletest := tt
 		t.Run(tabletest.name, func(t *testing.T) {
-			commit := Commit{
+			commit := configuration.Gommit{
 				SpellCheck:   tabletest.fields.SpellCheck,
 				Conventional: tabletest.fields.Conventional,
 				Header:       tabletest.fields.Header,
 				Body:         tabletest.fields.Body,
 				DCO:          tabletest.fields.DCO,
-				GPG: &GPG{
+				GPG: &configuration.GPG{
 					Required: tabletest.fields.GPG,
 				},
 				MaximumOfOneCommit: tabletest.fields.MaximumOfOneCommit,
-				msg:                tabletest.fields.msg,
+				Message:            tabletest.fields.msg,
 			}
-			got := commit.ValidateJiraCheck()
+			got := rules.ValidateJiraCheck(commit.Message, commit.Header.Jira.Keys)
 
 			if len(got.Errors()) != tabletest.want.errorCount {
 				t.Errorf("Wanted %d errors but got %d errors: %v", tabletest.want.errorCount, len(got.Errors()), got.Errors())

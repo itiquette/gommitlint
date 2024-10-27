@@ -2,13 +2,13 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-package commit
+package rules
 
 import (
 	"github.com/pkg/errors"
 
 	"github.com/janderssonse/gommitlint/internal/git"
-	"github.com/janderssonse/gommitlint/internal/policy"
+	"github.com/janderssonse/gommitlint/internal/interfaces"
 )
 
 // GPGCheck ensures that the commit is cryptographically signed using GPG.
@@ -16,8 +16,8 @@ type GPGCheck struct {
 	errors []error
 }
 
-// Name returns the name of the check.
-func (g GPGCheck) Name() string {
+// Status returns the name of the check.
+func (g GPGCheck) Status() string {
 	return "GPG"
 }
 
@@ -36,7 +36,7 @@ func (g GPGCheck) Errors() []error {
 }
 
 // ValidateGPGSign checks the commit message for a GPG signature.
-func (commit Commit) ValidateGPGSign(gitPtr *git.Git) policy.Check { //nolint:ireturn
+func ValidateGPGSign(gitPtr *git.Git) interfaces.Check { //nolint:ireturn
 	check := &GPGCheck{}
 
 	isOk, err := gitPtr.HasGPGSignature()

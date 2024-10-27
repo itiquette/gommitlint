@@ -2,14 +2,13 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-package commit
+package rules
 
 import (
 	"regexp"
 
+	"github.com/janderssonse/gommitlint/internal/interfaces"
 	"github.com/pkg/errors"
-
-	"github.com/janderssonse/gommitlint/internal/policy"
 )
 
 // JiraCheck enforces that a Jira issue is mentioned in the header.
@@ -17,8 +16,8 @@ type JiraCheck struct {
 	errors []error
 }
 
-// Name returns the name of the check.
-func (j *JiraCheck) Name() string {
+// Status returns the name of the check.
+func (j *JiraCheck) Status() string {
 	return "Jira issues"
 }
 
@@ -37,20 +36,20 @@ func (j *JiraCheck) Errors() []error {
 }
 
 // ValidateJiraCheck validates if a Jira issue is mentioned in the header.
-func (commit Commit) ValidateJiraCheck() policy.Check { //nolint:ireturn
+func ValidateJiraCheck(message string, jirakeys []string) interfaces.Check { //nolint:ireturn
 	check := &JiraCheck{}
 
 	reg := regexp.MustCompile(`.* \[?([A-Z]*)-[1-9]{1}\d*\]?.*`)
 
-	if reg.MatchString(commit.msg) {
-		submatch := reg.FindStringSubmatch(commit.msg)
+	if reg.MatchString(message) {
+		submatch := reg.FindStringSubmatch(message)
 		jiraProject := submatch[1]
 
-		if !find(commit.Header.Jira.Keys, jiraProject) {
+		if !find(jirakeys, jiraProject) {
 			check.errors = append(check.errors, errors.Errorf("Jira project %s is not a valid jira project", jiraProject))
 		}
 	} else {
-		check.errors = append(check.errors, errors.Errorf("No Jira issue tag found in %q", commit.msg))
+		check.errors = append(check.errors, errors.Errorf("No Jira issue tag found in %q", message))
 	}
 
 	return check

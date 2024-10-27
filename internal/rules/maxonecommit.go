@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-package commit
+package rules
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/janderssonse/gommitlint/internal/git"
-	"github.com/janderssonse/gommitlint/internal/policy"
+	"github.com/janderssonse/gommitlint/internal/interfaces"
 )
 
 // NumberOfCommits enforces a maximum number of charcters on the commit
@@ -21,8 +21,8 @@ type NumberOfCommits struct {
 	errors []error
 }
 
-// Name returns the name of the check.
-func (h NumberOfCommits) Name() string {
+// Status returns the name of the check.
+func (h NumberOfCommits) Status() string {
 	return "Number of Commits"
 }
 
@@ -41,7 +41,7 @@ func (h NumberOfCommits) Errors() []error {
 }
 
 // ValidateNumberOfCommits checks the header length.
-func (commit Commit) ValidateNumberOfCommits(gitPtr *git.Git, ref string) policy.Check { //nolint:ireturn
+func ValidateNumberOfCommits(gitPtr *git.Git, ref string) interfaces.Check { //nolint:ireturn
 	check := &NumberOfCommits{
 		ref: ref,
 	}

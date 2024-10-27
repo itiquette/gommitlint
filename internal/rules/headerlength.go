@@ -2,14 +2,13 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-package commit
+package rules
 
 import (
 	"fmt"
 
+	"github.com/janderssonse/gommitlint/internal/interfaces"
 	"github.com/pkg/errors"
-
-	"github.com/janderssonse/gommitlint/internal/policy"
 )
 
 // MaxNumberOfCommitCharacters is the default maximium number of characters
@@ -23,8 +22,8 @@ type HeaderLengthCheck struct {
 	errors       []error
 }
 
-// Name returns the name of the check.
-func (h HeaderLengthCheck) Name() string {
+// Status returns the name of the check.
+func (h HeaderLengthCheck) Status() string {
 	return "Header Length"
 }
 
@@ -39,14 +38,14 @@ func (h HeaderLengthCheck) Errors() []error {
 }
 
 // ValidateHeaderLength checks the header length.
-func (commit Commit) ValidateHeaderLength() policy.Check { //nolint:ireturn
+func ValidateHeaderLength(ruleLength int, actualLength int) interfaces.Check { //nolint:ireturn
 	check := &HeaderLengthCheck{}
 
-	if commit.Header.Length != 0 {
-		MaxNumberOfCommitCharacters = commit.Header.Length
+	if ruleLength != 0 {
+		MaxNumberOfCommitCharacters = actualLength
 	}
 
-	check.headerLength = len(commit.header())
+	check.headerLength = actualLength
 	if check.headerLength > MaxNumberOfCommitCharacters {
 		check.errors = append(check.errors, errors.Errorf("Commit header is %d characters", check.headerLength))
 	}

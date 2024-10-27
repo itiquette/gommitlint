@@ -2,15 +2,15 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-package commit
+package rules
 
 import (
+	"regexp"
 	"strings"
 
+	"github.com/janderssonse/gommitlint/internal/interfaces"
 	"github.com/jdkato/prose/v3"
 	"github.com/pkg/errors"
-
-	"github.com/janderssonse/gommitlint/internal/policy"
 )
 
 // ImperativeCheck enforces that the first word of a commit message header is
@@ -19,8 +19,8 @@ type ImperativeCheck struct {
 	errors []error
 }
 
-// Name returns the name of the check.
-func (i ImperativeCheck) Name() string {
+// Status returns the name of the check.
+func (i ImperativeCheck) Status() string {
 	return "Imperative Mood"
 }
 
@@ -38,8 +38,8 @@ func (i ImperativeCheck) Errors() []error {
 	return i.errors
 }
 
-// ValidateImperative checks the commit message for a GPG signature.
-func (commit Commit) ValidateImperative() policy.Check { //nolint:ireturn
+// ValidateImperative checks the commit message for a imperative first word.
+func ValidateImperative(isConventional bool, message string) interfaces.Check { //nolint:ireturn
 	check := &ImperativeCheck{}
 
 	var (
@@ -47,7 +47,7 @@ func (commit Commit) ValidateImperative() policy.Check { //nolint:ireturn
 		err  error
 	)
 
-	if word, err = commit.firstWord(); err != nil {
+	if word, err = firstWord(isConventional, message); err != nil {
 		check.errors = append(check.errors, err)
 
 		return check
@@ -77,3 +77,35 @@ func (commit Commit) ValidateImperative() policy.Check { //nolint:ireturn
 
 	return check
 }
+
+func firstWord(isConventional bool, message string) (string, error) {
+	var (
+		groups []string
+		msg    string
+	)
+
+	if isConventional {
+		groups = parseHeader(message)
+		if len(groups) != 7 {
+			return "", errors.Errorf("Invalid conventional commit format")
+		}
+
+		msg = groups[5]
+	} else {
+		msg = message
+	}
+
+	if msg == "" {
+		return "", errors.Errorf("Invalid msg: %s", msg)
+	}
+
+	if groups = FirstWordRegex.FindStringSubmatch(msg); groups == nil {
+		return "", errors.Errorf("Invalid msg: %s", msg)
+	}
+
+	return groups[0], nil
+}
+
+// FirstWordRegex is theregular expression used to find the first word in a
+// commit.
+var FirstWordRegex = regexp.MustCompile(`^\s*([a-zA-Z0-9]+)`)

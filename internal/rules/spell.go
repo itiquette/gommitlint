@@ -2,29 +2,23 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-package commit
+package rules
 
 import (
 	"fmt"
 	"strings"
 
 	"github.com/golangci/misspell"
-
-	"github.com/janderssonse/gommitlint/internal/policy"
+	"github.com/janderssonse/gommitlint/internal/interfaces"
 )
-
-// SpellCheck represents to spell check policy.
-type SpellCheck struct {
-	Locale string `mapstructure:"locale"`
-}
 
 // SpellingCheck enforces correct spelling.
 type SpellingCheck struct {
 	errors []error
 }
 
-// Name returns the name of the check.
-func (h SpellingCheck) Name() string {
+// Status returns the name of the check.
+func (h SpellingCheck) Status() string {
 	return "Spellcheck"
 }
 
@@ -39,26 +33,26 @@ func (h SpellingCheck) Errors() []error {
 }
 
 // ValidateSpelling checks the spelling.
-func (commit Commit) ValidateSpelling() policy.Check { //nolint:ireturn
+func ValidateSpelling(message string, locale string) interfaces.Check { //nolint:ireturn
 	check := &SpellingCheck{}
 
 	replacer := misspell.Replacer{
 		Replacements: misspell.DictMain,
 	}
 
-	switch strings.ToUpper(commit.SpellCheck.Locale) {
+	switch strings.ToUpper(locale) {
 	case "":
 	case "US":
 		replacer.AddRuleList(misspell.DictAmerican)
 	case "UK", "GB":
 		replacer.AddRuleList(misspell.DictBritish)
 	case "NZ", "AU", "CA":
-		check.errors = append(check.errors, fmt.Errorf("unknown locale: %q", commit.SpellCheck.Locale))
+		check.errors = append(check.errors, fmt.Errorf("unknown locale: %q", locale))
 	}
 
 	replacer.Compile()
 
-	_, diffs := replacer.Replace(commit.msg)
+	_, diffs := replacer.Replace(message)
 
 	for _, diff := range diffs {
 		check.errors = append(check.errors, fmt.Errorf("`%s` is a misspelling of `%s`", diff.Original, diff.Corrected))

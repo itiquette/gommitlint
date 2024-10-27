@@ -2,14 +2,13 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-package commit
+package rules
 
 import (
 	"strings"
 
+	"github.com/janderssonse/gommitlint/internal/interfaces"
 	"github.com/pkg/errors"
-
-	"github.com/janderssonse/gommitlint/internal/policy"
 )
 
 // RequiredBodyThreshold is the default minimum number of line changes required
@@ -22,8 +21,8 @@ type Body struct {
 	errors []error
 }
 
-// Name returns the name of the check.
-func (h Body) Name() string {
+// Status returns the name of the check.
+func (h Body) Status() string {
 	return "Commit Body"
 }
 
@@ -42,10 +41,10 @@ func (h Body) Errors() []error {
 }
 
 // ValidateBody checks the header length.
-func (commit Commit) ValidateBody() policy.Check { //nolint:ireturn
+func ValidateBody(message string) interfaces.Check { //nolint:ireturn
 	check := &Body{}
 
-	lines := strings.Split(strings.TrimPrefix(commit.msg, "\n"), "\n")
+	lines := strings.Split(strings.TrimPrefix(message, "\n"), "\n")
 	valid := false
 
 	for _, line := range lines[1:] {

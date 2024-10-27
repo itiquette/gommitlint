@@ -81,13 +81,7 @@ But as with any tool in early stages, it's always good to be careful!
 == Credits & History
 
 Gommitlint is a hard fork of Sidero Labs https://github.com/siderolabs/conform[Conform tool].
-All the heavy base work was made by them, so many creds and thanks for letting the hard work be Open Source.
-There where a few thing I wanted to do differently in the future,
-and therefore I forked this hard, with the intention a fresh start, using only the commitlint parts.
-
-- I want to create a more focused general commitlint tool, rather than a more general policy focused general tool.
- - and remove a few specifics like license policys, kres build etc are removed.
-- I wanted to be able to freely fix a few bugs and ideas from the Issue list
+All the heavy base work was made by them, so many creds and thanks for that. 
 
 That also means that the whole project will continue to be under the Mozila Public License, as that is the license of the most of the code base.
 I'm not planning to rewrite the code 100% just to be able to use another license.

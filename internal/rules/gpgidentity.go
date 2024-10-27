@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-package commit
+package rules
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/janderssonse/gommitlint/internal/git"
-	"github.com/janderssonse/gommitlint/internal/policy"
+	"github.com/janderssonse/gommitlint/internal/interfaces"
 )
 
 // GPGIdentityCheck ensures that the commit is cryptographically signed using known identity.
@@ -25,8 +25,8 @@ type GPGIdentityCheck struct {
 	identity string
 }
 
-// Name returns the name of the check.
-func (gpgIdentityCheck GPGIdentityCheck) Name() string {
+// Status returns the name of the check.
+func (gpgIdentityCheck GPGIdentityCheck) Status() string {
 	return "GPG Identity"
 }
 
@@ -45,14 +45,14 @@ func (gpgIdentityCheck GPGIdentityCheck) Errors() []error {
 }
 
 // ValidateGPGIdentity checks the commit GPG signature for a known identity.
-func (commit Commit) ValidateGPGIdentity(gitPtr *git.Git) policy.Check { //nolint:ireturn
+func ValidateGPGIdentity(gitPtr *git.Git, githubOrg string) interfaces.Check { //nolint:ireturn
 	check := &GPGIdentityCheck{}
 
 	switch {
-	case commit.GPG.Identity.GitHubOrganization != "":
+	case githubOrg != "":
 		githubClient := github.NewClient(nil)
 
-		list, _, err := githubClient.Organizations.ListMembers(context.Background(), commit.GPG.Identity.GitHubOrganization, &github.ListMembersOptions{})
+		list, _, err := githubClient.Organizations.ListMembers(context.Background(), githubOrg, &github.ListMembersOptions{})
 		if err != nil {
 			check.errors = append(check.errors, err)
 

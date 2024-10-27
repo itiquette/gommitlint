@@ -2,12 +2,12 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-package policy
+package configuration
 
-// Option is a functional option used to pass in arguments to a Policy.
+// Option is a functional option used to pass in arguments.
 type Option func(*Options)
 
-// Options defines the set of options available to a Policy.
+// Options defines the set of options available.
 type Options struct {
 	CommitMsgFile *string
 	CommitRef     string

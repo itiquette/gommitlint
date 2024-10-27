@@ -11,16 +11,23 @@ require (
 	github.com/google/go-github/v60 v60.0.0
 	github.com/jdkato/prose/v3 v3.0.0-20210921205322-a376476c2627
 	github.com/keybase/go-crypto v0.0.0-20200123153347-de78d2cb44f4
-	github.com/mitchellh/mapstructure v1.5.0
+	github.com/knadh/koanf/parsers/yaml v0.1.0
+	github.com/knadh/koanf/providers/file v1.1.2
+	github.com/knadh/koanf/v2 v2.1.1
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.8.1
 	golang.org/x/sync v0.8.0
-	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
+	github.com/fsnotify/fsnotify v1.7.0 // indirect
+	github.com/go-viper/mapstructure/v2 v2.0.0-alpha.1 // indirect
+	github.com/knadh/koanf/maps v0.1.1 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/mitchellh/copystructure v1.2.0 // indirect
+	github.com/mitchellh/reflectwalk v1.0.2 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
 require (
