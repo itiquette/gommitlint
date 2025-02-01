@@ -4,18 +4,18 @@
 
 == Getting Started
 
-To install gommitlint you can download a https://github.com/janderssonse/gommitlint/releases[release], or build it locally (go must be installed):
+To install gommitlint you can download a https://github.com/itiquette/gommitlint/releases[release], or build it locally (go must be installed):
 
 [source,bash]
 ----
-go install github.com/janderssonse/gommitlint/cmd/gommitlint@latest
+go install github.com/itiquette/gommitlint/cmd/gommitlint@latest
 ----
 
 Third option is to run it as a container:
 
 [source,bash]
 ----
-podman run --rm -it -v $PWD:/src -w /src ghcr.io/janderssonse/gommitlint:<version>
+podman run --rm -it -v $PWD:/src -w /src ghcr.io/itiquette/gommitlint:<version>
 ----
 
 

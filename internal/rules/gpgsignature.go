@@ -7,8 +7,8 @@ package rules
 import (
 	"github.com/pkg/errors"
 
-	"github.com/janderssonse/gommitlint/internal/git"
-	"github.com/janderssonse/gommitlint/internal/interfaces"
+	"github.com/itiquette/gommitlint/internal/git"
+	"github.com/itiquette/gommitlint/internal/interfaces"
 )
 
 // GPGCheck ensures that the commit is cryptographically signed using GPG.

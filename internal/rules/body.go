@@ -7,7 +7,7 @@ package rules
 import (
 	"strings"
 
-	"github.com/janderssonse/gommitlint/internal/interfaces"
+	"github.com/itiquette/gommitlint/internal/interfaces"
 	"github.com/pkg/errors"
 )
 

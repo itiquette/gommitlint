@@ -9,8 +9,8 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/janderssonse/gommitlint/internal/git"
-	"github.com/janderssonse/gommitlint/internal/interfaces"
+	"github.com/itiquette/gommitlint/internal/git"
+	"github.com/itiquette/gommitlint/internal/interfaces"
 )
 
 // NumberOfCommits enforces a maximum number of charcters on the commit

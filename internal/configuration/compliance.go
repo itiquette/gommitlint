@@ -10,10 +10,10 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/janderssonse/gommitlint/internal/git"
-	"github.com/janderssonse/gommitlint/internal/interfaces"
-	"github.com/janderssonse/gommitlint/internal/model"
-	"github.com/janderssonse/gommitlint/internal/rules"
+	"github.com/itiquette/gommitlint/internal/git"
+	"github.com/itiquette/gommitlint/internal/interfaces"
+	"github.com/itiquette/gommitlint/internal/model"
+	"github.com/itiquette/gommitlint/internal/rules"
 	"github.com/pkg/errors"
 )
 

@@ -93,14 +93,14 @@ quality/license:
 ## quality/openssfscorecard: security repo control check with openssf scorecard
 .PHONY: quality/openssfscorecard
 quality/openssfscorecard:
-	GITHUB_AUTH_TOKEN=${GH_AUTH} scorecard --repo=github.com/janderssonse/gommitlint
+	GITHUB_AUTH_TOKEN=${GH_AUTH} scorecard --repo=github.com/itiquette/gommitlint
 
 COMPARETOBRANCH ?= main
 ## quality/commit: commit format check 
 .PHONY: quality/commit
 quality/commit:
 	@if [[ $$(git rev-list --count ${COMPARETOBRANCH}..) -gt 0 ]]; then \
-		podman run --rm -i --volume $$(pwd):/repo -w /repo ghcr.io/janderssonse/gommitlint:v0.9.0 validate --base-branch=${COMPARETOBRANCH}; \
+		podman run --rm -i --volume $$(pwd):/repo -w /repo ghcr.io/itiquette/gommitlint:v0.9.0 validate --base-branch=${COMPARETOBRANCH}; \
 	else \
 		echo "no new commits found in branch compared to ${COMPARETOBRANCH}, skipping commit lint"; \
 	fi

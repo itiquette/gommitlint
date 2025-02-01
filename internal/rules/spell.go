@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/golangci/misspell"
-	"github.com/janderssonse/gommitlint/internal/interfaces"
+	"github.com/itiquette/gommitlint/internal/interfaces"
 )
 
 // SpellingCheck enforces correct spelling.

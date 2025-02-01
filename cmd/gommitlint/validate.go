@@ -9,7 +9,7 @@ import (
 	"fmt"
 
 	git "github.com/go-git/go-git/v5"
-	"github.com/janderssonse/gommitlint/internal/configuration"
+	"github.com/itiquette/gommitlint/internal/configuration"
 	"github.com/spf13/cobra"
 )
 

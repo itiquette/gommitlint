@@ -4,7 +4,7 @@
 
 package model
 
-import "github.com/janderssonse/gommitlint/internal/interfaces"
+import "github.com/itiquette/gommitlint/internal/interfaces"
 
 // Report reports the compliance checks.
 type Report struct {

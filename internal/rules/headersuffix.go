@@ -8,7 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/janderssonse/gommitlint/internal/interfaces"
+	"github.com/itiquette/gommitlint/internal/interfaces"
 	"github.com/pkg/errors"
 )
 

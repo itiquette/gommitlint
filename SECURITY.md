@@ -13,7 +13,7 @@ If you wish to report a security vulnerability privately, we appreciate your dil
 To report a security vulnerability, please provide the following information:
 
 1. **PROJECT**
-   - Include the URL of the project repository - Example: <https://github.com/janderssonse/gommitlint>
+   - Include the URL of the project repository - Example: <https://github.com/itiquette/gommitlint>
 
 2. **PUBLIC**
    - Indicate whether this vulnerability has already been publicly discussed or disclosed.

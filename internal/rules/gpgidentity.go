@@ -15,8 +15,8 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/janderssonse/gommitlint/internal/git"
-	"github.com/janderssonse/gommitlint/internal/interfaces"
+	"github.com/itiquette/gommitlint/internal/git"
+	"github.com/itiquette/gommitlint/internal/interfaces"
 )
 
 // GPGIdentityCheck ensures that the commit is cryptographically signed using known identity.

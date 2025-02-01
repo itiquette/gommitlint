@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/janderssonse/gommitlint/internal/interfaces"
+	"github.com/itiquette/gommitlint/internal/interfaces"
 	"github.com/jdkato/prose/v3"
 	"github.com/pkg/errors"
 )

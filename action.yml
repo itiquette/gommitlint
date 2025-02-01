@@ -17,6 +17,6 @@ inputs:
     default: "main"
 runs:
   using: "docker"
-  image: "docker://ghcr.io/janderssonse/gommitlint:v0.0.1"
+  image: "docker://ghcr.io/itiquette/gommitlint:v0.0.1"
   args:
     - validate --base-branch $h{{ inputs.comparebranch }}

@@ -9,8 +9,8 @@ package rules_test
 import (
 	"testing"
 
-	"github.com/janderssonse/gommitlint/internal/configuration"
-	"github.com/janderssonse/gommitlint/internal/rules"
+	"github.com/itiquette/gommitlint/internal/configuration"
+	"github.com/itiquette/gommitlint/internal/rules"
 )
 
 func TestCommit_ValidateJiraCheck(t *testing.T) {

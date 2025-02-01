@@ -15,9 +15,9 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/janderssonse/gommitlint/internal/configuration"
-	"github.com/janderssonse/gommitlint/internal/model"
-	"github.com/janderssonse/gommitlint/internal/rules"
+	"github.com/itiquette/gommitlint/internal/model"
+	"github.com/itiquette/gommitlint/internal/rules"
+	"github.com/itiquettemmitlint/internal/configuration"
 )
 
 //nolint:gocognit

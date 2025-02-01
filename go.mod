@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2024 Josef Andersson
 //
 // SPDX-License-Identifier: CC0-1.0
-module github.com/janderssonse/gommitlint
+module github.com/itiquette/gommitlint
 
 go 1.23.5
 

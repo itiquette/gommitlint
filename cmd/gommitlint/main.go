@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: janderssonse
+// SPDX-FileCopyrightText: itiquette
 //
 // SPDX-License-Identifier: MPL-2.0
 

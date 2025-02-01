@@ -16,10 +16,10 @@ ifdef::env-github[]
 :warning-caption: :warning:
 endif::[]
 
-image:https://img.shields.io/github/v/tag/janderssonse/gommitlint?style=for-the-badge&color=yellow[Tag,link=https://github.com/janderssonse/gommitlint/tags]
+image:https://img.shields.io/github/v/tag/itiquette/gommitlint?style=for-the-badge&color=yellow[Tag,link=https://github.com/itiquette/gommitlint/tags]
 link:LICENSE[image:https://img.shields.io/badge/MPL-Mozilla%20Public%20Licence%201.2-librarygreen?style=for-the-badge[MPL 2.0]]
-image:https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.reuse.software%2Fstatus%2Fgithub.com%2Fjanderssonse%2Fgommitlint&query=status&style=for-the-badge&label=REUSE[REUSE,link=https://api.reuse.software/info/github.com/janderssonse/gommitlint]
-https://scorecard.dev/viewer/?uri=github.com/janderssonse/gommitlint[image:https://api.scorecard.dev/projects/github.com/janderssonse/gommitlint/badge?style=for-the-badge[OpenSSF Scorecard]]
+image:https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.reuse.software%2Fstatus%2Fgithub.com%2Fitiquette%2Fgommitlint&query=status&style=for-the-badge&label=REUSE[REUSE,link=https://api.reuse.software/info/github.com/itiquette/gommitlint]
+https://scorecard.dev/viewer/?uri=github.com/itiquette/gommitlint[image:https://api.scorecard.dev/projects/github.com/itiquette/gommitlint/badge?style=for-the-badge[OpenSSF Scorecard]]
 
 == What can this tool do for you?
 
@@ -56,7 +56,7 @@ ED: Currently I'm not reading PRs as there is few base things to fix before that
 
 Here's how you can contribute:
 
-* Found a bug or have a great idea? Let us know in our https://github.com/janderssonse/gommitlint/issues[Issue Tracker]
+* Found a bug or have a great idea? Let us know in our https://github.com/itiquette/gommitlint/issues[Issue Tracker]
 * Want to contribute code? Check out our link:CONTRIBUTING.md[Contribution Guide] to get started.
 
 == For developers
@@ -66,7 +66,7 @@ TODO
 
 == What's next?
 
-Check out our https://github.com/janderssonse/gommitlint/issues[Issues page].
+Check out our https://github.com/itiquette/gommitlint/issues[Issues page].
 
 == A friendly reminder
 
