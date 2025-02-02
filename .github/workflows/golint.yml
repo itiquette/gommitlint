@@ -28,12 +28,6 @@ jobs:
           go-version: "stable"
           cache: false
 
-      - name: Generate mocks
-        run: |
-          go install github.com/vektra/mockery/v2@v2.46.0
-          go mod tidy
-          ./scripts/generatemock.sh
-
       - name: golangci-Lint analysis
         uses: golangci/golangci-lint-action@ec5d18412c0aeab7936cb16880d708ba2a64e1ae # v6.2.0
         with:
