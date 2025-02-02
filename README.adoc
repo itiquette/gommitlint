@@ -17,9 +17,11 @@ ifdef::env-github[]
 endif::[]
 
 image:https://img.shields.io/github/v/tag/itiquette/gommitlint?style=for-the-badge&color=yellow[Tag,link=https://github.com/itiquette/gommitlint/tags]
+
+https://scorecard.dev/viewer/?uri=github.com/itiquette/gommitlint[image:https://api.scorecard.dev/projects/github.com/itiquette/gommitlint/badge?style=for-the-badge[OpenSSF Scorecard]]
+
 link:LICENSE[image:https://img.shields.io/badge/MPL-Mozilla%20Public%20Licence%201.2-librarygreen?style=for-the-badge[MPL 2.0]]
 image:https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.reuse.software%2Fstatus%2Fgithub.com%2Fitiquette%2Fgommitlint&query=status&style=for-the-badge&label=REUSE[REUSE,link=https://api.reuse.software/info/github.com/itiquette/gommitlint]
-https://scorecard.dev/viewer/?uri=github.com/itiquette/gommitlint[image:https://api.scorecard.dev/projects/github.com/itiquette/gommitlint/badge?style=for-the-badge[OpenSSF Scorecard]]
 
 == What can this tool do for you?
 
