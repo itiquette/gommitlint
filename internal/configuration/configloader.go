@@ -16,14 +16,14 @@ import (
 )
 
 type ConfigLoader interface {
-	LoadConfiguration(ctx context.Context) (*GommitLint, error)
+	LoadConfiguration(ctx context.Context) (*AppConf, error)
 }
 
 type DefaultConfigLoader struct{}
 
 // LoadConfiguration loads the application configuration from various sources.
-func (DefaultConfigLoader) LoadConfiguration() (*GommitLint, error) {
-	appConfig := &GommitLint{}
+func (DefaultConfigLoader) LoadConfiguration() (*AppConf, error) {
+	appConfig := &AppConf{}
 	if err := ReadConfigurationFile(appConfig, ".gommitlint.yaml"); err != nil {
 		return nil, fmt.Errorf("failed to read configuration file: %w", err)
 	}
@@ -40,7 +40,7 @@ func (DefaultConfigLoader) LoadConfiguration() (*GommitLint, error) {
 	return appConfig, nil
 }
 
-func ReadConfigurationFile(appConfiguration *GommitLint, configfile string) error {
+func ReadConfigurationFile(appConfiguration *AppConf, configfile string) error {
 	const (
 		xdgConfigHomeEnv        = "XDG_CONFIG_HOME"
 		xdgConfigHomeConfigPath = "/gommitlint/" + "gommitlint.yaml"

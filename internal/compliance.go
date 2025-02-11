@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-package configuration
+package internal
 
 import (
 	"fmt"
@@ -10,6 +10,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/itiquette/gommitlint/internal/configuration"
 	"github.com/itiquette/gommitlint/internal/git"
 	"github.com/itiquette/gommitlint/internal/interfaces"
 	"github.com/itiquette/gommitlint/internal/model"
@@ -46,7 +47,7 @@ func Validate(checks []interfaces.Check) error {
 	return nil
 }
 
-func Compliance(options *Options, commit *Gommit) (*model.Report, error) {
+func Compliance(options *model.Options, gommit *configuration.Gommit) (*model.Report, error) {
 	var err error
 
 	report := &model.Report{}
@@ -90,83 +91,83 @@ func Compliance(options *Options, commit *Gommit) (*model.Report, error) {
 	}
 
 	for index := range msgs {
-		commit.Message = msgs[index]
+		gommit.Message = msgs[index]
 
-		compliance(report, gitPtr, options, commit)
+		compliance(report, gitPtr, options, gommit)
 	}
 
 	return report, nil
 }
 
 // compliance checks the compliance with the policies of the given commit.
-func compliance(report *model.Report, gitPtr *git.Git, options *Options, commit *Gommit) {
-	if commit.Header != nil {
-		if commit.Header.Length != 0 {
-			actualLength := len(commit.HeaderFromMsg())
-			report.AddCheck(rules.ValidateHeaderLength(commit.Header.Length, actualLength))
+func compliance(report *model.Report, gitPtr *git.Git, options *model.Options, gommit *configuration.Gommit) {
+	if gommit.Header != nil {
+		if gommit.Header.Length != 0 {
+			actualLength := len(gommit.HeaderFromMsg())
+			report.AddCheck(rules.ValidateHeaderLength(gommit.Header.Length, actualLength))
 		}
 
-		if commit.Header.Imperative {
+		if gommit.Header.Imperative {
 			isConventional := false
-			if commit.Conventional != nil {
+			if gommit.Conventional != nil {
 				isConventional = true
 			}
 
-			report.AddCheck(rules.ValidateImperative(isConventional, commit.Message))
+			report.AddCheck(rules.ValidateImperative(isConventional, gommit.Message))
 		}
 
-		if commit.Header.Case != "" {
+		if gommit.Header.Case != "" {
 			isConventional := false
-			if commit.Conventional != nil {
+			if gommit.Conventional != nil {
 				isConventional = true
 			}
 
-			report.AddCheck(rules.ValidateHeaderCase(isConventional, commit.Message, commit.Header.Case))
+			report.AddCheck(rules.ValidateHeaderCase(isConventional, gommit.Message, gommit.Header.Case))
 		}
 
-		if commit.Header.InvalidSuffix != "" {
-			report.AddCheck(rules.ValidateHeaderSuffix(commit.HeaderFromMsg(), commit.Header.InvalidSuffix))
+		if gommit.Header.InvalidSuffix != "" {
+			report.AddCheck(rules.ValidateHeaderSuffix(gommit.HeaderFromMsg(), gommit.Header.InvalidSuffix))
 		}
 
-		if commit.Header.Jira != nil {
-			report.AddCheck(rules.ValidateJiraCheck(commit.Message, commit.Header.Jira.Keys))
+		if gommit.Header.Jira != nil {
+			report.AddCheck(rules.ValidateJiraCheck(gommit.Message, gommit.Header.Jira.Keys))
 		}
 	}
 
-	if commit.DCO {
-		report.AddCheck(rules.ValidateDCO(commit.Message))
+	if gommit.DCO {
+		report.AddCheck(rules.ValidateDCO(gommit.Message))
 	}
 
-	if commit.GPG != nil {
-		if commit.GPG.Required {
+	if gommit.GPG != nil {
+		if gommit.GPG.Required {
 			report.AddCheck(rules.ValidateGPGSign(gitPtr))
 
-			if commit.GPG.Identity != nil {
-				report.AddCheck(rules.ValidateGPGIdentity(gitPtr, commit.GPG.Identity.GitHubOrganization))
+			if gommit.GPG.Identity != nil {
+				report.AddCheck(rules.ValidateGPGIdentity(gitPtr, gommit.GPG.Identity.GitHubOrganization))
 			}
 		}
 	}
 
-	if commit.Conventional != nil {
-		report.AddCheck(rules.ValidateConventionalCommit(commit.Message, commit.Conventional.Types, commit.Conventional.Scopes, commit.Conventional.DescriptionLength))
+	if gommit.Conventional != nil {
+		report.AddCheck(rules.ValidateConventionalCommit(gommit.Message, gommit.Conventional.Types, gommit.Conventional.Scopes, gommit.Conventional.DescriptionLength))
 	}
 
-	if commit.SpellCheck != nil {
-		report.AddCheck(rules.ValidateSpelling(commit.Message, commit.SpellCheck.Locale))
+	if gommit.SpellCheck != nil {
+		report.AddCheck(rules.ValidateSpelling(gommit.Message, gommit.SpellCheck.Locale))
 	}
 
-	if commit.MaximumOfOneCommit {
+	if gommit.MaximumOfOneCommit {
 		report.AddCheck(rules.ValidateNumberOfCommits(gitPtr, options.CommitRef))
 	}
 
-	if commit.Body != nil {
-		if commit.Body.Required {
-			report.AddCheck(rules.ValidateBody(commit.Message))
+	if gommit.Body != nil {
+		if gommit.Body.Required {
+			report.AddCheck(rules.ValidateBody(gommit.Message))
 		}
 	}
 }
 
-func extractRevisionRange(options *Options) ([]string, error) {
+func extractRevisionRange(options *model.Options) ([]string, error) {
 	revs := strings.Split(options.RevisionRange, "..")
 	if len(revs) > 2 || len(revs) == 0 || revs[0] == "" || revs[1] == "" {
 		return nil, errors.New("invalid revision range")

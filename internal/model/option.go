@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-package configuration
+package model
 
 // Option is a functional option used to pass in arguments.
 type Option func(*Options)

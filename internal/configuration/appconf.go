@@ -8,12 +8,12 @@ import (
 	"strings"
 )
 
-type GommitLint struct {
+type AppConf struct {
 	GommitConf *Gommit `koanf:"gommitlint"`
 }
 
 // New loads the gommitlint.yaml file and unmarshals it into a Gommitlint struct.
-func New() (*GommitLint, error) {
+func New() (*AppConf, error) {
 	gommitLintConf, err := DefaultConfigLoader{}.LoadConfiguration()
 	if err != nil {
 		return nil, err

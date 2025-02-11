@@ -12,8 +12,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// HeaderRegex is the regular expression used for Conventional Commits 1.0.0.
-var HeaderRegex = regexp.MustCompile(`^(\w*)(\(([^)]+)\))?(!)?:\s{1}(.*)($|\n{2})`)
+var HeaderRegex = regexp.MustCompile(`^(\w+)(?:\(([\w,/-]+)\))?(!)?:[ ](.+)$`)
 
 const (
 	// TypeFeat is a commit of the type fix patches a bug in your codebase
@@ -55,16 +54,22 @@ func ValidateConventionalCommit(message string, types []string, scopes []string,
 	check := &ConventionalCommitCheck{}
 	groups := parseHeader(message)
 
-	if len(groups) != 7 {
+	if len(groups) != 5 {
 		check.errors = append(check.errors, errors.Errorf("Invalid conventional commits format: %q", message))
 
 		return check
 	}
 
+	// [0] - Full match (entire commit message header)
+	// [1] - Type (feat, fix, etc.)
+	// [2] - Scope (without parentheses)
+	// [3] - Breaking change marker (!)
+	// [4] - Description
 	// conventional commit sections
+	ccFull := groups[0]
 	ccType := groups[1]
-	ccScope := groups[3]
-	ccDesc := groups[5]
+	ccScope := groups[2]
+	ccDesc := groups[4]
 
 	types = append(types, TypeFeat, TypeFix)
 	typeIsValid := false
@@ -101,6 +106,20 @@ func ValidateConventionalCommit(message string, types []string, scopes []string,
 		}
 	}
 
+	// Description is not optional, neither should be only whitespace
+	if strings.TrimSpace(ccDesc) == "" {
+		check.errors = append(check.errors, errors.Errorf("Invalid description %q: description must be at least one non whitespace char", groups[4]))
+
+		return check
+	}
+
+	var OneSpaceRegex = regexp.MustCompile(`^.*:[ ][^ ].*$`)
+
+	if !OneSpaceRegex.MatchString(ccFull) {
+		check.errors = append(check.errors, errors.Errorf("Space between type: description %q must be one", groups[0]))
+
+		return check
+	}
 	// Provide a good default value for DescriptionLength
 	if descLength == 0 {
 		descLength = 72
