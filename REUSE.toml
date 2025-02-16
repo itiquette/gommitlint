@@ -10,6 +10,9 @@ path = [
   "go.sum",
   "docs/dco.txt",
   "renovate.json",
+  "**/*/valid.priv",
+  "**/*/valid.pub",
+  ".gitleaksignore",
 ]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "itiquette. <https://github.com/itiquette>"

@@ -1,6 +1,7 @@
-// SPDX-FileCopyrightText: 2024 Josef Andersson
+// SPDX-FileCopyrightText: 2024 Sidero Labs, Inc.
+// SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
 //
-// SPDX-License-Identifier: EUPL-1.2
+// SPDX-License-Identifier: MPL-2.0
 
 package internal
 
@@ -58,19 +59,17 @@ func Compliance(options *model.Options, gommit *configuration.Gommit) (*model.Re
 		return report, errors.Errorf("failed to open git repo: %v", err)
 	}
 
-	var msgs []string
+	var msgs []git.CommitInfo
 
 	switch option := options; {
 	case option.CommitMsgFile != nil:
-		fmt.Println("C")
-
 		var contents []byte
 
 		if contents, err = os.ReadFile(*options.CommitMsgFile); err != nil {
 			return report, errors.Errorf("failed to read commit message file: %v", err)
 		}
 
-		msgs = append(msgs, string(contents))
+		msgs = append(msgs, git.CommitInfo{Message: string(contents)})
 	case option.RevisionRange != "":
 		revs, err := extractRevisionRange(options)
 		if err != nil {
@@ -91,7 +90,7 @@ func Compliance(options *model.Options, gommit *configuration.Gommit) (*model.Re
 	}
 
 	for index := range msgs {
-		gommit.Message = msgs[index]
+		gommit.Message = msgs[index].Message
 
 		compliance(report, gitPtr, options, gommit)
 	}
@@ -103,8 +102,7 @@ func Compliance(options *model.Options, gommit *configuration.Gommit) (*model.Re
 func compliance(report *model.Report, gitPtr *git.Git, options *model.Options, gommit *configuration.Gommit) {
 	if gommit.Header != nil {
 		if gommit.Header.Length != 0 {
-			actualLength := len(gommit.HeaderFromMsg())
-			report.AddCheck(rules.ValidateHeaderLength(gommit.Header.Length, actualLength))
+			report.AddCheck(rules.ValidateHeaderLength(gommit.Message, gommit.Header.Length))
 		}
 
 		if gommit.Header.Imperative {
@@ -130,7 +128,12 @@ func compliance(report *model.Report, gitPtr *git.Git, options *model.Options, g
 		}
 
 		if gommit.Header.Jira != nil {
-			report.AddCheck(rules.ValidateJiraCheck(gommit.Message, gommit.Header.Jira.Keys))
+			isConventional := false
+			if gommit.Conventional != nil {
+				isConventional = true
+			}
+
+			report.AddCheck(rules.ValidateJiraCheck(gommit.Message, gommit.Header.Jira.Keys, isConventional))
 		}
 	}
 
@@ -143,7 +146,7 @@ func compliance(report *model.Report, gitPtr *git.Git, options *model.Options, g
 			report.AddCheck(rules.ValidateGPGSign(gitPtr))
 
 			if gommit.GPG.Identity != nil {
-				report.AddCheck(rules.ValidateGPGIdentity(gitPtr, gommit.GPG.Identity.GitHubOrganization))
+				report.AddCheck(rules.ValidateGPGIdentity(gommit.Signature, gommit.RawCommit, gommit.GPG.Identity.PublicKeyURI))
 			}
 		}
 	}
@@ -162,7 +165,7 @@ func compliance(report *model.Report, gitPtr *git.Git, options *model.Options, g
 
 	if gommit.Body != nil {
 		if gommit.Body.Required {
-			report.AddCheck(rules.ValidateBody(gommit.Message))
+			report.AddCheck(rules.ValidateCommitBody(gommit.Message))
 		}
 	}
 }

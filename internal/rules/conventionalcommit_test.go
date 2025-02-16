@@ -285,12 +285,12 @@ func TestGitHubCompatibilityValidation(t *testing.T) {
 // Commit creation helpers.
 func createCommitWithMsg(msg string) func(*git.Repository) error {
 	return func(repo *git.Repository) error {
-		w, err := repo.Worktree()
+		wtree, err := repo.Worktree()
 		if err != nil {
 			return err
 		}
 
-		_, err = w.Commit(msg, &git.CommitOptions{
+		_, err = wtree.Commit(msg, &git.CommitOptions{
 			Author: &object.Signature{
 				Name:  "test",
 				Email: "test@commiter.io",
@@ -327,12 +327,12 @@ func initRepo(path string) (*git.Repository, error) {
 }
 
 func createValidScopedCommit(repo *git.Repository) error {
-	w, err := repo.Worktree()
+	wtree, err := repo.Worktree()
 	if err != nil {
 		return err
 	}
 
-	_, err = w.Commit("type(scope): description", &git.CommitOptions{
+	_, err = wtree.Commit("type(scope): description", &git.CommitOptions{
 		Author: &object.Signature{
 			Name:  "test",
 			Email: "test@commiter.io",
@@ -344,12 +344,12 @@ func createValidScopedCommit(repo *git.Repository) error {
 }
 
 func createValidBreakingCommit(repo *git.Repository) error {
-	w, err := repo.Worktree()
+	wtree, err := repo.Worktree()
 	if err != nil {
 		return err
 	}
 
-	_, err = w.Commit("feat!: description", &git.CommitOptions{
+	_, err = wtree.Commit("feat!: description", &git.CommitOptions{
 		Author: &object.Signature{
 			Name:  "test",
 			Email: "test@commiter.io",
@@ -361,12 +361,12 @@ func createValidBreakingCommit(repo *git.Repository) error {
 }
 
 func createInvalidBreakingSymbolCommit(repo *git.Repository) error {
-	w, err := repo.Worktree()
+	wtree, err := repo.Worktree()
 	if err != nil {
 		return err
 	}
 
-	_, err = w.Commit("feat$: description", &git.CommitOptions{
+	_, err = wtree.Commit("feat$: description", &git.CommitOptions{
 		Author: &object.Signature{
 			Name:  "test",
 			Email: "test@commiter.io",
@@ -378,12 +378,12 @@ func createInvalidBreakingSymbolCommit(repo *git.Repository) error {
 }
 
 func createValidScopedBreakingCommit(repo *git.Repository) error {
-	w, err := repo.Worktree()
+	wtree, err := repo.Worktree()
 	if err != nil {
 		return err
 	}
 
-	_, err = w.Commit("feat(scope)!: description", &git.CommitOptions{
+	_, err = wtree.Commit("feat(scope)!: description", &git.CommitOptions{
 		Author: &object.Signature{
 			Name:  "test",
 			Email: "test@commiter.io",
@@ -395,12 +395,12 @@ func createValidScopedBreakingCommit(repo *git.Repository) error {
 }
 
 func createInvalidScopedBreakingCommit(repo *git.Repository) error {
-	w, err := repo.Worktree()
+	wtree, err := repo.Worktree()
 	if err != nil {
 		return err
 	}
 
-	_, err = w.Commit("feat!(scope): description", &git.CommitOptions{
+	_, err = wtree.Commit("feat!(scope): description", &git.CommitOptions{
 		Author: &object.Signature{
 			Name:  "test",
 			Email: "test@commiter.io",
@@ -412,12 +412,12 @@ func createInvalidScopedBreakingCommit(repo *git.Repository) error {
 }
 
 func createInvalidCommit(repo *git.Repository) error {
-	w, err := repo.Worktree()
+	wtree, err := repo.Worktree()
 	if err != nil {
 		return err
 	}
 
-	_, err = w.Commit("invalid commit", &git.CommitOptions{
+	_, err = wtree.Commit("invalid commit", &git.CommitOptions{
 		Author: &object.Signature{
 			Name:  "test",
 			Email: "test@commiter.io",
@@ -429,12 +429,12 @@ func createInvalidCommit(repo *git.Repository) error {
 }
 
 func createInvalidEmptyCommit(repo *git.Repository) error {
-	w, err := repo.Worktree()
+	wtree, err := repo.Worktree()
 	if err != nil {
 		return err
 	}
 
-	_, err = w.Commit("", &git.CommitOptions{
+	_, err = wtree.Commit("", &git.CommitOptions{
 		Author: &object.Signature{
 			Name:  "test",
 			Email: "test@commiter.io",
@@ -446,12 +446,12 @@ func createInvalidEmptyCommit(repo *git.Repository) error {
 }
 
 func createValidCommitRegex(repo *git.Repository) error {
-	w, err := repo.Worktree()
+	wtree, err := repo.Worktree()
 	if err != nil {
 		return err
 	}
 
-	_, err = w.Commit("type(valid-1): description", &git.CommitOptions{
+	_, err = wtree.Commit("type(valid-1): description", &git.CommitOptions{
 		Author: &object.Signature{
 			Name:  "test",
 			Email: "test@commiter.io",
@@ -463,12 +463,12 @@ func createValidCommitRegex(repo *git.Repository) error {
 }
 
 func createInvalidCommitRegex(repo *git.Repository) error {
-	w, err := repo.Worktree()
+	wtree, err := repo.Worktree()
 	if err != nil {
 		return err
 	}
 
-	_, err = w.Commit("type(invalid-1): description", &git.CommitOptions{
+	_, err = wtree.Commit("type(invalid-1): description", &git.CommitOptions{
 		Author: &object.Signature{
 			Name:  "test",
 			Email: "test@commiter.io",

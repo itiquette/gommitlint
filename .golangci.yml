@@ -7,9 +7,9 @@ output:
       path: stderr
   print-issued-lines: true
   print-linter-name: true
-  uniq-by-line: true
   path-prefix: ""
 issues:
+  uniq-by-line: true
   exclude-dirs:
     - generated
 linters:

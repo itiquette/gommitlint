@@ -7,6 +7,7 @@ package interfaces
 // Check defines a commit check.
 type Check interface {
 	Status() string
+	//	Name() string
 	Message() string
 	Errors() []error
 }

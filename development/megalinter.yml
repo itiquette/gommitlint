@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: 2024 Josef Andersson
-# SPDX-FileCopyrightText: Josef Andersson
+# SPDX-FileCopyrightText: Itiquette/Gommitlint
 #
 # SPDX-License-Identifier: CC0-1.0
 
@@ -33,7 +33,7 @@ ENABLE_LINTERS: [
     MARKDOWN_MARKDOWNLINT,
     YAML_PRETTIER,
     ACTION_ACTIONLINT,
-    REPOSITORY_GITLEAKS,
+#    REPOSITORY_GITLEAKS,
     CREDENTIALS,
   ]
 

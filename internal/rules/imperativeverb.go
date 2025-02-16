@@ -1,10 +1,11 @@
 // SPDX-FileCopyrightText: 2024 Sidero Labs, Inc.
+// SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
 //
 // SPDX-License-Identifier: MPL-2.0
-
 package rules
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -13,20 +14,26 @@ import (
 	"github.com/pkg/errors"
 )
 
-// ImperativeCheck enforces that the first word of a commit message header is
-// and imperative verb.
+// imperativeTags represents verb tags that are not imperative.
+var imperativeTags = map[string]bool{
+	"VBD": true, // Past tense
+	"VBG": true, // Gerund
+	"VBZ": true, // 3rd person singular present
+}
+
+// ImperativeCheck enforces that the first word of a commit message header is an imperative verb.
 type ImperativeCheck struct {
 	errors []error
 }
 
 // Status returns the name of the check.
-func (i ImperativeCheck) Status() string {
+func (i *ImperativeCheck) Status() string {
 	return "Imperative Mood"
 }
 
-// Message returns to check message.
-func (i ImperativeCheck) Message() string {
-	if len(i.errors) != 0 {
+// Message returns the check message.
+func (i *ImperativeCheck) Message() string {
+	if len(i.errors) > 0 {
 		return i.errors[0].Error()
 	}
 
@@ -34,78 +41,84 @@ func (i ImperativeCheck) Message() string {
 }
 
 // Errors returns any violations of the check.
-func (i ImperativeCheck) Errors() []error {
+func (i *ImperativeCheck) Errors() []error {
 	return i.errors
 }
 
-// ValidateImperative checks the commit message for a imperative first word.
-func ValidateImperative(isConventional bool, message string) interfaces.Check { //nolint:ireturn
+// ValidateImperative checks the commit message for an imperative first word.
+func ValidateImperative(isConventional bool, message string) interfaces.Check {
 	check := &ImperativeCheck{}
 
-	var (
-		word string
-		err  error
-	)
-
-	if word, err = firstWord(isConventional, message); err != nil {
+	// Extract first word
+	word, err := extractFirstWord(isConventional, message)
+	if err != nil {
 		check.errors = append(check.errors, err)
 
 		return check
 	}
 
-	doc, err := prose.NewDocument("I " + strings.ToLower(word))
+	// Create prose document to analyze verb
+	doc, err := createProseDocument(word)
 	if err != nil {
-		check.errors = append(check.errors, errors.Errorf("Failed to create document: %v", err))
+		check.errors = append(check.errors, fmt.Errorf("failed to create document: %w", err))
 
 		return check
 	}
 
-	if len(doc.Tokens()) != 2 {
-		check.errors = append(check.errors, errors.Errorf("Expected 2 tokens, got %d", len(doc.Tokens())))
-
-		return check
-	}
-
-	tokens := doc.Tokens()
-	tok := tokens[1]
-
-	for _, tag := range []string{"VBD", "VBG", "VBZ"} {
-		if tok.Tag == tag {
-			check.errors = append(check.errors, errors.Errorf("First word of commit must be an imperative verb: %q is invalid", word))
-		}
+	// Validate verb type
+	if err := validateVerbType(doc, word); err != nil {
+		check.errors = append(check.errors, err)
 	}
 
 	return check
 }
 
-func firstWord(isConventional bool, message string) (string, error) {
-	var (
-		groups []string
-		msg    string
-	)
+// extractFirstWord extracts the first word from the commit message.
+func extractFirstWord(isConventional bool, message string) (string, error) {
+	var msg string
 
 	if isConventional {
-		groups = parseHeader(message)
-		if len(groups) != 7 {
-			return "", errors.Errorf("Invalid conventional commit format")
+		groups := parseHeader(message)
+		if len(groups) != 5 {
+			return "", errors.New("invalid conventional commit format")
 		}
 
-		msg = groups[5]
+		msg = groups[4]
 	} else {
 		msg = message
 	}
 
 	if msg == "" {
-		return "", errors.Errorf("Invalid msg: %s", msg)
+		return "", errors.New("empty message")
 	}
 
-	if groups = FirstWordRegex.FindStringSubmatch(msg); groups == nil {
-		return "", errors.Errorf("Invalid msg: %s", msg)
+	matches := firstWordRegex.FindStringSubmatch(msg)
+	if len(matches) == 0 {
+		return "", errors.New("no valid first word found")
 	}
 
-	return groups[0], nil
+	return matches[0], nil
 }
 
-// FirstWordRegex is theregular expression used to find the first word in a
-// commit.
-var FirstWordRegex = regexp.MustCompile(`^\s*([a-zA-Z0-9]+)`)
+// createProseDocument creates a prose document for verb analysis.
+func createProseDocument(word string) (*prose.Document, error) {
+	return prose.NewDocument("I " + strings.ToLower(word))
+}
+
+// validateVerbType checks if the first word is an imperative verb.
+func validateVerbType(doc *prose.Document, word string) error {
+	tokens := doc.Tokens()
+	if len(tokens) != 2 {
+		return fmt.Errorf("expected 2 tokens, got %d", len(tokens))
+	}
+
+	tok := tokens[1]
+	if imperativeTags[tok.Tag] {
+		return fmt.Errorf("first word of commit must be an imperative verb: %q is invalid", word)
+	}
+
+	return nil
+}
+
+// firstWordRegex is the regular expression used to find the first word in a commit.
+var firstWordRegex = regexp.MustCompile(`^\s*([a-zA-Z0-9]+)`)

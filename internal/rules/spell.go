@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: 2024 Sidero Labs, Inc.
+// SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
 //
 // SPDX-License-Identifier: MPL-2.0
 
@@ -18,44 +19,52 @@ type SpellingCheck struct {
 }
 
 // Status returns the name of the check.
-func (h SpellingCheck) Status() string {
+func (sc SpellingCheck) Status() string {
 	return "Spellcheck"
 }
 
-// Message returns to check message.
-func (h SpellingCheck) Message() string {
-	return fmt.Sprintf("Commit contains %d misspellings", len(h.errors))
+// Message returns the check message.
+func (sc SpellingCheck) Message() string {
+	if len(sc.errors) == 0 {
+		return ""
+	}
+
+	return fmt.Sprintf("Commit contains %d misspelling(s)", len(sc.errors))
 }
 
 // Errors returns any violations of the check.
-func (h SpellingCheck) Errors() []error {
-	return h.errors
+func (sc SpellingCheck) Errors() []error {
+	return sc.errors
 }
 
 // ValidateSpelling checks the spelling.
-func ValidateSpelling(message string, locale string) interfaces.Check { //nolint:ireturn
+func ValidateSpelling(message string, locale string) interfaces.Check {
 	check := &SpellingCheck{}
-
-	replacer := misspell.Replacer{
-		Replacements: misspell.DictMain,
-	}
+	replacer := misspell.New()
 
 	switch strings.ToUpper(locale) {
-	case "":
-	case "US":
-		replacer.AddRuleList(misspell.DictAmerican)
+	case "", "US":
+		// Use default American English
 	case "UK", "GB":
+		// For British English, we'll use the British dictionary
 		replacer.AddRuleList(misspell.DictBritish)
 	case "NZ", "AU", "CA":
+		check.errors = append(check.errors, fmt.Errorf("unsupported locale: %q", locale))
+
+		return check
+	default:
 		check.errors = append(check.errors, fmt.Errorf("unknown locale: %q", locale))
+
+		return check
 	}
 
 	replacer.Compile()
+	corrected, diffs := replacer.Replace(message)
 
-	_, diffs := replacer.Replace(message)
-
-	for _, diff := range diffs {
-		check.errors = append(check.errors, fmt.Errorf("`%s` is a misspelling of `%s`", diff.Original, diff.Corrected))
+	if corrected != message {
+		for _, diff := range diffs {
+			check.errors = append(check.errors, fmt.Errorf("`%s` is a misspelling of `%s`", diff.Original, diff.Corrected))
+		}
 	}
 
 	return check

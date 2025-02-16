@@ -1,53 +1,66 @@
 // SPDX-FileCopyrightText: 2024 Sidero Labs, Inc.
+// SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
 //
 // SPDX-License-Identifier: MPL-2.0
-
 package rules
 
 import (
 	"fmt"
+	"unicode/utf8"
 
 	"github.com/itiquette/gommitlint/internal/interfaces"
-	"github.com/pkg/errors"
 )
 
-// MaxNumberOfCommitCharacters is the default maximium number of characters
+// DefaultMaxCommitHeaderLength is the default maximum number of characters
 // allowed in a commit header.
-var MaxNumberOfCommitCharacters = 89
+const DefaultMaxCommitHeaderLength = 89
 
-// HeaderLengthCheck enforces a maximum number of charcters on the commit
-// header.
+// HeaderLengthCheck enforces a maximum number of characters on the commit header.
 type HeaderLengthCheck struct {
 	headerLength int
 	errors       []error
 }
 
 // Status returns the name of the check.
-func (h HeaderLengthCheck) Status() string {
+func (h *HeaderLengthCheck) Status() string {
 	return "Header Length"
 }
 
-// Message returns to check message.
-func (h HeaderLengthCheck) Message() string {
+// Message returns the check message.
+func (h *HeaderLengthCheck) Message() string {
+	if len(h.errors) > 0 {
+		return h.errors[0].Error()
+	}
+
 	return fmt.Sprintf("Header is %d characters", h.headerLength)
 }
 
 // Errors returns any violations of the check.
-func (h HeaderLengthCheck) Errors() []error {
+func (h *HeaderLengthCheck) Errors() []error {
 	return h.errors
 }
 
-// ValidateHeaderLength checks the header length.
-func ValidateHeaderLength(ruleLength int, actualLength int) interfaces.Check { //nolint:ireturn
-	check := &HeaderLengthCheck{}
-
-	if ruleLength != 0 {
-		MaxNumberOfCommitCharacters = actualLength
+// ValidateHeaderLength checks the header length with proper UTF-8 handling.
+func ValidateHeaderLength(message string, maxLength int) interfaces.Check {
+	// Use default max length if not specified
+	if maxLength == 0 {
+		maxLength = DefaultMaxCommitHeaderLength
 	}
 
-	check.headerLength = actualLength
-	if check.headerLength > MaxNumberOfCommitCharacters {
-		check.errors = append(check.errors, errors.Errorf("Commit header is %d characters", check.headerLength))
+	// Compute UTF-8 aware length
+	headerLength := utf8.RuneCountInString(message)
+
+	check := &HeaderLengthCheck{
+		headerLength: headerLength,
+	}
+
+	// Validate length
+	if headerLength > maxLength {
+		check.errors = append(check.errors, fmt.Errorf(
+			"commit header is too long: %d characters (maximum allowed: %d)",
+			headerLength,
+			maxLength,
+		))
 	}
 
 	return check

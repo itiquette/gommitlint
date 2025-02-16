@@ -6,6 +6,8 @@ package configuration
 
 import (
 	"strings"
+
+	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
 type AppConf struct {
@@ -40,6 +42,10 @@ type Gommit struct {
 	SpellCheck *SpellCheck `koanf:"spellcheck"`
 
 	Message string
+
+	Signature string
+
+	RawCommit *object.Commit
 }
 
 // HeaderChecks is the configuration for checks on the header of a commit.
@@ -82,9 +88,9 @@ type BodyChecks struct {
 type GPG struct {
 	// Identity configures identity of the signature.
 	Identity *struct {
-		// GitHubOrganization enforces that commit should be signed with the key
+		// PublicKeyURI enforces that commit should be signed with the key
 		// of one of the organization public members.
-		GitHubOrganization string `koanf:"gitHubOrganization"`
+		PublicKeyURI string `koanf:"filepath"`
 	} `koanf:"identity"`
 	// Required enforces that the current commit has a signature.
 	Required bool `koanf:"required"`

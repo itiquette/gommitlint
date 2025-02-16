@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Josef Andersson
+# SPDX-FileCopyrightText: Itiquette/Gommitlint
 #
 # SPDX-License-Identifier: CC0-1.0
 

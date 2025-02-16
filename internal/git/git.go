@@ -7,6 +7,7 @@ package git
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -23,7 +24,14 @@ import (
 
 // Git is a helper for git.
 type Git struct {
-	repo *git.Repository
+	Repo *git.Repository
+}
+
+// CommitInfo holds information about a commit.
+type CommitInfo struct {
+	Message   string
+	Signature string
+	RawCommit *object.Commit // Gives access to the full commit object
 }
 
 func findDotGit(name string) (string, error) {
@@ -46,23 +54,23 @@ func NewGit() (*Git, error) {
 		return nil, err
 	}
 
-	return &Git{repo: repo}, nil
+	return &Git{Repo: repo}, nil
 }
 
-// Message returns the commit message. In the case that a commit has multiple
+// Message returns the commit message and signature. In the case that a commit has multiple
 // parents, the message of the last parent is returned.
-//
-//nolint:nonamedreturns
-func (gitPtr *Git) Message() (message string, err error) {
-	ref, err := gitPtr.repo.Head()
+func (gitPtr *Git) Message() (CommitInfo, error) {
+	ref, err := gitPtr.Repo.Head()
 	if err != nil {
-		return "", err
+		return CommitInfo{}, err
 	}
 
-	commit, err := gitPtr.repo.CommitObject(ref.Hash())
+	commit, err := gitPtr.Repo.CommitObject(ref.Hash())
 	if err != nil {
-		return "", err
+		return CommitInfo{}, err
 	}
+
+	var message string
 
 	if commit.NumParents() > 1 {
 		parents := commit.Parents()
@@ -72,7 +80,7 @@ func (gitPtr *Git) Message() (message string, err error) {
 
 			next, err = parents.Next()
 			if err != nil {
-				return "", err
+				return CommitInfo{}, err
 			}
 
 			if index == commit.NumParents() {
@@ -83,27 +91,38 @@ func (gitPtr *Git) Message() (message string, err error) {
 		message = commit.Message
 	}
 
-	return message, err
+	return CommitInfo{
+		Message:   message,
+		Signature: commit.PGPSignature,
+		RawCommit: commit,
+	}, nil
 }
 
-// Messages returns the list of commit messages in the range commit1..commit2.
-func (gitPtr *Git) Messages(commit1, commit2 string) ([]string, error) {
-	hash1, err := gitPtr.repo.ResolveRevision(plumbing.Revision(commit1))
+// Messages returns the list of commit information in the range commit1..commit2.
+// Optional maxCommits parameter limits the number of commits processed.
+func (gitPtr *Git) Messages(commit1, commit2 string, maxCommits ...int) ([]CommitInfo, error) {
+	// Set default limit
+	limit := 1000
+	if len(maxCommits) > 0 && maxCommits[0] > 0 {
+		limit = maxCommits[0]
+	}
+
+	hash1, err := gitPtr.Repo.ResolveRevision(plumbing.Revision(commit1))
 	if err != nil {
 		return nil, err
 	}
 
-	hash2, err := gitPtr.repo.ResolveRevision(plumbing.Revision(commit2))
+	hash2, err := gitPtr.Repo.ResolveRevision(plumbing.Revision(commit2))
 	if err != nil {
 		return nil, err
 	}
 
-	commitObject2, err := gitPtr.repo.CommitObject(*hash2)
+	commitObject2, err := gitPtr.Repo.CommitObject(*hash2)
 	if err != nil {
 		return nil, err
 	}
 
-	commitObject1, err := gitPtr.repo.CommitObject(*hash1)
+	commitObject1, err := gitPtr.Repo.CommitObject(*hash1)
 	if err != nil {
 		return nil, err
 	}
@@ -117,54 +136,76 @@ func (gitPtr *Git) Messages(commit1, commit2 string) ([]string, error) {
 		commitObject1 = commitResult[0]
 	}
 
-	msgs := make([]string, 0)
+	commitInfos := make([]CommitInfo, 0, limit)
+	commitCount := 0
+	currentCommit := commitObject2
 
 	for {
-		msgs = append(msgs, commitObject2.Message)
+		commitInfos = append(commitInfos, CommitInfo{
+			Message:   currentCommit.Message,
+			Signature: currentCommit.PGPSignature,
+			RawCommit: currentCommit,
+		})
 
-		commitObject2, err = commitObject2.Parents().Next()
+		commitCount++
+		if commitCount >= limit {
+			break
+		}
+
+		nextCommit, err := currentCommit.Parents().Next()
+		if errors.Is(storer.ErrStop, err) {
+			break
+		}
+
 		if err != nil {
 			return nil, err
 		}
 
-		if commitObject2.ID() == commitObject1.ID() {
+		if nextCommit.ID() == commitObject1.ID() {
 			break
 		}
+
+		currentCommit = nextCommit
 	}
 
-	return msgs, nil
+	return commitInfos, nil
 }
 
-// HasGPGSignature returns the commit message. In the case that a commit has multiple
-// parents, the message of the last parent is returned.
-//
-//nolint:nonamedreturns
-func (gitPtr *Git) HasGPGSignature() (ok bool, err error) {
-	ref, err := gitPtr.repo.Head()
+// GetCommitData returns a reader for the commit data used in signature verification.
+func (c *CommitInfo) GetCommitData() (io.Reader, error) {
+	if c.RawCommit == nil {
+		return nil, errors.New("commit data not available")
+	}
+
+	encoded := &plumbing.MemoryObject{}
+	if err := c.RawCommit.EncodeWithoutSignature(encoded); err != nil {
+		return nil, fmt.Errorf("failed to encode commit: %w", err)
+	}
+
+	return encoded.Reader()
+}
+
+// HasGPGSignature returns whether the current HEAD commit is signed.
+func (gitPtr *Git) HasGPGSignature() (bool, error) {
+	ref, err := gitPtr.Repo.Head()
 	if err != nil {
 		return false, err
 	}
 
-	commit, err := gitPtr.repo.CommitObject(ref.Hash())
+	commit, err := gitPtr.Repo.CommitObject(ref.Hash())
 	if err != nil {
 		return false, err
 	}
 
-	ok = commit.PGPSignature != ""
+	ok := commit.PGPSignature != ""
 
 	return ok, err
 }
 
-// VerifyPGPSignature validates PGP signature against a keyring.
-func (gitPtr *Git) VerifyPGPSignature(armoredKeyrings []string) (*openpgp.Entity, error) {
-	ref, err := gitPtr.repo.Head()
-	if err != nil {
-		return nil, err
-	}
-
-	commit, err := gitPtr.repo.CommitObject(ref.Hash())
-	if err != nil {
-		return nil, err
+// VerifyCommitSignature validates PGP signature for a specific commit.
+func (gitPtr *Git) VerifyCommitSignature(commit *object.Commit, armoredKeyrings []string) (*openpgp.Entity, error) {
+	if commit.PGPSignature == "" {
+		return nil, errors.New("no GPG signature")
 	}
 
 	var keyring openpgp.EntityList
@@ -172,7 +213,7 @@ func (gitPtr *Git) VerifyPGPSignature(armoredKeyrings []string) (*openpgp.Entity
 	for _, armoredKeyring := range armoredKeyrings {
 		var entityList openpgp.EntityList
 
-		entityList, err = openpgp.ReadArmoredKeyRing(strings.NewReader(armoredKeyring))
+		entityList, err := openpgp.ReadArmoredKeyRing(strings.NewReader(armoredKeyring))
 		if err != nil {
 			return nil, err
 		}
@@ -186,7 +227,7 @@ func (gitPtr *Git) VerifyPGPSignature(armoredKeyrings []string) (*openpgp.Entity
 	encoded := &plumbing.MemoryObject{}
 
 	// Encode commit components, excluding signature and get a reader object.
-	if err = commit.EncodeWithoutSignature(encoded); err != nil {
+	if err := commit.EncodeWithoutSignature(encoded); err != nil {
 		return nil, err
 	}
 
@@ -199,9 +240,7 @@ func (gitPtr *Git) VerifyPGPSignature(armoredKeyrings []string) (*openpgp.Entity
 }
 
 // FetchPullRequest fetches a remote PR.
-//
-//nolint:nonamedreturns
-func (gitPtr *Git) FetchPullRequest(remote string, number int) (err error) {
+func (gitPtr *Git) FetchPullRequest(remote string, number int) error {
 	opts := &git.FetchOptions{
 		RemoteName: remote,
 		RefSpecs: []config.RefSpec{
@@ -209,14 +248,12 @@ func (gitPtr *Git) FetchPullRequest(remote string, number int) (err error) {
 		},
 	}
 
-	return gitPtr.repo.Fetch(opts)
+	return gitPtr.Repo.Fetch(opts)
 }
 
 // CheckoutPullRequest checks out pull request.
-//
-//nolint:nonamedreturns
-func (gitPtr *Git) CheckoutPullRequest(number int) (err error) {
-	worktree, err := gitPtr.repo.Worktree()
+func (gitPtr *Git) CheckoutPullRequest(number int) error {
+	worktree, err := gitPtr.Repo.Worktree()
 	if err != nil {
 		return err
 	}
@@ -229,55 +266,68 @@ func (gitPtr *Git) CheckoutPullRequest(number int) (err error) {
 }
 
 // SHA returns the sha of the current commit.
-//
-//nolint:nonamedreturns
-func (gitPtr *Git) SHA() (sha string, err error) {
-	ref, err := gitPtr.repo.Head()
+func (gitPtr *Git) SHA() (string, error) {
+	ref, err := gitPtr.Repo.Head()
 	if err != nil {
-		return sha, err
+		return "", err
 	}
 
-	sha = ref.Hash().String()
-
-	return sha, nil
+	return ref.Hash().String(), nil
 }
 
 // AheadBehind returns the number of commits that HEAD is ahead and behind
 // relative to the specified ref.
-//
-//nolint:nonamedreturns
-func (gitPtr *Git) AheadBehind(ref string) (ahead, behind int, err error) {
-	ref1, err := gitPtr.repo.Reference(plumbing.ReferenceName(ref), false)
+func (gitPtr *Git) AheadBehind(ref string) (int, int, error) {
+	ref1, err := gitPtr.Repo.Reference(plumbing.ReferenceName(ref), true)
 	if err != nil {
 		return 0, 0, err
 	}
 
-	ref2, err := gitPtr.repo.Head()
+	ref2, err := gitPtr.Repo.Head()
 	if err != nil {
 		return 0, 0, err
 	}
 
-	commit2, err := object.GetCommit(gitPtr.repo.Storer, ref2.Hash())
+	commit1, err := gitPtr.Repo.CommitObject(ref1.Hash())
 	if err != nil {
-		return 0, 0, nil //nolint:nilerr
+		return 0, 0, err
 	}
 
-	var count int
+	commit2, err := gitPtr.Repo.CommitObject(ref2.Hash())
+	if err != nil {
+		return 0, 0, err
+	}
 
-	iter := object.NewCommitPreorderIter(commit2, nil, nil)
+	mergeBase, err := commit1.MergeBase(commit2)
+	if err != nil {
+		return 0, 0, err
+	}
 
-	err = iter.ForEach(func(comm *object.Commit) error {
-		if comm.Hash != ref1.Hash() {
-			count++
+	ahead, err := countCommits(gitPtr.Repo, mergeBase[0], commit2)
+	if err != nil {
+		return 0, 0, err
+	}
 
-			return nil
+	behind, err := countCommits(gitPtr.Repo, mergeBase[0], commit1)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	return ahead, behind, nil
+}
+
+func countCommits(_ *git.Repository, from, to *object.Commit) (int, error) {
+	count := 0
+	iter := object.NewCommitIterCTime(to, nil, nil)
+	err := iter.ForEach(func(c *object.Commit) error {
+		if c.Hash == from.Hash {
+			return storer.ErrStop
 		}
 
-		return storer.ErrStop
-	})
-	if err != nil {
-		return 0, 0, nil //nolint:nilerr
-	}
+		count++
 
-	return count, 0, nil
+		return nil
+	})
+
+	return count, err
 }
