@@ -3,12 +3,13 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-package rules
+package rule_test
 
 import (
 	"strings"
 	"testing"
 
+	"github.com/itiquette/gommitlint/internal/rule"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -73,7 +74,7 @@ func TestValidateSpelling(t *testing.T) {
 
 	for _, tabletest := range tests {
 		t.Run(tabletest.name, func(t *testing.T) {
-			check := ValidateSpelling(tabletest.message, tabletest.locale)
+			check := rule.ValidateSpelling(tabletest.message, tabletest.locale)
 			errors := check.Errors()
 
 			assert.Len(t, errors, tabletest.expectedErrors, "Incorrect number of errors")

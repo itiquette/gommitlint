@@ -12,6 +12,7 @@ import (
 	"github.com/itiquette/gommitlint/internal"
 	"github.com/itiquette/gommitlint/internal/configuration"
 	"github.com/itiquette/gommitlint/internal/model"
+	"github.com/itiquette/gommitlint/internal/validation"
 	"github.com/spf13/cobra"
 )
 
@@ -58,12 +59,13 @@ func newValidateCmd() *cobra.Command {
 			}
 
 			s := model.NewDefaultOptions(opts...)
-			report, err := internal.Compliance(s, gommitLintConf.GommitConf)
+			report, err := validation.NewValidator(s, gommitLintConf.GommitConf)
 			if err != nil {
 				return err
 			}
+			r, _ := report.Validate()
 
-			return internal.Validate(report.Checks())
+			return internal.PrintReport(r.Rules())
 		},
 	}
 

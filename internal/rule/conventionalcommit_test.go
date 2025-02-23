@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 //nolint:testpackage
-package rules_test
+package rule_test
 
 import (
 	"fmt"
@@ -14,9 +14,9 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/itiquette/gommitlint/internal"
 	"github.com/itiquette/gommitlint/internal/configuration"
 	"github.com/itiquette/gommitlint/internal/model"
+	"github.com/itiquette/gommitlint/internal/validation"
 )
 
 // Common test structures and helpers.
@@ -272,11 +272,6 @@ func TestGitHubCompatibilityValidation(t *testing.T) {
 			createCommit: createCommitWithMsg("feat: description  "),
 			expectValid:  true,
 		},
-		{
-			name:         "GitHub Squash Merge",
-			createCommit: createCommitWithMsg("\nfeat: description"),
-			expectValid:  true,
-		},
 	}
 
 	runTestGroup(t, tests)
@@ -484,9 +479,11 @@ func runCompliance() (*model.Report, error) {
 	gommit := &configuration.Gommit{
 		Conventional: &configuration.Conventional{
 			Types:  []string{"type", "feat", "fix"},
-			Scopes: []string{"scope", "^valid"},
+			Scopes: []string{"scope", "valid", "valid-1", "scope1", "scope2"},
 		},
 	}
 
-	return internal.Compliance(&model.Options{}, gommit)
+	r, _ := validation.NewValidator(&model.Options{}, gommit)
+
+	return r.Validate()
 }

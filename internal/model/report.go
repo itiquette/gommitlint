@@ -8,13 +8,13 @@ import "github.com/itiquette/gommitlint/internal/interfaces"
 
 // Report reports the compliance checks.
 type Report struct {
-	checks []interfaces.Check
+	rules []interfaces.Rule
 }
 
 // Valid checks if a report is valid.
 func (r *Report) Valid() bool {
-	for _, check := range r.checks {
-		if len(check.Errors()) != 0 {
+	for _, rule := range r.rules {
+		if len(rule.Errors()) != 0 {
 			return false
 		}
 	}
@@ -22,12 +22,12 @@ func (r *Report) Valid() bool {
 	return true
 }
 
-// Checks returns the checks executed by a validator run.
-func (r *Report) Checks() []interfaces.Check {
-	return r.checks
+// Rules returns the rules executed by a validator run.
+func (r *Report) Rules() []interfaces.Rule {
+	return r.rules
 }
 
-// AddCheck adds a check to the report.
-func (r *Report) AddCheck(c interfaces.Check) {
-	r.checks = append(r.checks, c)
+// AddRule adds a rule to the report.
+func (r *Report) AddRule(c interfaces.Rule) {
+	r.rules = append(r.rules, c)
 }

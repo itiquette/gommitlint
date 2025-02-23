@@ -2,13 +2,14 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-package rules
+package rule_test
 
 import (
 	"fmt"
 	"testing"
 	"unicode/utf8"
 
+	"github.com/itiquette/gommitlint/internal/rule"
 	"github.com/stretchr/testify/require"
 )
 
@@ -86,7 +87,7 @@ func TestValidateHeaderLength(t *testing.T) {
 			require.Equal(t, tabletest.expectedLength, actualLength, "UTF-8 length calculation should be correct")
 
 			// Perform the check
-			check := ValidateHeaderLength(tabletest.message, tabletest.maxLength)
+			check := rule.ValidateHeaderLength(tabletest.message, tabletest.maxLength)
 
 			// Check errors
 			if tabletest.expectedValid {
@@ -103,7 +104,7 @@ func TestValidateHeaderLength(t *testing.T) {
 			}
 
 			// Check status method
-			require.Equal(t, "Header Length", check.Status(),
+			require.Equal(t, "Header Length", check.Name(),
 				"Status should always be 'Header Length'")
 		})
 	}

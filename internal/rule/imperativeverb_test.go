@@ -1,12 +1,13 @@
 // SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
 //
 // SPDX-License-Identifier: MPL-2.0
-package rules
+package rule_test
 
 import (
 	"errors"
 	"testing"
 
+	"github.com/itiquette/gommitlint/internal/rule"
 	"github.com/stretchr/testify/require"
 )
 
@@ -79,7 +80,7 @@ func TestValidateImperative(t *testing.T) {
 	for _, tabletest := range testCases {
 		t.Run(tabletest.name, func(t *testing.T) {
 			// Perform the check
-			check := ValidateImperative(tabletest.isConventional, tabletest.message)
+			check := rule.ValidateImperative(tabletest.isConventional, tabletest.message)
 
 			// Check errors
 			if tabletest.expectedValid {
@@ -99,7 +100,7 @@ func TestValidateImperative(t *testing.T) {
 			}
 
 			// Check status method
-			require.Equal(t, "Imperative Mood", check.Status(),
+			require.Equal(t, "Imperative Mood", check.Name(),
 				"Status should always be 'Imperative Mood'")
 		})
 	}
@@ -107,16 +108,13 @@ func TestValidateImperative(t *testing.T) {
 
 func TestImperativeCheckMethods(t *testing.T) {
 	t.Run("Status Method", func(t *testing.T) {
-		check := &ImperativeCheck{}
-		require.Equal(t, "Imperative Mood", check.Status())
+		check := &rule.ImperativeVerb{}
+		require.Equal(t, "Imperative Mood", check.Name())
 	})
 
 	t.Run("Message Method with Errors", func(t *testing.T) {
-		check := &ImperativeCheck{
-			errors: []error{
-				errors.New("first word of commit must be an imperative verb: \"Added\" is invalid"),
-			},
-		}
+		check := &rule.ImperativeVerb{}
+		check.SetErrors([]error{errors.New("first word of commit must be an imperative verb: \"Added\" is invalid")})
 		require.Equal(t,
 			"first word of commit must be an imperative verb: \"Added\" is invalid",
 			check.Message(),
@@ -124,7 +122,7 @@ func TestImperativeCheckMethods(t *testing.T) {
 	})
 
 	t.Run("Message Method without Errors", func(t *testing.T) {
-		check := &ImperativeCheck{}
+		check := &rule.ImperativeVerb{}
 		require.Equal(t, "Commit begins with imperative verb", check.Message())
 	})
 
@@ -132,9 +130,8 @@ func TestImperativeCheckMethods(t *testing.T) {
 		expectedErrors := []error{
 			errors.New("test error"),
 		}
-		check := &ImperativeCheck{
-			errors: expectedErrors,
-		}
-		require.Equal(t, expectedErrors, check.Errors())
+		ruleInstance := &rule.ImperativeVerb{}
+		ruleInstance.SetErrors(expectedErrors)
+		require.Equal(t, expectedErrors, ruleInstance.Errors())
 	})
 }

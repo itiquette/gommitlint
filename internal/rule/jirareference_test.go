@@ -2,12 +2,13 @@
 // SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
 //
 // SPDX-License-Identifier: MPL-2.0
-package rules
+package rule_test
 
 import (
 	"strings"
 	"testing"
 
+	"github.com/itiquette/gommitlint/internal/rule"
 	"github.com/stretchr/testify/require"
 )
 
@@ -97,18 +98,18 @@ func TestValidateJiraCheck(t *testing.T) {
 	// Run test cases
 	for _, tabletest := range testCases {
 		t.Run(tabletest.name, func(t *testing.T) {
-			// Execute Jira check
-			check := ValidateJiraCheck(tabletest.message, validProjects, tabletest.isConventionalCommit)
+			// Execute Jira result
+			result := rule.ValidateJira(tabletest.message, validProjects, tabletest.isConventionalCommit)
 
 			// Check for expected errors
 			if tabletest.expectedErrors {
-				require.NotEmpty(t, check.Errors(), "Expected errors but found none")
+				require.NotEmpty(t, result.Errors(), "Expected errors but found none")
 
 				// Check error message contains expected substring
 				if tabletest.errorContains != "" {
 					found := false
 
-					for _, err := range check.Errors() {
+					for _, err := range result.Errors() {
 						if strings.Contains(err.Error(), tabletest.errorContains) {
 							found = true
 
@@ -119,12 +120,12 @@ func TestValidateJiraCheck(t *testing.T) {
 					require.True(t, found, "Expected error containing %q", tabletest.errorContains)
 				}
 			} else {
-				require.Empty(t, check.Errors(), "Unexpected errors found")
+				require.Empty(t, result.Errors(), "Unexpected errors found")
 			}
 
 			// Verify Status and Message methods work
-			require.NotEmpty(t, check.Status(), "Status should not be empty")
-			require.NotEmpty(t, check.Message(), "Message should not be empty")
+			require.NotEmpty(t, result.Name(), "Status should not be empty")
+			require.NotEmpty(t, result.Message(), "Message should not be empty")
 		})
 	}
 }
@@ -153,7 +154,7 @@ func BenchmarkValidateJiraCheck(b *testing.B) {
 	for _, bc := range benchCases {
 		b.Run(bc.name, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				ValidateJiraCheck(bc.message, validProjects, bc.isConventionalCommit)
+				rule.ValidateJira(bc.message, validProjects, bc.isConventionalCommit)
 			}
 		})
 	}

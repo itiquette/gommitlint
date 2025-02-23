@@ -2,10 +2,11 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-package rules
+package rule
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/interfaces"
@@ -30,8 +31,8 @@ type ConventionalCommitCheck struct {
 	errors []error
 }
 
-// Status returns the name of the check.
-func (c ConventionalCommitCheck) Status() string {
+// Name returns the name of the check.
+func (c ConventionalCommitCheck) Name() string {
 	return "Conventional Commit"
 }
 
@@ -50,14 +51,14 @@ func (c ConventionalCommitCheck) Errors() []error {
 }
 
 // ValidateConventionalCommit returns the commit type.
-func ValidateConventionalCommit(message string, types []string, scopes []string, descLength int) interfaces.Check { //nolint:ireturn
-	check := &ConventionalCommitCheck{}
+func ValidateConventionalCommit(message string, types []string, scopes []string, descLength int) interfaces.Rule { //nolint:ireturn
+	rule := &ConventionalCommitCheck{}
 	groups := parseHeader(message)
 
 	if len(groups) != 5 {
-		check.errors = append(check.errors, errors.Errorf("Invalid conventional commits format: %q", message))
+		rule.errors = append(rule.errors, errors.Errorf("Invalid conventional commits format: %q", message))
 
-		return check
+		return rule
 	}
 
 	// [0] - Full match (entire commit message header)
@@ -71,74 +72,59 @@ func ValidateConventionalCommit(message string, types []string, scopes []string,
 	ccScope := groups[2]
 	ccDesc := groups[4]
 
-	types = append(types, TypeFeat, TypeFix)
-	typeIsValid := false
+	isValidType := slices.Contains(types, ccType)
 
-	for _, t := range types {
-		if t == ccType {
-			typeIsValid = true
-		}
-	}
+	if !isValidType {
+		rule.errors = append(rule.errors, errors.Errorf("Invalid type %q: allowed types are %v", groups[1], types))
 
-	if !typeIsValid {
-		check.errors = append(check.errors, errors.Errorf("Invalid type %q: allowed types are %v", groups[1], types))
-
-		return check
+		return rule
 	}
 
 	// Scope is optional.
 	if ccScope != "" {
-		scopeIsValid := false
+		ccScopes := strings.Split(ccScope, ",")
+		for _, scope := range ccScopes {
+			isValidScope := slices.Contains(scopes, scope)
 
-		for _, scope := range scopes {
-			re := regexp.MustCompile(scope)
-			if re.MatchString(ccScope) {
-				scopeIsValid = true
+			if !isValidScope {
+				rule.errors = append(rule.errors, errors.Errorf("Invalid scope %q: allowed scopes are %v", groups[3], scopes))
 
-				break
+				return rule
 			}
-		}
-
-		if !scopeIsValid {
-			check.errors = append(check.errors, errors.Errorf("Invalid scope %q: allowed scopes are %v", groups[3], scopes))
-
-			return check
 		}
 	}
 
 	// Description is not optional, neither should be only whitespace
 	if strings.TrimSpace(ccDesc) == "" {
-		check.errors = append(check.errors, errors.Errorf("Invalid description %q: description must be at least one non whitespace char", groups[4]))
+		rule.errors = append(rule.errors, errors.Errorf("Invalid description %q: description must be at least one non whitespace char", groups[4]))
 
-		return check
+		return rule
 	}
 
 	var OneSpaceRegex = regexp.MustCompile(`^.*:[ ][^ ].*$`)
 
 	if !OneSpaceRegex.MatchString(ccFull) {
-		check.errors = append(check.errors, errors.Errorf("Space between type: description %q must be one", groups[0]))
+		rule.errors = append(rule.errors, errors.Errorf("Space between type: description %q must be one", groups[0]))
 
-		return check
+		return rule
 	}
+
 	// Provide a good default value for DescriptionLength
 	if descLength == 0 {
 		descLength = 72
 	}
 
 	if len(ccDesc) <= descLength && len(ccDesc) != 0 {
-		return check
+		return rule
 	}
 
-	check.errors = append(check.errors, errors.Errorf("Invalid description: %s", ccDesc))
+	rule.errors = append(rule.errors, errors.Errorf("Invalid description: %s", ccDesc))
 
-	return check
+	return rule
 }
 
 func parseHeader(msg string) []string {
-	// To circumvent any commit violation due to the leading \n that GitHub
-	// prefixes to the commit message on a squash merge, we remove it from the
-	// message.
-	header := strings.Split(strings.TrimPrefix(msg, "\n"), "\n")[0]
+	header := strings.Split(msg, "\n")[0]
 	groups := HeaderRegex.FindStringSubmatch(header)
 
 	return groups

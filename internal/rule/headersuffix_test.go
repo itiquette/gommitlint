@@ -1,11 +1,12 @@
 // SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
 //
 // SPDX-License-Identifier: MPL-2.0
-package rules
+package rule_test
 
 import (
 	"testing"
 
+	"github.com/itiquette/gommitlint/internal/rule"
 	"github.com/stretchr/testify/require"
 )
 
@@ -64,7 +65,7 @@ func TestValidateHeaderSuffix(t *testing.T) {
 	for _, tabletest := range testCases {
 		t.Run(tabletest.name, func(t *testing.T) {
 			// Perform the check
-			check := ValidateHeaderSuffix(tabletest.header, tabletest.invalidSuffixes)
+			check := rule.ValidateHeaderSuffix(tabletest.header, tabletest.invalidSuffixes)
 
 			// Check errors
 			if tabletest.expectedValid {
@@ -84,7 +85,7 @@ func TestValidateHeaderSuffix(t *testing.T) {
 			}
 
 			// Check status method
-			require.Equal(t, "Header Last Character", check.Status(),
+			require.Equal(t, "Header Last Character", check.Name(),
 				"Status should always be 'Header Last Character'")
 		})
 	}

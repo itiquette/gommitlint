@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
 //
 // SPDX-License-Identifier: MPL-2.0
-package rules
+package rule
 
 import (
 	"fmt"
@@ -15,19 +15,19 @@ import (
 // allowed in a commit header.
 const DefaultMaxCommitHeaderLength = 89
 
-// HeaderLengthCheck enforces a maximum number of characters on the commit header.
-type HeaderLengthCheck struct {
+// HeaderLength enforces a maximum number of characters on the commit header.
+type HeaderLength struct {
 	headerLength int
 	errors       []error
 }
 
-// Status returns the name of the check.
-func (h *HeaderLengthCheck) Status() string {
+// Name returns the name of the check.
+func (h *HeaderLength) Name() string {
 	return "Header Length"
 }
 
 // Message returns the check message.
-func (h *HeaderLengthCheck) Message() string {
+func (h *HeaderLength) Message() string {
 	if len(h.errors) > 0 {
 		return h.errors[0].Error()
 	}
@@ -36,12 +36,12 @@ func (h *HeaderLengthCheck) Message() string {
 }
 
 // Errors returns any violations of the check.
-func (h *HeaderLengthCheck) Errors() []error {
+func (h *HeaderLength) Errors() []error {
 	return h.errors
 }
 
 // ValidateHeaderLength checks the header length with proper UTF-8 handling.
-func ValidateHeaderLength(message string, maxLength int) interfaces.Check {
+func ValidateHeaderLength(message string, maxLength int) interfaces.Rule {
 	// Use default max length if not specified
 	if maxLength == 0 {
 		maxLength = DefaultMaxCommitHeaderLength
@@ -50,18 +50,18 @@ func ValidateHeaderLength(message string, maxLength int) interfaces.Check {
 	// Compute UTF-8 aware length
 	headerLength := utf8.RuneCountInString(message)
 
-	check := &HeaderLengthCheck{
+	rule := &HeaderLength{
 		headerLength: headerLength,
 	}
 
 	// Validate length
 	if headerLength > maxLength {
-		check.errors = append(check.errors, fmt.Errorf(
+		rule.errors = append(rule.errors, fmt.Errorf(
 			"commit header is too long: %d characters (maximum allowed: %d)",
 			headerLength,
 			maxLength,
 		))
 	}
 
-	return check
+	return rule
 }

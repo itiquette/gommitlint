@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-package rules
+package rule
 
 import (
 	"fmt"
@@ -16,47 +16,47 @@ import (
 	"github.com/pkg/errors"
 )
 
-type GPGIdentityCheck struct {
-	errors   []error
-	identity string
+type GPGIdentity struct {
+	RuleErrors []error
+	Identity   string
 }
 
-func (g GPGIdentityCheck) Status() string {
+func (g GPGIdentity) Name() string {
 	return "GPG Identity"
 }
 
-func (g GPGIdentityCheck) Message() string {
-	if len(g.errors) != 0 {
-		return g.errors[0].Error()
+func (g GPGIdentity) Message() string {
+	if len(g.RuleErrors) != 0 {
+		return g.RuleErrors[0].Error()
 	}
 
-	return fmt.Sprintf("Signed by %q", g.identity)
+	return fmt.Sprintf("Signed by %q", g.Identity)
 }
 
-func (g GPGIdentityCheck) Errors() []error {
-	return g.errors
+func (g GPGIdentity) Errors() []error {
+	return g.RuleErrors
 }
 
-func ValidateGPGIdentity(signature string, commitData *object.Commit, pubKeyDir string) GPGIdentityCheck {
-	check := GPGIdentityCheck{}
+func ValidateGPGIdentity(signature string, commitData *object.Commit, pubKeyDir string) GPGIdentity {
+	rule := GPGIdentity{}
 
 	if pubKeyDir == "" {
-		check.errors = append(check.errors, errors.New("no public key directory provided"))
+		rule.RuleErrors = append(rule.RuleErrors, errors.New("no public key directory provided"))
 
-		return check
+		return rule
 	}
 
 	if signature == "" {
-		check.errors = append(check.errors, errors.New("commit is not signed"))
+		rule.RuleErrors = append(rule.RuleErrors, errors.New("commit is not signed"))
 
-		return check
+		return rule
 	}
 
 	entries, err := os.ReadDir(pubKeyDir)
 	if err != nil {
-		check.errors = append(check.errors, fmt.Errorf("failed to load public keys: %w", err))
+		rule.RuleErrors = append(rule.RuleErrors, fmt.Errorf("failed to load public keys: %w", err))
 
-		return check
+		return rule
 	}
 
 	var entityList []*openpgp.Entity
@@ -86,9 +86,9 @@ func ValidateGPGIdentity(signature string, commitData *object.Commit, pubKeyDir 
 	}
 
 	if len(entityList) == 0 {
-		check.errors = append(check.errors, errors.New("no public keys found in directory"))
+		rule.RuleErrors = append(rule.RuleErrors, errors.New("no public keys found in directory"))
 
-		return check
+		return rule
 	}
 	// Get commit data for signature verification
 	encoded := &plumbing.MemoryObject{}
@@ -109,16 +109,16 @@ func ValidateGPGIdentity(signature string, commitData *object.Commit, pubKeyDir 
 		if err == nil && verifiedEntity != nil {
 			// Found a matching key, get the identity
 			for _, identity := range verifiedEntity.Identities {
-				check.identity = identity.Name
+				rule.Identity = identity.Name
 
-				return check
+				return rule
 			}
 		}
 
 		signatureReader.Reset(signature)
 	}
 
-	check.errors = append(check.errors, errors.New("no valid signature found with trusted keys"))
+	rule.RuleErrors = append(rule.RuleErrors, errors.New("no valid signature found with trusted keys"))
 
-	return check
+	return rule
 }

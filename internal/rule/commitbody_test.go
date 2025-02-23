@@ -2,12 +2,12 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-package rules_test
+package rule_test
 
 import (
 	"testing"
 
-	"github.com/itiquette/gommitlint/internal/rules"
+	"github.com/itiquette/gommitlint/internal/rule"
 	"github.com/stretchr/testify/require"
 )
 
@@ -107,7 +107,7 @@ Signed-off-by: Jane Doe <jane@example.com>`,
 
 	for _, tabletest := range tests {
 		t.Run(tabletest.name, func(t *testing.T) {
-			check := rules.ValidateCommitBody(tabletest.message)
+			check := rule.ValidateCommitBody(tabletest.message)
 
 			if tabletest.expectError {
 				require.NotEmpty(t, check.Errors(), "expected errors but got none")

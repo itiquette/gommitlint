@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
 //
 // SPDX-License-Identifier: MPL-2.0
-package rules
+package rule
 
 import (
 	"fmt"
@@ -21,18 +21,18 @@ var imperativeTags = map[string]bool{
 	"VBZ": true, // 3rd person singular present
 }
 
-// ImperativeCheck enforces that the first word of a commit message header is an imperative verb.
-type ImperativeCheck struct {
+// ImperativeVerb enforces that the first word of a commit message header is an imperative verb.
+type ImperativeVerb struct {
 	errors []error
 }
 
-// Status returns the name of the check.
-func (i *ImperativeCheck) Status() string {
+// Name returns the name of the check.
+func (i *ImperativeVerb) Name() string {
 	return "Imperative Mood"
 }
 
 // Message returns the check message.
-func (i *ImperativeCheck) Message() string {
+func (i *ImperativeVerb) Message() string {
 	if len(i.errors) > 0 {
 		return i.errors[0].Error()
 	}
@@ -41,36 +41,39 @@ func (i *ImperativeCheck) Message() string {
 }
 
 // Errors returns any violations of the check.
-func (i *ImperativeCheck) Errors() []error {
+func (i *ImperativeVerb) Errors() []error {
 	return i.errors
+}
+func (i *ImperativeVerb) SetErrors(err []error) {
+	i.errors = err
 }
 
 // ValidateImperative checks the commit message for an imperative first word.
-func ValidateImperative(isConventional bool, message string) interfaces.Check {
-	check := &ImperativeCheck{}
+func ValidateImperative(isConventional bool, message string) interfaces.Rule {
+	rule := &ImperativeVerb{}
 
 	// Extract first word
 	word, err := extractFirstWord(isConventional, message)
 	if err != nil {
-		check.errors = append(check.errors, err)
+		rule.errors = append(rule.errors, err)
 
-		return check
+		return rule
 	}
 
 	// Create prose document to analyze verb
 	doc, err := createProseDocument(word)
 	if err != nil {
-		check.errors = append(check.errors, fmt.Errorf("failed to create document: %w", err))
+		rule.errors = append(rule.errors, fmt.Errorf("failed to create document: %w", err))
 
-		return check
+		return rule
 	}
 
 	// Validate verb type
 	if err := validateVerbType(doc, word); err != nil {
-		check.errors = append(check.errors, err)
+		rule.errors = append(rule.errors, err)
 	}
 
-	return check
+	return rule
 }
 
 // extractFirstWord extracts the first word from the commit message.

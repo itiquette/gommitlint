@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
 //
 // SPDX-License-Identifier: MPL-2.0
-package rules
+package rule
 
 import (
 	"fmt"
@@ -13,49 +13,49 @@ import (
 	"github.com/pkg/errors"
 )
 
-// HeaderCaseCheck enforces the case of the first word in the header.
-type HeaderCaseCheck struct {
+// HeaderCase enforces the case of the first word in the header.
+type HeaderCase struct {
 	headerCase string
-	errors     []error
+	RuleErrors []error
 }
 
-// Status returns the name of the check.
-func (h *HeaderCaseCheck) Status() string {
+// Name returns the name of the check.
+func (h *HeaderCase) Name() string {
 	return "Header Case"
 }
 
 // Message returns the check message.
-func (h *HeaderCaseCheck) Message() string {
-	if len(h.errors) > 0 {
-		return h.errors[0].Error()
+func (h *HeaderCase) Message() string {
+	if len(h.RuleErrors) > 0 {
+		return h.RuleErrors[0].Error()
 	}
 
 	return "Header case is valid"
 }
 
 // Errors returns any violations of the check.
-func (h *HeaderCaseCheck) Errors() []error {
-	return h.errors
+func (h *HeaderCase) Errors() []error {
+	return h.RuleErrors
 }
 
 // ValidateHeaderCase checks the header case based on the specified case choice.
-func ValidateHeaderCase(isConventional bool, message, caseChoice string) interfaces.Check {
-	check := &HeaderCaseCheck{headerCase: caseChoice}
+func ValidateHeaderCase(isConventional bool, message, caseChoice string) interfaces.Rule {
+	rule := &HeaderCase{headerCase: caseChoice}
 
 	// Extract first word
 	firstWord, err := extractFirstWord(isConventional, message)
 	if err != nil {
-		check.errors = append(check.errors, err)
+		rule.RuleErrors = append(rule.RuleErrors, err)
 
-		return check
+		return rule
 	}
 
 	// Decode first rune
 	first, _ := utf8.DecodeRuneInString(firstWord)
 	if first == utf8.RuneError {
-		check.errors = append(check.errors, errors.New("header does not start with valid UTF-8 text"))
+		rule.RuleErrors = append(rule.RuleErrors, errors.New("header does not start with valid UTF-8 text"))
 
-		return check
+		return rule
 	}
 
 	// Validate case
@@ -67,14 +67,14 @@ func ValidateHeaderCase(isConventional bool, message, caseChoice string) interfa
 	case "lower":
 		valid = unicode.IsLower(first)
 	default:
-		check.errors = append(check.errors, fmt.Errorf("invalid configured case: %s", caseChoice))
+		rule.RuleErrors = append(rule.RuleErrors, fmt.Errorf("invalid configured case: %s", caseChoice))
 
-		return check
+		return rule
 	}
 
 	if !valid {
-		check.errors = append(check.errors, fmt.Errorf("commit header case is not %s", caseChoice))
+		rule.RuleErrors = append(rule.RuleErrors, fmt.Errorf("commit header case is not %s", caseChoice))
 	}
 
-	return check
+	return rule
 }

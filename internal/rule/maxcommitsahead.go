@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
 //
 // SPDX-License-Identifier: MPL-2.0
-package rules
+package rule
 
 import (
 	"fmt"
@@ -32,37 +32,37 @@ func DefaultCommitsAheadConfig() CommitsAheadConfig {
 	}
 }
 
-// NumberOfCommitsCheck enforces a maximum number of commits ahead of a reference.
-type NumberOfCommitsCheck struct {
+// MaxCommitsAhead enforces a maximum number of commits ahead of a reference.
+type MaxCommitsAhead struct {
 	ref    string
-	ahead  int
+	Ahead  int
 	config CommitsAheadConfig
 	errors []error
 }
 
-// Status returns the name of the check.
-func (c *NumberOfCommitsCheck) Status() string {
-	return "Number of Commits"
+// Name returns the name of the rule.
+func (c *MaxCommitsAhead) Name() string {
+	return "Max Commits Ahead"
 }
 
-// Message returns the check message.
-func (c *NumberOfCommitsCheck) Message() string {
+// Message returns the rule message.
+func (c *MaxCommitsAhead) Message() string {
 	if len(c.errors) > 0 {
 		return c.errors[0].Error()
 	}
 
-	return fmt.Sprintf("HEAD is %d commit(s) ahead of %s", c.ahead, c.ref)
+	return fmt.Sprintf("HEAD is %d commit(s) ahead of %s", c.Ahead, c.ref)
 }
 
-// Errors returns any violations of the check.
-func (c *NumberOfCommitsCheck) Errors() []error {
+// Errors returns any violations of the rule.
+func (c *MaxCommitsAhead) Errors() []error {
 	return c.errors
 }
 func ValidateNumberOfCommits(
 	gitClient *git.Git,
 	ref string,
 	opts ...func(*CommitsAheadConfig),
-) interfaces.Check {
+) interfaces.Rule {
 	// Start with default configuration
 	config := DefaultCommitsAheadConfig()
 
@@ -71,39 +71,39 @@ func ValidateNumberOfCommits(
 		opt(&config)
 	}
 
-	check := &NumberOfCommitsCheck{
+	rule := &MaxCommitsAhead{
 		ref:    ref,
 		config: config,
 	}
 
 	// Validate git client
 	if gitClient == nil {
-		check.errors = append(check.errors,
+		rule.errors = append(rule.errors,
 			errors.New("git client is nil"))
 
-		return check
+		return rule
 	}
 
 	// Get current branch name
 	head, err := gitClient.Repo.Head()
 	if err != nil {
-		check.errors = append(check.errors,
+		rule.errors = append(rule.errors,
 			fmt.Errorf("failed to get current branch: %w", err))
 
-		return check
+		return rule
 	}
 
 	currentBranch := head.Name().Short()
 
 	// Check if branch should be ignored
 	if contains(config.IgnoreBranches, currentBranch) {
-		return check
+		return rule
 	}
 
 	// Check if enforcement is limited to specific branches
 	if len(config.EnforceOnBranches) > 0 &&
 		!contains(config.EnforceOnBranches, currentBranch) {
-		return check
+		return rule
 	}
 
 	// Ensure the ref is a full reference name
@@ -127,23 +127,23 @@ func ValidateNumberOfCommits(
 		if strings.Contains(err.Error(), "reference not found") {
 			ahead = 0
 		} else {
-			check.errors = append(check.errors,
+			rule.errors = append(rule.errors,
 				fmt.Errorf("failed to check ahead/behind status: %w", err))
 
-			return check
+			return rule
 		}
 	}
 
-	check.ahead = ahead
+	rule.Ahead = ahead
 
 	// Validate number of commits
 	if ahead > config.MaxCommitsAhead {
-		check.errors = append(check.errors,
+		rule.errors = append(rule.errors,
 			fmt.Errorf("HEAD is %d commit(s) ahead of %s (max: %d)",
 				ahead, ref, config.MaxCommitsAhead))
 	}
 
-	return check
+	return rule
 }
 
 func WithMaxCommitsAhead(maxnr int) func(*CommitsAheadConfig) {

@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-package rules
+package rule
 
 import (
 	"strings"
@@ -19,10 +19,6 @@ type CommitBody struct {
 
 // Name returns the identifier of this check.
 func (c CommitBody) Name() string {
-	return "Commit Body"
-}
-
-func (c CommitBody) Status() string {
 	return "Commit Body"
 }
 
@@ -43,32 +39,32 @@ func (c CommitBody) Errors() []error {
 // ValidateCommitBody validates the commit message body.
 // It ensures the body is not empty (contains at least one non-DCO line)
 // and has exactly one empty line between header and body.
-func ValidateCommitBody(message string) interfaces.Check { //nolint:ireturn
-	check := &CommitBody{}
+func ValidateCommitBody(message string) interfaces.Rule { //nolint:ireturn
+	rule := &CommitBody{}
 	lines := strings.Split(strings.TrimPrefix(message, "\n"), "\n")
 
-	// A valid commit must have at least 3 lines:
+	// A valid commit body must have at least 3 lines:
 	// - header
 	// - empty line
 	// - body
 	if len(lines) < 3 {
-		check.errors = append(check.errors, errors.New("Commit requires a descriptive body explaining the changes"))
+		rule.errors = append(rule.errors, errors.New("Commit requires a descriptive body explaining the changes"))
 
-		return check
+		return rule
 	}
 
 	// Second line must be empty
 	if lines[1] != "" {
-		check.errors = append(check.errors, errors.New("Commit message must have exactly one empty line between header and body"))
+		rule.errors = append(rule.errors, errors.New("Commit message must have exactly one empty line between header and body"))
 
-		return check
+		return rule
 	}
 
 	// Third line must be not empty
 	if lines[2] == "" {
-		check.errors = append(check.errors, errors.New("Commit message must have a non empty body text"))
+		rule.errors = append(rule.errors, errors.New("Commit message must have a non empty body text"))
 
-		return check
+		return rule
 	}
 
 	bodyContent := []string{}
@@ -84,7 +80,7 @@ func ValidateCommitBody(message string) interfaces.Check { //nolint:ireturn
 	}
 
 	if len(bodyContent) == 0 {
-		check.errors = append(check.errors, errors.New(`Commit body is required. 
+		rule.errors = append(rule.errors, errors.New(`Commit body is required. 
 Be specific, descriptive, and explain the why behind changes while staying brief.
 
 Example - A commit header with body and sign-off:
@@ -96,8 +92,8 @@ feat: update password validation to meet NIST guidelines
 
 Signed-off-by: Humpty Dumpty <supercommiter@example.com>`))
 
-		return check
+		return rule
 	}
 
-	return check
+	return rule
 }

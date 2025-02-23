@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-package rules
+package rule
 
 import (
 	"regexp"
@@ -16,22 +16,18 @@ import (
 // DCORegex is the regular expression used to validate the Developer Certificate of Origin signature.
 var DCORegex = regexp.MustCompile(`^Signed-off-by: ([^<]+) <([^<>@]+@[^<>]+)>$`)
 
-// DCOCheck ensures that the commit message contains a
+// SignOff ensures that the commit message contains a
 // Developer Certificate of Origin signature.
-type DCOCheck struct {
+type SignOff struct {
 	errors []error
 }
 
-func (d DCOCheck) Name() string {
-	return "DCO"
-}
-
-func (d DCOCheck) Status() string {
+func (d SignOff) Name() string {
 	return "DCO"
 }
 
 // Message returns the check message.
-func (d DCOCheck) Message() string {
+func (d SignOff) Message() string {
 	if len(d.errors) != 0 {
 		return d.errors[0].Error()
 	}
@@ -40,21 +36,21 @@ func (d DCOCheck) Message() string {
 }
 
 // Errors returns any violations of the check.
-func (d DCOCheck) Errors() []error {
+func (d SignOff) Errors() []error {
 	return d.errors
 }
 
-func ValidateDCO(message string) interfaces.Check { //nolint:ireturn
-	check := &DCOCheck{}
+func ValidateSignOff(message string) interfaces.Rule { //nolint:ireturn
+	rule := &SignOff{}
 
 	for _, line := range strings.Split(message, "\n") {
 		trimmedLine := strings.TrimSpace(line)
 		if DCORegex.MatchString(trimmedLine) {
-			return check
+			return rule
 		}
 	}
 
-	check.errors = append(check.errors, errors.New(`Commit must be signed-off with a Developer Certificate of Origin (DCO).
+	rule.errors = append(rule.errors, errors.New(`Commit must be signed-off with a Developer Certificate of Origin (DCO).
 Use 'git commit -s' or manually add a sign-off line.
 
 Example - A complete commit message with sign-off:
@@ -67,5 +63,5 @@ Adds rate limiting to prevent API abuse:
 
 Signed-off-by: Jane Smith <jane.smith@example.com>`))
 
-	return check
+	return rule
 }

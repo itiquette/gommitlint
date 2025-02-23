@@ -2,10 +2,11 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-package rules
+package rule
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -19,27 +20,27 @@ import (
 )
 
 func TestGPGIdentityCheck_Status(t *testing.T) {
-	check := GPGIdentityCheck{}
-	require.Equal(t, "GPG Identity", check.Status())
+	check := GPGIdentity{}
+	require.Equal(t, "GPG Identity", check.Name())
 }
 
 func TestGPGIdentityCheck_Message(t *testing.T) {
 	tests := []struct {
 		name     string
-		check    GPGIdentityCheck
+		check    GPGIdentity
 		expected string
 	}{
 		{
 			name: "valid identity",
-			check: GPGIdentityCheck{
-				identity: "Test User <test@example.com>",
+			check: GPGIdentity{
+				Identity: "Test User <test@example.com>",
 			},
 			expected: `Signed by "Test User <test@example.com>"`,
 		},
 		{
 			name: "with error",
-			check: GPGIdentityCheck{
-				errors: []error{errors.New("verification failed")},
+			check: GPGIdentity{
+				RuleErrors: []error{errors.New("verification failed")},
 			},
 			expected: "verification failed",
 		},
@@ -55,7 +56,11 @@ func TestGPGIdentityCheck_Message(t *testing.T) {
 func loadTestKey(t *testing.T, filename string) *openpgp.Entity {
 	t.Helper()
 
-	privKeyData, err := os.ReadFile(filepath.Join("testdata", filename))
+	fullPath, _ := filepath.Abs("testdata")
+
+	fmt.Print("ASDFASDFSADF")
+	fmt.Print(fullPath)
+	privKeyData, err := os.ReadFile(filepath.Join(fullPath, filename))
 	require.NoError(t, err, "failed to read test key file")
 
 	t.Logf("Loaded private key file: %s, length: %d", filename, len(privKeyData))
@@ -131,6 +136,7 @@ func setupTestRepo(t *testing.T, opts setupRepoOptions) (*git.Repository, *objec
 }
 
 func TestValidateGPGIdentity(t *testing.T) {
+	testDataDir, _ := filepath.Abs("testdata")
 	tests := []struct {
 		name        string
 		setupOpts   setupRepoOptions
@@ -148,7 +154,7 @@ func TestValidateGPGIdentity(t *testing.T) {
 				message:     "Signed commit",
 				signKey:     loadTestKey(t, "valid.priv"),
 			},
-			pubKeyDir:   "testdata",
+			pubKeyDir:   testDataDir,
 			expectError: false,
 			wantID:      "Test User <test@example.com>",
 		},
@@ -159,7 +165,7 @@ func TestValidateGPGIdentity(t *testing.T) {
 				authorEmail: "test@example.com",
 				message:     "Unsigned commit",
 			},
-			pubKeyDir:   "testdata",
+			pubKeyDir:   testDataDir,
 			expectError: true,
 			wantErrMsg:  "commit is not signed",
 		},
@@ -194,7 +200,7 @@ func TestValidateGPGIdentity(t *testing.T) {
 				authorEmail: "test@example.com",
 				message:     "Malformed signature",
 			},
-			pubKeyDir:   "testdata",
+			pubKeyDir:   testDataDir,
 			signature:   "not-a-real-signature",
 			expectError: true,
 			wantErrMsg:  "no valid signature found with trusted keys",
@@ -221,7 +227,7 @@ func TestValidateGPGIdentity(t *testing.T) {
 				}
 			} else {
 				require.Empty(t, result.Errors())
-				require.Equal(t, tabletest.wantID, result.identity)
+				require.Equal(t, tabletest.wantID, result.Identity)
 			}
 		})
 	}

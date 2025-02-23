@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
 //
 // SPDX-License-Identifier: MPL-2.0
-package rules
+package rule_test
 
 import (
 	"fmt"
@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gitClient "github.com/itiquette/gommitlint/internal/git"
+	"github.com/itiquette/gommitlint/internal/rule"
 )
 
 func TestValidateNumberOfCommits(t *testing.T) {
@@ -23,7 +24,7 @@ func TestValidateNumberOfCommits(t *testing.T) {
 		name          string
 		setupRepo     func(t *testing.T, repo *git.Repository, w *git.Worktree)
 		ref           string
-		opts          []func(*CommitsAheadConfig)
+		opts          []func(*rule.CommitsAheadConfig)
 		expectedAhead int
 		expectError   bool
 		errorContains string
@@ -61,7 +62,7 @@ func TestValidateNumberOfCommits(t *testing.T) {
 				createCommit(t, repo, w, "feat: second feature")
 			},
 			ref:           "main",
-			opts:          []func(*CommitsAheadConfig){WithIgnoreBranches("feature")},
+			opts:          []func(*rule.CommitsAheadConfig){rule.WithIgnoreBranches("feature")},
 			expectedAhead: 0,
 			expectError:   false,
 			currentBranch: "feature",
@@ -74,7 +75,7 @@ func TestValidateNumberOfCommits(t *testing.T) {
 				createCommit(t, repo, w, "feat: second feature")
 			},
 			ref:           "main",
-			opts:          []func(*CommitsAheadConfig){WithEnforceOnBranches("other")},
+			opts:          []func(*rule.CommitsAheadConfig){rule.WithEnforceOnBranches("other")},
 			expectedAhead: 0,
 			expectError:   false,
 			currentBranch: "feature",
@@ -87,7 +88,7 @@ func TestValidateNumberOfCommits(t *testing.T) {
 				createCommit(t, repo, w, "feat: second feature")
 			},
 			ref:           "main",
-			opts:          []func(*CommitsAheadConfig){WithMaxCommitsAhead(2)},
+			opts:          []func(*rule.CommitsAheadConfig){rule.WithMaxCommitsAhead(2)},
 			expectedAhead: 2,
 			expectError:   false,
 			currentBranch: "feature",
@@ -144,18 +145,18 @@ func TestValidateNumberOfCommits(t *testing.T) {
 				Repo: repo,
 			}
 
-			check := ValidateNumberOfCommits(client, tabletest.ref, tabletest.opts...)
-			nr, _ := check.(*NumberOfCommitsCheck)
-			require.Equal(t, tabletest.expectedAhead, nr.ahead)
+			ruleInfo := rule.ValidateNumberOfCommits(client, tabletest.ref, tabletest.opts...)
+			nr, _ := ruleInfo.(*rule.MaxCommitsAhead)
+			require.Equal(t, tabletest.expectedAhead, nr.Ahead)
 
 			if tabletest.expectError {
-				require.NotEmpty(t, check.Errors())
+				require.NotEmpty(t, ruleInfo.Errors())
 
 				if tabletest.errorContains != "" {
-					require.Contains(t, check.Errors()[0].Error(), tabletest.errorContains)
+					require.Contains(t, ruleInfo.Errors()[0].Error(), tabletest.errorContains)
 				}
 			} else {
-				require.Empty(t, check.Errors())
+				require.Empty(t, ruleInfo.Errors())
 			}
 		})
 	}

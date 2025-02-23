@@ -23,10 +23,12 @@ type DefaultConfigLoader struct{}
 
 // LoadConfiguration loads the application configuration from various sources.
 func (DefaultConfigLoader) LoadConfiguration() (*AppConf, error) {
-	appConfig := &AppConf{}
+	appConfig := &AppConf{GommitConf: &Gommit{Conventional: &Conventional{}}}
 	if err := ReadConfigurationFile(appConfig, ".gommitlint.yaml"); err != nil {
 		return nil, fmt.Errorf("failed to read configuration file: %w", err)
 	}
+
+	defaultConventionalTypes(appConfig)
 
 	//	for _, config := range appConfig.Configurations {
 	// if err := validateConfiguration(config); err != nil {
@@ -38,6 +40,15 @@ func (DefaultConfigLoader) LoadConfiguration() (*AppConf, error) {
 	//	fmt.Print(appConfig)
 
 	return appConfig, nil
+}
+
+func defaultConventionalTypes(appConf *AppConf) {
+	// fill defaults
+	if len(appConf.GommitConf.Conventional.Types) == 0 {
+		types := []string{"build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "revert", "style", "test"}
+
+		appConf.GommitConf.Conventional.Types = types
+	}
 }
 
 func ReadConfigurationFile(appConfiguration *AppConf, configfile string) error {
@@ -62,6 +73,10 @@ func ReadConfigurationFile(appConfiguration *AppConf, configfile string) error {
 		if err := koanfConf.Load(file.Provider(configfile), yaml.Parser()); err != nil {
 			return fmt.Errorf("error loading config: %w", err)
 		}
+	}
+
+	if !localConfigfileExists && !xdgConfigfileExists {
+		return nil
 	}
 
 	// Unmarshal the YAML data into the config struct

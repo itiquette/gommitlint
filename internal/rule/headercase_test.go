@@ -1,11 +1,12 @@
 // SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
 //
 // SPDX-License-Identifier: MPL-2.0
-package rules
+package rule_test
 
 import (
 	"testing"
 
+	"github.com/itiquette/gommitlint/internal/rule"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -97,7 +98,7 @@ func TestValidateHeaderCase(t *testing.T) {
 	for _, tabletest := range testCases {
 		t.Run(tabletest.name, func(t *testing.T) {
 			// Perform the check
-			check := ValidateHeaderCase(tabletest.isConventional, tabletest.message, tabletest.caseChoice)
+			check := rule.ValidateHeaderCase(tabletest.isConventional, tabletest.message, tabletest.caseChoice)
 
 			// Check errors
 			if tabletest.expectedErrors {
@@ -113,25 +114,25 @@ func TestValidateHeaderCase(t *testing.T) {
 			}
 
 			// Check status
-			require.Equal(t, "Header Case", check.Status(), "Status should always be 'Header Case'")
+			require.Equal(t, "Header Case", check.Name(), "Status should always be 'Header Case'")
 		})
 	}
 }
 
 func TestHeaderCaseCheckMethods(t *testing.T) {
 	t.Run("Status Method", func(t *testing.T) {
-		check := &HeaderCaseCheck{}
-		require.Equal(t, "Header Case", check.Status())
+		check := &rule.HeaderCase{}
+		require.Equal(t, "Header Case", check.Name())
 	})
 
 	t.Run("Message Method with No Errors", func(t *testing.T) {
-		check := &HeaderCaseCheck{}
+		check := &rule.HeaderCase{}
 		require.Equal(t, "Header case is valid", check.Message())
 	})
 
 	t.Run("Message Method with Errors", func(t *testing.T) {
-		check := &HeaderCaseCheck{
-			errors: []error{
+		check := &rule.HeaderCase{
+			RuleErrors: []error{
 				errors.New("test error"),
 				errors.New("second error"),
 			},
@@ -144,8 +145,8 @@ func TestHeaderCaseCheckMethods(t *testing.T) {
 			errors.New("test error"),
 			errors.New("second error"),
 		}
-		check := &HeaderCaseCheck{
-			errors: expectedErrors,
+		check := &rule.HeaderCase{
+			RuleErrors: expectedErrors,
 		}
 		require.Equal(t, expectedErrors, check.Errors())
 	})

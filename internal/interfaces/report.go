@@ -4,10 +4,9 @@
 
 package interfaces
 
-// Check defines a commit check.
-type Check interface {
-	Status() string
-	//	Name() string
+// Rule defines a commit check.
+type Rule interface {
+	Name() string
 	Message() string
 	Errors() []error
 }

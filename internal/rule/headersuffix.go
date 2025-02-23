@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
 //
 // SPDX-License-Identifier: MPL-2.0
-package rules
+package rule
 
 import (
 	"fmt"
@@ -13,18 +13,18 @@ import (
 	"github.com/pkg/errors"
 )
 
-// HeaderSuffixCheck enforces that the last character of the header isn't in a specified set.
-type HeaderSuffixCheck struct {
+// HeaderSuffix enforces that the last character of the header isn't in a specified set.
+type HeaderSuffix struct {
 	errors []error
 }
 
-// Status returns the name of the check.
-func (h *HeaderSuffixCheck) Status() string {
+// Name returns the name of the rule.
+func (h *HeaderSuffix) Name() string {
 	return "Header Last Character"
 }
 
 // Message returns the check message.
-func (h *HeaderSuffixCheck) Message() string {
+func (h *HeaderSuffix) Message() string {
 	if len(h.errors) > 0 {
 		return h.errors[0].Error()
 	}
@@ -33,17 +33,17 @@ func (h *HeaderSuffixCheck) Message() string {
 }
 
 // Errors returns any violations of the check.
-func (h *HeaderSuffixCheck) Errors() []error {
+func (h *HeaderSuffix) Errors() []error {
 	return h.errors
 }
 
 // ValidateHeaderSuffix checks the last character of the header.
-func ValidateHeaderSuffix(header, invalidSuffixes string) interfaces.Check {
-	check := &HeaderSuffixCheck{}
+func ValidateHeaderSuffix(header, invalidSuffixes string) interfaces.Rule {
+	rule := &HeaderSuffix{}
 
 	// Handle empty header
 	if header == "" {
-		return check
+		return rule
 	}
 
 	// Decode the last rune
@@ -51,15 +51,15 @@ func ValidateHeaderSuffix(header, invalidSuffixes string) interfaces.Check {
 
 	// Check for invalid UTF-8
 	if last == utf8.RuneError {
-		check.errors = append(check.errors, errors.New("header does not end with valid UTF-8 text"))
+		rule.errors = append(rule.errors, errors.New("header does not end with valid UTF-8 text"))
 
-		return check
+		return rule
 	}
 
 	// Check if the last character is in the invalid suffix set
 	if strings.ContainsRune(invalidSuffixes, last) {
-		check.errors = append(check.errors, fmt.Errorf("commit header ends with invalid character %q", last))
+		rule.errors = append(rule.errors, fmt.Errorf("commit header ends with invalid character %q", last))
 	}
 
-	return check
+	return rule
 }
