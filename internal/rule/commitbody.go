@@ -1,7 +1,6 @@
-// SPDX-FileCopyrightText: 2024 Sidero Labs, Inc.
-// SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: EUPL-1.2
 
 package rule
 
@@ -22,8 +21,8 @@ func (c CommitBody) Name() string {
 	return "Commit Body"
 }
 
-// Message returns the check message.
-func (c CommitBody) Message() string {
+// Result returns the check message.
+func (c CommitBody) Result() string {
 	if len(c.errors) != 0 {
 		return c.errors[0].Error()
 	}
@@ -38,13 +37,13 @@ func (c CommitBody) Errors() []error {
 
 // ValidateCommitBody validates the commit message body.
 // It ensures the body is not empty (contains at least one non-DCO line)
-// and has exactly one empty line between header and body.
-func ValidateCommitBody(message string) interfaces.Rule { //nolint:ireturn
+// and has exactly one empty line between subject and body.
+func ValidateCommitBody(message string) interfaces.CommitRule { //nolint:ireturn
 	rule := &CommitBody{}
 	lines := strings.Split(strings.TrimPrefix(message, "\n"), "\n")
 
 	// A valid commit body must have at least 3 lines:
-	// - header
+	// - subject
 	// - empty line
 	// - body
 	if len(lines) < 3 {
@@ -55,7 +54,7 @@ func ValidateCommitBody(message string) interfaces.Rule { //nolint:ireturn
 
 	// Second line must be empty
 	if lines[1] != "" {
-		rule.errors = append(rule.errors, errors.New("Commit message must have exactly one empty line between header and body"))
+		rule.errors = append(rule.errors, errors.New("Commit message must have exactly one empty line between subject and body"))
 
 		return rule
 	}
@@ -70,7 +69,7 @@ func ValidateCommitBody(message string) interfaces.Rule { //nolint:ireturn
 	bodyContent := []string{}
 
 	for _, line := range lines[2:] {
-		if DCORegex.MatchString(strings.TrimSpace(line)) {
+		if SignOffRegex.MatchString(strings.TrimSpace(line)) {
 			continue
 		}
 
@@ -83,7 +82,7 @@ func ValidateCommitBody(message string) interfaces.Rule { //nolint:ireturn
 		rule.errors = append(rule.errors, errors.New(`Commit body is required. 
 Be specific, descriptive, and explain the why behind changes while staying brief.
 
-Example - A commit header with body and sign-off:
+Example - A commit subject with body and sign-off:
 
 feat: update password validation to meet NIST guidelines
 

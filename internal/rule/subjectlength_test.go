@@ -1,11 +1,12 @@
-// SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: EUPL-1.2
 
 package rule_test
 
 import (
 	"fmt"
+	"strconv"
 	"testing"
 	"unicode/utf8"
 
@@ -13,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidateHeaderLength(t *testing.T) {
+func TestValidateSubjectLength(t *testing.T) {
 	testCases := []struct {
 		name           string
 		message        string
@@ -40,11 +41,11 @@ func TestValidateHeaderLength(t *testing.T) {
 		},
 		{
 			name:           "Exceeds Default Length",
-			message:        "A very long message that definitely exceeds the default maximum length allowed for commit messages..",
+			message:        "A very long message that definitely exceeds the default maximum length allowed for cddddddddddddddddd",
 			maxLength:      0,
 			expectedValid:  false,
-			expectedLength: 100,
-			expectedError:  "commit header is too long: 100 characters (maximum allowed: 89)",
+			expectedLength: rule.DefaultMaxCommitSubjectLength + 1,
+			expectedError:  "subject too long: " + strconv.Itoa(rule.DefaultMaxCommitSubjectLength+1) + " characters (maximum allowed: " + strconv.Itoa(rule.DefaultMaxCommitSubjectLength) + ")",
 		},
 		{
 			name:           "Custom Max Length Exceeded",
@@ -52,7 +53,7 @@ func TestValidateHeaderLength(t *testing.T) {
 			maxLength:      20,
 			expectedValid:  false,
 			expectedLength: 46,
-			expectedError:  "commit header is too long: 46 characters (maximum allowed: 20)",
+			expectedError:  "subject too long: 46 characters (maximum allowed: 20)",
 		},
 		{
 			name:           "Unicode Characters",
@@ -65,10 +66,10 @@ func TestValidateHeaderLength(t *testing.T) {
 		{
 			name:           "Unicode Characters Exceeding Length",
 			message:        "A very long message with unicode characters like élément that makes it exceed the length límit",
-			maxLength:      0,
+			maxLength:      89,
 			expectedValid:  false,
 			expectedLength: 94,
-			expectedError:  "commit header is too long: 94 characters (maximum allowed: 89)",
+			expectedError:  "subject too long: 94 characters (maximum allowed: 89)",
 		},
 		{
 			name:           "Empty Message",
@@ -87,25 +88,25 @@ func TestValidateHeaderLength(t *testing.T) {
 			require.Equal(t, tabletest.expectedLength, actualLength, "UTF-8 length calculation should be correct")
 
 			// Perform the check
-			check := rule.ValidateHeaderLength(tabletest.message, tabletest.maxLength)
+			check := rule.ValidateSubjectLength(tabletest.message, tabletest.maxLength)
 
 			// Check errors
 			if tabletest.expectedValid {
 				require.Empty(t, check.Errors(), "Did not expect errors")
 				require.Equal(t,
-					fmt.Sprintf("Header is %d characters", actualLength),
-					check.Message(),
+					fmt.Sprintf("Subject is %d characters", actualLength),
+					check.Result(),
 					"Message should report correct length",
 				)
 			} else {
 				require.NotEmpty(t, check.Errors(), "Expected errors")
-				require.Equal(t, tabletest.expectedError, check.Message(),
+				require.Equal(t, tabletest.expectedError, check.Result(),
 					"Error message should match expected")
 			}
 
 			// Check status method
-			require.Equal(t, "Header Length", check.Name(),
-				"Status should always be 'Header Length'")
+			require.Equal(t, "Subject Length", check.Name(),
+				"Status should always be 'Subject Length'")
 		})
 	}
 }

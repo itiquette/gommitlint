@@ -1,6 +1,6 @@
-// SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: EUPL-1.2
 package rule_test
 
 import (
@@ -15,7 +15,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/stretchr/testify/require"
 
-	gitClient "github.com/itiquette/gommitlint/internal/git"
+	gitClient "github.com/itiquette/gommitlint/internal/model"
 	"github.com/itiquette/gommitlint/internal/rule"
 )
 
@@ -141,7 +141,7 @@ func TestValidateNumberOfCommits(t *testing.T) {
 			tabletest.setupRepo(t, repo, wtree)
 
 			// Create git client
-			client := &gitClient.Git{
+			client := &gitClient.Repository{
 				Repo: repo,
 			}
 

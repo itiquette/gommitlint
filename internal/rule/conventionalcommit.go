@@ -1,6 +1,6 @@
-// SPDX-FileCopyrightText: 2024 Sidero Labs, Inc.
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: EUPL-1.2
 
 package rule
 
@@ -13,7 +13,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-var HeaderRegex = regexp.MustCompile(`^(\w+)(?:\(([\w,/-]+)\))?(!)?:[ ](.+)$`)
+var SubjectRegex = regexp.MustCompile(`^(\w+)(?:\(([\w,/-]+)\))?(!)?:[ ](.+)$`)
 
 const (
 	// TypeFeat is a commit of the type fix patches a bug in your codebase
@@ -36,8 +36,8 @@ func (c ConventionalCommitCheck) Name() string {
 	return "Conventional Commit"
 }
 
-// Message returns to check message.
-func (c ConventionalCommitCheck) Message() string {
+// Result returns to check message.
+func (c ConventionalCommitCheck) Result() string {
 	if len(c.errors) != 0 {
 		return c.errors[0].Error()
 	}
@@ -51,17 +51,17 @@ func (c ConventionalCommitCheck) Errors() []error {
 }
 
 // ValidateConventionalCommit returns the commit type.
-func ValidateConventionalCommit(message string, types []string, scopes []string, descLength int) interfaces.Rule { //nolint:ireturn
+func ValidateConventionalCommit(subject string, types []string, scopes []string, descLength int) interfaces.CommitRule { //nolint:ireturn
 	rule := &ConventionalCommitCheck{}
-	groups := parseHeader(message)
+	groups := parseSubject(subject)
 
 	if len(groups) != 5 {
-		rule.errors = append(rule.errors, errors.Errorf("Invalid conventional commits format: %q", message))
+		rule.errors = append(rule.errors, errors.Errorf("Invalid conventional commits format: %q", subject))
 
 		return rule
 	}
 
-	// [0] - Full match (entire commit message header)
+	// [0] - Full match (entire commit message subject)
 	// [1] - Type (feat, fix, etc.)
 	// [2] - Scope (without parentheses)
 	// [3] - Breaking change marker (!)
@@ -81,7 +81,7 @@ func ValidateConventionalCommit(message string, types []string, scopes []string,
 	}
 
 	// Scope is optional.
-	if ccScope != "" {
+	if ccScope != "" && len(scopes) > 0 {
 		ccScopes := strings.Split(ccScope, ",")
 		for _, scope := range ccScopes {
 			isValidScope := slices.Contains(scopes, scope)
@@ -123,9 +123,9 @@ func ValidateConventionalCommit(message string, types []string, scopes []string,
 	return rule
 }
 
-func parseHeader(msg string) []string {
-	header := strings.Split(msg, "\n")[0]
-	groups := HeaderRegex.FindStringSubmatch(header)
+func parseSubject(msg string) []string {
+	subject := strings.Split(msg, "\n")[0]
+	groups := SubjectRegex.FindStringSubmatch(subject)
 
 	return groups
 }

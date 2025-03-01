@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2024 Sidero Labs, Inc.
-// SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: EUPL-1.2
 package rule_test
 
 import (
@@ -125,7 +125,7 @@ func TestValidateJiraCheck(t *testing.T) {
 
 			// Verify Status and Message methods work
 			require.NotEmpty(t, result.Name(), "Status should not be empty")
-			require.NotEmpty(t, result.Message(), "Message should not be empty")
+			require.NotEmpty(t, result.Result(), "Message should not be empty")
 		})
 	}
 }

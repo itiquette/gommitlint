@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2024 Sidero Labs, Inc.
-// SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: EUPL-1.2
 
 package rule_test
 
@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidateDCO(t *testing.T) {
+func TestValidateSignoff(t *testing.T) {
 	tests := []struct {
 		name         string
 		message      string
@@ -20,60 +20,60 @@ func TestValidateDCO(t *testing.T) {
 		errorMessage string
 	}{
 		{
-			name: "valid DCO signature",
+			name: "valid sign-off",
 			message: `Add new feature
 
 Implement automatic logging system.
 
-Signed-off-by: John Doe <john.doe@example.com>`,
+Signed-off-by: Laval Lion <laval.lion@cavora.org>`,
 			expectError: false,
 		},
 		{
-			name:        "valid DCO with CRLF",
+			name:        "valid sign-off with CRLF",
 			message:     "Update docs\r\n\r\nImprove README\r\n\r\nSigned-off-by: Jane Smith <jane.smith@example.com>",
 			expectError: false,
 		},
 		{
-			name: "valid DCO with multiple signers",
+			name: "valid sign-off with multiple signers",
 			message: `Fix bug
 
 Update error handling.
 
-Signed-off-by: John Doe <john.doe@example.com>
+Signed-off-by: Laval Lion <laval.lion@cavora.org>
 Signed-off-by: Jane Smith <jane.smith@example.com>`,
 			expectError: false,
 		},
 		{
-			name: "missing DCO signature",
+			name: "missing sign-off signature",
 			message: `Add feature
 
 Implement new logging system.`,
 			expectError:  true,
-			errorMessage: "Commit must be signed-off with a Developer Certificate of Origin (DCO)",
+			errorMessage: "Commit must be signed-off",
 		},
 		{
-			name: "malformed DCO - wrong format",
+			name: "malformed sign-off - wrong format",
 			message: `Add test
 
-Signed by: John Doe <john.doe@example.com>`,
+Signed by: Laval Lion <laval.lion@cavora.org>`,
 			expectError:  true,
-			errorMessage: "Commit must be signed-off with a Developer Certificate of Origin (DCO)",
+			errorMessage: "Commit must be signed-off",
 		},
 		{
-			name: "malformed DCO - invalid email",
+			name: "malformed sign-off - invalid email",
 			message: `Add test
 
 Signed-off-by: John Doe <invalid-email>`,
 			expectError:  true,
-			errorMessage: "Commit must be signed-off with a Developer Certificate of Origin (DCO)",
+			errorMessage: "Commit must be signed-off",
 		},
 		{
-			name: "malformed DCO - missing name",
+			name: "malformed sign-off - missing name",
 			message: `Add test
 
 Signed-off-by: <john.doe@example.com>`,
 			expectError:  true,
-			errorMessage: "Commit must be signed-off with a Developer Certificate of Origin (DCO)",
+			errorMessage: "Commit must be signed-off",
 		},
 	}
 
@@ -83,14 +83,14 @@ Signed-off-by: <john.doe@example.com>`,
 
 			if tabletest.expectError {
 				require.NotEmpty(t, check.Errors(), "expected errors but got none")
-				require.Contains(t, check.Message(), tabletest.errorMessage, "unexpected error message")
+				require.Contains(t, check.Result(), tabletest.errorMessage, "unexpected error message")
 
 				return
 			}
 
 			require.Empty(t, check.Errors(), "unexpected errors: %v", check.Errors())
-			require.Equal(t, "Developer Certificate of Origin signature is valid", check.Message(),
-				"unexpected message for valid DCO")
+			require.Equal(t, "Sign-off exists", check.Result(),
+				"unexpected message for valid sign-off")
 		})
 	}
 }

@@ -1,7 +1,10 @@
-// SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: EUPL-1.2
 
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
+//
+// SPDX-License-Identifier: EUPL-1.2
 package rule_test
 
 import (
@@ -40,22 +43,22 @@ Signed-off-by: John Doe <john@example.com>`,
 		},
 		{
 			name:         "commit without body",
-			message:      "just a header",
+			message:      "just a subject",
 			expectError:  true,
 			errorMessage: "Commit requires a descriptive body explaining the changes",
 		},
 		{
-			name: "commit without empty line between header and body",
+			name: "commit without empty line between subject and body",
 			message: `Update CI pipeline
 Adding new stages for:
 - Security scanning
 - Performance testing
 Signed-off-by: John Doe <john@example.com>`,
 			expectError:  true,
-			errorMessage: "Commit message must have exactly one empty line between header and body",
+			errorMessage: "Commit message must have exactly one empty line between subject and body",
 		},
 		{
-			name: "commit with multiple empty lines between header and body",
+			name: "commit with multiple empty lines between subject and body",
 			message: `Update CI pipeline
 
 
@@ -68,7 +71,7 @@ Signed-off-by: John Doe <john@example.com>`,
 			errorMessage: "Commit message must have a non empty body text",
 		},
 		{
-			name: "commit without empty line between header and body",
+			name: "commit without empty line between subject and body",
 			message: `Update CI pipeline
 Adding new stages for:
 - Security scanning
@@ -76,7 +79,7 @@ Adding new stages for:
 
 Signed-off-by: John Doe <john@example.com>`,
 			expectError:  true,
-			errorMessage: "Commit message must have exactly one empty line between header and body",
+			errorMessage: "Commit message must have exactly one empty line between subject and body",
 		},
 		{
 			name: "commit with only DCO",
@@ -111,13 +114,13 @@ Signed-off-by: Jane Doe <jane@example.com>`,
 
 			if tabletest.expectError {
 				require.NotEmpty(t, check.Errors(), "expected errors but got none")
-				require.Contains(t, check.Message(), tabletest.errorMessage, "unexpected error message")
+				require.Contains(t, check.Result(), tabletest.errorMessage, "unexpected error message")
 
 				return
 			}
 
 			require.Empty(t, check.Errors(), "unexpected errors: %v", check.Errors())
-			require.Equal(t, "Commit body is valid", check.Message(), "unexpected message for valid commit")
+			require.Equal(t, "Commit body is valid", check.Result(), "unexpected message for valid commit")
 		})
 	}
 }

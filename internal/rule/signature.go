@@ -1,13 +1,12 @@
-// SPDX-FileCopyrightText: 2024 Sidero Labs, Inc.
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: EUPL-1.2
 
 package rule
 
 import (
 	"github.com/pkg/errors"
 
-	"github.com/itiquette/gommitlint/internal/git"
 	"github.com/itiquette/gommitlint/internal/interfaces"
 )
 
@@ -18,16 +17,16 @@ type Signature struct {
 
 // Name returns the name of the check.
 func (g Signature) Name() string {
-	return "GPG"
+	return "Signature"
 }
 
-// Message returns to check message.
-func (g Signature) Message() string {
+// Result returns to check message.
+func (g Signature) Result() string {
 	if len(g.RuleErrors) != 0 {
 		return g.RuleErrors[0].Error()
 	}
 
-	return "GPG signature found"
+	return "SSH/GPG signature found"
 }
 
 func (g Signature) Errors() []error {
@@ -35,18 +34,11 @@ func (g Signature) Errors() []error {
 }
 
 // ValidateSignature checks the commit message for a GPG signature.
-func ValidateSignature(gitPtr *git.Git) interfaces.Rule { //nolint:ireturn
+func ValidateSignature(signature string) interfaces.CommitRule { //nolint:ireturn
 	rule := &Signature{}
 
-	isOk, err := gitPtr.HasGPGSignature()
-	if err != nil {
-		rule.RuleErrors = append(rule.RuleErrors, err)
-
-		return rule
-	}
-
-	if !isOk {
-		rule.RuleErrors = append(rule.RuleErrors, errors.Errorf("Commit does not have a GPG signature"))
+	if signature == "" {
+		rule.RuleErrors = append(rule.RuleErrors, errors.Errorf("Commit does not have a SSH/GPG-signature"))
 
 		return rule
 	}

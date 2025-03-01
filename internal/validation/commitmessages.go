@@ -1,19 +1,17 @@
-// SPDX-FileCopyrightText: 2024 Sidero Labs, Inc.
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
-// SPDX-License-Identifier: MPL-2.0
-
+// SPDX-License-Identifier: EUPL-1.2
 package validation
 
 import (
 	"fmt"
 	"os"
 
-	"github.com/itiquette/gommitlint/internal/git"
+	"github.com/itiquette/gommitlint/internal/model"
 )
 
 // getCommitMessages retrieves commit messages based on options.
-func (v *Validator) getCommitMessages() ([]git.CommitInfo, error) {
+func (v *Validator) getCommitMessages() ([]model.CommitInfo, error) {
 	switch {
 	case v.options.CommitMsgFile != nil:
 		return v.getCommitFromFile()
@@ -24,16 +22,16 @@ func (v *Validator) getCommitMessages() ([]git.CommitInfo, error) {
 	}
 }
 
-func (v *Validator) getCommitFromFile() ([]git.CommitInfo, error) {
+func (v *Validator) getCommitFromFile() ([]model.CommitInfo, error) {
 	contents, err := os.ReadFile(*v.options.CommitMsgFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read commit message file: %w", err)
 	}
 
-	return []git.CommitInfo{{Message: string(contents)}}, nil
+	return []model.CommitInfo{{Message: string(contents)}}, nil
 }
 
-func (v *Validator) getCommitFromRange() ([]git.CommitInfo, error) {
+func (v *Validator) getCommitFromRange() ([]model.CommitInfo, error) {
 	revs, err := v.parseRevisionRange()
 	if err != nil {
 		return nil, err
@@ -47,11 +45,11 @@ func (v *Validator) getCommitFromRange() ([]git.CommitInfo, error) {
 	return msgs, nil
 }
 
-func (v *Validator) getCurrentCommit() ([]git.CommitInfo, error) {
-	msg, err := v.git.Message()
+func (v *Validator) getCurrentCommit() ([]model.CommitInfo, error) {
+	msg, err := v.git.Messages("", "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get current commit message: %w", err)
 	}
 
-	return []git.CommitInfo{msg}, nil
+	return []model.CommitInfo{msg[0]}, nil
 }

@@ -1,83 +1,153 @@
-// SPDX-FileCopyrightText: 2024 Sidero Labs, Inc.
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
-// SPDX-License-Identifier: MPL-2.0
-
+// SPDX-License-Identifier: EUPL-1.2
 package validation
 
 import (
+	"github.com/itiquette/gommitlint/internal/configuration"
 	"github.com/itiquette/gommitlint/internal/model"
 	"github.com/itiquette/gommitlint/internal/rule"
 )
 
-// checkValidity validates the commit message against all configured rules.
-func (v *Validator) checkValidity(report *model.Report) {
-	v.checkHeaderRules(report)
-	v.checkSignatureRules(report)
-	v.checkConventionalRules(report)
-	v.checkAdditionalRules(report)
+// Default values as simple constants.
+const (
+	DefaultSubjectDescriptionCase = "lower"
+	DefaultSubjectInvalidSuffixes = ".! ?"
+	DefaultSpellCheckLocale       = "UK"
+)
+
+// Default boolean values.
+var (
+	DefaultSubjectImperativeRequired = true
+	DefaultSignOffRequired           = true
+	DefaultOneCommitMax              = true
+)
+
+var DefaultConventionalTypes = []string{
+	"build", "chore", "ci", "docs", "feat", "fix",
+	"perf", "refactor", "revert", "style", "test",
 }
 
-func (v *Validator) checkHeaderRules(report *model.Report) {
-	if v.config.Header == nil {
+// boolPtr returns a pointer to the given boolean value.
+func boolPtr(b bool) *bool {
+	return &b
+}
+
+// checkValidity validates the commit message against all configured rules.
+func (v *Validator) checkValidity(report *model.Report, commitInfo model.CommitInfo) {
+	v.ensureDefaultValues()
+	v.checkSubjectRules(report, commitInfo)
+	v.checkSignatureRules(report, commitInfo)
+	v.checkConventionalRules(report, commitInfo)
+	v.checkAdditionalRules(report, commitInfo)
+}
+
+// ensureDefaultValues ensures all configuration values have appropriate defaults.
+func (v *Validator) ensureDefaultValues() {
+	// Subject defaults
+	if v.config.Subject != nil {
+		if v.config.Subject.Imperative == nil {
+			v.config.Subject.Imperative = boolPtr(DefaultSubjectImperativeRequired)
+		}
+
+		if v.config.Subject.Case == "" {
+			v.config.Subject.Case = DefaultSubjectDescriptionCase
+		}
+
+		if v.config.Subject.InvalidSuffixes == "" {
+			v.config.Subject.InvalidSuffixes = DefaultSubjectInvalidSuffixes
+		}
+
+		if v.config.Subject.Jira == nil {
+			v.config.Subject.Jira = &configuration.JiraRule{IsRequired: false}
+		}
+	}
+
+	// Signature defaults
+	if v.config.IsSignOffRequired == nil {
+		v.config.IsSignOffRequired = boolPtr(DefaultSignOffRequired)
+	}
+
+	if v.config.Signature == nil {
+		v.config.Signature = &configuration.SignatureRule{IsRequired: true}
+	}
+
+	// Conventional commit defaults
+	if v.config.ConventionalCommit == nil {
+		v.config.ConventionalCommit = &configuration.ConventionalRule{
+			IsRequired: true,
+		}
+	}
+
+	if len(v.config.ConventionalCommit.Types) == 0 {
+		v.config.ConventionalCommit.Types = DefaultConventionalTypes
+	}
+
+	// Additional rules defaults
+	if v.config.SpellCheck == nil {
+		v.config.SpellCheck = &configuration.SpellingRule{Locale: DefaultSpellCheckLocale}
+	}
+
+	if v.config.Body == nil {
+		v.config.Body = &configuration.BodyRule{IsRequired: false}
+	}
+
+	if v.config.IsNCommitMax == nil {
+		v.config.IsNCommitMax = boolPtr(DefaultOneCommitMax)
+	}
+}
+
+func (v *Validator) checkSubjectRules(report *model.Report, commitInfo model.CommitInfo) {
+	if v.config.Subject == nil {
 		return
 	}
 
-	header := v.config.Header
-	isConventional := v.config.Conventional != nil
+	subject := v.config.Subject
+	isConventional := v.config.ConventionalCommit != nil
 
-	if header.Length != 0 {
-		report.AddRule(rule.ValidateHeaderLength(v.config.Message, header.Length))
+	report.AddRule(rule.ValidateSubjectLength(commitInfo.Subject, subject.MaxLength))
+
+	if *subject.Imperative {
+		report.AddRule(rule.ValidateImperative(commitInfo.Subject, isConventional))
 	}
 
-	if header.Imperative {
-		report.AddRule(rule.ValidateImperative(isConventional, v.config.Message))
-	}
+	report.AddRule(rule.ValidateSubjectCase(commitInfo.Subject, subject.Case, isConventional))
+	report.AddRule(rule.ValidateSubjectSuffix(commitInfo.Subject, subject.InvalidSuffixes))
 
-	if header.Case != "" {
-		report.AddRule(rule.ValidateHeaderCase(isConventional, v.config.Message, header.Case))
-	}
-
-	if header.InvalidSuffix != "" {
-		report.AddRule(rule.ValidateHeaderSuffix(v.config.HeaderFromMsg(), header.InvalidSuffix))
-	}
-
-	if header.Jira != nil {
-		report.AddRule(rule.ValidateJira(v.config.Message, header.Jira.Keys, isConventional))
+	if subject.Jira.IsRequired {
+		report.AddRule(rule.ValidateJira(commitInfo.Subject, subject.Jira.Keys, isConventional))
 	}
 }
 
-func (v *Validator) checkSignatureRules(report *model.Report) {
-	if v.config.DCO {
-		report.AddRule(rule.ValidateSignOff(v.config.Message))
+func (v *Validator) checkSignatureRules(report *model.Report, commitInfo model.CommitInfo) {
+	if *v.config.IsSignOffRequired {
+		report.AddRule(rule.ValidateSignOff(commitInfo.Body))
 	}
 
-	if v.config.GPG != nil && v.config.GPG.Required {
-		report.AddRule(rule.ValidateSignature(v.git))
+	if v.config.Signature.IsRequired {
+		report.AddRule(rule.ValidateSignature(commitInfo.Signature))
 
-		if v.config.GPG.Identity != nil {
-			report.AddRule(rule.ValidateGPGIdentity(v.config.Signature, v.config.RawCommit, v.config.GPG.Identity.PublicKeyURI))
+		if v.config.Signature.Identity != nil {
+			report.AddRule(rule.ValidateGPGIdentity(commitInfo.Signature, commitInfo.RawCommit, v.config.Signature.Identity.PublicKeyURI))
 		}
 	}
 }
 
-func (v *Validator) checkConventionalRules(report *model.Report) {
-	if v.config.Conventional != nil {
-		conv := v.config.Conventional
-		report.AddRule(rule.ValidateConventionalCommit(v.config.Message, conv.Types, conv.Scopes, conv.DescriptionLength))
+func (v *Validator) checkConventionalRules(report *model.Report, commitInfo model.CommitInfo) {
+	if v.config.ConventionalCommit.IsRequired {
+		conv := v.config.ConventionalCommit
+		report.AddRule(rule.ValidateConventionalCommit(commitInfo.Subject, conv.Types, conv.Scopes, conv.MaxDescriptionLength))
 	}
 }
 
-func (v *Validator) checkAdditionalRules(report *model.Report) {
-	if v.config.SpellCheck != nil {
-		report.AddRule(rule.ValidateSpelling(v.config.Message, v.config.SpellCheck.Locale))
-	}
+func (v *Validator) checkAdditionalRules(report *model.Report, commitInfo model.CommitInfo) {
+	report.AddRule(rule.ValidateSpelling(commitInfo.Message, v.config.SpellCheck.Locale))
 
-	if v.config.MaximumOfOneCommit {
+	if *v.config.IsNCommitMax {
 		report.AddRule(rule.ValidateNumberOfCommits(v.git, v.options.CommitRef))
 	}
 
-	if v.config.Body != nil && v.config.Body.Required {
-		report.AddRule(rule.ValidateCommitBody(v.config.Message))
+	if v.config.Body.IsRequired {
+		report.AddRule(rule.ValidateCommitBody(commitInfo.Message))
 	}
 }

@@ -1,6 +1,6 @@
-// SPDX-FileCopyrightText: 2024 Sidero Labs, Inc.
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: EUPL-1.2
 
 //nolint:testpackage
 package rule_test
@@ -102,7 +102,7 @@ func TestScopeValidation(t *testing.T) {
 	tests := []testDesc{
 		{
 			name:         "Valid Single Scope",
-			createCommit: createValidScopedCommit,
+			createCommit: createCommitWithMsg("feat(scope): add commit"),
 			expectValid:  true,
 		},
 		{
@@ -124,11 +124,6 @@ func TestScopeValidation(t *testing.T) {
 			name:         "Scope With Spaces",
 			createCommit: createCommitWithMsg("feat(scope 1): space not allowed"),
 			expectValid:  false,
-		},
-		{
-			name:         "Valid Scope With Underscore",
-			createCommit: createValidCommitRegex,
-			expectValid:  true,
 		},
 		{
 			name:         "Invalid Scope Format",
@@ -181,7 +176,7 @@ func TestDescriptionValidation(t *testing.T) {
 	tests := []testDesc{
 		{
 			name:         "Valid Description",
-			createCommit: createValidScopedCommit,
+			createCommit: createCommitWithMsg("feat(scope): add commit"),
 			expectValid:  true,
 		},
 		{
@@ -222,7 +217,7 @@ func TestMessageFormatValidation(t *testing.T) {
 	tests := []testDesc{
 		{
 			name:         "Valid Format",
-			createCommit: createValidScopedCommit,
+			createCommit: createCommitWithMsg("feat(ascope): add a commit"),
 			expectValid:  true,
 		},
 		{
@@ -277,7 +272,6 @@ func TestGitHubCompatibilityValidation(t *testing.T) {
 	runTestGroup(t, tests)
 }
 
-// Commit creation helpers.
 func createCommitWithMsg(msg string) func(*git.Repository) error {
 	return func(repo *git.Repository) error {
 		wtree, err := repo.Worktree()
@@ -285,10 +279,12 @@ func createCommitWithMsg(msg string) func(*git.Repository) error {
 			return err
 		}
 
-		_, err = wtree.Commit(msg, &git.CommitOptions{
+		signedMsg := msg + "\n\nSigned-off-by: Laval Lion <laval@cavora.org>"
+
+		_, err = wtree.Commit(signedMsg, &git.CommitOptions{
 			Author: &object.Signature{
-				Name:  "test",
-				Email: "test@commiter.io",
+				Name:  "Laval Lion",
+				Email: "laval@cavora.org",
 				When:  time.Now(),
 			},
 		})
@@ -296,7 +292,6 @@ func createCommitWithMsg(msg string) func(*git.Repository) error {
 		return err
 	}
 }
-
 func initRepo(path string) (*git.Repository, error) {
 	repo, err := git.PlainInit(path, false)
 	if err != nil {
@@ -321,30 +316,14 @@ func initRepo(path string) (*git.Repository, error) {
 	return repo, nil
 }
 
-func createValidScopedCommit(repo *git.Repository) error {
-	wtree, err := repo.Worktree()
-	if err != nil {
-		return err
-	}
-
-	_, err = wtree.Commit("type(scope): description", &git.CommitOptions{
-		Author: &object.Signature{
-			Name:  "test",
-			Email: "test@commiter.io",
-			When:  time.Now(),
-		},
-	})
-
-	return err
-}
-
 func createValidBreakingCommit(repo *git.Repository) error {
 	wtree, err := repo.Worktree()
 	if err != nil {
 		return err
 	}
 
-	_, err = wtree.Commit("feat!: description", &git.CommitOptions{
+	signedMsg := "feat!: description" + "\n\nSigned-off-by: Laval Lion <laval@cavora.org>"
+	_, err = wtree.Commit(signedMsg, &git.CommitOptions{
 		Author: &object.Signature{
 			Name:  "test",
 			Email: "test@commiter.io",
@@ -440,23 +419,6 @@ func createInvalidEmptyCommit(repo *git.Repository) error {
 	return err
 }
 
-func createValidCommitRegex(repo *git.Repository) error {
-	wtree, err := repo.Worktree()
-	if err != nil {
-		return err
-	}
-
-	_, err = wtree.Commit("type(valid-1): description", &git.CommitOptions{
-		Author: &object.Signature{
-			Name:  "test",
-			Email: "test@commiter.io",
-			When:  time.Now(),
-		},
-	})
-
-	return err
-}
-
 func createInvalidCommitRegex(repo *git.Repository) error {
 	wtree, err := repo.Worktree()
 	if err != nil {
@@ -476,12 +438,8 @@ func createInvalidCommitRegex(repo *git.Repository) error {
 
 // Configuration helpers.
 func runCompliance() (*model.Report, error) {
-	gommit := &configuration.Gommit{
-		Conventional: &configuration.Conventional{
-			Types:  []string{"type", "feat", "fix"},
-			Scopes: []string{"scope", "valid", "valid-1", "scope1", "scope2"},
-		},
-	}
+	boolPtr := new(bool)
+	gommit := &configuration.GommitLintConfig{Signature: &configuration.SignatureRule{IsRequired: false}, IsSignOffRequired: boolPtr}
 
 	r, _ := validation.NewValidator(&model.Options{}, gommit)
 

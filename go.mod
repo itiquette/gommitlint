@@ -6,16 +6,15 @@ module github.com/itiquette/gommitlint
 go 1.23.6
 
 require (
-	github.com/ProtonMail/go-crypto v1.1.5
-	github.com/go-git/go-git/v5 v5.13.2
+	github.com/ProtonMail/go-crypto v1.1.6
+	github.com/go-git/go-git/v5 v5.14.0
 	github.com/golangci/misspell v0.6.0
 	github.com/jdkato/prose/v3 v3.0.0-20210921205322-a376476c2627
-	github.com/keybase/go-crypto v0.0.0-20200123153347-de78d2cb44f4
 	github.com/knadh/koanf/parsers/yaml v0.1.0
 	github.com/knadh/koanf/providers/file v1.1.2
 	github.com/knadh/koanf/v2 v2.1.2
 	github.com/pkg/errors v0.9.1
-	github.com/spf13/cobra v1.8.1
+	github.com/spf13/cobra v1.9.1
 	github.com/stretchr/testify v1.10.0
 )
 
@@ -50,7 +49,7 @@ require (
 	github.com/skeema/knownhosts v1.3.1 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
-	golang.org/x/crypto v0.33.0 // indirect
+	golang.org/x/crypto v0.35.0 // indirect
 	golang.org/x/net v0.35.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
 	gonum.org/v1/gonum v0.15.1 // indirect

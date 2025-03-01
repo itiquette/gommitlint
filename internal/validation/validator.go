@@ -1,7 +1,6 @@
-// SPDX-FileCopyrightText: 2024 Sidero Labs, Inc.
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: EUPL-1.2
 
 package validation
 
@@ -9,20 +8,19 @@ import (
 	"fmt"
 
 	"github.com/itiquette/gommitlint/internal/configuration"
-	"github.com/itiquette/gommitlint/internal/git"
 	"github.com/itiquette/gommitlint/internal/model"
 )
 
 // Validator handles commit message validation logic.
 type Validator struct {
-	git     *git.Git
+	git     *model.Repository
 	options *model.Options
-	config  *configuration.Gommit
+	config  *configuration.GommitLintConfig
 }
 
 // NewValidator creates a new Validator instance.
-func NewValidator(options *model.Options, config *configuration.Gommit) (*Validator, error) {
-	gitHandler, err := git.NewGit()
+func NewValidator(options *model.Options, config *configuration.GommitLintConfig) (*Validator, error) {
+	gitHandler, err := model.NewRepository("")
 	if err != nil {
 		return nil, fmt.Errorf("failed to open git repo: %w", err)
 	}
@@ -44,8 +42,7 @@ func (v *Validator) Validate() (*model.Report, error) {
 	report := &model.Report{}
 
 	for _, msg := range msgs {
-		v.config.Message = msg.Message
-		v.checkValidity(report)
+		v.checkValidity(report, msg)
 	}
 
 	return report, nil

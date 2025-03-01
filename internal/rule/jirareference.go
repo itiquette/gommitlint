@@ -1,6 +1,6 @@
-// SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: EUPL-1.2
 package rule
 
 import (
@@ -21,8 +21,8 @@ func (j *JiraReference) Name() string {
 	return "Jira issues"
 }
 
-// Message returns the rule message.
-func (j *JiraReference) Message() string {
+// Result returns the rule message.
+func (j *JiraReference) Result() string {
 	if len(j.errors) > 0 {
 		return j.errors[0].Error()
 	}

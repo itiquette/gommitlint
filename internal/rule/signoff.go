@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2024 Sidero Labs, Inc.
-// SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: EUPL-1.2
 
 package rule
 
@@ -13,8 +13,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-// DCORegex is the regular expression used to validate the Developer Certificate of Origin signature.
-var DCORegex = regexp.MustCompile(`^Signed-off-by: ([^<]+) <([^<>@]+@[^<>]+)>$`)
+// SignOffRegex is the regular expression used to validate the Developer Certificate of Origin signature.
+var SignOffRegex = regexp.MustCompile(`^Signed-off-by: ([^<]+) <([^<>@]+@[^<>]+)>$`)
 
 // SignOff ensures that the commit message contains a
 // Developer Certificate of Origin signature.
@@ -23,16 +23,16 @@ type SignOff struct {
 }
 
 func (d SignOff) Name() string {
-	return "DCO"
+	return "SignOff"
 }
 
-// Message returns the check message.
-func (d SignOff) Message() string {
+// Result returns the check message.
+func (d SignOff) Result() string {
 	if len(d.errors) != 0 {
 		return d.errors[0].Error()
 	}
 
-	return "Developer Certificate of Origin signature is valid"
+	return "Sign-off exists"
 }
 
 // Errors returns any violations of the check.
@@ -40,17 +40,17 @@ func (d SignOff) Errors() []error {
 	return d.errors
 }
 
-func ValidateSignOff(message string) interfaces.Rule { //nolint:ireturn
+func ValidateSignOff(body string) interfaces.CommitRule { //nolint:ireturn
 	rule := &SignOff{}
 
-	for _, line := range strings.Split(message, "\n") {
+	for _, line := range strings.Split(body, "\n") {
 		trimmedLine := strings.TrimSpace(line)
-		if DCORegex.MatchString(trimmedLine) {
+		if SignOffRegex.MatchString(trimmedLine) {
 			return rule
 		}
 	}
 
-	rule.errors = append(rule.errors, errors.New(`Commit must be signed-off with a Developer Certificate of Origin (DCO).
+	rule.errors = append(rule.errors, errors.New(`Commit must be signed-off.
 Use 'git commit -s' or manually add a sign-off line.
 
 Example - A complete commit message with sign-off:
@@ -61,7 +61,7 @@ Adds rate limiting to prevent API abuse:
 - Implements token bucket algorithm
 - Configurable limits per endpoint
 
-Signed-off-by: Jane Smith <jane.smith@example.com>`))
+Signed-off-by: Laval Lajon <laval.lajon@cavora.exampleorg>`))
 
 	return rule
 }

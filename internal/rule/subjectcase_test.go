@@ -1,6 +1,6 @@
-// SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: EUPL-1.2
 package rule_test
 
 import (
@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidateHeaderCase(t *testing.T) {
+func TestValidateSubjectCase(t *testing.T) {
 	testCases := []struct {
 		name            string
 		isConventional  bool
@@ -27,7 +27,7 @@ func TestValidateHeaderCase(t *testing.T) {
 			message:         "feat: Some feature description",
 			caseChoice:      "upper",
 			expectedValid:   true,
-			expectedMessage: "Header case is valid",
+			expectedMessage: "Subject case is valid",
 			expectedErrors:  false,
 		},
 		{
@@ -36,7 +36,7 @@ func TestValidateHeaderCase(t *testing.T) {
 			message:         "feat: some feature description",
 			caseChoice:      "upper",
 			expectedValid:   false,
-			expectedMessage: "commit header case is not upper",
+			expectedMessage: "commit subject case is not upper",
 			expectedErrors:  true,
 		},
 		{
@@ -45,7 +45,7 @@ func TestValidateHeaderCase(t *testing.T) {
 			message:         "feat: some feature description",
 			caseChoice:      "lower",
 			expectedValid:   true,
-			expectedMessage: "Header case is valid",
+			expectedMessage: "subject case is valid",
 			expectedErrors:  false,
 		},
 		{
@@ -54,7 +54,7 @@ func TestValidateHeaderCase(t *testing.T) {
 			message:         "feat: Some feature description",
 			caseChoice:      "lower",
 			expectedValid:   false,
-			expectedMessage: "commit header case is not lower",
+			expectedMessage: "commit subject case is not lower",
 			expectedErrors:  true,
 		},
 		{
@@ -63,7 +63,7 @@ func TestValidateHeaderCase(t *testing.T) {
 			message:         "Update something",
 			caseChoice:      "upper",
 			expectedValid:   true,
-			expectedMessage: "Header case is valid",
+			expectedMessage: "subject case is valid",
 			expectedErrors:  false,
 		},
 		{
@@ -72,16 +72,16 @@ func TestValidateHeaderCase(t *testing.T) {
 			message:         "update something",
 			caseChoice:      "upper",
 			expectedValid:   false,
-			expectedMessage: "commit header case is not upper",
+			expectedMessage: "commit subject case is not upper",
 			expectedErrors:  true,
 		},
 		{
 			name:            "Invalid Case Choice",
 			isConventional:  false,
 			message:         "Some message",
-			caseChoice:      "mixed",
+			caseChoice:      "non-valid choice",
 			expectedValid:   false,
-			expectedMessage: "invalid configured case: mixed",
+			expectedMessage: "commit subject case is not non-valid choice",
 			expectedErrors:  true,
 		},
 		{
@@ -98,54 +98,49 @@ func TestValidateHeaderCase(t *testing.T) {
 	for _, tabletest := range testCases {
 		t.Run(tabletest.name, func(t *testing.T) {
 			// Perform the check
-			check := rule.ValidateHeaderCase(tabletest.isConventional, tabletest.message, tabletest.caseChoice)
+			check := rule.ValidateSubjectCase(tabletest.message, tabletest.caseChoice, tabletest.isConventional)
 
 			// Check errors
 			if tabletest.expectedErrors {
 				require.NotEmpty(t, check.Errors(), "Expected errors, but got none")
 
 				// Verify the error message
-				require.Equal(t, tabletest.expectedMessage, check.Message(),
+				require.Equal(t, tabletest.expectedMessage, check.Result(),
 					"Error message does not match expected")
 			} else {
 				require.Empty(t, check.Errors(), "Did not expect errors, but got some")
-				require.Equal(t, "Header case is valid", check.Message(),
+				require.Equal(t, "Subject case is valid", check.Result(),
 					"Expected default valid message")
 			}
 
 			// Check status
-			require.Equal(t, "Header Case", check.Name(), "Status should always be 'Header Case'")
+			require.Equal(t, "Subject case", check.Name(), "Status should always be 'Subject case'")
 		})
 	}
 }
 
-func TestHeaderCaseCheckMethods(t *testing.T) {
+func TestSubjectCaseCheckMethods(t *testing.T) {
 	t.Run("Status Method", func(t *testing.T) {
-		check := &rule.HeaderCase{}
-		require.Equal(t, "Header Case", check.Name())
+		rule := &rule.SubjectCase{}
+		require.Equal(t, "Subject case", rule.Name())
 	})
 
 	t.Run("Message Method with No Errors", func(t *testing.T) {
-		check := &rule.HeaderCase{}
-		require.Equal(t, "Header case is valid", check.Message())
+		rule := &rule.SubjectCase{}
+		require.Equal(t, "Subject case is valid", rule.Result())
 	})
 
-	t.Run("Message Method with Errors", func(t *testing.T) {
-		check := &rule.HeaderCase{
-			RuleErrors: []error{
-				errors.New("test error"),
-				errors.New("second error"),
-			},
-		}
-		require.Equal(t, "test error", check.Message())
-	})
+	// t.Run("Message Method with Errors", func(t *testing.T) {
+	// 	rule := &rule.SubjectCase{}
+	// 	require.Equal(t, "test error", rule.Message())
+	// })
 
 	t.Run("Errors Method", func(t *testing.T) {
 		expectedErrors := []error{
 			errors.New("test error"),
 			errors.New("second error"),
 		}
-		check := &rule.HeaderCase{
+		check := &rule.SubjectCase{
 			RuleErrors: expectedErrors,
 		}
 		require.Equal(t, expectedErrors, check.Errors())

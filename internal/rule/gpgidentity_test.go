@@ -1,6 +1,6 @@
-// SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: EUPL-1.2
 
 package rule
 
@@ -48,7 +48,7 @@ func TestGPGIdentityCheck_Message(t *testing.T) {
 
 	for _, tabletest := range tests {
 		t.Run(tabletest.name, func(t *testing.T) {
-			require.Equal(t, tabletest.expected, tabletest.check.Message())
+			require.Equal(t, tabletest.expected, tabletest.check.Result())
 		})
 	}
 }

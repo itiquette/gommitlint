@@ -1,6 +1,6 @@
-// SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: EUPL-1.2
 
 package rule
 
@@ -25,7 +25,7 @@ func (g GPGIdentity) Name() string {
 	return "GPG Identity"
 }
 
-func (g GPGIdentity) Message() string {
+func (g GPGIdentity) Result() string {
 	if len(g.RuleErrors) != 0 {
 		return g.RuleErrors[0].Error()
 	}

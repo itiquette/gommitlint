@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: EUPL-1.2
 
 package internal
 
@@ -24,41 +24,41 @@ const (
 
 // Constants for report formatting.
 const (
-	reportHeader   = "CHECK\tSTATUS\tMESSAGE\t"
+	reportHeader   = "RULE\tSTATUS\tRESULT\t"
 	tabPadding     = 8
 	tabWriterFlags = 0
 )
 
 // PrintReport prints the results of all rule checks and returns an error if any checks failed.
 // It formats the output in a tabulated form using a tabwriter.
-func PrintReport(checks []interfaces.Rule) error {
+func PrintReport(checks []interfaces.CommitRule) error {
 	return PrintReportTo(os.Stdout, checks)
 }
 
 // PrintReportTo prints the report to the specified writer, allowing for better testing
 // and flexibility in output destination.
-func PrintReportTo(writer io.Writer, checks []interfaces.Rule) error {
+func PrintReportTo(writer io.Writer, checks []interfaces.CommitRule) error {
 	tabWriter := tabwriter.NewWriter(writer, 0, 0, tabPadding, ' ', tabWriterFlags)
 	defer tabWriter.Flush()
 
-	if err := printHeader(tabWriter); err != nil {
-		return errors.Wrap(err, "failed to print header")
+	if err := printSubject(tabWriter); err != nil {
+		return errors.Wrap(err, "failed to print subject")
 	}
 
 	if err := printChecks(tabWriter, checks); err != nil {
-		return errors.Wrap(err, "failed to print checks")
+		return err
 	}
 
 	return nil
 }
 
-func printHeader(writer io.Writer) error {
+func printSubject(writer io.Writer) error {
 	_, err := fmt.Fprintln(writer, reportHeader)
 
 	return err
 }
 
-func printChecks(writer io.Writer, checks []interfaces.Rule) error {
+func printChecks(writer io.Writer, checks []interfaces.CommitRule) error {
 	var failed bool
 
 	for _, check := range checks {
@@ -82,7 +82,7 @@ func printChecks(writer io.Writer, checks []interfaces.Rule) error {
 	return nil
 }
 
-func printFailedCheck(writer io.Writer, check interfaces.Rule, errs []error) error {
+func printFailedCheck(writer io.Writer, check interfaces.CommitRule, errs []error) error {
 	for _, err := range errs {
 		if _, err := fmt.Fprintf(writer, "%s\t%s\t%v\t\n", check.Name(), statusFailed, err); err != nil {
 			return errors.Wrap(err, "failed to print failed check")
@@ -92,8 +92,8 @@ func printFailedCheck(writer io.Writer, check interfaces.Rule, errs []error) err
 	return nil
 }
 
-func printPassedCheck(w io.Writer, check interfaces.Rule) error {
-	_, err := fmt.Fprintf(w, "%s\t%s\t%s\t\n", check.Name(), statusPass, check.Message())
+func printPassedCheck(writer io.Writer, check interfaces.CommitRule) error {
+	_, err := fmt.Fprintf(writer, "%s\t%s\t%s\t\n", check.Name(), statusPass, check.Result())
 
 	return errors.Wrap(err, "failed to print passed check")
 }

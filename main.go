@@ -1,7 +1,6 @@
-// SPDX-FileCopyrightText: itiquette
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
-// SPDX-License-Identifier: MPL-2.0
-
+// SPDX-License-Identifier: EUPL-1.2
 package main
 
 import "github.com/itiquette/gommitlint/cmd"

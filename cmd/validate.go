@@ -1,7 +1,6 @@
-// SPDX-FileCopyrightText: 2024 Sidero Labs, Inc.
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
-// SPDX-License-Identifier: MPL-2.0
-
+// SPDX-License-Identifier: EUPL-1.2
 package cmd
 
 import (
@@ -34,32 +33,31 @@ func newValidateCmd() *cobra.Command {
 				return fmt.Errorf("failed to create validator: %w", err)
 			}
 
-			opts := []model.Option{}
+			opts := model.NewOptions()
 
 			if commitMsgFile := cmd.Flags().Lookup("commit-msg-file").Value.String(); commitMsgFile != "" {
-				opts = append(opts, model.WithCommitMsgFile(&commitMsgFile))
+				opts.CommitMsgFile = &commitMsgFile
 			}
 
 			if commitRef := cmd.Flags().Lookup("commit-ref").Value.String(); commitRef != "" {
-				opts = append(opts, model.WithCommitRef(commitRef))
+				opts.CommitRef = commitRef
 			} else {
 				mainBranch, err := detectMainBranch()
 				if err != nil {
 					return fmt.Errorf("failed to detect main branch: %w", err)
 				}
 				if mainBranch != "" {
-					opts = append(opts, model.WithCommitRef("refs/heads/"+mainBranch))
+					opts.CommitRef = "refs/heads/" + mainBranch
 				}
 			}
 
 			if baseBranch := cmd.Flags().Lookup("base-branch").Value.String(); baseBranch != "" {
-				opts = append(opts, model.WithRevisionRange(baseBranch+"..HEAD"))
+				opts.RevisionRange = baseBranch + "..HEAD"
 			} else if revisionRange := cmd.Flags().Lookup("revision-range").Value.String(); revisionRange != "" {
-				opts = append(opts, model.WithRevisionRange(revisionRange))
+				opts.RevisionRange = revisionRange
 			}
 
-			s := model.NewDefaultOptions(opts...)
-			report, err := validation.NewValidator(s, gommitLintConf.GommitConf)
+			report, err := validation.NewValidator(opts, gommitLintConf.GommitConf)
 			if err != nil {
 				return err
 			}

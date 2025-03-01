@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2024 Sidero Labs, Inc.
-// SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: EUPL-1.2
 
 package rule
 
@@ -23,10 +23,10 @@ func (sc Spell) Name() string {
 	return "Spellcheck"
 }
 
-// Message returns the rule message.
-func (sc Spell) Message() string {
+// Result returns the rule message.
+func (sc Spell) Result() string {
 	if len(sc.RuleErrors) == 0 {
-		return ""
+		return "No common misspellings found"
 	}
 
 	return fmt.Sprintf("Commit contains %d misspelling(s)", len(sc.RuleErrors))
@@ -38,20 +38,14 @@ func (sc Spell) Errors() []error {
 }
 
 // ValidateSpelling checks the spelling.
-func ValidateSpelling(message string, locale string) interfaces.Rule {
+func ValidateSpelling(message string, locale string) interfaces.CommitRule {
 	rule := &Spell{}
 	replacer := misspell.New()
 
 	switch strings.ToUpper(locale) {
 	case "", "US":
-		// Use default American English
 	case "UK", "GB":
-		// For British English, we'll use the British dictionary
 		replacer.AddRuleList(misspell.DictBritish)
-	case "NZ", "AU", "CA":
-		rule.RuleErrors = append(rule.RuleErrors, fmt.Errorf("unsupported locale: %q", locale))
-
-		return rule
 	default:
 		rule.RuleErrors = append(rule.RuleErrors, fmt.Errorf("unknown locale: %q", locale))
 

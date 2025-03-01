@@ -1,6 +1,6 @@
-// SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: EUPL-1.2
 package rule_test
 
 import (
@@ -80,21 +80,21 @@ func TestValidateImperative(t *testing.T) {
 	for _, tabletest := range testCases {
 		t.Run(tabletest.name, func(t *testing.T) {
 			// Perform the check
-			check := rule.ValidateImperative(tabletest.isConventional, tabletest.message)
+			check := rule.ValidateImperative(tabletest.message, tabletest.isConventional)
 
 			// Check errors
 			if tabletest.expectedValid {
 				require.Empty(t, check.Errors(), "Did not expect errors")
 				require.Equal(t,
 					"Commit begins with imperative verb",
-					check.Message(),
+					check.Result(),
 					"Message should be valid",
 				)
 			} else {
 				require.NotEmpty(t, check.Errors(), "Expected errors")
 				require.Equal(t,
 					tabletest.expectedMessage,
-					check.Message(),
+					check.Result(),
 					"Error message should match expected",
 				)
 			}
@@ -117,13 +117,13 @@ func TestImperativeCheckMethods(t *testing.T) {
 		check.SetErrors([]error{errors.New("first word of commit must be an imperative verb: \"Added\" is invalid")})
 		require.Equal(t,
 			"first word of commit must be an imperative verb: \"Added\" is invalid",
-			check.Message(),
+			check.Result(),
 		)
 	})
 
 	t.Run("Message Method without Errors", func(t *testing.T) {
 		check := &rule.ImperativeVerb{}
-		require.Equal(t, "Commit begins with imperative verb", check.Message())
+		require.Equal(t, "Commit begins with imperative verb", check.Result())
 	})
 
 	t.Run("Errors Method", func(t *testing.T) {

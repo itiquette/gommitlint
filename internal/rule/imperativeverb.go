@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2024 Sidero Labs, Inc.
-// SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: EUPL-1.2
 package rule
 
 import (
@@ -21,7 +21,7 @@ var imperativeTags = map[string]bool{
 	"VBZ": true, // 3rd person singular present
 }
 
-// ImperativeVerb enforces that the first word of a commit message header is an imperative verb.
+// ImperativeVerb enforces that the first word of a commit message subject is an imperative verb.
 type ImperativeVerb struct {
 	errors []error
 }
@@ -31,8 +31,8 @@ func (i *ImperativeVerb) Name() string {
 	return "Imperative Mood"
 }
 
-// Message returns the check message.
-func (i *ImperativeVerb) Message() string {
+// Result returns the check message.
+func (i *ImperativeVerb) Result() string {
 	if len(i.errors) > 0 {
 		return i.errors[0].Error()
 	}
@@ -49,11 +49,11 @@ func (i *ImperativeVerb) SetErrors(err []error) {
 }
 
 // ValidateImperative checks the commit message for an imperative first word.
-func ValidateImperative(isConventional bool, message string) interfaces.Rule {
+func ValidateImperative(subject string, isConventional bool) interfaces.CommitRule {
 	rule := &ImperativeVerb{}
 
 	// Extract first word
-	word, err := extractFirstWord(isConventional, message)
+	word, err := extractFirstWord(isConventional, subject)
 	if err != nil {
 		rule.errors = append(rule.errors, err)
 
@@ -77,18 +77,18 @@ func ValidateImperative(isConventional bool, message string) interfaces.Rule {
 }
 
 // extractFirstWord extracts the first word from the commit message.
-func extractFirstWord(isConventional bool, message string) (string, error) {
+func extractFirstWord(isConventional bool, subject string) (string, error) {
 	var msg string
 
 	if isConventional {
-		groups := parseHeader(message)
+		groups := parseSubject(subject)
 		if len(groups) != 5 {
 			return "", errors.New("invalid conventional commit format")
 		}
 
 		msg = groups[4]
 	} else {
-		msg = message
+		msg = subject
 	}
 
 	if msg == "" {

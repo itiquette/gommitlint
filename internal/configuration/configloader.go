@@ -1,7 +1,6 @@
-// SPDX-FileCopyrightText: 2024 Josef Andersson
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
 // SPDX-License-Identifier: EUPL-1.2
-
 package configuration
 
 import (
@@ -23,12 +22,10 @@ type DefaultConfigLoader struct{}
 
 // LoadConfiguration loads the application configuration from various sources.
 func (DefaultConfigLoader) LoadConfiguration() (*AppConf, error) {
-	appConfig := &AppConf{GommitConf: &Gommit{Conventional: &Conventional{}}}
+	appConfig := &AppConf{GommitConf: &GommitLintConfig{ConventionalCommit: &ConventionalRule{}, Subject: &SubjectRule{}}}
 	if err := ReadConfigurationFile(appConfig, ".gommitlint.yaml"); err != nil {
 		return nil, fmt.Errorf("failed to read configuration file: %w", err)
 	}
-
-	defaultConventionalTypes(appConfig)
 
 	//	for _, config := range appConfig.Configurations {
 	// if err := validateConfiguration(config); err != nil {
@@ -40,15 +37,6 @@ func (DefaultConfigLoader) LoadConfiguration() (*AppConf, error) {
 	//	fmt.Print(appConfig)
 
 	return appConfig, nil
-}
-
-func defaultConventionalTypes(appConf *AppConf) {
-	// fill defaults
-	if len(appConf.GommitConf.Conventional.Types) == 0 {
-		types := []string{"build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "revert", "style", "test"}
-
-		appConf.GommitConf.Conventional.Types = types
-	}
 }
 
 func ReadConfigurationFile(appConfiguration *AppConf, configfile string) error {

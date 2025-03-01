@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2024 Josef Andersson
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
 // SPDX-License-Identifier: EUPL-1.2
 
@@ -24,7 +24,7 @@ func TestLoadConfiguration(t *testing.T) {
 			name: "Load configuration from local file",
 			setupFunc: func(dir string) error {
 				content := `gommitlint:
-  conventional:
+  conventional-commit:
     types:
       - custom
       - types`
@@ -42,7 +42,7 @@ func TestLoadConfiguration(t *testing.T) {
 					return err
 				}
 				content := `gommitlint:
-  conventional:
+  conventional-commit:
     types:
       - xdg
       - config`
@@ -55,14 +55,6 @@ func TestLoadConfiguration(t *testing.T) {
 				return nil
 			},
 			expectedTypes: []string{"xdg", "config"},
-			wantErr:       false,
-		},
-		{
-			name: "Load configuration from no file",
-			setupFunc: func(_ string) error {
-				return nil
-			},
-			expectedTypes: []string{"build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "revert", "style", "test"},
 			wantErr:       false,
 		},
 	}
@@ -96,7 +88,7 @@ func TestLoadConfiguration(t *testing.T) {
 
 			require.NoError(t, err)
 			require.NotNil(t, config)
-			require.Equal(t, tabletest.expectedTypes, config.GommitConf.Conventional.Types)
+			require.Equal(t, tabletest.expectedTypes, config.GommitConf.ConventionalCommit.Types)
 		})
 	}
 }

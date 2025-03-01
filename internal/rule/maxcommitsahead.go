@@ -1,15 +1,15 @@
 // SPDX-FileCopyrightText: 2024 Sidero Labs, Inc.
-// SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: EUPL-1.2
 package rule
 
 import (
 	"fmt"
 	"strings"
 
-	"github.com/itiquette/gommitlint/internal/git"
 	"github.com/itiquette/gommitlint/internal/interfaces"
+	"github.com/itiquette/gommitlint/internal/model"
 	"github.com/pkg/errors"
 )
 
@@ -45,8 +45,8 @@ func (c *MaxCommitsAhead) Name() string {
 	return "Max Commits Ahead"
 }
 
-// Message returns the rule message.
-func (c *MaxCommitsAhead) Message() string {
+// Result returns the rule message.
+func (c *MaxCommitsAhead) Result() string {
 	if len(c.errors) > 0 {
 		return c.errors[0].Error()
 	}
@@ -59,10 +59,10 @@ func (c *MaxCommitsAhead) Errors() []error {
 	return c.errors
 }
 func ValidateNumberOfCommits(
-	gitClient *git.Git,
+	gitClient *model.Repository,
 	ref string,
 	opts ...func(*CommitsAheadConfig),
-) interfaces.Rule {
+) interfaces.CommitRule {
 	// Start with default configuration
 	config := DefaultCommitsAheadConfig()
 

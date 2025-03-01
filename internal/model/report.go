@@ -1,14 +1,13 @@
-// SPDX-FileCopyrightText: 2024 Sidero Labs, Inc.
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: EUPL-1.2
 
 package model
 
 import "github.com/itiquette/gommitlint/internal/interfaces"
 
-// Report reports the compliance checks.
 type Report struct {
-	rules []interfaces.Rule
+	rules []interfaces.CommitRule
 }
 
 // Valid checks if a report is valid.
@@ -22,12 +21,10 @@ func (r *Report) Valid() bool {
 	return true
 }
 
-// Rules returns the rules executed by a validator run.
-func (r *Report) Rules() []interfaces.Rule {
+func (r *Report) Rules() []interfaces.CommitRule {
 	return r.rules
 }
 
-// AddRule adds a rule to the report.
-func (r *Report) AddRule(c interfaces.Rule) {
+func (r *Report) AddRule(c interfaces.CommitRule) {
 	r.rules = append(r.rules, c)
 }

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2024 Sidero Labs, Inc.
-// SPDX-FileCopyrightText: 2025 Itiquette/Gommitlint
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: EUPL-1.2
 
 package rule_test
 
@@ -44,24 +44,17 @@ func TestValidateSpelling(t *testing.T) {
 		// },
 		{
 			name:           "British English",
-			message:        "The colour of the centre is grey.",
+			message:        "langauge", //nolint
 			locale:         "GB",
-			expectedErrors: 0, // This might need to be adjusted based on actual behavior
+			expectedErrors: 1,
 			expectedWords:  nil,
 		},
 		{
 			name:           "American English",
-			message:        "The color of the center is gray.",
+			message:        "langauge", //nolint
 			locale:         "US",
-			expectedErrors: 0,
-			expectedWords:  nil,
-		},
-		{
-			name:           "Unsupported locale",
-			message:        "This is a test.",
-			locale:         "AU",
 			expectedErrors: 1,
-			expectedWords:  []string{"unsupported locale"},
+			expectedWords:  nil,
 		},
 		{
 			name:           "Unknown locale",
@@ -94,9 +87,9 @@ func TestValidateSpelling(t *testing.T) {
 			}
 
 			if tabletest.expectedErrors > 0 {
-				assert.NotEmpty(t, check.Message(), "Message should not be empty when errors are present")
+				assert.NotEmpty(t, check.Result(), "Message should not be empty when errors are present")
 			} else {
-				assert.Empty(t, check.Message(), "Message should be empty when no errors are present")
+				assert.Contains(t, check.Result(), "No common misspellings found")
 			}
 		})
 	}
