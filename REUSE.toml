@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: 2024 Josef Andersson
+#
+# SPDX-License-Identifier: CC0-1.0
+
+version = 1
+
+[[annotations]]
+path = [
+  ".github/pull_request_template.md",
+  "go.sum",
+  "docs/dco.txt",
+  "renovate.json",
+  "**/*/valid.priv",
+  "**/*/valid.pub",
+  ".gitleaksignore",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "itiquette. <https://github.com/itiquette>"
+SPDX-License-Identifier = "CC0-1.0"
