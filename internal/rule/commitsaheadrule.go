@@ -103,14 +103,14 @@ func ValidateNumberOfCommits(
 	}
 
 	// Gracefully handle reference checking
-	ahead, _, err := func() (int, int, error) {
+	ahead, err := func() (int, error) {
 		defer func() {
 			if r := recover(); r != nil {
 				err = fmt.Errorf("panic while checking ahead/behind: %v", r)
 			}
 		}()
 
-		return git.AheadAndBehind(repo, ref)
+		return git.IsAhead(repo, ref)
 	}()
 
 	if err != nil {

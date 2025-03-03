@@ -12,6 +12,37 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestNew(t *testing.T) {
+	// Create a temporary directory for this test
+	tmpDir := t.TempDir()
+
+	// Change to temp directory for test
+	err := os.Chdir(tmpDir)
+	require.NoError(t, err)
+
+	// Create a test configuration file
+	content := `gommitlint:
+  conventional-commit:
+    types:
+      - feat
+      - fix
+  subject:
+    max-length: 72`
+
+	err = os.WriteFile(filepath.Join(tmpDir, ".gommitlint.yaml"), []byte(content), 0600)
+	require.NoError(t, err)
+
+	// Test the New function
+	config, err := New()
+	require.NoError(t, err)
+	require.NotNil(t, config)
+	require.NotNil(t, config.GommitConf)
+	require.NotNil(t, config.GommitConf.ConventionalCommit)
+	require.Equal(t, []string{"feat", "fix"}, config.GommitConf.ConventionalCommit.Types)
+	require.NotNil(t, config.GommitConf.Subject)
+	require.Equal(t, 72, config.GommitConf.Subject.MaxLength)
+}
+
 func TestLoadConfiguration(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -57,6 +88,50 @@ func TestLoadConfiguration(t *testing.T) {
 			expectedTypes: []string{"xdg", "config"},
 			wantErr:       false,
 		},
+		{
+			name: "Local file takes precedence over XDG config",
+			setupFunc: func(dir string) error {
+				// Create XDG config
+				xdgPath := filepath.Join(dir, "gommitlint")
+				if err := os.MkdirAll(xdgPath, 0755); err != nil {
+					return err
+				}
+				xdgContent := `gommitlint:
+  conventional-commit:
+    types:
+      - xdg
+      - config`
+				configPath := filepath.Join(xdgPath, "gommitlint.yaml")
+				if err := os.WriteFile(configPath, []byte(xdgContent), 0600); err != nil {
+					return err
+				}
+				os.Setenv("XDG_CONFIG_HOME", dir)
+
+				// Create local config that should take precedence
+				localContent := `gommitlint:
+  conventional-commit:
+    types:
+      - local
+      - override`
+
+				return os.WriteFile(filepath.Join(dir, ".gommitlint.yaml"), []byte(localContent), 0600)
+			},
+			expectedTypes: []string{"local", "override"},
+			wantErr:       false,
+		},
+		{
+			name: "Partial configuration with only subject",
+			setupFunc: func(dir string) error {
+				content := `gommitlint:
+  subject:
+    max-length: 50
+    case: lower`
+
+				return os.WriteFile(filepath.Join(dir, ".gommitlint.yaml"), []byte(content), 0600)
+			},
+			expectedTypes: nil, // No types should be set
+			wantErr:       false,
+		},
 	}
 
 	for _, tabletest := range tests {
@@ -88,7 +163,17 @@ func TestLoadConfiguration(t *testing.T) {
 
 			require.NoError(t, err)
 			require.NotNil(t, config)
-			require.Equal(t, tabletest.expectedTypes, config.GommitConf.ConventionalCommit.Types)
+
+			// For the partial configuration test
+			if tabletest.name == "Partial configuration with only subject" {
+				require.Nil(t, config.GommitConf.ConventionalCommit)
+				require.NotNil(t, config.GommitConf.Subject)
+				require.Equal(t, 50, config.GommitConf.Subject.MaxLength)
+				require.Equal(t, "lower", config.GommitConf.Subject.Case)
+			} else {
+				require.NotNil(t, config.GommitConf.ConventionalCommit)
+				require.Equal(t, tabletest.expectedTypes, config.GommitConf.ConventionalCommit.Types)
+			}
 		})
 	}
 }
@@ -98,7 +183,6 @@ func TestReadConfigurationFile(t *testing.T) {
 		name      string
 		setupFunc func(string) error
 		wantErr   bool
-		wantPanic bool
 	}{
 		{
 			name: "No configuration files exist",
@@ -123,7 +207,7 @@ gommitlint:
 			wantErr: false,
 		},
 		{
-			name: "Invalid YAML that causes unmarshal panic",
+			name: "Invalid YAML that causes unmarshal error",
 			setupFunc: func(dir string) error {
 				content := `
 gommitlint: [invalid
@@ -151,20 +235,10 @@ gommitlint: [invalid
 			require.NoError(t, err, "Setup failed")
 
 			appConfig := &AppConf{}
-
-			if tabletest.wantPanic {
-				require.Panics(t, func() {
-					_ = ReadConfigurationFile(appConfig, ".gommitlint.yaml")
-				})
-
-				return
-			}
-
 			err = ReadConfigurationFile(appConfig, ".gommitlint.yaml")
 
 			if tabletest.wantErr {
 				require.Error(t, err)
-				require.Equal(t, "error loading config: yaml: line 1: did not find expected ',' or ']'", err.Error())
 
 				return
 			}

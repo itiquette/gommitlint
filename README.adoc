@@ -80,7 +80,7 @@ Check out our https://github.com/itiquette/gommitlint/issues[Issues page].
 
 == Credits & History
 
-Gommitlint is heavily inspired by Sidero Labs https://github.com/siderolabs/conform[Conform tool].
+Gommitlint was inspired by Sidero Labs https://github.com/siderolabs/conform[Conform tool].
 
 == Legal Stuff
 

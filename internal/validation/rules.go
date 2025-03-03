@@ -56,23 +56,23 @@ func (v *Validator) ensureDefaultValues() {
 		}
 
 		if v.config.Subject.Jira == nil {
-			v.config.Subject.Jira = &configuration.JiraRule{IsRequired: false}
+			v.config.Subject.Jira = &configuration.JiraRule{Required: false}
 		}
 	}
 
 	// Signature defaults
-	if v.config.IsSignOffRequired == nil {
-		v.config.IsSignOffRequired = boolPtr(DefaultSignOffRequired)
+	if v.config.SignOffRequired == nil {
+		v.config.SignOffRequired = boolPtr(DefaultSignOffRequired)
 	}
 
 	if v.config.Signature == nil {
-		v.config.Signature = &configuration.SignatureRule{IsRequired: true}
+		v.config.Signature = &configuration.SignatureRule{Required: true}
 	}
 
 	// Conventional commit defaults
 	if v.config.ConventionalCommit == nil {
 		v.config.ConventionalCommit = &configuration.ConventionalRule{
-			IsRequired: true,
+			Required: true,
 		}
 	}
 
@@ -86,11 +86,11 @@ func (v *Validator) ensureDefaultValues() {
 	}
 
 	if v.config.Body == nil {
-		v.config.Body = &configuration.BodyRule{IsRequired: false}
+		v.config.Body = &configuration.BodyRule{Required: false}
 	}
 
-	if v.config.IsNCommitMax == nil {
-		v.config.IsNCommitMax = boolPtr(DefaultOneCommitMax)
+	if v.config.NCommitsAhead == nil {
+		v.config.NCommitsAhead = boolPtr(DefaultOneCommitMax)
 	}
 }
 
@@ -111,17 +111,17 @@ func (v *Validator) checkSubjectRules(report *model.CommitRules, commitInfo mode
 	report.Add(rule.ValidateSubjectCaseRule(commitInfo.Subject, subject.Case, isConventional))
 	report.Add(rule.ValidateSubjectSuffix(commitInfo.Subject, subject.InvalidSuffixes))
 
-	if subject.Jira.IsRequired {
+	if subject.Jira.Required {
 		report.Add(rule.ValidateJira(commitInfo.Subject, subject.Jira.Keys, isConventional))
 	}
 }
 
 func (v *Validator) checkSignatureRules(report *model.CommitRules, commitInfo model.CommitInfo) {
-	if *v.config.IsSignOffRequired {
+	if *v.config.SignOffRequired {
 		report.Add(rule.ValidateSignOffRule(commitInfo.Body))
 	}
 
-	if v.config.Signature.IsRequired {
+	if v.config.Signature.Required {
 		report.Add(rule.ValidateSignatureRule(commitInfo.Signature))
 
 		if v.config.Signature.Identity != nil {
@@ -131,7 +131,7 @@ func (v *Validator) checkSignatureRules(report *model.CommitRules, commitInfo mo
 }
 
 func (v *Validator) checkConventionalRules(report *model.CommitRules, commitInfo model.CommitInfo) {
-	if v.config.ConventionalCommit.IsRequired {
+	if v.config.ConventionalCommit.Required {
 		conv := v.config.ConventionalCommit
 		report.Add(rule.ValidateConventionalCommit(commitInfo.Subject, conv.Types, conv.Scopes, conv.MaxDescriptionLength))
 	}
@@ -140,11 +140,11 @@ func (v *Validator) checkConventionalRules(report *model.CommitRules, commitInfo
 func (v *Validator) checkAdditionalRules(report *model.CommitRules, commitInfo model.CommitInfo) {
 	report.Add(rule.ValidateSpellingRule(commitInfo.Message, v.config.SpellCheck.Locale))
 
-	if *v.config.IsNCommitMax {
+	if *v.config.NCommitsAhead {
 		report.Add(rule.ValidateNumberOfCommits(v.repo, v.options.CommitRef))
 	}
 
-	if v.config.Body.IsRequired {
+	if v.config.Body.Required {
 		report.Add(rule.ValidateCommitBody(commitInfo.Message))
 	}
 }

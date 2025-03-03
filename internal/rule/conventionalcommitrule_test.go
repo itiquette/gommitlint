@@ -449,7 +449,7 @@ func createInvalidCommitRegex(repo *git.Repository) error {
 // Configuration helpers.
 func runCompliance() (*model.CommitRules, error) {
 	boolPtr := new(bool)
-	gommit := &configuration.GommitLintConfig{Signature: &configuration.SignatureRule{IsRequired: false}, IsSignOffRequired: boolPtr}
+	gommit := &configuration.GommitLintConfig{Signature: &configuration.SignatureRule{Required: false}, SignOffRequired: boolPtr}
 
 	r, _ := validation.NewValidator(&model.Options{}, gommit)
 

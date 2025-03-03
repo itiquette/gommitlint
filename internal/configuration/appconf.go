@@ -4,11 +4,13 @@
 
 package configuration
 
+// AppConf is the root configuration structure for the application.
 type AppConf struct {
 	GommitConf *GommitLintConfig `koanf:"gommitlint"`
 }
 
-// New loads the gommitlint.yaml file and unmarshals it into a Gommitlint struct.
+// New loads the gommitlint configuration and returns an AppConf instance.
+// Returns an error if configuration loading fails.
 func New() (*AppConf, error) {
 	gommitLintConf, err := DefaultConfigLoader{}.LoadConfiguration()
 	if err != nil {
@@ -27,13 +29,14 @@ type GommitLintConfig struct {
 	SpellCheck         *SpellingRule     `koanf:"spellcheck"`
 
 	// Security validation rules
-	Signature         *SignatureRule `koanf:"signature"`
-	IsSignOffRequired *bool          `koanf:"sign-off"`
+	Signature       *SignatureRule `koanf:"signature"`
+	SignOffRequired *bool          `koanf:"sign-off"`
 
 	// Misc validation rules
-	IsNCommitMax *bool `koanf:"is-n-commit-max"`
+	NCommitsAhead *bool `koanf:"n-commits-ahead"`
 }
 
+// SubjectRule defines configuration for commit subject validation.
 type SubjectRule struct {
 	// Case specifies the case that the first word of the description must have ("upper" or "lower").
 	Case string `koanf:"case"`
@@ -51,6 +54,7 @@ type SubjectRule struct {
 	MaxLength int `koanf:"max-length"`
 }
 
+// ConventionalRule defines configuration for conventional commit format validation.
 type ConventionalRule struct {
 	// MaxDescriptionLength specifies the maximum allowed length for the description.
 	MaxDescriptionLength int `koanf:"max-description-length"`
@@ -61,36 +65,41 @@ type ConventionalRule struct {
 	// Types lists the allowed types for conventional commits.
 	Types []string `koanf:"types"`
 
-	// IsRequired indicates whether Conventional Commits are required.
-	IsRequired bool `koanf:"required"`
+	// Required indicates whether Conventional Commits are required.
+	Required bool `koanf:"required"`
 }
 
+// SpellingRule defines configuration for spell checking.
 type SpellingRule struct {
 	// Locale specifies the language/locale to use for spell checking.
 	Locale string `koanf:"locale"`
 }
 
+// JiraRule defines configuration for Jira key validation.
 type JiraRule struct {
 	// Keys specifies the allowed Jira project keys.
 	Keys []string `koanf:"keys"`
 
-	// IsRequired indicates whether a Jira key must be present.
-	IsRequired bool `koanf:"required"`
+	// Required indicates whether a Jira key must be present.
+	Required bool `koanf:"required"`
 }
 
+// BodyRule defines configuration for commit body validation.
 type BodyRule struct {
-	// IsRequired enforces that the current commit has a body.
-	IsRequired bool `koanf:"required"`
+	// Required enforces that the current commit has a body.
+	Required bool `koanf:"required"`
 }
 
+// SignatureRule defines configuration for signature validation.
 type SignatureRule struct {
 	// Identity configures identity verification for signatures.
 	Identity *IdentityRule `koanf:"identity"`
 
-	// IsRequired enforces that the commit has a valid signature.
-	IsRequired bool `koanf:"required"`
+	// Required enforces that the commit has a valid signature.
+	Required bool `koanf:"required"`
 }
 
+// IdentityRule defines configuration for identity verification.
 type IdentityRule struct {
 	// PublicKeyURI points to a file containing authorized public keys.
 	PublicKeyURI string `koanf:"public-key-uri"`
