@@ -11,11 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidateSubjectCase(t *testing.T) {
+func TestValidateSubjectCaseRule(t *testing.T) {
 	testCases := []struct {
 		name            string
 		isConventional  bool
-		message         string
+		subject         string
 		caseChoice      string
 		expectedValid   bool
 		expectedMessage string
@@ -24,16 +24,16 @@ func TestValidateSubjectCase(t *testing.T) {
 		{
 			name:            "Valid Uppercase Conventional Commit",
 			isConventional:  true,
-			message:         "feat: Some feature description",
+			subject:         "feat: Some feature description",
 			caseChoice:      "upper",
 			expectedValid:   true,
-			expectedMessage: "Subject case is valid",
+			expectedMessage: "SubjectCaseRule is valid",
 			expectedErrors:  false,
 		},
 		{
 			name:            "Invalid Uppercase Conventional Commit",
 			isConventional:  true,
-			message:         "feat: some feature description",
+			subject:         "feat: some feature description",
 			caseChoice:      "upper",
 			expectedValid:   false,
 			expectedMessage: "commit subject case is not upper",
@@ -42,7 +42,7 @@ func TestValidateSubjectCase(t *testing.T) {
 		{
 			name:            "Valid Lowercase Conventional Commit",
 			isConventional:  true,
-			message:         "feat: some feature description",
+			subject:         "feat: some feature description",
 			caseChoice:      "lower",
 			expectedValid:   true,
 			expectedMessage: "subject case is valid",
@@ -51,7 +51,7 @@ func TestValidateSubjectCase(t *testing.T) {
 		{
 			name:            "Invalid Lowercase Conventional Commit",
 			isConventional:  true,
-			message:         "feat: Some feature description",
+			subject:         "feat: Some feature description",
 			caseChoice:      "lower",
 			expectedValid:   false,
 			expectedMessage: "commit subject case is not lower",
@@ -60,7 +60,7 @@ func TestValidateSubjectCase(t *testing.T) {
 		{
 			name:            "Valid Uppercase Non-Conventional Commit",
 			isConventional:  false,
-			message:         "Update something",
+			subject:         "Update something",
 			caseChoice:      "upper",
 			expectedValid:   true,
 			expectedMessage: "subject case is valid",
@@ -69,7 +69,7 @@ func TestValidateSubjectCase(t *testing.T) {
 		{
 			name:            "Invalid Uppercase Non-Conventional Commit",
 			isConventional:  false,
-			message:         "update something",
+			subject:         "update something",
 			caseChoice:      "upper",
 			expectedValid:   false,
 			expectedMessage: "commit subject case is not upper",
@@ -78,7 +78,7 @@ func TestValidateSubjectCase(t *testing.T) {
 		{
 			name:            "Invalid Case Choice",
 			isConventional:  false,
-			message:         "Some message",
+			subject:         "Some message",
 			caseChoice:      "non-valid choice",
 			expectedValid:   false,
 			expectedMessage: "commit subject case is not non-valid choice",
@@ -87,7 +87,7 @@ func TestValidateSubjectCase(t *testing.T) {
 		{
 			name:            "Empty Message",
 			isConventional:  false,
-			message:         "",
+			subject:         "",
 			caseChoice:      "upper",
 			expectedValid:   false,
 			expectedMessage: "empty message",
@@ -97,37 +97,37 @@ func TestValidateSubjectCase(t *testing.T) {
 
 	for _, tabletest := range testCases {
 		t.Run(tabletest.name, func(t *testing.T) {
-			// Perform the check
-			check := rule.ValidateSubjectCase(tabletest.message, tabletest.caseChoice, tabletest.isConventional)
+			// Perform the rule
+			rule := rule.ValidateSubjectCaseRule(tabletest.subject, tabletest.caseChoice, tabletest.isConventional)
 
 			// Check errors
 			if tabletest.expectedErrors {
-				require.NotEmpty(t, check.Errors(), "Expected errors, but got none")
+				require.NotEmpty(t, rule.Errors(), "Expected errors, but got none")
 
 				// Verify the error message
-				require.Equal(t, tabletest.expectedMessage, check.Result(),
+				require.Equal(t, tabletest.expectedMessage, rule.Result(),
 					"Error message does not match expected")
 			} else {
-				require.Empty(t, check.Errors(), "Did not expect errors, but got some")
-				require.Equal(t, "Subject case is valid", check.Result(),
+				require.Empty(t, rule.Errors(), "Did not expect errors, but got some")
+				require.Equal(t, "SubjectCaseRule is valid", rule.Result(),
 					"Expected default valid message")
 			}
 
 			// Check status
-			require.Equal(t, "Subject case", check.Name(), "Status should always be 'Subject case'")
+			require.Equal(t, "SubjectCaseRule", rule.Name(), "Status should always be 'SubjectCaseRule'")
 		})
 	}
 }
 
-func TestSubjectCaseCheckMethods(t *testing.T) {
+func TestSubjectCaseRuleMethods(t *testing.T) {
 	t.Run("Status Method", func(t *testing.T) {
-		rule := &rule.SubjectCase{}
-		require.Equal(t, "Subject case", rule.Name())
+		rule := &rule.SubjectCaseRule{}
+		require.Equal(t, "SubjectCaseRule", rule.Name())
 	})
 
 	t.Run("Message Method with No Errors", func(t *testing.T) {
-		rule := &rule.SubjectCase{}
-		require.Equal(t, "Subject case is valid", rule.Result())
+		rule := &rule.SubjectCaseRule{}
+		require.Equal(t, "SubjectCaseRule is valid", rule.Result())
 	})
 
 	// t.Run("Message Method with Errors", func(t *testing.T) {
@@ -140,7 +140,7 @@ func TestSubjectCaseCheckMethods(t *testing.T) {
 			errors.New("test error"),
 			errors.New("second error"),
 		}
-		check := &rule.SubjectCase{
+		check := &rule.SubjectCaseRule{
 			RuleErrors: expectedErrors,
 		}
 		require.Equal(t, expectedErrors, check.Errors())

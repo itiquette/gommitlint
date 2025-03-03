@@ -335,8 +335,8 @@ func createValidBreakingCommit(repo *git.Repository) error {
 	signedMsg := "feat!: description" + "\n\nSigned-off-by: Laval Lion <laval@cavora.org>"
 	_, err = wtree.Commit(signedMsg, &git.CommitOptions{
 		Author: &object.Signature{
-			Name:  "test",
-			Email: "test@commiter.io",
+			Name:  "Laval Lion",
+			Email: "laval@cavora.org",
 			When:  time.Now(),
 		},
 	})
@@ -352,8 +352,8 @@ func createInvalidBreakingSymbolCommit(repo *git.Repository) error {
 
 	_, err = wtree.Commit("feat$: description", &git.CommitOptions{
 		Author: &object.Signature{
-			Name:  "test",
-			Email: "test@commiter.io",
+			Name:  "Laval Lion",
+			Email: "laval@cavora.org",
 			When:  time.Now(),
 		},
 	})
@@ -369,8 +369,8 @@ func createValidScopedBreakingCommit(repo *git.Repository) error {
 
 	_, err = wtree.Commit("feat(scope)!: description", &git.CommitOptions{
 		Author: &object.Signature{
-			Name:  "test",
-			Email: "test@commiter.io",
+			Name:  "Laval Lion",
+			Email: "laval@cavora.org",
 			When:  time.Now(),
 		},
 	})
@@ -386,8 +386,8 @@ func createInvalidScopedBreakingCommit(repo *git.Repository) error {
 
 	_, err = wtree.Commit("feat!(scope): description", &git.CommitOptions{
 		Author: &object.Signature{
-			Name:  "test",
-			Email: "test@commiter.io",
+			Name:  "Laval Lion",
+			Email: "laval@cavora.org",
 			When:  time.Now(),
 		},
 	})
@@ -403,8 +403,8 @@ func createInvalidCommit(repo *git.Repository) error {
 
 	_, err = wtree.Commit("invalid commit", &git.CommitOptions{
 		Author: &object.Signature{
-			Name:  "test",
-			Email: "test@commiter.io",
+			Name:  "Laval Lion",
+			Email: "laval@cavora.org",
 			When:  time.Now(),
 		},
 	})
@@ -420,8 +420,8 @@ func createInvalidEmptyCommit(repo *git.Repository) error {
 
 	_, err = wtree.Commit("", &git.CommitOptions{
 		Author: &object.Signature{
-			Name:  "test",
-			Email: "test@commiter.io",
+			Name:  "Laval Lion",
+			Email: "laval@cavora.org",
 			When:  time.Now(),
 		},
 	})
@@ -437,8 +437,8 @@ func createInvalidCommitRegex(repo *git.Repository) error {
 
 	_, err = wtree.Commit("type(invalid-1): description", &git.CommitOptions{
 		Author: &object.Signature{
-			Name:  "test",
-			Email: "test@commiter.io",
+			Name:  "Laval Lion",
+			Email: "laval@cavora.org",
 			When:  time.Now(),
 		},
 	})

@@ -6,7 +6,6 @@ package rule
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -19,27 +18,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGPGIdentityCheck_Status(t *testing.T) {
-	check := GPGIdentity{}
-	require.Equal(t, "GPG Identity", check.Name())
+func TestGPGIdentityRule_Status(t *testing.T) {
+	rule := GPGIdentityRule{}
+	require.Equal(t, "GPGIdentityRule", rule.Name())
 }
 
-func TestGPGIdentityCheck_Message(t *testing.T) {
+func TestGPGIdentityRule_Result(t *testing.T) {
 	tests := []struct {
 		name     string
-		check    GPGIdentity
+		rule     GPGIdentityRule
 		expected string
 	}{
 		{
 			name: "valid identity",
-			check: GPGIdentity{
+			rule: GPGIdentityRule{
 				Identity: "Test User <test@example.com>",
 			},
 			expected: `Signed by "Test User <test@example.com>"`,
 		},
 		{
 			name: "with error",
-			check: GPGIdentity{
+			rule: GPGIdentityRule{
 				RuleErrors: []error{errors.New("verification failed")},
 			},
 			expected: "verification failed",
@@ -48,7 +47,7 @@ func TestGPGIdentityCheck_Message(t *testing.T) {
 
 	for _, tabletest := range tests {
 		t.Run(tabletest.name, func(t *testing.T) {
-			require.Equal(t, tabletest.expected, tabletest.check.Result())
+			require.Equal(t, tabletest.expected, tabletest.rule.Result())
 		})
 	}
 }
@@ -58,8 +57,6 @@ func loadTestKey(t *testing.T, filename string) *openpgp.Entity {
 
 	fullPath, _ := filepath.Abs("testdata")
 
-	fmt.Print("ASDFASDFSADF")
-	fmt.Print(fullPath)
 	privKeyData, err := os.ReadFile(filepath.Join(fullPath, filename))
 	require.NoError(t, err, "failed to read test key file")
 
@@ -135,7 +132,7 @@ func setupTestRepo(t *testing.T, opts setupRepoOptions) (*git.Repository, *objec
 	return repo, commit
 }
 
-func TestValidateGPGIdentity(t *testing.T) {
+func TestValidateGPGIdentityRule(t *testing.T) {
 	testDataDir, _ := filepath.Abs("testdata")
 	tests := []struct {
 		name        string
@@ -150,7 +147,7 @@ func TestValidateGPGIdentity(t *testing.T) {
 			name: "valid signed commit",
 			setupOpts: setupRepoOptions{
 				authorName:  "Test User",
-				authorEmail: "test@example.com",
+				authorEmail: "laval@cavora.org",
 				message:     "Signed commit",
 				signKey:     loadTestKey(t, "valid.priv"),
 			},
@@ -162,7 +159,7 @@ func TestValidateGPGIdentity(t *testing.T) {
 			name: "unsigned commit",
 			setupOpts: setupRepoOptions{
 				authorName:  "Test User",
-				authorEmail: "test@example.com",
+				authorEmail: "laval@cavora.org",
 				message:     "Unsigned commit",
 			},
 			pubKeyDir:   testDataDir,
@@ -173,7 +170,7 @@ func TestValidateGPGIdentity(t *testing.T) {
 			name: "missing public key directory",
 			setupOpts: setupRepoOptions{
 				authorName:  "Test User",
-				authorEmail: "test@example.com",
+				authorEmail: "laval@cavora.org",
 				message:     "Signed commit",
 				signKey:     loadTestKey(t, "valid.priv"),
 			},
@@ -185,7 +182,7 @@ func TestValidateGPGIdentity(t *testing.T) {
 			name: "nonexistent public key directory",
 			setupOpts: setupRepoOptions{
 				authorName:  "Test User",
-				authorEmail: "test@example.com",
+				authorEmail: "laval@cavora.org",
 				message:     "Signed commit",
 				signKey:     loadTestKey(t, "valid.priv"),
 			},
@@ -197,7 +194,7 @@ func TestValidateGPGIdentity(t *testing.T) {
 			name: "malformed signature",
 			setupOpts: setupRepoOptions{
 				authorName:  "Test User",
-				authorEmail: "test@example.com",
+				authorEmail: "laval@cavora.org",
 				message:     "Malformed signature",
 			},
 			pubKeyDir:   testDataDir,

@@ -16,16 +16,16 @@ import (
 	"github.com/pkg/errors"
 )
 
-type GPGIdentity struct {
+type GPGIdentityRule struct {
 	RuleErrors []error
 	Identity   string
 }
 
-func (g GPGIdentity) Name() string {
-	return "GPG Identity"
+func (g GPGIdentityRule) Name() string {
+	return "GPGIdentityRule"
 }
 
-func (g GPGIdentity) Result() string {
+func (g GPGIdentityRule) Result() string {
 	if len(g.RuleErrors) != 0 {
 		return g.RuleErrors[0].Error()
 	}
@@ -33,12 +33,12 @@ func (g GPGIdentity) Result() string {
 	return fmt.Sprintf("Signed by %q", g.Identity)
 }
 
-func (g GPGIdentity) Errors() []error {
+func (g GPGIdentityRule) Errors() []error {
 	return g.RuleErrors
 }
 
-func ValidateGPGIdentity(signature string, commitData *object.Commit, pubKeyDir string) GPGIdentity {
-	rule := GPGIdentity{}
+func ValidateGPGIdentity(signature string, commitData *object.Commit, pubKeyDir string) GPGIdentityRule {
+	rule := GPGIdentityRule{}
 
 	if pubKeyDir == "" {
 		rule.RuleErrors = append(rule.RuleErrors, errors.New("no public key directory provided"))

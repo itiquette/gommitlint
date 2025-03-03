@@ -17,7 +17,7 @@ import (
 func TestValidateSubjectLength(t *testing.T) {
 	testCases := []struct {
 		name           string
-		message        string
+		subject        string
 		maxLength      int
 		expectedValid  bool
 		expectedLength int
@@ -25,7 +25,7 @@ func TestValidateSubjectLength(t *testing.T) {
 	}{
 		{
 			name:           "Within Default Length",
-			message:        "Fix authentication service",
+			subject:        "Fix authentication service",
 			maxLength:      0,
 			expectedValid:  true,
 			expectedLength: 26,
@@ -33,7 +33,7 @@ func TestValidateSubjectLength(t *testing.T) {
 		},
 		{
 			name:           "Exactly Default Max Length",
-			message:        "A message that is exactly the default maximum length allowed",
+			subject:        "A message that is exactly the default maximum length allowed",
 			maxLength:      0,
 			expectedValid:  true,
 			expectedLength: 60,
@@ -41,7 +41,7 @@ func TestValidateSubjectLength(t *testing.T) {
 		},
 		{
 			name:           "Exceeds Default Length",
-			message:        "A very long message that definitely exceeds the default maximum length allowed for cddddddddddddddddd",
+			subject:        "A very long message that definitely exceeds the default maximum length allowed for cddddddddddddddddd",
 			maxLength:      0,
 			expectedValid:  false,
 			expectedLength: rule.DefaultMaxCommitSubjectLength + 1,
@@ -49,7 +49,7 @@ func TestValidateSubjectLength(t *testing.T) {
 		},
 		{
 			name:           "Custom Max Length Exceeded",
-			message:        "A message that exceeds a custom maximum length",
+			subject:        "A message that exceeds a custom maximum length",
 			maxLength:      20,
 			expectedValid:  false,
 			expectedLength: 46,
@@ -57,7 +57,7 @@ func TestValidateSubjectLength(t *testing.T) {
 		},
 		{
 			name:           "Unicode Characters",
-			message:        "Fix élément with special characters éçà",
+			subject:        "Fix élément with special characters éçà",
 			maxLength:      0,
 			expectedValid:  true,
 			expectedLength: 39,
@@ -65,7 +65,7 @@ func TestValidateSubjectLength(t *testing.T) {
 		},
 		{
 			name:           "Unicode Characters Exceeding Length",
-			message:        "A very long message with unicode characters like élément that makes it exceed the length límit",
+			subject:        "A very long message with unicode characters like élément that makes it exceed the length límit",
 			maxLength:      89,
 			expectedValid:  false,
 			expectedLength: 94,
@@ -73,7 +73,7 @@ func TestValidateSubjectLength(t *testing.T) {
 		},
 		{
 			name:           "Empty Message",
-			message:        "",
+			subject:        "",
 			maxLength:      0,
 			expectedValid:  true,
 			expectedLength: 0,
@@ -84,29 +84,29 @@ func TestValidateSubjectLength(t *testing.T) {
 	for _, tabletest := range testCases {
 		t.Run(tabletest.name, func(t *testing.T) {
 			// Compute UTF-8 aware length
-			actualLength := utf8.RuneCountInString(tabletest.message)
+			actualLength := utf8.RuneCountInString(tabletest.subject)
 			require.Equal(t, tabletest.expectedLength, actualLength, "UTF-8 length calculation should be correct")
 
-			// Perform the check
-			check := rule.ValidateSubjectLength(tabletest.message, tabletest.maxLength)
+			// Perform the rule
+			rule := rule.ValidateSubjectLengthRule(tabletest.subject, tabletest.maxLength)
 
 			// Check errors
 			if tabletest.expectedValid {
-				require.Empty(t, check.Errors(), "Did not expect errors")
+				require.Empty(t, rule.Errors(), "Did not expect errors")
 				require.Equal(t,
 					fmt.Sprintf("Subject is %d characters", actualLength),
-					check.Result(),
+					rule.Result(),
 					"Message should report correct length",
 				)
 			} else {
-				require.NotEmpty(t, check.Errors(), "Expected errors")
-				require.Equal(t, tabletest.expectedError, check.Result(),
+				require.NotEmpty(t, rule.Errors(), "Expected errors")
+				require.Equal(t, tabletest.expectedError, rule.Result(),
 					"Error message should match expected")
 			}
 
 			// Check status method
-			require.Equal(t, "Subject Length", check.Name(),
-				"Status should always be 'Subject Length'")
+			require.Equal(t, "SubjectLengthRule", rule.Name(),
+				"Status should always be 'SubjectLengthRule'")
 		})
 	}
 }

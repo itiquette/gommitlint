@@ -8,15 +8,15 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/itiquette/gommitlint/internal/git"
 	"github.com/itiquette/gommitlint/internal/model"
-	"github.com/pkg/errors"
 )
 
 // CommitsAheadConfig provides configuration for commits ahead validation.
 type CommitsAheadConfig struct {
 	// MaxCommitsAhead defines the maximum number of commits allowed ahead of the reference
 	MaxCommitsAhead int
-	// IgnoreBranches allows excluding specific branches from the check
+	// IgnoreBranches allows excluding specific branches
 	IgnoreBranches []string
 	// EnforceOnBranches limits the check to specific branches
 	EnforceOnBranches []string
@@ -31,8 +31,8 @@ func DefaultCommitsAheadConfig() CommitsAheadConfig {
 	}
 }
 
-// MaxCommitsAhead enforces a maximum number of commits ahead of a reference.
-type MaxCommitsAhead struct {
+// CommitsAheadRule enforces a maximum number of commits ahead of a reference.
+type CommitsAheadRule struct {
 	ref    string
 	Ahead  int
 	config CommitsAheadConfig
@@ -40,12 +40,12 @@ type MaxCommitsAhead struct {
 }
 
 // Name returns the name of the rule.
-func (c *MaxCommitsAhead) Name() string {
-	return "Max Commits Ahead"
+func (c *CommitsAheadRule) Name() string {
+	return "CommitsAheadRule"
 }
 
 // Result returns the rule message.
-func (c *MaxCommitsAhead) Result() string {
+func (c *CommitsAheadRule) Result() string {
 	if len(c.errors) > 0 {
 		return c.errors[0].Error()
 	}
@@ -54,14 +54,14 @@ func (c *MaxCommitsAhead) Result() string {
 }
 
 // Errors returns any violations of the rule.
-func (c *MaxCommitsAhead) Errors() []error {
+func (c *CommitsAheadRule) Errors() []error {
 	return c.errors
 }
 func ValidateNumberOfCommits(
-	gitClient *model.Repository,
+	repo *model.Repository,
 	ref string,
 	opts ...func(*CommitsAheadConfig),
-) *MaxCommitsAhead {
+) *CommitsAheadRule {
 	// Start with default configuration
 	config := DefaultCommitsAheadConfig()
 
@@ -70,21 +70,13 @@ func ValidateNumberOfCommits(
 		opt(&config)
 	}
 
-	rule := &MaxCommitsAhead{
+	rule := &CommitsAheadRule{
 		ref:    ref,
 		config: config,
 	}
 
-	// Validate git client
-	if gitClient == nil {
-		rule.errors = append(rule.errors,
-			errors.New("git client is nil"))
-
-		return rule
-	}
-
 	// Get current branch name
-	head, err := gitClient.Repo.Head()
+	head, err := repo.Repo.Head()
 	if err != nil {
 		rule.errors = append(rule.errors,
 			fmt.Errorf("failed to get current branch: %w", err))
@@ -118,7 +110,7 @@ func ValidateNumberOfCommits(
 			}
 		}()
 
-		return gitClient.AheadBehind(ref)
+		return git.AheadAndBehind(repo, ref)
 	}()
 
 	if err != nil {

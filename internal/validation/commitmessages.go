@@ -10,19 +10,19 @@ import (
 	"github.com/itiquette/gommitlint/internal/model"
 )
 
-// getCommitMessages retrieves commit messages based on options.
-func (v *Validator) getCommitMessages() ([]model.CommitInfo, error) {
+// getCommitInfos retrieves commit messages based on options.
+func (v *Validator) getCommitInfos() ([]model.CommitInfo, error) {
 	switch {
 	case v.options.CommitMsgFile != nil:
-		return v.getCommitFromFile()
+		return v.getCommitInfosFromFile()
 	case v.options.RevisionRange != "":
-		return v.getCommitFromRange()
+		return v.getCommitInfosFromRange()
 	default:
 		return v.getCurrentCommit()
 	}
 }
 
-func (v *Validator) getCommitFromFile() ([]model.CommitInfo, error) {
+func (v *Validator) getCommitInfosFromFile() ([]model.CommitInfo, error) {
 	contents, err := os.ReadFile(*v.options.CommitMsgFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read commit message file: %w", err)
@@ -31,13 +31,13 @@ func (v *Validator) getCommitFromFile() ([]model.CommitInfo, error) {
 	return []model.CommitInfo{{Message: string(contents)}}, nil
 }
 
-func (v *Validator) getCommitFromRange() ([]model.CommitInfo, error) {
+func (v *Validator) getCommitInfosFromRange() ([]model.CommitInfo, error) {
 	revs, err := v.parseRevisionRange()
 	if err != nil {
 		return nil, err
 	}
 
-	msgs, err := v.git.Messages(revs[0], revs[1])
+	msgs, err := v.repo.CommitInfos(revs[0], revs[1])
 	if err != nil {
 		return nil, fmt.Errorf("failed to get commit messages: %w", err)
 	}
@@ -46,7 +46,7 @@ func (v *Validator) getCommitFromRange() ([]model.CommitInfo, error) {
 }
 
 func (v *Validator) getCurrentCommit() ([]model.CommitInfo, error) {
-	msg, err := v.git.Messages("", "")
+	msg, err := v.repo.CommitInfos("", "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get current commit message: %w", err)
 	}

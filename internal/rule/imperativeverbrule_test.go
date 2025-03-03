@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidateImperative(t *testing.T) {
+func TestValidateImperativeRule(t *testing.T) {
 	testCases := []struct {
 		name            string
 		isConventional  bool
@@ -79,58 +79,57 @@ func TestValidateImperative(t *testing.T) {
 
 	for _, tabletest := range testCases {
 		t.Run(tabletest.name, func(t *testing.T) {
-			// Perform the check
-			check := rule.ValidateImperative(tabletest.message, tabletest.isConventional)
+			rule := rule.ValidateImperativeRule(tabletest.message, tabletest.isConventional)
 
 			// Check errors
 			if tabletest.expectedValid {
-				require.Empty(t, check.Errors(), "Did not expect errors")
+				require.Empty(t, rule.Errors(), "Did not expect errors")
 				require.Equal(t,
 					"Commit begins with imperative verb",
-					check.Result(),
+					rule.Result(),
 					"Message should be valid",
 				)
 			} else {
-				require.NotEmpty(t, check.Errors(), "Expected errors")
+				require.NotEmpty(t, rule.Errors(), "Expected errors")
 				require.Equal(t,
 					tabletest.expectedMessage,
-					check.Result(),
+					rule.Result(),
 					"Error message should match expected",
 				)
 			}
 
 			// Check status method
-			require.Equal(t, "Imperative Mood", check.Name(),
-				"Status should always be 'Imperative Mood'")
+			require.Equal(t, "ImperativeVerbRule", rule.Name(),
+				"Status should always be 'ImperativeVerbRule'")
 		})
 	}
 }
 
-func TestImperativeCheckMethods(t *testing.T) {
+func TestImperativeRuleMethods(t *testing.T) {
 	t.Run("Status Method", func(t *testing.T) {
-		check := &rule.ImperativeVerb{}
-		require.Equal(t, "Imperative Mood", check.Name())
+		rule := &rule.ImperativeVerbRule{}
+		require.Equal(t, "ImperativeVerbRule", rule.Name())
 	})
 
 	t.Run("Message Method with Errors", func(t *testing.T) {
-		check := &rule.ImperativeVerb{}
-		check.SetErrors([]error{errors.New("first word of commit must be an imperative verb: \"Added\" is invalid")})
+		rule := &rule.ImperativeVerbRule{}
+		rule.SetErrors([]error{errors.New("first word of commit must be an imperative verb: \"Added\" is invalid")})
 		require.Equal(t,
 			"first word of commit must be an imperative verb: \"Added\" is invalid",
-			check.Result(),
+			rule.Result(),
 		)
 	})
 
 	t.Run("Message Method without Errors", func(t *testing.T) {
-		check := &rule.ImperativeVerb{}
-		require.Equal(t, "Commit begins with imperative verb", check.Result())
+		rule := &rule.ImperativeVerbRule{}
+		require.Equal(t, "Commit begins with imperative verb", rule.Result())
 	})
 
 	t.Run("Errors Method", func(t *testing.T) {
 		expectedErrors := []error{
 			errors.New("test error"),
 		}
-		ruleInstance := &rule.ImperativeVerb{}
+		ruleInstance := &rule.ImperativeVerbRule{}
 		ruleInstance.SetErrors(expectedErrors)
 		require.Equal(t, expectedErrors, ruleInstance.Errors())
 	})

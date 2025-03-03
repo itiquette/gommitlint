@@ -59,13 +59,13 @@ In the same directory, run:
 ----
 $ gommitlint validate
 CHECK                        STATUS        MESSAGE
-Subject Length               PASS         Subject is 43 characters
-Imperative Mood              PASS          Commit begins with imperative verb
-Subject Case                 PASS          Subject case is valid
-Subject Last Character       PASS          Subject last character is valid
+SubjectLengthRule               PASS         Subject is 43 characters
+ImperativeVerbRule              PASS          Commit begins with imperative verb
+Subject Case                 PASS          SubjectCaseRule is valid
+SubjectSuffixRule       PASS          Subject last character is valid
 Sign-Off                     PASS          Sign-Off was found
 Signature                    PASS          Signature found
-GPG Identity                 PASS          Signed by "Someone <someone@example.com>"
+GPGIdentityRule                 PASS          Signed by "Someone <someone@example.com>"
 Conventional Commit          PASS          Commit message is a valid conventional commit
 Spellcheck                   PASS          Commit contains 0 misspellings
 Number of Commits            PASS          HEAD is 0 commit(s) ahead of refs/heads/main

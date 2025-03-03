@@ -9,14 +9,12 @@ import (
 	"github.com/itiquette/gommitlint/internal/rule"
 )
 
-// Default values as simple constants.
 const (
 	DefaultSubjectDescriptionCase = "lower"
 	DefaultSubjectInvalidSuffixes = ".! ?"
 	DefaultSpellCheckLocale       = "UK"
 )
 
-// Default boolean values.
 var (
 	DefaultSubjectImperativeRequired = true
 	DefaultSignOffRequired           = true
@@ -33,13 +31,12 @@ func boolPtr(b bool) *bool {
 	return &b
 }
 
-// checkValidity validates the commit message against all configured rules.
-func (v *Validator) checkValidity(report *model.CommitRules, commitInfo model.CommitInfo) {
+func (v *Validator) checkValidity(commitRules *model.CommitRules, commitInfo model.CommitInfo) {
 	v.ensureDefaultValues()
-	v.checkSubjectRules(report, commitInfo)
-	v.checkSignatureRules(report, commitInfo)
-	v.checkConventionalRules(report, commitInfo)
-	v.checkAdditionalRules(report, commitInfo)
+	v.checkSubjectRules(commitRules, commitInfo)
+	v.checkSignatureRules(commitRules, commitInfo)
+	v.checkConventionalRules(commitRules, commitInfo)
+	v.checkAdditionalRules(commitRules, commitInfo)
 }
 
 // ensureDefaultValues ensures all configuration values have appropriate defaults.
@@ -105,13 +102,13 @@ func (v *Validator) checkSubjectRules(report *model.CommitRules, commitInfo mode
 	subject := v.config.Subject
 	isConventional := v.config.ConventionalCommit != nil
 
-	report.Add(rule.ValidateSubjectLength(commitInfo.Subject, subject.MaxLength))
+	report.Add(rule.ValidateSubjectLengthRule(commitInfo.Subject, subject.MaxLength))
 
 	if *subject.Imperative {
-		report.Add(rule.ValidateImperative(commitInfo.Subject, isConventional))
+		report.Add(rule.ValidateImperativeRule(commitInfo.Subject, isConventional))
 	}
 
-	report.Add(rule.ValidateSubjectCase(commitInfo.Subject, subject.Case, isConventional))
+	report.Add(rule.ValidateSubjectCaseRule(commitInfo.Subject, subject.Case, isConventional))
 	report.Add(rule.ValidateSubjectSuffix(commitInfo.Subject, subject.InvalidSuffixes))
 
 	if subject.Jira.IsRequired {
@@ -121,11 +118,11 @@ func (v *Validator) checkSubjectRules(report *model.CommitRules, commitInfo mode
 
 func (v *Validator) checkSignatureRules(report *model.CommitRules, commitInfo model.CommitInfo) {
 	if *v.config.IsSignOffRequired {
-		report.Add(rule.ValidateSignOff(commitInfo.Body))
+		report.Add(rule.ValidateSignOffRule(commitInfo.Body))
 	}
 
 	if v.config.Signature.IsRequired {
-		report.Add(rule.ValidateSignature(commitInfo.Signature))
+		report.Add(rule.ValidateSignatureRule(commitInfo.Signature))
 
 		if v.config.Signature.Identity != nil {
 			report.Add(rule.ValidateGPGIdentity(commitInfo.Signature, commitInfo.RawCommit, v.config.Signature.Identity.PublicKeyURI))
@@ -141,10 +138,10 @@ func (v *Validator) checkConventionalRules(report *model.CommitRules, commitInfo
 }
 
 func (v *Validator) checkAdditionalRules(report *model.CommitRules, commitInfo model.CommitInfo) {
-	report.Add(rule.ValidateSpelling(commitInfo.Message, v.config.SpellCheck.Locale))
+	report.Add(rule.ValidateSpellingRule(commitInfo.Message, v.config.SpellCheck.Locale))
 
 	if *v.config.IsNCommitMax {
-		report.Add(rule.ValidateNumberOfCommits(v.git, v.options.CommitRef))
+		report.Add(rule.ValidateNumberOfCommits(v.repo, v.options.CommitRef))
 	}
 
 	if v.config.Body.IsRequired {

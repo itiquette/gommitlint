@@ -8,18 +8,18 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Signature ensures that the commit is cryptographically signed using GPG.
-type Signature struct {
+// SignatureRule ensures that the commit is cryptographically signed.
+type SignatureRule struct {
 	RuleErrors []error
 }
 
-// Name returns the name of the check.
-func (g Signature) Name() string {
-	return "Signature"
+// Name returns the name of the rule.
+func (g SignatureRule) Name() string {
+	return "SignatureRule"
 }
 
-// Result returns to check message.
-func (g Signature) Result() string {
+// Result returns validation results.
+func (g SignatureRule) Result() string {
 	if len(g.RuleErrors) != 0 {
 		return g.RuleErrors[0].Error()
 	}
@@ -27,13 +27,12 @@ func (g Signature) Result() string {
 	return "SSH/GPG signature found"
 }
 
-func (g Signature) Errors() []error {
+func (g SignatureRule) Errors() []error {
 	return g.RuleErrors
 }
 
-// ValidateSignature checks the commit message for a GPG signature.
-func ValidateSignature(signature string) *Signature {
-	rule := &Signature{}
+func ValidateSignatureRule(signature string) *SignatureRule {
+	rule := &SignatureRule{}
 
 	if signature == "" {
 		rule.RuleErrors = append(rule.RuleErrors, errors.Errorf("Commit does not have a SSH/GPG-signature"))

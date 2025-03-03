@@ -15,12 +15,12 @@ type CommitBodyRule struct {
 	errors []error
 }
 
-// Name returns the identifier of this check.
+// Name returns the identifier of this rule.
 func (c CommitBodyRule) Name() string {
-	return "Commit Body"
+	return "CommitBodyRule"
 }
 
-// Result returns the check message.
+// Result returns the validation result.
 func (c CommitBodyRule) Result() string {
 	if len(c.errors) != 0 {
 		return c.errors[0].Error()
@@ -29,31 +29,31 @@ func (c CommitBodyRule) Result() string {
 	return "Commit body is valid"
 }
 
-// Errors returns any violations of the check.
+// Errors returns any validation errors.
 func (c CommitBodyRule) Errors() []error {
 	return c.errors
 }
 
 // ValidateCommitBody validates the commit message body.
-// It ensures the body is not empty (contains at least one non-DCO line)
+// It ensures the body is not empty (contains at least one none sign-off line)
 // and has exactly one empty line between subject and body.
 func ValidateCommitBody(message string) *CommitBodyRule {
 	rule := &CommitBodyRule{}
-	lines := strings.Split(strings.TrimPrefix(message, "\n"), "\n")
+	lines := strings.Split(message, "\n")
 
 	// A valid commit body must have at least 3 lines:
 	// - subject
 	// - empty line
 	// - body
 	if len(lines) < 3 {
-		rule.errors = append(rule.errors, errors.New("Commit requires a descriptive body explaining the changes"))
+		rule.errors = append(rule.errors, errors.New("Commit message requires a body explaining the changes"))
 
 		return rule
 	}
 
 	// Second line must be empty
 	if lines[1] != "" {
-		rule.errors = append(rule.errors, errors.New("Commit message must have exactly one empty line between subject and body"))
+		rule.errors = append(rule.errors, errors.New("Commit message must have exactly one empty line between the subject and the body"))
 
 		return rule
 	}
@@ -78,17 +78,17 @@ func ValidateCommitBody(message string) *CommitBodyRule {
 	}
 
 	if len(bodyContent) == 0 {
-		rule.errors = append(rule.errors, errors.New(`Commit body is required. 
+		rule.errors = append(rule.errors, errors.New(`Commit message body is required. 
 Be specific, descriptive, and explain the why behind changes while staying brief.
 
-Example - A commit subject with body and sign-off:
+Example - A commit subject with a body and a sign-off:
 
 feat: update password validation to meet NIST guidelines
 
 - Increases minimum length to 12 characters
 - Adds check against compromised password database
 
-Signed-off-by: Humpty Dumpty <supercommiter@example.com>`))
+Signed-off-by: Laval Lion <laval@cavora.org>`))
 
 		return rule
 	}

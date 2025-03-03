@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidateSubjectSuffix(t *testing.T) {
+func TestValidateSubjectSuffixRule(t *testing.T) {
 	testCases := []struct {
 		name            string
 		subject         string
@@ -57,29 +57,28 @@ func TestValidateSubjectSuffix(t *testing.T) {
 
 	for _, tabletest := range testCases {
 		t.Run(tabletest.name, func(t *testing.T) {
-			// Perform the check
-			check := rule.ValidateSubjectSuffix(tabletest.subject, tabletest.invalidSuffixes)
+			rule := rule.ValidateSubjectSuffix(tabletest.subject, tabletest.invalidSuffixes)
 
 			// Check errors
 			if tabletest.expectedValid {
-				require.Empty(t, check.Errors(), "Did not expect errors")
+				require.Empty(t, rule.Errors(), "Did not expect errors")
 				require.Equal(t,
 					"Subject last character is valid",
-					check.Result(),
+					rule.Result(),
 					"Message should be valid",
 				)
 			} else {
-				require.NotEmpty(t, check.Errors(), "Expected errors")
+				require.NotEmpty(t, rule.Errors(), "Expected errors")
 				require.Equal(t,
 					tabletest.expectedMessage,
-					check.Result(),
+					rule.Result(),
 					"Error message should match expected",
 				)
 			}
 
 			// Check status method
-			require.Equal(t, "Subject Last Character", check.Name(),
-				"Status should always be 'Subject Last Character'")
+			require.Equal(t, "SubjectSuffixRule", rule.Name(),
+				"Status should always be 'SubjectSuffixRule'")
 		})
 	}
 }

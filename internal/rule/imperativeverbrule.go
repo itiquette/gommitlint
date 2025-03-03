@@ -20,18 +20,18 @@ var imperativeTags = map[string]bool{
 	"VBZ": true, // 3rd person singular present
 }
 
-// ImperativeVerb enforces that the first word of a commit message subject is an imperative verb.
-type ImperativeVerb struct {
+// ImperativeVerbRule enforces that the first word of a commit message subject is an imperative verb.
+type ImperativeVerbRule struct {
 	errors []error
 }
 
-// Name returns the name of the check.
-func (i *ImperativeVerb) Name() string {
-	return "Imperative Mood"
+// Name returns the name of the rule.
+func (i *ImperativeVerbRule) Name() string {
+	return "ImperativeVerbRule"
 }
 
-// Result returns the check message.
-func (i *ImperativeVerb) Result() string {
+// Result returns the validation result.
+func (i *ImperativeVerbRule) Result() string {
 	if len(i.errors) > 0 {
 		return i.errors[0].Error()
 	}
@@ -39,17 +39,15 @@ func (i *ImperativeVerb) Result() string {
 	return "Commit begins with imperative verb"
 }
 
-// Errors returns any violations of the check.
-func (i *ImperativeVerb) Errors() []error {
+func (i *ImperativeVerbRule) Errors() []error {
 	return i.errors
 }
-func (i *ImperativeVerb) SetErrors(err []error) {
+func (i *ImperativeVerbRule) SetErrors(err []error) {
 	i.errors = err
 }
 
-// ValidateImperative checks the commit message for an imperative first word.
-func ValidateImperative(subject string, isConventional bool) *ImperativeVerb {
-	rule := &ImperativeVerb{}
+func ValidateImperativeRule(subject string, isConventional bool) *ImperativeVerbRule {
+	rule := &ImperativeVerbRule{}
 
 	// Extract first word
 	word, err := extractFirstWord(isConventional, subject)
@@ -107,7 +105,6 @@ func createProseDocument(word string) (*prose.Document, error) {
 	return prose.NewDocument("I " + strings.ToLower(word))
 }
 
-// validateVerbType checks if the first word is an imperative verb.
 func validateVerbType(doc *prose.Document, word string) error {
 	tokens := doc.Tokens()
 	if len(tokens) != 2 {

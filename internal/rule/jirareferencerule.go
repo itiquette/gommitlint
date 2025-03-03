@@ -11,18 +11,18 @@ import (
 	"github.com/pkg/errors"
 )
 
-// JiraReference enforces Jira issue references in commit messages.
-type JiraReference struct {
+// JiraReferenceRule enforces Jira issue references in commit messages.
+type JiraReferenceRule struct {
 	errors []error
 }
 
 // Name returns the name of the rule.
-func (j *JiraReference) Name() string {
-	return "Jira issues"
+func (j *JiraReferenceRule) Name() string {
+	return "JiraReferenceRule"
 }
 
 // Result returns the rule message.
-func (j *JiraReference) Result() string {
+func (j *JiraReferenceRule) Result() string {
 	if len(j.errors) > 0 {
 		return j.errors[0].Error()
 	}
@@ -31,13 +31,13 @@ func (j *JiraReference) Result() string {
 }
 
 // Errors returns any violations of the rule.
-func (j *JiraReference) Errors() []error {
+func (j *JiraReferenceRule) Errors() []error {
 	return j.errors
 }
 
 // ValidateJira validates Jira issue references in commit messages.
-func ValidateJira(message string, validJiraProjects []string, isConventionalCommit bool) *JiraReference {
-	rule := &JiraReference{}
+func ValidateJira(message string, validJiraProjects []string, isConventionalCommit bool) *JiraReferenceRule {
+	rule := &JiraReferenceRule{}
 
 	// Regex for matching Jira issue key
 	jiraKeyRegex := regexp.MustCompile(`([A-Z]+-\d+)`)
@@ -116,7 +116,6 @@ func ValidateJira(message string, validJiraProjects []string, isConventionalComm
 	return rule
 }
 
-// containsString checks if a slice contains a specific string.
 func containsString(slice []string, value string) bool {
 	for _, item := range slice {
 		if item == value {

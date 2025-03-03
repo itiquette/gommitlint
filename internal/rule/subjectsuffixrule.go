@@ -12,18 +12,17 @@ import (
 	"github.com/pkg/errors"
 )
 
-// SubjectSuffix enforces that the last character of the subject isn't in a specified set.
-type SubjectSuffix struct {
+// SubjectSuffixRule enforces that the last character of the subject isn't in a specified set.
+type SubjectSuffixRule struct {
 	errors []error
 }
 
 // Name returns the name of the rule.
-func (h *SubjectSuffix) Name() string {
-	return "Subject Last Character"
+func (h *SubjectSuffixRule) Name() string {
+	return "SubjectSuffixRule"
 }
 
-// Result returns the check message.
-func (h *SubjectSuffix) Result() string {
+func (h *SubjectSuffixRule) Result() string {
 	if len(h.errors) > 0 {
 		return h.errors[0].Error()
 	}
@@ -31,14 +30,12 @@ func (h *SubjectSuffix) Result() string {
 	return "Subject last character is valid"
 }
 
-// Errors returns any violations of the check.
-func (h *SubjectSuffix) Errors() []error {
+func (h *SubjectSuffixRule) Errors() []error {
 	return h.errors
 }
 
-// ValidateSubjectSuffix checks the last character of the subject.
-func ValidateSubjectSuffix(subject, invalidSuffixes string) *SubjectSuffix {
-	rule := &SubjectSuffix{}
+func ValidateSubjectSuffix(subject, invalidSuffixes string) *SubjectSuffixRule {
+	rule := &SubjectSuffixRule{}
 
 	last, _ := utf8.DecodeLastRuneInString(subject)
 

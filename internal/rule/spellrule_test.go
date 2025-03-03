@@ -1,4 +1,3 @@
-// SPDX-FileCopyrightText: 2024 Sidero Labs, Inc.
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
 // SPDX-License-Identifier: EUPL-1.2
@@ -13,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestValidateSpelling(t *testing.T) {
+func TestValidateSpellingRule(t *testing.T) {
 	tests := []struct {
 		name           string
 		message        string
@@ -67,8 +66,8 @@ func TestValidateSpelling(t *testing.T) {
 
 	for _, tabletest := range tests {
 		t.Run(tabletest.name, func(t *testing.T) {
-			check := rule.ValidateSpelling(tabletest.message, tabletest.locale)
-			errors := check.Errors()
+			rule := rule.ValidateSpellingRule(tabletest.message, tabletest.locale)
+			errors := rule.Errors()
 
 			assert.Len(t, errors, tabletest.expectedErrors, "Incorrect number of errors")
 
@@ -87,9 +86,9 @@ func TestValidateSpelling(t *testing.T) {
 			}
 
 			if tabletest.expectedErrors > 0 {
-				assert.NotEmpty(t, check.Result(), "Message should not be empty when errors are present")
+				assert.NotEmpty(t, rule.Result(), "Message should not be empty when errors are present")
 			} else {
-				assert.Contains(t, check.Result(), "No common misspellings found")
+				assert.Contains(t, rule.Result(), "No common misspellings found")
 			}
 		})
 	}

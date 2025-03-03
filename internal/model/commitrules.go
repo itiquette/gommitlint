@@ -9,6 +9,7 @@ type CommitRule interface {
 	Result() string
 	Errors() []error
 }
+
 type CommitRules struct {
 	rules []CommitRule
 }

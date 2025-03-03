@@ -12,34 +12,33 @@ import (
 	"github.com/pkg/errors"
 )
 
-// SubjectCase enforces the case of the first word in the subject.
-type SubjectCase struct {
+// SubjectCaseRule enforces the case of the first word in the subject.
+type SubjectCaseRule struct {
 	subjectCase string
 	RuleErrors  []error
 }
 
-// Name returns the name of the check.
-func (h *SubjectCase) Name() string {
-	return "Subject case"
+// Name returns the validation rule name.
+func (h *SubjectCaseRule) Name() string {
+	return "SubjectCaseRule"
 }
 
-// Result returns the check message.
-func (h *SubjectCase) Result() string {
+// Result returns the rule message.
+func (h *SubjectCaseRule) Result() string {
 	if len(h.RuleErrors) > 0 {
 		return h.RuleErrors[0].Error()
 	}
 
-	return "Subject case is valid"
+	return "SubjectCaseRule is valid"
 }
 
-// Errors returns any violations of the check.
-func (h *SubjectCase) Errors() []error {
+func (h *SubjectCaseRule) Errors() []error {
 	return h.RuleErrors
 }
 
-// ValidateSubjectCase checks the subject case based on the specified case choice.
-func ValidateSubjectCase(subject, caseChoice string, isConventional bool) *SubjectCase {
-	rule := &SubjectCase{subjectCase: caseChoice}
+// ValidateSubjectCaseRule checks the subject case based on the specified case choice.
+func ValidateSubjectCaseRule(subject, caseChoice string, isConventional bool) *SubjectCaseRule {
+	rule := &SubjectCaseRule{subjectCase: caseChoice}
 
 	// Extract first word
 	firstWord, err := extractFirstWord(isConventional, subject)

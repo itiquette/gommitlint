@@ -1,4 +1,3 @@
-// SPDX-FileCopyrightText: 2024 Sidero Labs, Inc.
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
 // SPDX-License-Identifier: EUPL-1.2
@@ -15,18 +14,16 @@ import (
 // SignOffRegex is the regular expression used to validate the Developer Certificate of Origin signature.
 var SignOffRegex = regexp.MustCompile(`^Signed-off-by: ([^<]+) <([^<>@]+@[^<>]+)>$`)
 
-// SignOff ensures that the commit message contains a
-// Developer Certificate of Origin signature.
-type SignOff struct {
+// SignOffRule ensures that the commit message contains a sign-off.
+type SignOffRule struct {
 	errors []error
 }
 
-func (d SignOff) Name() string {
-	return "SignOff"
+func (d SignOffRule) Name() string {
+	return "SignOffRule"
 }
 
-// Result returns the check message.
-func (d SignOff) Result() string {
+func (d SignOffRule) Result() string {
 	if len(d.errors) != 0 {
 		return d.errors[0].Error()
 	}
@@ -34,13 +31,12 @@ func (d SignOff) Result() string {
 	return "Sign-off exists"
 }
 
-// Errors returns any violations of the check.
-func (d SignOff) Errors() []error {
+func (d SignOffRule) Errors() []error {
 	return d.errors
 }
 
-func ValidateSignOff(body string) *SignOff {
-	rule := &SignOff{}
+func ValidateSignOffRule(body string) *SignOffRule {
+	rule := &SignOffRule{}
 
 	for _, line := range strings.Split(body, "\n") {
 		trimmedLine := strings.TrimSpace(line)

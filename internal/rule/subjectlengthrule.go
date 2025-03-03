@@ -13,19 +13,19 @@ import (
 // allowed in a commit subject.
 const DefaultMaxCommitSubjectLength = 100
 
-// SubjectLength enforces a maximum number of characters on the commit subject.
-type SubjectLength struct {
+// SubjectLengthRule enforces a maximum number of characters on the commit subject.
+type SubjectLengthRule struct {
 	subjectLength int
 	errors        []error
 }
 
-// Name returns the name of the check.
-func (h *SubjectLength) Name() string {
-	return "Subject Length"
+// Name returns the rule name.
+func (h *SubjectLengthRule) Name() string {
+	return "SubjectLengthRule"
 }
 
-// Result returns the check message.
-func (h *SubjectLength) Result() string {
+// Result returns the validation result.
+func (h *SubjectLengthRule) Result() string {
 	if len(h.errors) > 0 {
 		return h.errors[0].Error()
 	}
@@ -33,20 +33,20 @@ func (h *SubjectLength) Result() string {
 	return fmt.Sprintf("Subject is %d characters", h.subjectLength)
 }
 
-// Errors returns any violations of the check.
-func (h *SubjectLength) Errors() []error {
+// Errors returns validation errors.
+func (h *SubjectLengthRule) Errors() []error {
 	return h.errors
 }
 
-// ValidateSubjectLength checks the subject length.
-func ValidateSubjectLength(subject string, maxLength int) *SubjectLength {
+// ValidateSubjectLengthRule checks the subject length.
+func ValidateSubjectLengthRule(subject string, maxLength int) *SubjectLengthRule {
 	if maxLength == 0 {
 		maxLength = DefaultMaxCommitSubjectLength
 	}
 
 	subjectLength := utf8.RuneCountInString(subject)
 
-	rule := &SubjectLength{
+	rule := &SubjectLengthRule{
 		subjectLength: subjectLength,
 	}
 

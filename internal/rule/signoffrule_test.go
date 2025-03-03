@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidateSignoff(t *testing.T) {
+func TestValidateSignoffRule(t *testing.T) {
 	tests := []struct {
 		name         string
 		message      string
@@ -30,7 +30,7 @@ Signed-off-by: Laval Lion <laval.lion@cavora.org>`,
 		},
 		{
 			name:        "valid sign-off with CRLF",
-			message:     "Update docs\r\n\r\nImprove README\r\n\r\nSigned-off-by: Jane Smith <jane.smith@example.com>",
+			message:     "Update docs\r\n\r\nImprove README\r\n\r\nSigned-off-by: Cragger Crocodile <cragger@svamp.org>",
 			expectError: false,
 		},
 		{
@@ -40,7 +40,7 @@ Signed-off-by: Laval Lion <laval.lion@cavora.org>`,
 Update error handling.
 
 Signed-off-by: Laval Lion <laval.lion@cavora.org>
-Signed-off-by: Jane Smith <jane.smith@example.com>`,
+Signed-off-by: Cragger Crocodile <cragger@svamp.org>`,
 			expectError: false,
 		},
 		{
@@ -63,7 +63,7 @@ Signed by: Laval Lion <laval.lion@cavora.org>`,
 			name: "malformed sign-off - invalid email",
 			message: `Add test
 
-Signed-off-by: John Doe <invalid-email>`,
+Signed-off-by: Phoenix Fire <invalid-email>`,
 			expectError:  true,
 			errorMessage: "Commit must be signed-off",
 		},
@@ -71,7 +71,7 @@ Signed-off-by: John Doe <invalid-email>`,
 			name: "malformed sign-off - missing name",
 			message: `Add test
 
-Signed-off-by: <john.doe@example.com>`,
+Signed-off-by: <laval@cavora.org>`,
 			expectError:  true,
 			errorMessage: "Commit must be signed-off",
 		},
@@ -79,17 +79,17 @@ Signed-off-by: <john.doe@example.com>`,
 
 	for _, tabletest := range tests {
 		t.Run(tabletest.name, func(t *testing.T) {
-			check := rule.ValidateSignOff(tabletest.message)
+			rule := rule.ValidateSignOffRule(tabletest.message)
 
 			if tabletest.expectError {
-				require.NotEmpty(t, check.Errors(), "expected errors but got none")
-				require.Contains(t, check.Result(), tabletest.errorMessage, "unexpected error message")
+				require.NotEmpty(t, rule.Errors(), "expected errors but got none")
+				require.Contains(t, rule.Result(), tabletest.errorMessage, "unexpected error message")
 
 				return
 			}
 
-			require.Empty(t, check.Errors(), "unexpected errors: %v", check.Errors())
-			require.Equal(t, "Sign-off exists", check.Result(),
+			require.Empty(t, rule.Errors(), "unexpected errors: %v", rule.Errors())
+			require.Equal(t, "Sign-off exists", rule.Result(),
 				"unexpected message for valid sign-off")
 		})
 	}

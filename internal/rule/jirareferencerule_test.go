@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidateJiraCheck(t *testing.T) {
+func TestValidateJiraRule(t *testing.T) {
 	// Define valid Jira projects for testing
 	validProjects := []string{"PROJ", "TEAM", "CORE"}
 
@@ -95,7 +95,6 @@ func TestValidateJiraCheck(t *testing.T) {
 		},
 	}
 
-	// Run test cases
 	for _, tabletest := range testCases {
 		t.Run(tabletest.name, func(t *testing.T) {
 			// Execute Jira result
@@ -125,37 +124,7 @@ func TestValidateJiraCheck(t *testing.T) {
 
 			// Verify Status and Message methods work
 			require.NotEmpty(t, result.Name(), "Status should not be empty")
-			require.NotEmpty(t, result.Result(), "Message should not be empty")
-		})
-	}
-}
-
-// Benchmark the Jira check validation.
-func BenchmarkValidateJiraCheck(b *testing.B) {
-	validProjects := []string{"PROJ", "TEAM", "CORE"}
-
-	benchCases := []struct {
-		name                 string
-		message              string
-		isConventionalCommit bool
-	}{
-		{
-			name:                 "Conventional Commit",
-			message:              "feat(auth): add user authentication [PROJ-123]",
-			isConventionalCommit: true,
-		},
-		{
-			name:                 "Non-Conventional Commit",
-			message:              "PROJ-123 Implement user authentication",
-			isConventionalCommit: false,
-		},
-	}
-
-	for _, bc := range benchCases {
-		b.Run(bc.name, func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
-				rule.ValidateJira(bc.message, validProjects, bc.isConventionalCommit)
-			}
+			require.NotEmpty(t, result.Result(), "Result should not be empty")
 		})
 	}
 }

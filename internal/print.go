@@ -14,12 +14,11 @@ import (
 	"github.com/pkg/errors"
 )
 
-// reportStatus represents the status of a rule check.
-type reportStatus string
+type validationStatus string
 
 const (
-	statusPass   reportStatus = "PASS"
-	statusFailed reportStatus = "FAILED"
+	statusPass   validationStatus = "PASS"
+	statusFailed validationStatus = "FAILED"
 )
 
 // Constants for report formatting.
@@ -29,15 +28,13 @@ const (
 	tabWriterFlags = 0
 )
 
-// PrintReport prints the results of all rule checks and returns an error if any checks failed.
-// It formats the output in a tabulated form using a tabwriter.
-func PrintReport(checks []model.CommitRule) error {
-	return PrintReportTo(os.Stdout, checks)
+// PrintReport prints the results of all rule validations.
+func PrintReport(rules []model.CommitRule) error {
+	return PrintReportTo(os.Stdout, rules)
 }
 
-// PrintReportTo prints the report to the specified writer, allowing for better testing
-// and flexibility in output destination.
-func PrintReportTo(writer io.Writer, checks []model.CommitRule) error {
+// PrintReportTo prints the report to the specified writer.
+func PrintReportTo(writer io.Writer, rules []model.CommitRule) error {
 	tabWriter := tabwriter.NewWriter(writer, 0, 0, tabPadding, ' ', tabWriterFlags)
 	defer tabWriter.Flush()
 
@@ -45,7 +42,7 @@ func PrintReportTo(writer io.Writer, checks []model.CommitRule) error {
 		return errors.Wrap(err, "failed to print subject")
 	}
 
-	if err := printChecks(tabWriter, checks); err != nil {
+	if err := printRules(tabWriter, rules); err != nil {
 		return err
 	}
 
@@ -58,18 +55,18 @@ func printSubject(writer io.Writer) error {
 	return err
 }
 
-func printChecks(writer io.Writer, checks []model.CommitRule) error {
+func printRules(writer io.Writer, rules []model.CommitRule) error {
 	var failed bool
 
-	for _, check := range checks {
-		if errs := check.Errors(); len(errs) > 0 {
-			if err := printFailedCheck(writer, check, errs); err != nil {
+	for _, rule := range rules {
+		if errs := rule.Errors(); len(errs) > 0 {
+			if err := printFailedRule(writer, rule, errs); err != nil {
 				return err
 			}
 
 			failed = true
 		} else {
-			if err := printPassedCheck(writer, check); err != nil {
+			if err := printPassedRule(writer, rule); err != nil {
 				return err
 			}
 		}
@@ -82,18 +79,18 @@ func printChecks(writer io.Writer, checks []model.CommitRule) error {
 	return nil
 }
 
-func printFailedCheck(writer io.Writer, check model.CommitRule, errs []error) error {
+func printFailedRule(writer io.Writer, rule model.CommitRule, errs []error) error {
 	for _, err := range errs {
-		if _, err := fmt.Fprintf(writer, "%s\t%s\t%v\t\n", check.Name(), statusFailed, err); err != nil {
-			return errors.Wrap(err, "failed to print failed check")
+		if _, err := fmt.Fprintf(writer, "%s\t%s\t%v\t\n", rule.Name(), statusFailed, err); err != nil {
+			return errors.Wrap(err, "failed to print failed rule")
 		}
 	}
 
 	return nil
 }
 
-func printPassedCheck(writer io.Writer, check model.CommitRule) error {
-	_, err := fmt.Fprintf(writer, "%s\t%s\t%s\t\n", check.Name(), statusPass, check.Result())
+func printPassedRule(writer io.Writer, rule model.CommitRule) error {
+	_, err := fmt.Fprintf(writer, "%s\t%s\t%s\t\n", rule.Name(), statusPass, rule.Result())
 
-	return errors.Wrap(err, "failed to print passed check")
+	return errors.Wrap(err, "failed to print passed rule")
 }

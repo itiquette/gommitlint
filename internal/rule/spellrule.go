@@ -1,4 +1,3 @@
-// SPDX-FileCopyrightText: 2024 Sidero Labs, Inc.
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
 // SPDX-License-Identifier: EUPL-1.2
@@ -19,10 +18,10 @@ type Spell struct {
 
 // Name returns the name of the rule.
 func (sc Spell) Name() string {
-	return "Spellcheck"
+	return "SpellRule"
 }
 
-// Result returns the rule message.
+// Result returns validation resulits.
 func (sc Spell) Result() string {
 	if len(sc.RuleErrors) == 0 {
 		return "No common misspellings found"
@@ -36,8 +35,8 @@ func (sc Spell) Errors() []error {
 	return sc.RuleErrors
 }
 
-// ValidateSpelling checks the spelling.
-func ValidateSpelling(message string, locale string) *Spell {
+// ValidateSpellingRule checks the spelling.
+func ValidateSpellingRule(message string, locale string) *Spell {
 	rule := &Spell{}
 	replacer := misspell.New()
 

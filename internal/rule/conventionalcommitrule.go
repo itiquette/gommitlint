@@ -14,28 +14,18 @@ import (
 
 var SubjectRegex = regexp.MustCompile(`^(\w+)(?:\(([\w,/-]+)\))?(!)?:[ ](.+)$`)
 
-const (
-	// TypeFeat is a commit of the type fix patches a bug in your codebase
-	// (this correlates with MINOR in semantic versioning).
-	TypeFeat = "feat"
-
-	// TypeFix is a commit of the type feat introduces a new feature to the
-	// codebase (this correlates with PATCH in semantic versioning).
-	TypeFix = "fix"
-)
-
 // ConventionalCommitRule ensures that the commit message is a valid
 // conventional commit.
 type ConventionalCommitRule struct {
 	errors []error
 }
 
-// Name returns the name of the check.
+// Name returns the name of the rule.
 func (c ConventionalCommitRule) Name() string {
-	return "Conventional Commit"
+	return "ConventionalCommitRule"
 }
 
-// Result returns to check message.
+// Result returns the validation results.
 func (c ConventionalCommitRule) Result() string {
 	if len(c.errors) != 0 {
 		return c.errors[0].Error()
@@ -44,17 +34,16 @@ func (c ConventionalCommitRule) Result() string {
 	return "Commit message is a valid conventional commit"
 }
 
-// Errors returns any violations of the check.
+// Errors returns validation errors.
 func (c ConventionalCommitRule) Errors() []error {
 	return c.errors
 }
 
-// ValidateConventionalCommit returns the commit type.
 func ValidateConventionalCommit(subject string, types []string, scopes []string, descLength int) *ConventionalCommitRule {
 	rule := &ConventionalCommitRule{}
-	groups := parseSubject(subject)
+	subjectGroups := parseSubject(subject)
 
-	if len(groups) != 5 {
+	if len(subjectGroups) != 5 {
 		rule.errors = append(rule.errors, errors.Errorf("Invalid conventional commits format: %q", subject))
 
 		return rule
@@ -66,15 +55,15 @@ func ValidateConventionalCommit(subject string, types []string, scopes []string,
 	// [3] - Breaking change marker (!)
 	// [4] - Description
 	// conventional commit sections
-	ccFull := groups[0]
-	ccType := groups[1]
-	ccScope := groups[2]
-	ccDesc := groups[4]
+	ccFull := subjectGroups[0]
+	ccType := subjectGroups[1]
+	ccScope := subjectGroups[2]
+	ccDesc := subjectGroups[4]
 
 	isValidType := slices.Contains(types, ccType)
 
 	if !isValidType {
-		rule.errors = append(rule.errors, errors.Errorf("Invalid type %q: allowed types are %v", groups[1], types))
+		rule.errors = append(rule.errors, errors.Errorf("Invalid type %q: allowed types are %v", ccType, types))
 
 		return rule
 	}
@@ -86,7 +75,7 @@ func ValidateConventionalCommit(subject string, types []string, scopes []string,
 			isValidScope := slices.Contains(scopes, scope)
 
 			if !isValidScope {
-				rule.errors = append(rule.errors, errors.Errorf("Invalid scope %q: allowed scopes are %v", groups[3], scopes))
+				rule.errors = append(rule.errors, errors.Errorf("Invalid scope %q: allowed scopes are %v", scope, scopes))
 
 				return rule
 			}
@@ -95,7 +84,7 @@ func ValidateConventionalCommit(subject string, types []string, scopes []string,
 
 	// Description is not optional, neither should be only whitespace
 	if strings.TrimSpace(ccDesc) == "" {
-		rule.errors = append(rule.errors, errors.Errorf("Invalid description %q: description must be at least one non whitespace char", groups[4]))
+		rule.errors = append(rule.errors, errors.Errorf("Invalid description %q: description must be at least one non whitespace char", subjectGroups[4]))
 
 		return rule
 	}
@@ -103,7 +92,7 @@ func ValidateConventionalCommit(subject string, types []string, scopes []string,
 	var OneSpaceRegex = regexp.MustCompile(`^.*:[ ][^ ].*$`)
 
 	if !OneSpaceRegex.MatchString(ccFull) {
-		rule.errors = append(rule.errors, errors.Errorf("Space between type: description %q must be one", groups[0]))
+		rule.errors = append(rule.errors, errors.Errorf("Space between type: description %q must be one", subjectGroups[0]))
 
 		return rule
 	}
