@@ -16,7 +16,9 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/itiquette/gommitlint/internal/configuration"
 	"github.com/itiquette/gommitlint/internal/model"
+	"github.com/itiquette/gommitlint/internal/rule"
 	"github.com/itiquette/gommitlint/internal/validation"
+	"github.com/stretchr/testify/assert"
 )
 
 // Common test structures and helpers.
@@ -63,14 +65,90 @@ func runTestGroup(t *testing.T, tests []testDesc) {
 				}
 			}
 
-			if tabletest.expectValid != !hasErrors {
-				t.Errorf("%s: Expected validity %v, got %v", tabletest.name, tabletest.expectValid, !hasErrors)
+			assert.Equal(t, tabletest.expectValid, !hasErrors, "Expected validity %v, got %v", tabletest.expectValid, !hasErrors)
+		})
+	}
+}
+
+// Direct tests for the ConventionalCommitRule.
+func TestConventionalCommitRule(t *testing.T) {
+	// Default allowed types and scopes for tests
+	allowedTypes := []string{"feat", "fix", "docs", "style", "refactor", "test", "chore"}
+	allowedScopes := []string{"core", "ui", "api", "scope", "scope1", "scope2"}
+	maxDescLength := 72
+
+	tests := []struct {
+		name        string
+		subject     string
+		expectValid bool
+		errorMsg    string
+	}{
+		{
+			name:        "Valid conventional commit",
+			subject:     "feat(ui): add dark mode toggle",
+			expectValid: true,
+		},
+		{
+			name:        "Invalid type",
+			subject:     "invalid: this is not a valid type",
+			expectValid: false,
+			errorMsg:    "invalid type",
+		},
+		{
+			name:        "Invalid scope",
+			subject:     "feat(unknown): unknown scope",
+			expectValid: false,
+			errorMsg:    "invalid scope",
+		},
+		{
+			name:        "Empty description",
+			subject:     "feat: ",
+			expectValid: false,
+			errorMsg:    "invalid conventional commit format",
+		},
+		{
+			name:        "Description too long",
+			subject:     "feat: " + strings.Repeat("a", 73),
+			expectValid: false,
+			errorMsg:    "description too long",
+		},
+		{
+			name:        "Invalid spacing after colon",
+			subject:     "feat:no space",
+			expectValid: false,
+			errorMsg:    "invalid conventional commit format",
+		},
+		{
+			name:        "Valid with multiple scopes",
+			subject:     "feat(scope1,scope2): multiple scopes",
+			expectValid: true,
+		},
+		{
+			name:        "Valid breaking change",
+			subject:     "feat(core)!: breaking API change",
+			expectValid: true,
+		},
+	}
+
+	for _, tabletest := range tests {
+		t.Run(tabletest.name, func(t *testing.T) {
+			result := rule.ValidateConventionalCommitRule(tabletest.subject, allowedTypes, allowedScopes, maxDescLength)
+
+			if tabletest.expectValid {
+				assert.Empty(t, result.Errors(), "Expected no errors but got: %v", result.Errors())
+				assert.Equal(t, "Commit message is a valid conventional commit", result.Result())
+			} else {
+				assert.NotEmpty(t, result.Errors(), "Expected errors but got none")
+
+				if tabletest.errorMsg != "" {
+					assert.Contains(t, result.Errors()[0].Error(), tabletest.errorMsg)
+				}
 			}
 		})
 	}
 }
 
-// Base test groups.
+// Base test groups using the integration approach.
 func TestTypeValidation(t *testing.T) {
 	tests := []testDesc{
 		{
@@ -223,6 +301,7 @@ func TestDescriptionValidation(t *testing.T) {
 
 	runTestGroup(t, tests)
 }
+
 func TestMessageFormatValidation(t *testing.T) {
 	tests := []testDesc{
 		{
@@ -302,6 +381,7 @@ func createCommitWithMsg(msg string) func(*git.Repository) error {
 		return err
 	}
 }
+
 func initRepo(path string) (*git.Repository, error) {
 	repo, err := git.PlainInit(path, false)
 	if err != nil {

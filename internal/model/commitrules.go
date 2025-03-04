@@ -14,6 +14,12 @@ type CommitRules struct {
 	rules []CommitRule
 }
 
+func NewCommitRules() *CommitRules {
+	return &CommitRules{
+		rules: make([]CommitRule, 0, 50),
+	}
+}
+
 func (r *CommitRules) All() []CommitRule {
 	return r.rules
 }

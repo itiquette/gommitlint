@@ -121,3 +121,10 @@ func validateVerbType(doc *prose.Document, word string) error {
 
 // firstWordRegex is the regular expression used to find the first word in a commit.
 var firstWordRegex = regexp.MustCompile(`^\s*([a-zA-Z0-9]+)`)
+
+func parseSubject(msg string) []string {
+	subject := strings.Split(msg, "\n")[0]
+	groups := SubjectRegex.FindStringSubmatch(subject)
+
+	return groups
+}

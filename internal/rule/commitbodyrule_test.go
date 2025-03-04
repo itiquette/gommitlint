@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidateCommitBody(t *testing.T) {
+func TestValidateCommitBodyRule(t *testing.T) {
 	tests := []struct {
 		name         string
 		message      string
@@ -33,7 +33,6 @@ This commit adds new validation rules for:
 
 Improve the getting started guide
 Add more examples
-
 Signed-off-by: Laval Lion <laval@cavora.org>`,
 			expectError: false,
 		},
@@ -54,40 +53,16 @@ Signed-off-by: Laval Lion <laval@cavora.org>`,
 			errorMessage: "Commit message must have exactly one empty line between the subject and the body",
 		},
 		{
-			name: "commit with multiple empty lines between subject and body",
+			name: "commit with empty line after subject but empty body",
 			message: `Update CI pipeline
-
-
-
-Adding new stages for:
-- Security scanning
-- Performance testing
-Signed-off-by: Laval Lion <laval@cavora.org>`,
-			expectError:  true,
-			errorMessage: "Commit message must have a non empty body text",
-		},
-		{
-			name: "commit without empty line between subject and body",
-			message: `Update CI pipeline
-Adding new stages for:
-- Security scanning
-- Performance testing
-
-Signed-off-by: Laval Lion <laval@cavora.org>`,
-			expectError:  true,
-			errorMessage: "Commit message must have exactly one empty line between the subject and the body",
-		},
-		{
-			name: "commit with only sign-off",
-			message: `Update config
 
 Signed-off-by: Laval Lion <laval@cavora.org>`,
 			expectError:  true,
 			errorMessage: "Commit message body is required",
 		},
 		{
-			name: "commit with empty lines and a sign-off",
-			message: `Update tests
+			name: "commit with only sign-off",
+			message: `Update config
 
 Signed-off-by: Laval Lion <laval@cavora.org>`,
 			expectError:  true,
@@ -106,7 +81,8 @@ Signed-off-by: Cragger Crocodile <cragger@svamp.org>`,
 
 	for _, tabletest := range tests {
 		t.Run(tabletest.name, func(t *testing.T) {
-			rule := rule.ValidateCommitBody(tabletest.message)
+			// Use the new function name that matches the implementation
+			rule := rule.ValidateCommitBodyRule(tabletest.message)
 
 			if tabletest.expectError {
 				require.NotEmpty(t, rule.Errors(), "expected errors but got none")

@@ -39,7 +39,7 @@ func (v *Validator) Validate() (*model.CommitRules, error) {
 		return nil, err
 	}
 
-	commitRules := &model.CommitRules{}
+	commitRules := model.NewCommitRules()
 
 	for _, msg := range msgs {
 		v.checkValidity(commitRules, msg)

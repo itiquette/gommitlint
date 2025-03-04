@@ -16,6 +16,9 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/storer"
 )
 
+// ErrRevisionRange is returned when both revisions aren't provided for a range.
+var ErrRevisionRange = errors.New("both rev1 and rev2 must be provided for a range")
+
 // Repository wraps a git.Repository with additional functionality.
 type Repository struct {
 	Repo *git.Repository
@@ -84,6 +87,7 @@ func (r *Repository) GetHeadCommit() (*CommitInfo, error) {
 
 // CommitInfos retrieves commit information between two revisions.
 // If both revisions are empty, it returns only the HEAD commit.
+// If one revision is provided but the other is empty, it returns ErrRevisionRange.
 func (r *Repository) CommitInfos(rev1, rev2 string) ([]CommitInfo, error) {
 	// Case: Neither revision specified - use HEAD only
 	if rev1 == "" && rev2 == "" {
@@ -97,12 +101,13 @@ func (r *Repository) CommitInfos(rev1, rev2 string) ([]CommitInfo, error) {
 
 	// Both revisions must be provided for a range
 	if rev1 == "" || rev2 == "" {
-		return nil, errors.New("both rev1 and rev2 must be provided for a range")
+		return nil, ErrRevisionRange
 	}
 
 	return r.getCommitRange(rev1, rev2)
 }
 
+// getCommitRange returns commits between rev1 and rev2 (exclusive of rev1).
 // Format is similar to git log rev1..rev2.
 func (r *Repository) getCommitRange(rev1, rev2 string) ([]CommitInfo, error) {
 	// Resolve revisions to hashes
@@ -128,19 +133,19 @@ func (r *Repository) getCommitRange(rev1, rev2 string) ([]CommitInfo, error) {
 
 	// Collect commits until we reach hash1
 	commits := make([]CommitInfo, 0, 16)
-	err = commitIter.ForEach(func(commitOject *object.Commit) error {
+	err = commitIter.ForEach(func(commitObject *object.Commit) error {
 		// Stop when we reach the starting commit
-		if commitOject.Hash == *hash1 {
+		if commitObject.Hash == *hash1 {
 			return storer.ErrStop
 		}
 
-		subject, body := SplitCommitMessage(commitOject.Message)
+		subject, body := SplitCommitMessage(commitObject.Message)
 		commits = append(commits, CommitInfo{
-			Message:   commitOject.Message,
+			Message:   commitObject.Message,
 			Subject:   subject,
 			Body:      body,
-			Signature: commitOject.PGPSignature,
-			RawCommit: commitOject,
+			Signature: commitObject.PGPSignature,
+			RawCommit: commitObject,
 		})
 
 		return nil
@@ -155,6 +160,7 @@ func (r *Repository) getCommitRange(rev1, rev2 string) ([]CommitInfo, error) {
 }
 
 // SplitCommitMessage separates a commit message into subject and body.
+// It returns the first line as subject and the rest (if any) as body.
 func SplitCommitMessage(message string) (string, string) {
 	// Trim trailing newlines
 	message = strings.TrimRight(message, "\n")

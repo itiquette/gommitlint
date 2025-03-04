@@ -125,7 +125,7 @@ func (v *Validator) checkSignatureRules(report *model.CommitRules, commitInfo mo
 		report.Add(rule.ValidateSignatureRule(commitInfo.Signature))
 
 		if v.config.Signature.Identity != nil {
-			report.Add(rule.ValidateGPGIdentity(commitInfo.Signature, commitInfo.RawCommit, v.config.Signature.Identity.PublicKeyURI))
+			report.Add(rule.VerifyCommitSignature(commitInfo.RawCommit, commitInfo.Signature, v.config.Signature.Identity.PublicKeyURI))
 		}
 	}
 }
@@ -133,7 +133,7 @@ func (v *Validator) checkSignatureRules(report *model.CommitRules, commitInfo mo
 func (v *Validator) checkConventionalRules(report *model.CommitRules, commitInfo model.CommitInfo) {
 	if v.config.ConventionalCommit.Required {
 		conv := v.config.ConventionalCommit
-		report.Add(rule.ValidateConventionalCommit(commitInfo.Subject, conv.Types, conv.Scopes, conv.MaxDescriptionLength))
+		report.Add(rule.ValidateConventionalCommitRule(commitInfo.Subject, conv.Types, conv.Scopes, conv.MaxDescriptionLength))
 	}
 }
 
@@ -145,6 +145,6 @@ func (v *Validator) checkAdditionalRules(report *model.CommitRules, commitInfo m
 	}
 
 	if v.config.Body.Required {
-		report.Add(rule.ValidateCommitBody(commitInfo.Message))
+		report.Add(rule.ValidateCommitBodyRule(commitInfo.Message))
 	}
 }

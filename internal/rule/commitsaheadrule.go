@@ -1,4 +1,3 @@
-// SPDX-FileCopyrightText: 2024 Sidero Labs, Inc.
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
 // SPDX-License-Identifier: EUPL-1.2
@@ -12,22 +11,16 @@ import (
 	"github.com/itiquette/gommitlint/internal/model"
 )
 
-// CommitsAheadConfig provides configuration for commits ahead validation.
+// CommitsAheadConfig provides configuration for the CommitsAheadRule.
 type CommitsAheadConfig struct {
-	// MaxCommitsAhead defines the maximum number of commits allowed ahead of the reference
+	// MaxCommitsAhead defines the maximum allowed commits ahead of reference
 	MaxCommitsAhead int
-	// IgnoreBranches allows excluding specific branches
-	IgnoreBranches []string
-	// EnforceOnBranches limits the check to specific branches
-	EnforceOnBranches []string
 }
 
-// DefaultCommitsAheadConfig returns a default configuration.
+// DefaultCommitsAheadConfig returns the default configuration.
 func DefaultCommitsAheadConfig() CommitsAheadConfig {
 	return CommitsAheadConfig{
-		MaxCommitsAhead:   20,
-		IgnoreBranches:    []string{"main", "master"},
-		EnforceOnBranches: nil, // enforce on all branches by default
+		MaxCommitsAhead: 20,
 	}
 }
 
@@ -39,12 +32,12 @@ type CommitsAheadRule struct {
 	errors []error
 }
 
-// Name returns the name of the rule.
+// Name returns the rule identifier.
 func (c *CommitsAheadRule) Name() string {
 	return "CommitsAheadRule"
 }
 
-// Result returns the rule message.
+// Result returns a string representation of the rule's status.
 func (c *CommitsAheadRule) Result() string {
 	if len(c.errors) > 0 {
 		return c.errors[0].Error()
@@ -53,19 +46,32 @@ func (c *CommitsAheadRule) Result() string {
 	return fmt.Sprintf("HEAD is %d commit(s) ahead of %s", c.Ahead, c.ref)
 }
 
-// Errors returns any violations of the rule.
+// Errors returns any violations detected by the rule.
 func (c *CommitsAheadRule) Errors() []error {
 	return c.errors
 }
+
+// Option configures a CommitsAheadConfig.
+type Option func(*CommitsAheadConfig)
+
+// WithMaxCommitsAhead sets the maximum allowed commits ahead.
+func WithMaxCommitsAhead(maxCommitsAhead int) Option {
+	return func(c *CommitsAheadConfig) {
+		if maxCommitsAhead >= 0 {
+			c.MaxCommitsAhead = maxCommitsAhead
+		}
+	}
+}
+
+// ValidateNumberOfCommits checks if the current HEAD exceeds the maximum
+// allowed commits ahead of a reference branch.
 func ValidateNumberOfCommits(
 	repo *model.Repository,
 	ref string,
-	opts ...func(*CommitsAheadConfig),
+	opts ...Option,
 ) *CommitsAheadRule {
-	// Start with default configuration
+	// Apply configuration options
 	config := DefaultCommitsAheadConfig()
-
-	// Apply any provided configuration options
 	for _, opt := range opts {
 		opt(&config)
 	}
@@ -75,59 +81,20 @@ func ValidateNumberOfCommits(
 		config: config,
 	}
 
-	// Get current branch name
-	head, err := repo.Repo.Head()
+	// Ensure reference has proper format
+	fullRef := ensureFullReference(ref)
+
+	// Count commits ahead
+	ahead, err := countCommitsAhead(repo, fullRef)
 	if err != nil {
-		rule.errors = append(rule.errors,
-			fmt.Errorf("failed to get current branch: %w", err))
+		rule.errors = append(rule.errors, err)
 
 		return rule
-	}
-
-	currentBranch := head.Name().Short()
-
-	// Check if branch should be ignored
-	if contains(config.IgnoreBranches, currentBranch) {
-		return rule
-	}
-
-	// Check if enforcement is limited to specific branches
-	if len(config.EnforceOnBranches) > 0 &&
-		!contains(config.EnforceOnBranches, currentBranch) {
-		return rule
-	}
-
-	// Ensure the ref is a full reference name
-	if !strings.HasPrefix(ref, "refs/") {
-		ref = "refs/heads/" + ref
-	}
-
-	// Gracefully handle reference checking
-	ahead, err := func() (int, error) {
-		defer func() {
-			if r := recover(); r != nil {
-				err = fmt.Errorf("panic while checking ahead/behind: %v", r)
-			}
-		}()
-
-		return git.IsAhead(repo, ref)
-	}()
-
-	if err != nil {
-		// If reference not found, treat as 0 commits ahead
-		if strings.Contains(err.Error(), "reference not found") {
-			ahead = 0
-		} else {
-			rule.errors = append(rule.errors,
-				fmt.Errorf("failed to check ahead/behind status: %w", err))
-
-			return rule
-		}
 	}
 
 	rule.Ahead = ahead
 
-	// Validate number of commits
+	// Check if exceeds maximum allowed
 	if ahead > config.MaxCommitsAhead {
 		rule.errors = append(rule.errors,
 			fmt.Errorf("HEAD is %d commit(s) ahead of %s (max: %d)",
@@ -137,33 +104,34 @@ func ValidateNumberOfCommits(
 	return rule
 }
 
-func WithMaxCommitsAhead(maxnr int) func(*CommitsAheadConfig) {
-	return func(c *CommitsAheadConfig) {
-		if maxnr >= 0 {
-			c.MaxCommitsAhead = maxnr
-		}
+// ensureFullReference ensures the reference has the correct format.
+func ensureFullReference(ref string) string {
+	if !strings.HasPrefix(ref, "refs/") {
+		return "refs/heads/" + ref
 	}
+
+	return ref
 }
 
-func WithIgnoreBranches(branches ...string) func(*CommitsAheadConfig) {
-	return func(c *CommitsAheadConfig) {
-		c.IgnoreBranches = append(c.IgnoreBranches, branches...)
-	}
-}
+// countCommitsAhead safely counts commits ahead of the reference.
+func countCommitsAhead(repo *model.Repository, ref string) (int, error) {
+	var err error
 
-func WithEnforceOnBranches(branches ...string) func(*CommitsAheadConfig) {
-	return func(c *CommitsAheadConfig) {
-		c.EnforceOnBranches = branches
-	}
-}
+	// Use a closure with recover to handle potential panics from the git package
+	ahead, err := func() (int, error) {
+		defer func() {
+			if r := recover(); r != nil {
+				err = fmt.Errorf("panic while checking ahead count: %v", r)
+			}
+		}()
 
-// contains checks if a slice contains a specific string.
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
+		return git.IsAhead(repo, ref)
+	}()
+
+	// Handle special case for missing reference
+	if err != nil && strings.Contains(err.Error(), "reference not found") {
+		return 0, nil
 	}
 
-	return false
+	return ahead, err
 }

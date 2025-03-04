@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
 // SPDX-License-Identifier: EUPL-1.2
-
 package rule
 
 import (
+	"fmt"
 	"regexp"
 	"slices"
 	"strings"
@@ -12,108 +12,100 @@ import (
 	"github.com/pkg/errors"
 )
 
+// SubjectRegex Format: type(scope)!: description.
 var SubjectRegex = regexp.MustCompile(`^(\w+)(?:\(([\w,/-]+)\))?(!)?:[ ](.+)$`)
 
-// ConventionalCommitRule ensures that the commit message is a valid
-// conventional commit.
+// ConventionalCommitRule validates that commit messages follow the
+// conventional commit specification.
 type ConventionalCommitRule struct {
 	errors []error
 }
 
-// Name returns the name of the rule.
+// Name returns the rule identifier.
 func (c ConventionalCommitRule) Name() string {
 	return "ConventionalCommitRule"
 }
 
-// Result returns the validation results.
+// Result returns a string representation of the validation result.
 func (c ConventionalCommitRule) Result() string {
-	if len(c.errors) != 0 {
+	if len(c.errors) > 0 {
 		return c.errors[0].Error()
 	}
 
 	return "Commit message is a valid conventional commit"
 }
 
-// Errors returns validation errors.
+// Errors returns all validation errors.
 func (c ConventionalCommitRule) Errors() []error {
 	return c.errors
 }
 
-func ValidateConventionalCommit(subject string, types []string, scopes []string, descLength int) *ConventionalCommitRule {
+// ValidateConventionalCommitRule checks if a commit subject follows conventional format.
+// It validates the type, scope (if provided), and description length.
+// If descLength is 0, defaults to 72 characters.
+func ValidateConventionalCommitRule(subject string, types []string, scopes []string, descLength int) *ConventionalCommitRule {
 	rule := &ConventionalCommitRule{}
-	subjectGroups := parseSubject(subject)
 
-	if len(subjectGroups) != 5 {
-		rule.errors = append(rule.errors, errors.Errorf("Invalid conventional commits format: %q", subject))
+	// Default description length if not specified
+	if descLength == 0 {
+		descLength = 72
+	}
+
+	// Get first line of commit message
+	subjectLine := strings.SplitN(subject, "\n", 2)[0]
+
+	// Parse the subject according to conventional commit format
+	matches := SubjectRegex.FindStringSubmatch(subjectLine)
+	if len(matches) != 5 {
+		rule.errors = append(rule.errors, fmt.Errorf("invalid conventional commit format: %q", subjectLine))
 
 		return rule
 	}
 
-	// [0] - Full match (entire commit message subject)
-	// [1] - Type (feat, fix, etc.)
-	// [2] - Scope (without parentheses)
-	// [3] - Breaking change marker (!)
-	// [4] - Description
-	// conventional commit sections
-	ccFull := subjectGroups[0]
-	ccType := subjectGroups[1]
-	ccScope := subjectGroups[2]
-	ccDesc := subjectGroups[4]
+	// Extract components
+	commitType := matches[1]
+	scope := matches[2]
+	description := matches[4]
 
-	isValidType := slices.Contains(types, ccType)
-
-	if !isValidType {
-		rule.errors = append(rule.errors, errors.Errorf("Invalid type %q: allowed types are %v", ccType, types))
+	// Validate type
+	if len(types) > 0 && !slices.Contains(types, commitType) {
+		rule.errors = append(rule.errors, fmt.Errorf("invalid type %q: allowed types are %v", commitType, types))
 
 		return rule
 	}
 
-	// Scope is optional.
-	if ccScope != "" && len(scopes) > 0 {
-		ccScopes := strings.Split(ccScope, ",")
-		for _, scope := range ccScopes {
-			isValidScope := slices.Contains(scopes, scope)
-
-			if !isValidScope {
-				rule.errors = append(rule.errors, errors.Errorf("Invalid scope %q: allowed scopes are %v", scope, scopes))
+	// Validate scope if provided and scope list is defined
+	if scope != "" && len(scopes) > 0 {
+		scopesList := strings.Split(scope, ",")
+		for _, s := range scopesList {
+			if !slices.Contains(scopes, s) {
+				rule.errors = append(rule.errors, fmt.Errorf("invalid scope %q: allowed scopes are %v", s, scopes))
 
 				return rule
 			}
 		}
 	}
 
-	// Description is not optional, neither should be only whitespace
-	if strings.TrimSpace(ccDesc) == "" {
-		rule.errors = append(rule.errors, errors.Errorf("Invalid description %q: description must be at least one non whitespace char", subjectGroups[4]))
+	// Validate description content
+	if strings.TrimSpace(description) == "" {
+		rule.errors = append(rule.errors, errors.New("empty description: description must contain non-whitespace characters"))
 
 		return rule
 	}
 
-	var OneSpaceRegex = regexp.MustCompile(`^.*:[ ][^ ].*$`)
-
-	if !OneSpaceRegex.MatchString(ccFull) {
-		rule.errors = append(rule.errors, errors.Errorf("Space between type: description %q must be one", subjectGroups[0]))
+	// Validate description length
+	if len(description) > descLength {
+		rule.errors = append(rule.errors, fmt.Errorf("description too long: %d characters (max: %d)", len(description), descLength))
 
 		return rule
 	}
 
-	// Provide a good default value for DescriptionLength
-	if descLength == 0 {
-		descLength = 72
-	}
+	// Validate spacing after colon
+	if !regexp.MustCompile(`^.*:[ ][^ ].*$`).MatchString(subjectLine) {
+		rule.errors = append(rule.errors, errors.New("spacing error: must have exactly one space after colon"))
 
-	if len(ccDesc) <= descLength && len(ccDesc) != 0 {
 		return rule
 	}
-
-	rule.errors = append(rule.errors, errors.Errorf("Invalid description: %s", ccDesc))
 
 	return rule
-}
-
-func parseSubject(msg string) []string {
-	subject := strings.Split(msg, "\n")[0]
-	groups := SubjectRegex.FindStringSubmatch(subject)
-
-	return groups
 }
