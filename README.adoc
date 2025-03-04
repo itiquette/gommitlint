@@ -25,7 +25,7 @@ image:https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.reuse.soft
 
 == What can this tool do for you?
 
-*Gommitlint* will be a CLI-tool for validating commit messages.
+*Gommitlint* will be a simple CLI-tool for validating commit messages.
 At the moment it is not ready.
 
 Available validation rules:
