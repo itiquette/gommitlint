@@ -20,7 +20,7 @@ type DefaultConfigLoader struct{}
 // LoadConfiguration loads the application configuration from various sources.
 // It reads from the configuration file and returns the populated AppConf.
 func (DefaultConfigLoader) LoadConfiguration() (*AppConf, error) {
-	appConfig := &AppConf{&GommitLintConfig{}}
+	appConfig := &AppConf{&GommitLintConfig{Subject: &SubjectRule{}}}
 	if err := ReadConfigurationFile(appConfig, ".gommitlint.yaml"); err != nil {
 		return nil, fmt.Errorf("failed to read configuration file: %w", err)
 	}
