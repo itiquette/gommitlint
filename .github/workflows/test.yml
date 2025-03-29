@@ -1,0 +1,54 @@
+# SPDX-FileCopyrightText: itiquette/gommitlint
+#
+# SPDX-License-Identifier: CC0-1.0
+
+---
+name: Golang Test
+
+on: [workflow_call] # yamllint disable-line rule:truthy
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Harden GitHub runner
+        uses: step-security/harden-runner@cb605e52c26070c328afc4562f0b4ada7618a84e # v2.10.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Go
+        uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 # v5.3.0
+        with:
+          go-version: "stable"
+          cache: false
+
+      - name: Go test run
+        run: |
+          go mod tidy
+          # shellcheck disable=SC2046
+          go test -count=1 $(go list './...' | grep -v generated) -v -coverprofile=coverage.txt 
+          go tool cover -func=coverage.txt -o=coverage.out
+          # shellcheck disable=SC2002
+          # shellcheck disable=SC2086
+          echo "COVERAGE=$(cat coverage.out | grep total | grep -Eo '[0-9]+\.[0-9]+')" >> $GITHUB_ENV
+
+      # - name: Create Coverage Badge
+      #   uses: schneegans/dynamic-badges-action@v1.7.0
+      #   with:
+      #     auth: ${{ secrets.GIST_SECRET }}
+      #     gistID: 87d513c639cf65c02ecc31c1670cbcd1
+      #     filename: go-coverage.json
+      #     label: Coverage
+      #     message: ${{ env.COVERAGE }}%
+      #     color: purple
