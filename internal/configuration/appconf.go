@@ -82,6 +82,9 @@ type JiraRule struct {
 
 	// Required indicates whether a Jira key must be present.
 	Required bool `koanf:"required"`
+
+	// BodyRef indicates whether a Jira key must be present in body ref .
+	BodyRef bool `koanf:"bodyref"`
 }
 
 // BodyRule defines configuration for commit body validation.

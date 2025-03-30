@@ -107,7 +107,8 @@ func (v *Validator) checkSubjectRules(report *model.CommitRules, commitInfo mode
 	report.Add(subjectLengthRule)
 
 	if *subject.Imperative {
-		report.Add(rule.ValidateImperativeRule(commitInfo.Subject, isConventional))
+		imperativeRule := rule.ValidateImperative(commitInfo.Subject, isConventional)
+		report.Add(&imperativeRule)
 	}
 
 	subjectCaseRule := rule.ValidateSubjectCase(commitInfo.Subject, subject.Case, isConventional)
@@ -117,7 +118,8 @@ func (v *Validator) checkSubjectRules(report *model.CommitRules, commitInfo mode
 	report.Add(subjectSuffixRule)
 
 	if subject.Jira.Required {
-		report.Add(rule.ValidateJira(commitInfo.Subject, subject.Jira.Keys, isConventional))
+		jiraReferenceRule := rule.ValidateJiraReference(commitInfo.Subject, commitInfo.Body, subject.Jira, isConventional)
+		report.Add(jiraReferenceRule)
 	}
 }
 
@@ -141,7 +143,8 @@ func (v *Validator) checkSignatureRules(report *model.CommitRules, commitInfo mo
 func (v *Validator) checkConventionalRules(report *model.CommitRules, commitInfo model.CommitInfo) {
 	if v.config.ConventionalCommit.Required {
 		conv := v.config.ConventionalCommit
-		report.Add(rule.ValidateConventionalCommitRule(commitInfo.Subject, conv.Types, conv.Scopes, conv.MaxDescriptionLength))
+		ccRule := rule.ValidateConventionalCommit(commitInfo.Subject, conv.Types, conv.Scopes, conv.MaxDescriptionLength)
+		report.Add(ccRule)
 	}
 }
 
@@ -150,10 +153,12 @@ func (v *Validator) checkAdditionalRules(report *model.CommitRules, commitInfo m
 	report.Add(spellRule)
 
 	if *v.config.NCommitsAhead {
-		report.Add(rule.ValidateNumberOfCommits(v.repo, v.options.CommitRef))
+		commitsAhead := rule.ValidateNumberOfCommits(v.repo, v.options.CommitRef)
+		report.Add(commitsAhead)
 	}
 
 	if v.config.Body.Required {
-		report.Add(rule.ValidateCommitBodyRule(commitInfo.Message))
+		commitBodyRule := rule.ValidateCommitBody(commitInfo.Message)
+		report.Add(commitBodyRule)
 	}
 }

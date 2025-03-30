@@ -1,17 +1,16 @@
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint
 //
 // SPDX-License-Identifier: EUPL-1.2
-
 package internal
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"text/tabwriter"
 
 	"github.com/itiquette/gommitlint/internal/model"
-	"github.com/pkg/errors"
 )
 
 type validationStatus string
@@ -39,7 +38,7 @@ func PrintReportTo(writer io.Writer, rules []model.CommitRule) error {
 	defer tabWriter.Flush()
 
 	if err := printSubject(tabWriter); err != nil {
-		return errors.Wrap(err, "failed to print subject")
+		return fmt.Errorf("failed to print subject: %w", err)
 	}
 
 	if err := printRules(tabWriter, rules); err != nil {
@@ -82,7 +81,7 @@ func printRules(writer io.Writer, rules []model.CommitRule) error {
 func printFailedRule(writer io.Writer, rule model.CommitRule, errs []error) error {
 	for _, err := range errs {
 		if _, err := fmt.Fprintf(writer, "%s\t%s\t%v\t\n", rule.Name(), statusFailed, err); err != nil {
-			return errors.Wrap(err, "failed to print failed rule")
+			return fmt.Errorf("failed to print failed rule: %w", err)
 		}
 	}
 
@@ -91,6 +90,9 @@ func printFailedRule(writer io.Writer, rule model.CommitRule, errs []error) erro
 
 func printPassedRule(writer io.Writer, rule model.CommitRule) error {
 	_, err := fmt.Fprintf(writer, "%s\t%s\t%s\t\n", rule.Name(), statusPass, rule.Result())
+	if err != nil {
+		return fmt.Errorf("failed to print passed rule: %w", err)
+	}
 
-	return errors.Wrap(err, "failed to print passed rule")
+	return nil
 }

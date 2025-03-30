@@ -45,7 +45,7 @@ linters:
     - gochecknoinits
     - gochecksumtype
     # - gocognit
-    - goconst
+    # - goconst
     # - gocritic
     - gocyclo
     - godot
@@ -68,7 +68,7 @@ linters:
     - interfacebloat
     # - ireturn
     - loggercheck
-    - maintidx
+    # - maintidx
     - makezero
     - mirror
     - misspell

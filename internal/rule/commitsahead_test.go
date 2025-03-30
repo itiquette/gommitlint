@@ -4,6 +4,7 @@
 package rule_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/itiquette/gommitlint/internal/model"
@@ -78,23 +80,58 @@ func TestValidateNumberOfCommits(t *testing.T) {
 			maxCommits:  20,
 			expectError: false,
 		},
+		{
+			name: "reference with full path",
+			setupRepo: func(t *testing.T, w *git.Worktree) int {
+				t.Helper()
+				createCommit(t, w, "feat: add new feature")
+
+				return 1
+			},
+			ref:         "refs/heads/main",
+			maxCommits:  20,
+			expectError: false,
+		},
+		{
+			name: "empty reference",
+			setupRepo: func(t *testing.T, _ *git.Worktree) int {
+				t.Helper()
+
+				return 0
+			},
+			ref:           "",
+			maxCommits:    20,
+			expectError:   true,
+			errorContains: "reference cannot be empty",
+		},
+		{
+			name: "many commits exceed limit",
+			setupRepo: func(t *testing.T, w *git.Worktree) int {
+				t.Helper()
+				// Create 30 commits
+				for i := 1; i <= 30; i++ {
+					createCommit(t, w, fmt.Sprintf("feat: feature %d", i))
+				}
+
+				return 30
+			},
+			ref:           "main",
+			maxCommits:    20,
+			expectError:   true,
+			errorContains: "HEAD is 30 commit(s) ahead of main (max: 20)",
+		},
 	}
 
 	for _, tabletest := range tests {
 		t.Run(tabletest.name, func(t *testing.T) {
 			// Setup test repository
-			tmpDir := t.TempDir()
-			repo, err := git.PlainInit(tmpDir, false)
-			require.NoError(t, err)
-
-			wtree, err := repo.Worktree()
-			require.NoError(t, err)
+			repo, wtree := setupTestRepo(t)
 
 			// Create initial commit on master
 			createInitialCommit(t, wtree)
 
 			// Create and checkout main branch (as reference)
-			err = wtree.Checkout(&git.CheckoutOptions{
+			err := wtree.Checkout(&git.CheckoutOptions{
 				Create: true,
 				Branch: plumbing.NewBranchReferenceName("main"),
 			})
@@ -123,20 +160,89 @@ func TestValidateNumberOfCommits(t *testing.T) {
 			result := rule.ValidateNumberOfCommits(client, tabletest.ref, opts...)
 
 			// Verify the result
-			require.Equal(t, commitsCreated, result.Ahead, "Number of commits ahead should match")
+			assert.Equal(t, commitsCreated, result.Ahead, "Number of commits ahead should match")
 
+			// Check rule name
+			assert.Equal(t, "CommitsAhead", result.Name(), "Rule name should be correct")
+
+			// Check errors
 			if tabletest.expectError {
-				require.NotEmpty(t, result.Errors(), "Expected error but got none")
+				assert.NotEmpty(t, result.Errors(), "Expected error but got none")
 
 				if tabletest.errorContains != "" {
-					require.Contains(t, result.Errors()[0].Error(), tabletest.errorContains,
+					assert.Contains(t, result.Errors()[0].Error(), tabletest.errorContains,
 						"Error message doesn't contain expected text")
 				}
+
+				// Verify result string contains error message
+				assert.Contains(t, result.Result(), result.Errors()[0].Error(),
+					"Result string should contain error message")
+
+				// Verify help method returns non-empty string
+				assert.NotEmpty(t, result.Help(), "Help should provide guidance")
 			} else {
-				require.Empty(t, result.Errors(), "Expected no errors but got: %v", result.Errors())
+				assert.Empty(t, result.Errors(), "Expected no errors but got: %v", result.Errors())
+				assert.Contains(t, result.Result(), fmt.Sprintf("HEAD is %d commit(s) ahead of", commitsCreated),
+					"Result string should indicate number of commits ahead")
 			}
 		})
 	}
+}
+
+func TestValidateNumberOfCommitsWithNilRepo(t *testing.T) {
+	// Test with nil repository
+	result := rule.ValidateNumberOfCommits(nil, "main")
+
+	assert.NotNil(t, result, "Result should not be nil even with nil repo")
+	assert.NotEmpty(t, result.Errors(), "Should have errors with nil repo")
+	assert.Contains(t, result.Errors()[0].Error(), "repository cannot be nil",
+		"Error message should indicate nil repository")
+}
+
+func TestCommitsAheadHelpMethod(t *testing.T) {
+	// Add a mock error using reflection or create a rule with a known error
+	repo, wtree := setupTestRepo(t)
+	createInitialCommit(t, wtree)
+
+	err := wtree.Checkout(&git.CheckoutOptions{
+		Create: true,
+		Branch: plumbing.NewBranchReferenceName("main"),
+	})
+	require.NoError(t, err)
+
+	err = wtree.Checkout(&git.CheckoutOptions{
+		Create: true,
+		Branch: plumbing.NewBranchReferenceName("feature"),
+	})
+	require.NoError(t, err)
+
+	// Create 25 commits
+	for i := 1; i <= 25; i++ {
+		createCommit(t, wtree, fmt.Sprintf("feat: feature %d", i))
+	}
+
+	client := &model.Repository{Repo: repo}
+	commitsAhead := rule.ValidateNumberOfCommits(client, "main")
+
+	// Verify help content
+	helpText := commitsAhead.Help()
+	assert.Contains(t, helpText, "too many commits ahead", "Help should explain the issue")
+	assert.Contains(t, helpText, "Merge or rebase", "Help should suggest merging or rebasing")
+	assert.Contains(t, helpText, "splitting your changes", "Help should suggest splitting changes")
+}
+
+// setupTestRepo creates a new Git repository for testing.
+func setupTestRepo(t *testing.T) (*git.Repository, *git.Worktree) {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+	repo, err := git.PlainInit(tmpDir, false)
+	require.NoError(t, err)
+
+	wtree, err := repo.Worktree()
+	require.NoError(t, err)
+
+	return repo, wtree
 }
 
 func createInitialCommit(t *testing.T, wtree *git.Worktree) plumbing.Hash {
@@ -167,7 +273,7 @@ func createCommit(t *testing.T, wtree *git.Worktree, message string) plumbing.Ha
 	t.Helper()
 
 	// Create a new file for this commit
-	filename := filepath.Join(wtree.Filesystem.Root(), message+".txt")
+	filename := filepath.Join(wtree.Filesystem.Root(), fmt.Sprintf("%s-%d.txt", message, time.Now().UnixNano()))
 	err := os.WriteFile(filename, []byte("content for "+message), 0600)
 	require.NoError(t, err)
 
