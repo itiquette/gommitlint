@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
 
@@ -19,21 +19,45 @@ var (
 )
 
 // JiraReference enforces proper Jira issue references in commit messages.
+//
 // This rule ensures that commit messages include valid Jira issue keys (e.g., PROJECT-123)
-// and that they follow the project's conventions for placement and format.
+// according to the project's conventions for placement and format. It helps maintain
+// traceability between code changes and issue tracking systems, making it easier to
+// understand the purpose and context of each commit.
 //
-// For conventional commits, the rule checks that a Jira issue key appears at the end
-// of the first line, in formats like "feat(scope): description PROJ-123",
-// "fix: bug fix [PROJ-123]", or "docs: update readme (PROJ-123)".
+// The rule supports two validation modes:
+//  1. Subject-based validation - Checks for Jira keys in the commit subject line
+//  2. Body-based validation - Checks for Jira keys in dedicated "Refs:" lines in the commit body
 //
-// For non-conventional commits, the rule verifies that a Jira issue key appears
-// anywhere in the message and that it refers to a valid project.
+// Examples:
 //
-// If BodyRef is enabled, the rule will also look for Jira references in the commit body
-// using the "Refs:" prefix, such as "Refs: PROJECT-123" or "Refs: PROJECT-123, PROJECT-456".
+//   - For conventional commits with subject validation:
+//     "feat(auth): add login feature PROJ-123" would pass
+//     "fix: resolve timeout issue [PROJ-123]" would pass
+//     "feat(PROJ-123): add login feature" would fail (key not at end)
 //
-// All referenced Jira projects must be in the list of valid projects provided
-// to the validator, if any projects are specified.
+//   - For non-conventional commits with subject validation:
+//     "Add login feature PROJ-123" would pass
+//     "PROJ-123: Fix memory leak" would pass (key can be anywhere)
+//     "Add new feature" would fail (missing key)
+//
+//   - For body reference validation:
+//     "feat: add feature
+//
+//     Implements the login functionality
+//     as described in the spec.
+//
+//     Refs: PROJ-123" would pass
+//
+//     "feat: add feature
+//
+//     Implements login.
+//
+//     Signed-off-by: Dev <dev@example.com>
+//     Refs: PROJ-123" would fail (Refs after Sign-off)
+//
+// If a list of valid Jira project keys is provided in the configuration, the
+// rule also validates that all referenced projects exist in that list.
 type JiraReference struct {
 	errors []error
 }
@@ -168,6 +192,27 @@ func (j *JiraReference) addErrorf(format string, args ...interface{}) {
 	j.errors = append(j.errors, fmt.Errorf(format, args...))
 }
 
+// ValidateJiraReference checks if the commit message contains valid Jira issue references
+// according to the configured validation rules.
+//
+// Parameters:
+//   - subject: The commit subject line
+//   - body: The commit message body
+//   - jira: Configuration for Jira validation rules
+//   - isConventionalCommit: Whether the commit follows conventional commit format
+//
+// The function checks for valid Jira issue references based on the configured mode:
+//   - When BodyRef is enabled, it looks for "Refs: PROJ-123" lines in the commit body
+//   - Otherwise, it validates Jira references in the commit subject
+//
+// For conventional commits in subject validation mode, the Jira key must appear at the end
+// of the first line. For non-conventional commits, the key can appear anywhere in the subject.
+//
+// If a list of valid project keys is provided in the configuration, the function also
+// validates that all referenced projects exist in that list.
+//
+// Returns:
+//   - A JiraReference instance with validation results
 func ValidateJiraReference(subject string, body string, jira *configuration.JiraRule, isConventionalCommit bool) *JiraReference {
 	rule := &JiraReference{}
 
@@ -198,6 +243,15 @@ func ValidateJiraReference(subject string, body string, jira *configuration.Jira
 }
 
 // validateSubjectReferences validates Jira references in the commit subject.
+//
+// Parameters:
+//   - rule: The JiraReference rule being populated
+//   - subject: The commit subject to validate
+//   - validJiraProjects: List of valid Jira project keys, if any
+//   - isConventionalCommit: Whether to validate as a conventional commit
+//
+// The function dispatches to the appropriate validation function based on whether
+// the commit follows conventional commit format or not.
 func validateSubjectReferences(rule *JiraReference, subject string, validJiraProjects []string, isConventionalCommit bool) {
 	lines := strings.Split(subject, "\n")
 	firstLine := lines[0]
@@ -210,6 +264,19 @@ func validateSubjectReferences(rule *JiraReference, subject string, validJiraPro
 }
 
 // validateConventionalCommitSubject validates a conventional commit subject line.
+//
+// Parameters:
+//   - rule: The JiraReference rule being populated
+//   - firstLine: The first line of the commit message
+//   - validJiraProjects: List of valid Jira project keys, if any
+//
+// The function checks that:
+//  1. A Jira issue key exists in the subject
+//  2. The key appears at the end of the subject line
+//  3. The key references a valid project (if validJiraProjects is provided)
+//
+// For conventional commits, the Jira key must be at the end of the subject line,
+// optionally enclosed in brackets or parentheses.
 func validateConventionalCommitSubject(rule *JiraReference, firstLine string, validJiraProjects []string) {
 	matches := jiraKeyRegex.FindAllString(firstLine, -1)
 	if len(matches) == 0 {
@@ -250,6 +317,17 @@ func validateConventionalCommitSubject(rule *JiraReference, firstLine string, va
 }
 
 // validateNonConventionalCommitSubject validates a non-conventional commit subject.
+//
+// Parameters:
+//   - rule: The JiraReference rule being populated
+//   - subject: The commit subject to validate
+//   - validJiraProjects: List of valid Jira project keys, if any
+//
+// The function checks that:
+//  1. At least one Jira issue key exists in the subject
+//  2. All keys reference valid projects (if validJiraProjects is provided)
+//
+// For non-conventional commits, Jira keys can appear anywhere in the subject.
 func validateNonConventionalCommitSubject(rule *JiraReference, subject string, validJiraProjects []string) {
 	matches := jiraKeyRegex.FindAllString(subject, -1)
 	if len(matches) == 0 {
@@ -266,7 +344,7 @@ func validateNonConventionalCommitSubject(rule *JiraReference, subject string, v
 	}
 }
 
-// validateBodyReferences validates Jira references in the commit body.
+// A valid "Refs:" line follows the format: "Refs: PROJ-123" or "Refs: PROJ-123, PROJ-456".
 func validateBodyReferences(rule *JiraReference, body string, validJiraProjects []string) {
 	body = strings.TrimSpace(body)
 	if body == "" {
@@ -334,7 +412,19 @@ func validateBodyReferences(rule *JiraReference, body string, validJiraProjects 
 	}
 }
 
-// Returns true if valid, false if invalid.
+// validateJiraProject checks if a Jira issue key is valid.
+//
+// Parameters:
+//   - rule: The JiraReference rule being populated
+//   - jiraKey: The Jira issue key to validate
+//   - validJiraProjects: List of valid Jira project keys, if any
+//
+// The function checks that:
+//  1. The key follows the correct format (PROJECT-123)
+//  2. The project part of the key exists in the validJiraProjects list, if provided
+//
+// Returns:
+//   - true if the key is valid, false otherwise
 func validateJiraProject(rule *JiraReference, jiraKey string, validJiraProjects []string) bool {
 	// First, verify the key has the correct format
 	if !jiraKeyRegex.MatchString(jiraKey) {
@@ -360,6 +450,13 @@ func validateJiraProject(rule *JiraReference, jiraKey string, validJiraProjects 
 }
 
 // containsString checks if a string is present in a slice of strings.
+//
+// Parameters:
+//   - slice: The slice of strings to search
+//   - value: The string to look for
+//
+// Returns:
+//   - true if the value is found in the slice, false otherwise
 func containsString(slice []string, value string) bool {
 	for _, item := range slice {
 		if item == value {
@@ -370,8 +467,10 @@ func containsString(slice []string, value string) bool {
 	return false
 }
 
-// getValidProjectsFromConfig extracts valid project keys
-// for use in the Help method.
+// getValidProjectsFromConfig extracts valid project keys for use in the Help method.
+//
+// Returns:
+//   - A slice of string containing valid Jira project keys
 func getValidProjectsFromConfig() []string {
 	// This is a dummy implementation that would be replaced with actual logic
 	// in a real implementation that has access to the validJiraProjects

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
 
@@ -19,20 +19,33 @@ import (
 )
 
 // Signature enforces that commits are cryptographically signed using SSH or GPG keys.
+//
 // This rule helps ensure security and verifiability in the git history by requiring
-// all commits to be properly signed by their authors.
+// all commits to be properly signed. Signed commits establish a chain of trust and
+// provide strong assurance about who authored each change, which is especially
+// important for security-sensitive projects.
 //
-// A valid signature confirms that the commit was created by someone with access to
-// the private key corresponding to a trusted public key, providing authentication
-// and non-repudiation for the commit history.
+// The rule checks:
+//   - That a signature exists and is not empty
+//   - That the signature follows either GPG or SSH signature format
+//   - That the signature has the correct structure and encoding
 //
-// For example, commits created with 'git commit -S' (GPG) or 'git commit -s' (SSH)
-// would pass validation, while unsigned commits would fail.
+// Examples:
+//
+//   - Valid GPG-signed commit would pass:
+//     Created with 'git commit -S -m "Message"' after configuring GPG signing
+//
+//   - Valid SSH-signed commit would pass:
+//     Created with 'git commit -S -m "Message"' after configuring SSH signing
+//     with 'git config --global gpg.format ssh'
+//
+//   - Unsigned commit would fail:
+//     Created with normal 'git commit -m "Message"'
 //
 // IMPORTANT: This rule only checks for the presence and basic format of signatures.
 // It does NOT verify the cryptographic validity of signatures or check if they were
-// created with trusted keys. For full security, additional verification mechanisms
-// should be used. You can use the signedidentityrule for that.
+// created with trusted keys. For full signature verification including cryptographic
+// validation against trusted keys, use the SignedIdentity rule.
 type Signature struct {
 	errors []error
 }
@@ -62,14 +75,12 @@ func (rule Signature) Errors() []error {
 func (rule Signature) Help() string {
 	if len(rule.errors) == 0 {
 		return `No errors to fix
-
 Note: This rule only checks that a signature exists and has valid formatting.
 It does NOT verify the cryptographic validity of the signature or that it was 
 created by a trusted key. For full security, additional verification is required.`
 	}
 
 	return `Sign your commit using SSH or GPG to verify your identity.
-
 You can do this by:
 1. Setting up GPG signing:
    - Generate a GPG key if you don't have one: 'gpg --gen-key'
@@ -95,15 +106,32 @@ func (rule *Signature) addErrorf(format string, args ...interface{}) {
 }
 
 // ValidateSignature checks if the commit has a valid cryptographic signature.
-// It returns a Signature rule with any validation errors.
 //
-// The function accepts a signature string from the Git commit metadata and validates:
-// 1. That a signature exists (not empty)
-// 2. That it follows either GPG or SSH signature format using library validation
-// 3. That the signature has the correct structure and encoding
+// Parameters:
+//   - signature: The signature string from the Git commit metadata
 //
-// This validation only checks the format, not cryptographic validity against a public key.
-// It uses the ProtonMail Go OpenPGP library for GPG signature validation.
+// The function validates that:
+//  1. A signature exists (not empty)
+//  2. It follows either GPG or SSH signature format
+//  3. The signature has the correct structure and encoding
+//
+// For GPG signatures, it verifies:
+//   - Proper PGP armor header and footer
+//   - Valid armor block type
+//   - Correctly formatted packet structure
+//
+// For SSH signatures, it verifies:
+//   - Proper SSH signature header and footer
+//   - Valid base64 encoding
+//   - Presence of the SSHSIG prefix
+//   - Reasonable signature length
+//
+// IMPORTANT: This validation only checks the format, not the cryptographic
+// validity of the signature against a public key. For cryptographic verification,
+// use the SignedIdentity rule instead.
+//
+// Returns:
+//   - A Signature instance with validation results
 func ValidateSignature(signature string) *Signature {
 	rule := &Signature{}
 
@@ -173,6 +201,18 @@ func ValidateSignature(signature string) *Signature {
 
 // verifySSHSignatureFormat performs basic validation of SSH signature format
 // without attempting to parse the detailed binary structure.
+//
+// Parameters:
+//   - signature: The SSH signature string to validate
+//
+// The function checks:
+//   - Presence of proper SSH signature header and footer
+//   - Valid base64 encoding of the content
+//   - Presence of the expected "SSHSIG" binary prefix
+//   - That the signature has a reasonable minimum length
+//
+// Returns:
+//   - An error if the signature format is invalid, nil otherwise
 func verifySSHSignatureFormat(signature string) error {
 	if !strings.HasPrefix(signature, "-----BEGIN SSH SIGNATURE-----") {
 		return errors.New("missing SSH signature begin marker")
@@ -195,7 +235,6 @@ func verifySSHSignatureFormat(signature string) error {
 	}
 
 	// Basic structure checks
-
 	// Check for the SSHSIG prefix
 	if len(data) < 6 || !bytes.Equal(data[:6], []byte("SSHSIG")) {
 		return errors.New("malformed SSH signature: missing SSHSIG prefix")
@@ -208,6 +247,5 @@ func verifySSHSignatureFormat(signature string) error {
 
 	// We'll avoid detailed binary parsing which can be fragile
 	// and just check the overall structure is reasonable
-
 	return nil
 }

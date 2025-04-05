@@ -1,6 +1,7 @@
-// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
+
 package signedidentityrule
 
 import (
@@ -14,7 +15,25 @@ import (
 	"github.com/ProtonMail/go-crypto/openpgp/packet"
 )
 
-// verifyGPGSignature verifies a GPG signature against commit data.
+// verifyGPGSignature verifies a GPG signature against commit data using trusted keys.
+//
+// Parameters:
+//   - commitData: The raw commit data to verify
+//   - signature: The GPG signature in ASCII-armored format
+//   - keyDir: Directory containing trusted public keys
+//
+// The function attempts to verify the signature against all trusted GPG keys found
+// in the specified directory. It performs several security checks on each key:
+//  1. Skips revoked keys
+//  2. Skips expired keys
+//  3. Skips keys that don't meet minimum strength requirements
+//
+// This comprehensive validation ensures that commits are only verified against
+// currently valid and sufficiently secure keys.
+//
+// Returns:
+//   - string: The identity associated with the key that verified the signature
+//   - error: Any error encountered during verification, or if no key verified the signature
 func verifyGPGSignature(commitData []byte, signature string, keyDir string) (string, error) {
 	if signature == "" {
 		return "", errors.New("empty GPG signature")
@@ -78,7 +97,22 @@ func verifyGPGSignature(commitData []byte, signature string, keyDir string) (str
 	return "", errors.New("GPG signature not verified with any trusted key")
 }
 
-// loadGPGKey loads a GPG key from a file.
+// loadGPGKey loads a GPG key from a file, supporting both armored and binary formats.
+//
+// Parameters:
+//   - path: Path to the GPG key file
+//
+// The function attempts to read the key file in armored (ASCII) format first,
+// then falls back to binary format if that fails. This provides flexibility
+// in handling different key file formats that users might have.
+//
+// Armored format is the ASCII-encoded format typically used for sharing keys
+// (begins with "-----BEGIN PGP PUBLIC KEY BLOCK-----"), while binary format
+// is more compact but not human-readable.
+//
+// Returns:
+//   - []*openpgp.Entity: The loaded GPG key entities (a file may contain multiple keys)
+//   - error: Any error encountered during loading or parsing
 func loadGPGKey(path string) ([]*openpgp.Entity, error) {
 	data, err := safeReadFile(path)
 	if err != nil {
@@ -96,6 +130,16 @@ func loadGPGKey(path string) ([]*openpgp.Entity, error) {
 }
 
 // isKeyRevoked checks if a GPG key has been revoked.
+//
+// Parameters:
+//   - entity: The GPG key entity to check
+//
+// The function checks both direct key revocations and identity revocations.
+// A key might be revoked directly, or one of its identities might be revoked.
+// Either case makes the key unsuitable for verification.
+//
+// Returns:
+//   - bool: true if the key is revoked, false otherwise
 func isKeyRevoked(entity *openpgp.Entity) bool {
 	// Check direct key revocations
 	for _, sig := range entity.Revocations {
@@ -117,6 +161,18 @@ func isKeyRevoked(entity *openpgp.Entity) bool {
 }
 
 // isKeyExpired checks if a GPG key has expired at the given time.
+//
+// Parameters:
+//   - entity: The GPG key entity to check
+//   - now: The current time to check against
+//
+// The function first checks if the primary key has expired. If not, it checks for
+// at least one valid signing subkey. A key is considered valid for verification
+// if either the primary key can sign and hasn't expired, or if it has at least one
+// unexpired signing subkey.
+//
+// Returns:
+//   - bool: true if the key is expired for signing purposes, false otherwise
 func isKeyExpired(entity *openpgp.Entity, now time.Time) bool {
 	// Check primary key expiration first
 	for _, ident := range entity.Identities {
@@ -152,6 +208,22 @@ func isKeyExpired(entity *openpgp.Entity, now time.Time) bool {
 }
 
 // hasMinimumKeyStrength checks if a GPG key meets the minimum strength requirements.
+//
+// Parameters:
+//   - entity: The GPG key entity to check
+//
+// The function evaluates the cryptographic strength of the key based on its algorithm
+// and bit length:
+//   - For RSA keys, it compares against MinimumRSABits (default: 2048)
+//   - For EC keys, it compares against MinimumECBits (default: 256)
+//   - If bit length can't be determined, it takes a conservative approach
+//   - Other algorithm types are rejected by default
+//
+// This ensures that only keys with sufficient cryptographic strength are used for
+// verification, protecting against the use of weak or outdated keys.
+//
+// Returns:
+//   - bool: true if the key meets minimum strength requirements, false otherwise
 func hasMinimumKeyStrength(entity *openpgp.Entity) bool {
 	// Check RSA keys against minimum bit length
 	if entity.PrimaryKey.PubKeyAlgo == packet.PubKeyAlgoRSA ||

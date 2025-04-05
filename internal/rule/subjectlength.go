@@ -1,6 +1,7 @@
-// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
+
 package rule
 
 import (
@@ -14,12 +15,27 @@ import (
 const DefaultMaxCommitSubjectLength = 100
 
 // SubjectLength enforces a maximum number of characters on the commit subject line.
-// This rule helps ensure commit messages remain readable in Git tools and UIs by
-// preventing overly long subject lines that might get truncated. Most Git best practices
-// recommend keeping subject lines to 50-72 characters, with an absolute maximum of 100.
-// For example, with maxLength=50, a subject like "Implement new authentication system with support
-// for multiple providers" would fail validation because it's too long, while
-// "Implement multi-provider authentication" would pass.
+//
+// This rule helps ensure commit messages remain readable and effective in Git tools and
+// interfaces by preventing overly long subject lines that might get truncated or
+// become difficult to scan. Many Git interfaces truncate subjects at 72 characters, and
+// best practices recommend keeping subjects concise and focused.
+//
+// The rule validates that the number of characters (Unicode code points) in the subject
+// does not exceed the specified maximum length. If no maximum is specified, it uses
+// the DefaultMaxCommitSubjectLength of 100 characters.
+//
+// Examples:
+//
+//   - With maxLength=50:
+//     "Add user authentication" would pass (28 characters)
+//     "Implement comprehensive user authentication system with multi-factor capabilities" would fail (76 characters)
+//
+//   - With maxLength=72:
+//     "Refactor database connection pool to improve resource utilization" would pass (65 characters)
+//     "Completely redesign the application's architecture to support distributed processing across multiple geographic regions" would fail (110 characters)
+//
+// The rule properly handles Unicode characters by counting code points rather than bytes.
 type SubjectLength struct {
 	subjectLength int
 	errors        []error
@@ -57,7 +73,6 @@ func (rule SubjectLength) Help() string {
 	}
 
 	errMsg := rule.errors[0].Error()
-
 	if strings.Contains(errMsg, "subject too long") {
 		return "Shorten your commit message subject line to be more concise. " +
 			"A good subject should be brief but descriptive, ideally under 50 characters " +
@@ -69,6 +84,13 @@ func (rule SubjectLength) Help() string {
 
 // ValidateSubjectLength checks the subject length against the specified maximum.
 // If maxLength is 0, it uses the DefaultMaxCommitSubjectLength.
+//
+// Parameters:
+//   - subject: The commit subject line to validate
+//   - maxLength: The maximum allowed character count (0 means use default)
+//
+// Returns:
+//   - A SubjectLength instance with validation results
 func ValidateSubjectLength(subject string, maxLength int) *SubjectLength {
 	if maxLength == 0 {
 		maxLength = DefaultMaxCommitSubjectLength

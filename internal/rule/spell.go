@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
 
@@ -12,12 +12,28 @@ import (
 )
 
 // Spell enforces correct spelling in commit messages by identifying common misspellings.
-// This rule helps maintain consistent, professional-looking commit messages by catching
-// frequently misspelled words based on the specified locale.
 //
-// For example, with locale="US", a commit message containing "occurred" would be flagged
-// because it should be spelled "occurred", while "colour" would be acceptable with
-// locale="GB" but flagged with locale="US".
+// This rule helps maintain consistent, professional-looking commit messages by catching
+// frequently misspelled words and offering corrections. It supports different English
+// language variants (locales) to accommodate regional spelling differences.
+//
+// The rule uses a comprehensive dictionary of common misspellings to identify likely
+// errors without requiring a full dictionary. This makes it efficient while still
+// catching the most frequent spelling errors in commit messages.
+//
+// Examples:
+//
+//   - With locale="US" (American English):
+//     "Fix authorization bug" would pass
+//     "Fix authorisation bug" would fail (should be "authorization")
+//
+//   - With locale="GB" (British English):
+//     "Update colour scheme" would pass
+//     "Update color scheme" would fail (should be "colour")
+//
+//   - Common misspellings caught in any locale:
+//     "Fix defenite issue" would fail (should be "definite")
+//     "Accidentally deleted file" would fail (should be "accidentally")
 type Spell struct {
 	errors []error
 }
@@ -73,13 +89,25 @@ func (rule Spell) Help() string {
 }
 
 // ValidateSpelling checks the spelling in a commit message based on the specified locale.
-// It returns a Spell rule with any detected misspellings.
+// It identifies common misspellings and suggests corrections.
+//
+// Parameters:
+//   - message: The commit message to check for spelling errors
+//   - locale: The language variant to use for spell checking
 //
 // The locale parameter accepts:
-// - "US" (default): American English spelling
-// - "UK" or "GB": British English spelling
-// If an empty string is provided, it defaults to "US".
+//   - "US" (default): American English spelling (e.g., "color", "organize")
+//   - "UK" or "GB": British English spelling (e.g., "colour", "organise")
+//
+// If an empty string is provided for locale, it defaults to "US".
 // If an unsupported locale is provided, it returns an error.
+//
+// The spell checker uses a curated list of common misspellings rather than a
+// full dictionary, so it won't catch all possible spelling errors but focuses
+// on the most frequent mistakes.
+//
+// Returns:
+//   - A Spell instance with validation results including any detected misspellings
 func ValidateSpelling(message string, locale string) Spell {
 	rule := Spell{}
 

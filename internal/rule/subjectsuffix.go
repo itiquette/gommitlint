@@ -1,6 +1,7 @@
-// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
+
 package rule
 
 import (
@@ -9,11 +10,30 @@ import (
 	"unicode/utf8"
 )
 
-// SubjectSuffix enforces that the last character of the subject line isn't in a specified set
-// of invalid suffixes. This rule helps ensure commit messages maintain a consistent format by
-// preventing them from ending with characters like periods, commas, or other specified punctuation.
-// For example, with invalidSuffixes=".,;:", a subject like "Add new feature." would fail validation
-// because it ends with a period, while "Add new feature" would pass.
+// SubjectSuffix enforces that the last character of the commit subject line
+// is not in a specified set of invalid suffixes.
+//
+// This rule helps ensure commit messages maintain a consistent format by
+// preventing subjects from ending with unwanted characters like periods,
+// commas, or other punctuation marks that can affect readability and
+// automated processing of commit messages.
+//
+// The rule validates the last character of the subject line against a set of
+// specified invalid characters. If the last character is found in this set,
+// the rule fails.
+//
+// Examples:
+//
+//   - With invalidSuffixes=".,;:":
+//     "Add new feature" would pass
+//     "Add new feature." would fail (ends with period)
+//     "Implement login," would fail (ends with comma)
+//
+//   - With invalidSuffixes="!?":
+//     "Fix critical bug" would pass
+//     "Fix critical bug!" would fail (ends with exclamation)
+//
+// The rule also handles empty subjects and invalid UTF-8 characters.
 type SubjectSuffix struct {
 	errors []error
 }
@@ -44,6 +64,13 @@ func (rule *SubjectSuffix) addErrorf(format string, args ...interface{}) {
 
 // ValidateSubjectSuffix checks if the subject ends with a character in the invalidSuffixes set.
 // It returns a SubjectSuffix with any validation errors.
+//
+// Parameters:
+//   - subject: The commit subject line to validate
+//   - invalidSuffixes: A string containing characters considered invalid at the end of a subject
+//
+// Returns:
+//   - A SubjectSuffix instance with validation results
 func ValidateSubjectSuffix(subject, invalidSuffixes string) SubjectSuffix {
 	rule := SubjectSuffix{}
 

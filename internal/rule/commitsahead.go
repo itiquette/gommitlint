@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
 
@@ -29,12 +29,6 @@ func DefaultCommitsAheadConfig() CommitsAheadConfig {
 // This rule helps teams maintain clean git histories by preventing branches
 // from diverging too far from a baseline reference branch, reducing the
 // complexity of eventual merges.
-//
-// Key benefits of this rule:
-//   - Encourages frequent integration with the main branch
-//   - Prevents large, difficult-to-review pull requests
-//   - Reduces merge conflicts by limiting branch divergence
-//   - Supports continuous integration practices
 //
 // The rule validates that the current HEAD is not too far ahead of a specified
 // reference branch (typically main/master). When the number of commits exceeds

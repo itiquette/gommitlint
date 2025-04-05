@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
 package validation
@@ -134,7 +134,7 @@ func (v *Validator) checkSignatureRules(report *model.CommitRules, commitInfo mo
 		report.Add(signatureRule)
 
 		if v.config.Signature.Identity != nil {
-			signedIdentityRule := signedidentityrule.VerifyCommitSignature(commitInfo.RawCommit, commitInfo.Signature, v.config.Signature.Identity.PublicKeyURI)
+			signedIdentityRule := signedidentityrule.VerifySignatureIdentity(commitInfo.RawCommit, commitInfo.Signature, v.config.Signature.Identity.PublicKeyURI)
 			report.Add(signedIdentityRule)
 		}
 	}

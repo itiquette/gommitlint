@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
 
@@ -95,17 +95,28 @@ func (rule SubjectCase) Help() string {
 }
 
 // ValidateSubjectCase checks the subject case based on the specified case choice.
-// If isConventional is true, it handles conventional commit format by extracting
-// the first word after the type(scope): section.
+// It enforces capitalization rules for both conventional and standard commit messages.
+//
+// Parameters:
+//   - subject: The commit subject line to validate
+//   - caseChoice: The desired case ("upper" or "lower")
+//   - isConventional: Whether to treat as a conventional commit format
 //
 // For conventional commits (format: "type(scope): subject"), it validates the
 // first letter of the subject part after the colon, ignoring the type and scope.
 // For example, in "feat(auth): Add login", it validates "Add".
 //
+// For standard commits, it validates the first letter of the subject.
+// For example, in "Add login feature", it validates "Add".
+//
 // The caseChoice parameter accepts:
-// - "upper": Requires the first letter to be uppercase
-// - "lower": Requires the first letter to be lowercase
+//   - "upper": Requires the first letter to be uppercase
+//   - "lower": Requires the first letter to be lowercase
+//
 // If an invalid caseChoice is provided, it defaults to "lower".
+//
+// Returns:
+//   - A SubjectCase instance with validation results
 func ValidateSubjectCase(subject, caseChoice string, isConventional bool) *SubjectCase {
 	rule := &SubjectCase{subjectCase: caseChoice}
 

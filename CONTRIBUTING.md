@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: 2024 Josef Andersson
+SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
  
 SPDX-License-Identifier: CC0-1.0
 -->

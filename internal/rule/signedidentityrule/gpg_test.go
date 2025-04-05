@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
 package signedidentityrule
@@ -26,7 +26,7 @@ func TestVerifyGPGSignature(t *testing.T) {
 				authorName:  "Test User",
 				authorEmail: "test@example.com",
 				message:     "Signed commit",
-				signKey:     loadTestKey(t, "valid.priv"),
+				signKey:     loadTestKey(t),
 			},
 			keyDir:      testDataDir,
 			expectError: false,
@@ -49,7 +49,7 @@ func TestVerifyGPGSignature(t *testing.T) {
 				authorName:  "Test User",
 				authorEmail: "test@example.com",
 				message:     "Signed commit",
-				signKey:     loadTestKey(t, "valid.priv"),
+				signKey:     loadTestKey(t),
 			},
 			keyDir:      "",
 			expectError: true,
@@ -61,7 +61,7 @@ func TestVerifyGPGSignature(t *testing.T) {
 				authorName:  "Test User",
 				authorEmail: "test@example.com",
 				message:     "Signed commit",
-				signKey:     loadTestKey(t, "valid.priv"),
+				signKey:     loadTestKey(t),
 			},
 			keyDir:      t.TempDir(), // Empty directory
 			expectError: true,
@@ -74,7 +74,7 @@ func TestVerifyGPGSignature(t *testing.T) {
 			_, commit := setupTestRepo(t, tabletest.setupOpts)
 
 			// Test the convenience wrapper function
-			result := VerifyCommitSignature(commit, commit.PGPSignature, tabletest.keyDir)
+			result := VerifySignatureIdentity(commit, commit.PGPSignature, tabletest.keyDir)
 
 			if tabletest.expectError {
 				require.NotEmpty(t, result.Errors(), "Expected errors but got none")

@@ -1,10 +1,12 @@
-// SPDX-FileCopyrightText: 2025 itiquette/gommitlint
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
+
 package signedidentityrule
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,13 +15,14 @@ import (
 	"github.com/ProtonMail/go-crypto/openpgp"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSignedIdentity_Name(t *testing.T) {
+	// Simple test for rule name
 	rule := SignedIdentity{}
-	require.Equal(t, "SignedIdentityRule", rule.Name())
+	assert.Equal(t, "SignedIdentity", rule.Name())
 }
 
 func TestSignedIdentity_Result(t *testing.T) {
@@ -32,7 +35,7 @@ func TestSignedIdentity_Result(t *testing.T) {
 			name: "valid GPG identity",
 			rule: SignedIdentity{
 				Identity:      "Test User <test@example.com>",
-				SignatureType: "GPG",
+				SignatureType: GPG,
 			},
 			expected: `Signed by "Test User <test@example.com>" using GPG`,
 		},
@@ -40,7 +43,7 @@ func TestSignedIdentity_Result(t *testing.T) {
 			name: "valid SSH identity",
 			rule: SignedIdentity{
 				Identity:      "ssh-key-user",
-				SignatureType: "SSH",
+				SignatureType: SSH,
 			},
 			expected: `Signed by "ssh-key-user" using SSH`,
 		},
@@ -53,9 +56,9 @@ func TestSignedIdentity_Result(t *testing.T) {
 		},
 	}
 
-	for _, tabletest := range tests {
-		t.Run(tabletest.name, func(t *testing.T) {
-			require.Equal(t, tabletest.expected, tabletest.rule.Result())
+	for _, atest := range tests {
+		t.Run(atest.name, func(t *testing.T) {
+			assert.Equal(t, atest.expected, atest.rule.Result())
 		})
 	}
 }
@@ -69,44 +72,45 @@ func TestDetectSignatureType(t *testing.T) {
 		{
 			name:      "GPG signature with PGP header",
 			signature: "-----BEGIN PGP SIGNATURE-----\nVersion: GnuPG v2\nData\n-----END PGP SIGNATURE-----",
-			expected:  "GPG",
+			expected:  GPG,
 		},
 		{
 			name:      "SSH RSA signature format",
 			signature: "ssh-rsa:AAAAB3NzaC1yc2EAAA...",
-			expected:  "SSH",
+			expected:  SSH,
 		},
 		{
 			name:      "SSH ed25519 signature format",
 			signature: "ssh-ed25519:AAAAC3NzaC1lZDI1NTE5AAAA...",
-			expected:  "SSH",
+			expected:  SSH,
 		},
 		{
 			name:      "ECDSA SSH signature format",
 			signature: "ecdsa-sha2-nistp256:AAAAE2VjZHNhLXNoYTItbmlzdHA...",
-			expected:  "SSH",
+			expected:  SSH,
 		},
 		{
 			name:      "Unknown format defaulting to GPG",
 			signature: "unknown-signature-format",
-			expected:  "GPG",
+			expected:  GPG,
 		},
 	}
 
-	for _, tabletest := range tests {
-		t.Run(tabletest.name, func(t *testing.T) {
-			result := detectSignatureType(tabletest.signature)
-			require.Equal(t, tabletest.expected, result)
+	for _, atest := range tests {
+		t.Run(atest.name, func(t *testing.T) {
+			result := detectSignatureType(atest.signature)
+			assert.Equal(t, atest.expected, result)
 		})
 	}
 }
 
 // Common test helper functions
 
-func loadTestKey(t *testing.T, _ string) *openpgp.Entity {
+func loadTestKey(t *testing.T) *openpgp.Entity {
 	t.Helper()
 
 	filename := "valid.priv"
+
 	fullPath, _ := filepath.Abs("testdata")
 
 	privKeyData, err := os.ReadFile(filepath.Join(fullPath, filename))
@@ -171,14 +175,15 @@ func setupTestRepo(t *testing.T, opts setupRepoOptions) (*git.Repository, *objec
 }
 
 func TestVerifyCommitSignature(t *testing.T) {
-	testDataDir, _ := filepath.Abs("testdata")
+	testDataDir, err := filepath.Abs("testdata")
+	require.NoError(t, err, "failed to get absolute path for testdata")
 
 	// Create a signed commit for testing
 	setupOpts := setupRepoOptions{
 		authorName:  "Test User",
 		authorEmail: "test@example.com",
 		message:     "Signed commit",
-		signKey:     loadTestKey(t, "valid.priv"),
+		signKey:     loadTestKey(t),
 	}
 
 	_, commit := setupTestRepo(t, setupOpts)
@@ -187,60 +192,90 @@ func TestVerifyCommitSignature(t *testing.T) {
 
 	tests := []struct {
 		name        string
+		commit      *object.Commit
 		signature   string
 		keyDir      string
 		expectError bool
-		wantErrMsg  string
-		wantID      string
-		wantType    string
+		errorText   string
+		identity    string
+		sigType     string
 	}{
 		{
 			name:        "valid GPG signature",
+			commit:      commit,
 			signature:   gpgSignature,
 			keyDir:      testDataDir,
 			expectError: false,
-			wantID:      "Test User <test@example.com>",
-			wantType:    "GPG",
+			identity:    "Test User <test@example.com>",
+			sigType:     GPG,
 		},
 		{
 			name:        "empty signature",
+			commit:      commit,
 			signature:   "",
 			keyDir:      testDataDir,
 			expectError: true,
-			wantErrMsg:  "no signature provided",
+			errorText:   "no signature provided",
 		},
 		{
 			name:        "no key directory",
+			commit:      commit,
 			signature:   gpgSignature,
 			keyDir:      "",
 			expectError: true,
-			wantErrMsg:  "no key directory provided",
+			errorText:   "no key directory provided",
+		},
+		{
+			name:        "nil commit",
+			commit:      nil,
+			signature:   gpgSignature,
+			keyDir:      testDataDir,
+			expectError: true,
+			errorText:   "commit cannot be nil",
 		},
 		{
 			name:        "invalid signature format",
+			commit:      commit,
 			signature:   "invalid-signature-format",
 			keyDir:      testDataDir,
 			expectError: true,
-			wantErrMsg:  "not verified with any trusted key",
+			errorText:   "GPG signature not verified with any trusted key", //"failed to verify signature"
 		},
 	}
 
 	for _, tabletest := range tests {
 		t.Run(tabletest.name, func(t *testing.T) {
-			result := VerifyCommitSignature(commit, tabletest.signature, tabletest.keyDir)
+			// Run the verification
+			result := VerifySignatureIdentity(tabletest.commit, tabletest.signature, tabletest.keyDir)
 
+			// Check results based on expectations
 			if tabletest.expectError {
-				require.NotEmpty(t, result.Errors(), "Expected errors but got none")
+				assert.NotEmpty(t, result.Errors(), "Expected errors but got none")
 
-				if tabletest.wantErrMsg != "" {
-					require.Contains(t, result.Errors()[0].Error(), tabletest.wantErrMsg,
+				if tabletest.errorText != "" {
+					assert.Contains(t, result.Errors()[0].Error(), tabletest.errorText,
 						"Error message doesn't contain expected text")
 				}
 			} else {
-				require.Empty(t, result.Errors(), "Expected no errors but got: %v", result.Errors())
-				require.Equal(t, tabletest.wantID, result.Identity, "Identity doesn't match expected value")
-				require.Equal(t, tabletest.wantType, result.SignatureType, "Signature type incorrect")
+				assert.Empty(t, result.Errors(), "Expected no errors but got: %v", result.Errors())
+				assert.Equal(t, tabletest.identity, result.Identity, "Identity doesn't match expected value")
+				assert.Equal(t, tabletest.sigType, result.SignatureType, "Signature type incorrect")
 			}
 		})
 	}
+}
+
+// TestHelp ensures the Help method provides useful guidance.
+func TestSignedIdentity_Help(t *testing.T) {
+	// Test with errors
+	ruleWithErrors := SignedIdentity{
+		errors: []error{errors.New("signature verification failed")},
+	}
+	help := ruleWithErrors.Help()
+	assert.Contains(t, help, "Sign your commits")
+	assert.Contains(t, help, "key strength")
+
+	// Test without errors
+	ruleNoErrors := SignedIdentity{}
+	assert.Equal(t, "No errors to fix", ruleNoErrors.Help())
 }
