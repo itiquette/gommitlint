@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: itiquette/gommitlint
+#
+# SPDX-License-Identifier: CC0-1.0
+
+*
+!cmd
+!internal
+!go.mod
+!go.sum
+!.golangci.yml
+!CHANGELOG.md
+!README.md
+!dist/*-linux-amd64
+!dist/*-linux-arm64
