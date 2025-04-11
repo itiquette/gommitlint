@@ -4,9 +4,9 @@
 package rule_test
 
 import (
-	"errors"
 	"testing"
 
+	"github.com/itiquette/gommitlint/internal/model"
 	"github.com/itiquette/gommitlint/internal/rule"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,6 +18,7 @@ func TestValidateImperative(t *testing.T) {
 		isConventional  bool
 		message         string
 		expectedValid   bool
+		expectedCode    string
 		expectedMessage string
 	}{
 		{
@@ -53,6 +54,7 @@ func TestValidateImperative(t *testing.T) {
 			isConventional:  false,
 			message:         "Added new feature",
 			expectedValid:   false,
+			expectedCode:    "past_tense",
 			expectedMessage: "first word of commit must be an imperative verb: \"Added\" appears to be past tense",
 		},
 		{
@@ -60,6 +62,7 @@ func TestValidateImperative(t *testing.T) {
 			isConventional:  false,
 			message:         "Adding new feature",
 			expectedValid:   false,
+			expectedCode:    "gerund",
 			expectedMessage: "first word of commit must be an imperative verb: \"Adding\" appears to be a gerund",
 		},
 		{
@@ -67,6 +70,7 @@ func TestValidateImperative(t *testing.T) {
 			isConventional:  false,
 			message:         "Adds new feature",
 			expectedValid:   false,
+			expectedCode:    "third_person",
 			expectedMessage: "first word of commit must be an imperative verb: \"Adds\" appears to be 3rd person present",
 		},
 		{
@@ -74,6 +78,7 @@ func TestValidateImperative(t *testing.T) {
 			isConventional:  false,
 			message:         "",
 			expectedValid:   false,
+			expectedCode:    "empty_message",
 			expectedMessage: "empty message",
 		},
 		{
@@ -81,6 +86,7 @@ func TestValidateImperative(t *testing.T) {
 			isConventional:  true,
 			message:         "invalid-format",
 			expectedValid:   false,
+			expectedCode:    "invalid_format",
 			expectedMessage: "invalid conventional commit format",
 		},
 		{
@@ -88,6 +94,7 @@ func TestValidateImperative(t *testing.T) {
 			isConventional:  true,
 			message:         "feat: ",
 			expectedValid:   false,
+			expectedCode:    "missing_subject",
 			expectedMessage: "missing subject after type",
 		},
 		{
@@ -102,6 +109,7 @@ func TestValidateImperative(t *testing.T) {
 			isConventional:  true,
 			message:         "fix(core): Added new validation",
 			expectedValid:   false,
+			expectedCode:    "past_tense",
 			expectedMessage: "first word of commit must be an imperative verb: \"Added\" appears to be past tense",
 		},
 		{
@@ -109,6 +117,7 @@ func TestValidateImperative(t *testing.T) {
 			isConventional:  false,
 			message:         "The new feature",
 			expectedValid:   false,
+			expectedCode:    "non_verb",
 			expectedMessage: "first word of commit must be an imperative verb: \"The\" is not a verb",
 		},
 	}
@@ -127,11 +136,21 @@ func TestValidateImperative(t *testing.T) {
 				)
 			} else {
 				require.NotEmpty(t, rule.Errors(), "Expected errors")
+
+				// Check error code
+				if tabletest.expectedCode != "" {
+					assert.Equal(t, tabletest.expectedCode, rule.Errors()[0].Code, "Error code should match expected")
+				}
+
+				// Check error message
 				require.Equal(t,
 					tabletest.expectedMessage,
 					rule.Result(),
 					"Error message should match expected",
 				)
+
+				// Verify rule name is set in the error
+				assert.Equal(t, "ImperativeVerb", rule.Errors()[0].Rule, "Rule name should be set in ValidationError")
 			}
 
 			// Check name method
@@ -170,7 +189,9 @@ func TestImperativeVerbMethods(t *testing.T) {
 
 	t.Run("Result method with errors", func(t *testing.T) {
 		rule := &rule.ImperativeVerb{}
-		rule.SetErrors([]error{errors.New("first word of commit must be an imperative verb: \"Added\" is invalid")})
+		err := model.NewValidationError("ImperativeVerb", "past_tense",
+			"first word of commit must be an imperative verb: \"Added\" is invalid")
+		rule.SetErrors([]*model.ValidationError{err})
 		require.Equal(t,
 			"first word of commit must be an imperative verb: \"Added\" is invalid",
 			rule.Result(),
@@ -183,9 +204,9 @@ func TestImperativeVerbMethods(t *testing.T) {
 	})
 
 	t.Run("Errors method", func(t *testing.T) {
-		expectedErrors := []error{
-			errors.New("test error"),
-		}
+		expectedError := model.NewValidationError("ImperativeVerb", "test_error", "test error")
+		expectedErrors := []*model.ValidationError{expectedError}
+
 		ruleInstance := &rule.ImperativeVerb{}
 		ruleInstance.SetErrors(expectedErrors)
 		require.Equal(t, expectedErrors, ruleInstance.Errors())
@@ -194,23 +215,38 @@ func TestImperativeVerbMethods(t *testing.T) {
 	t.Run("Help method with different errors", func(t *testing.T) {
 		// Test help text for empty message
 		emptyRule := &rule.ImperativeVerb{}
-		emptyRule.SetErrors([]error{errors.New("empty message")})
+		emptyRule.SetErrors([]*model.ValidationError{
+			model.NewValidationError("ImperativeVerb", "empty_message", "empty message"),
+		})
 		assert.Contains(t, emptyRule.Help(), "Provide a non-empty commit message")
 
 		// Test help text for invalid format
 		formatRule := &rule.ImperativeVerb{}
-		formatRule.SetErrors([]error{errors.New("invalid conventional commit format")})
+		formatRule.SetErrors([]*model.ValidationError{
+			model.NewValidationError("ImperativeVerb", "invalid_format", "invalid conventional commit format"),
+		})
 		assert.Contains(t, formatRule.Help(), "Format your commit message according to the Conventional Commits")
 
 		// Test help text for missing subject
 		missingSubjectRule := &rule.ImperativeVerb{}
-		missingSubjectRule.SetErrors([]error{errors.New("missing subject after type")})
+		missingSubjectRule.SetErrors([]*model.ValidationError{
+			model.NewValidationError("ImperativeVerb", "missing_subject", "missing subject after type"),
+		})
 		assert.Contains(t, missingSubjectRule.Help(), "Add a description after the type and colon")
 
 		// Test help text for non-imperative verb
 		verbRule := &rule.ImperativeVerb{}
-		verbRule.SetErrors([]error{errors.New("first word of commit must be an imperative verb")})
+		verbRule.SetErrors([]*model.ValidationError{
+			model.NewValidationError("ImperativeVerb", "non_verb", "first word of commit must be an imperative verb"),
+		})
 		assert.Contains(t, verbRule.Help(), "Use the imperative mood")
+
+		// Test help text for past tense
+		pastTenseRule := &rule.ImperativeVerb{}
+		pastTenseRule.SetErrors([]*model.ValidationError{
+			model.NewValidationError("ImperativeVerb", "past_tense", "word appears to be past tense"),
+		})
+		assert.Contains(t, pastTenseRule.Help(), "Avoid using past tense verbs")
 
 		// Test help text for no errors
 		validRule := &rule.ImperativeVerb{}
@@ -218,17 +254,22 @@ func TestImperativeVerbMethods(t *testing.T) {
 	})
 }
 
-// TestAddErrorf verifies the behavior of the addErrorf method.
-func TestAddErrorf(t *testing.T) {
+// TestAddError verifies the behavior of the ValidationError creation.
+func TestAddError(t *testing.T) {
 	vrule := rule.ValidateImperative("", false)
 	require.NotEmpty(t, vrule.Errors(), "Should have errors for empty message")
 	require.Equal(t, "empty message", vrule.Result(), "Error message should match")
+	assert.Equal(t, "empty_message", vrule.Errors()[0].Code, "Error code should be set")
 
-	// Check the format of error messages with formatting
+	// Check the context information in errors
 	verbRule := rule.ValidateImperative("Added feature", false)
 	require.NotEmpty(t, verbRule.Errors(), "Should have errors for past tense")
 	assert.Contains(t, verbRule.Result(), "\"Added\"", "Error should contain the word in quotes")
+	assert.Equal(t, "past_tense", verbRule.Errors()[0].Code, "Error code should be set")
+	assert.Equal(t, "Added", verbRule.Errors()[0].Context["word"], "Word should be included in context")
 }
+
+// TestErrorsWithSubjectRegex verifies that the
 
 // TestErrorsWithSubjectRegex verifies that the subject regex properly handles different commit formats.
 func TestErrorsWithSubjectRegex(t *testing.T) {

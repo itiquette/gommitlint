@@ -6,7 +6,6 @@ package signedidentityrule
 
 import (
 	"bytes"
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -15,6 +14,7 @@ import (
 	"github.com/ProtonMail/go-crypto/openpgp"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/itiquette/gommitlint/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -50,7 +50,9 @@ func TestSignedIdentity_Result(t *testing.T) {
 		{
 			name: "with error",
 			rule: SignedIdentity{
-				errors: []error{errors.New("verification failed")},
+				errors: []*model.ValidationError{
+					model.NewValidationError("SignedIdentity", "verification_failed", "verification failed"),
+				},
 			},
 			expected: "verification failed",
 		},
@@ -196,6 +198,7 @@ func TestVerifyCommitSignature(t *testing.T) {
 		signature   string
 		keyDir      string
 		expectError bool
+		errorCode   string
 		errorText   string
 		identity    string
 		sigType     string
@@ -215,6 +218,7 @@ func TestVerifyCommitSignature(t *testing.T) {
 			signature:   "",
 			keyDir:      testDataDir,
 			expectError: true,
+			errorCode:   "no_signature",
 			errorText:   "no signature provided",
 		},
 		{
@@ -223,6 +227,7 @@ func TestVerifyCommitSignature(t *testing.T) {
 			signature:   gpgSignature,
 			keyDir:      "",
 			expectError: true,
+			errorCode:   "no_key_dir",
 			errorText:   "no key directory provided",
 		},
 		{
@@ -231,6 +236,7 @@ func TestVerifyCommitSignature(t *testing.T) {
 			signature:   gpgSignature,
 			keyDir:      testDataDir,
 			expectError: true,
+			errorCode:   "commit_nil",
 			errorText:   "commit cannot be nil",
 		},
 		{
@@ -239,7 +245,8 @@ func TestVerifyCommitSignature(t *testing.T) {
 			signature:   "invalid-signature-format",
 			keyDir:      testDataDir,
 			expectError: true,
-			errorText:   "GPG signature not verified with any trusted key", //"failed to verify signature"
+			errorCode:   "key_not_trusted",
+			errorText:   "GPG signature not verified with any trusted key",
 		},
 	}
 
@@ -256,6 +263,21 @@ func TestVerifyCommitSignature(t *testing.T) {
 					assert.Contains(t, result.Errors()[0].Error(), tabletest.errorText,
 						"Error message doesn't contain expected text")
 				}
+
+				if tabletest.errorCode != "" {
+					assert.Equal(t, tabletest.errorCode, result.Errors()[0].Code,
+						"Error code doesn't match expected")
+				}
+
+				// Check that context is set appropriately
+				assert.NotNil(t, result.Errors()[0].Context, "Context should not be nil")
+
+				// Check specific context values for certain error types
+				switch tabletest.errorCode {
+				case "key_not_trusted", "verification_failed":
+					assert.Contains(t, result.Errors()[0].Context, "signature_type",
+						"Context should contain signature_type")
+				}
 			} else {
 				assert.Empty(t, result.Errors(), "Expected no errors but got: %v", result.Errors())
 				assert.Equal(t, tabletest.identity, result.Identity, "Identity doesn't match expected value")
@@ -267,13 +289,80 @@ func TestVerifyCommitSignature(t *testing.T) {
 
 // TestHelp ensures the Help method provides useful guidance.
 func TestSignedIdentity_Help(t *testing.T) {
-	// Test with errors
-	ruleWithErrors := SignedIdentity{
-		errors: []error{errors.New("signature verification failed")},
+	// Test different error codes
+	errorCases := []struct {
+		name     string
+		code     string
+		message  string
+		context  map[string]string
+		contains string
+	}{
+		{
+			name:     "commit_nil error",
+			code:     "commit_nil",
+			message:  "commit cannot be nil",
+			context:  map[string]string{},
+			contains: "valid commit object",
+		},
+		{
+			name:     "no_key_dir error",
+			code:     "no_key_dir",
+			message:  "no key directory provided",
+			context:  map[string]string{},
+			contains: "valid directory containing trusted public keys",
+		},
+		{
+			name:     "invalid_key_dir error",
+			code:     "invalid_key_dir",
+			message:  "invalid key directory: path error",
+			context:  map[string]string{"key_dir": "/invalid/path"},
+			contains: "key directory is invalid",
+		},
+		{
+			name:     "no_signature error",
+			code:     "no_signature",
+			message:  "no signature provided",
+			context:  map[string]string{},
+			contains: "not signed",
+		},
+		{
+			name:    "weak_key error",
+			code:    "weak_key",
+			message: "GPG key strength: 1024 bits (required: 2048 bits)",
+			context: map[string]string{
+				"key_type":      "GPG",
+				"key_bits":      "1024",
+				"required_bits": "2048",
+			},
+			contains: "does not meet the minimum strength",
+		},
+		{
+			name:     "generic error",
+			code:     "some_other_error",
+			message:  "some other error",
+			context:  map[string]string{},
+			contains: "Sign your commits",
+		},
 	}
-	help := ruleWithErrors.Help()
-	assert.Contains(t, help, "Sign your commits")
-	assert.Contains(t, help, "key strength")
+
+	for _, testCase := range errorCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			rule := SignedIdentity{}
+
+			// Create and add the validation error
+			err := model.NewValidationError("SignedIdentity", testCase.code, testCase.message)
+			for k, v := range testCase.context {
+				_ = err.WithContext(k, v)
+			}
+
+			rule.errors = append(rule.errors, err)
+
+			// Check help text
+			help := rule.Help()
+			assert.Contains(t, help, testCase.contains,
+				"Help text should contain guidance for error code %s", testCase.code)
+		})
+	}
 
 	// Test without errors
 	ruleNoErrors := SignedIdentity{}

@@ -5,11 +5,12 @@
 package rule
 
 import (
-	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/configuration"
+	"github.com/itiquette/gommitlint/internal/model"
 )
 
 // Common regex patterns compiled once at package level.
@@ -59,7 +60,7 @@ var (
 // If a list of valid Jira project keys is provided in the configuration, the
 // rule also validates that all referenced projects exist in that list.
 type JiraReference struct {
-	errors []error
+	errors []*model.ValidationError
 }
 
 // Name returns the name of the rule.
@@ -77,7 +78,7 @@ func (j *JiraReference) Result() string {
 }
 
 // Errors returns any violations of the rule.
-func (j *JiraReference) Errors() []error {
+func (j *JiraReference) Errors() []*model.ValidationError {
 	return j.errors
 }
 
@@ -87,7 +88,97 @@ func (j *JiraReference) Help() string {
 		return "No errors to fix"
 	}
 
-	errMsg := j.errors[0].Error()
+	// Check error code
+	if len(j.errors) > 0 {
+		switch j.errors[0].Code {
+		case "empty_subject":
+			return "Provide a non-empty commit message with a Jira issue reference"
+
+		case "missing_jira_key_body":
+			return `Include a valid Jira issue key (e.g., PROJECT-123) in your commit body with the "Refs:" prefix.
+
+Examples:
+- Refs: PROJECT-123
+- Refs: PROJECT-123, PROJECT-456
+- Refs: PROJECT-123, PROJECT-456, PROJECT-789
+
+The Refs: line should appear at the end of the commit body, before any Signed-off-by lines.`
+
+		case "missing_jira_key_subject":
+			return `Include a valid Jira issue key (e.g., PROJECT-123) in your commit subject.
+
+For conventional commits, place the Jira key at the end of the first line:
+- feat(auth): add login feature PROJ-123
+- fix: resolve timeout issue [PROJ-123]
+- docs(readme): update installation steps (PROJ-123)
+
+For other commit formats, include the Jira key anywhere in the subject.
+`
+
+		case "key_not_at_end":
+			return `In conventional commit format, place the Jira issue key at the end of the first line.
+
+Examples:
+- feat(auth): add login feature PROJ-123
+- fix: resolve timeout issue [PROJ-123]
+- docs(readme): update installation steps (PROJ-123)
+
+Avoid putting the Jira key in the middle of the line:
+- INCORRECT: feat(PROJ-123): add login feature
+- INCORRECT: fix: PROJ-123 resolve timeout issue
+`
+
+		case "invalid_project":
+			projectKeys := getValidProjectsFromConfig()
+			if len(projectKeys) > 0 {
+				return `The Jira project reference is not recognized as a valid project.
+
+Valid projects: ` + strings.Join(projectKeys, ", ") + `
+
+Please use one of these project keys in your Jira reference.`
+			}
+
+			return `The Jira project reference is not valid.
+Jira project keys should be uppercase letters followed by a hyphen and numbers (e.g., PROJECT-123).`
+
+		case "invalid_refs_format":
+			return `The "Refs:" line in your commit body has an invalid format.
+
+The correct format is:
+Refs: PROJECT-123
+or for multiple references:
+Refs: PROJECT-123, PROJECT-456
+
+Make sure:
+- "Refs:" is at the beginning of the line
+- Project keys follow the format PROJECT-123
+- Multiple references are separated by commas
+- The Refs line appears before any Signed-off-by lines`
+
+		case "refs_after_signoff":
+			return `The "Refs:" line must appear before any "Signed-off-by" lines in your commit message.
+
+The correct order is:
+1. Commit subject
+2. Blank line
+3. Commit body (if any)
+4. Refs: line(s)
+5. Signed-off-by line(s)`
+
+		case "invalid_key_format":
+			return `The Jira issue key has an invalid format.
+
+Jira keys must follow the format PROJECT-123, where:
+- PROJECT is one or more uppercase letters
+- Followed by a hyphen (-)
+- Followed by one or more digits (123)
+
+Examples of valid keys: PROJ-123, DEV-456, TEAM-7890`
+		}
+	}
+
+	// Default help using message content if available
+	errMsg := j.errors[0].Message
 
 	if strings.Contains(errMsg, "commit subject is empty") {
 		return "Provide a non-empty commit message with a Jira issue reference"
@@ -133,53 +224,15 @@ Avoid putting the Jira key in the middle of the line:
 	if strings.Contains(errMsg, "not a valid project") {
 		projectKeys := getValidProjectsFromConfig()
 		if len(projectKeys) > 0 {
-			return fmt.Sprintf(`The Jira project reference is not recognized as a valid project.
+			return `The Jira project reference is not recognized as a valid project.
 
-Valid projects: %s
+Valid projects: ` + strings.Join(projectKeys, ", ") + `
 
-Please use one of these project keys in your Jira reference.
-`, strings.Join(projectKeys, ", "))
+Please use one of these project keys in your Jira reference.`
 		}
 
 		return `The Jira project reference is not valid.
 Jira project keys should be uppercase letters followed by a hyphen and numbers (e.g., PROJECT-123).`
-	}
-
-	if strings.Contains(errMsg, "invalid Refs format") {
-		return `The "Refs:" line in your commit body has an invalid format.
-
-The correct format is:
-Refs: PROJECT-123
-or for multiple references:
-Refs: PROJECT-123, PROJECT-456
-
-Make sure:
-- "Refs:" is at the beginning of the line
-- Project keys follow the format PROJECT-123
-- Multiple references are separated by commas
-- The Refs line appears before any Signed-off-by lines`
-	}
-
-	if strings.Contains(errMsg, "Refs: line must appear before") {
-		return `The "Refs:" line must appear before any "Signed-off-by" lines in your commit message.
-
-The correct order is:
-1. Commit subject
-2. Blank line
-3. Commit body (if any)
-4. Refs: line(s)
-5. Signed-off-by line(s)`
-	}
-
-	if strings.Contains(errMsg, "invalid Jira issue key format") {
-		return `The Jira issue key has an invalid format.
-
-Jira keys must follow the format PROJECT-123, where:
-- PROJECT is one or more uppercase letters
-- Followed by a hyphen (-)
-- Followed by one or more digits (123)
-
-Examples of valid keys: PROJ-123, DEV-456, TEAM-7890`
 	}
 
 	// Default help
@@ -187,9 +240,16 @@ Examples of valid keys: PROJ-123, DEV-456, TEAM-7890`
 The Jira issue key should follow the format PROJECT-123.`
 }
 
-// addErrorf adds an error to the rule's errors slice.
-func (j *JiraReference) addErrorf(format string, args ...interface{}) {
-	j.errors = append(j.errors, fmt.Errorf(format, args...))
+// addError adds a structured validation error.
+func (j *JiraReference) addError(code, message string, context map[string]string) {
+	err := model.NewValidationError("JiraReference", code, message)
+
+	// Add any context values
+	for key, value := range context {
+		_ = err.WithContext(key, value)
+	}
+
+	j.errors = append(j.errors, err)
 }
 
 // ValidateJiraReference checks if the commit message contains valid Jira issue references
@@ -227,7 +287,11 @@ func ValidateJiraReference(subject string, body string, jira *configuration.Jira
 	// Normalize and trim the subject
 	subject = strings.TrimSpace(subject)
 	if subject == "" {
-		rule.addErrorf("commit subject is empty")
+		rule.addError(
+			"empty_subject",
+			"commit subject is empty",
+			nil,
+		)
 
 		return rule
 	}
@@ -280,7 +344,13 @@ func validateSubjectReferences(rule *JiraReference, subject string, validJiraPro
 func validateConventionalCommitSubject(rule *JiraReference, firstLine string, validJiraProjects []string) {
 	matches := jiraKeyRegex.FindAllString(firstLine, -1)
 	if len(matches) == 0 {
-		rule.addErrorf("no Jira issue key found in the commit subject")
+		rule.addError(
+			"missing_jira_key_subject",
+			"no Jira issue key found in the commit subject",
+			map[string]string{
+				"subject": firstLine,
+			},
+		)
 
 		return
 	}
@@ -292,8 +362,8 @@ func validateConventionalCommitSubject(rule *JiraReference, firstLine string, va
 	// Supporting common formats: PROJ-123, [PROJ-123], (PROJ-123)
 	validSuffixes := []string{
 		lastMatch,
-		fmt.Sprintf("[%s]", lastMatch),
-		fmt.Sprintf("(%s)", lastMatch),
+		"[" + lastMatch + "]",
+		"(" + lastMatch + ")",
 	}
 
 	found := false
@@ -307,7 +377,14 @@ func validateConventionalCommitSubject(rule *JiraReference, firstLine string, va
 	}
 
 	if !found {
-		rule.addErrorf("in conventional commit format, Jira issue key must be at the end of the first line")
+		rule.addError(
+			"key_not_at_end",
+			"in conventional commit format, Jira issue key must be at the end of the first line",
+			map[string]string{
+				"subject": firstLine,
+				"key":     lastMatch,
+			},
+		)
 
 		return
 	}
@@ -331,7 +408,13 @@ func validateConventionalCommitSubject(rule *JiraReference, firstLine string, va
 func validateNonConventionalCommitSubject(rule *JiraReference, subject string, validJiraProjects []string) {
 	matches := jiraKeyRegex.FindAllString(subject, -1)
 	if len(matches) == 0 {
-		rule.addErrorf("no Jira issue key found in the commit subject")
+		rule.addError(
+			"missing_jira_key_subject",
+			"no Jira issue key found in the commit subject",
+			map[string]string{
+				"subject": subject,
+			},
+		)
 
 		return
 	}
@@ -348,7 +431,11 @@ func validateNonConventionalCommitSubject(rule *JiraReference, subject string, v
 func validateBodyReferences(rule *JiraReference, body string, validJiraProjects []string) {
 	body = strings.TrimSpace(body)
 	if body == "" {
-		rule.addErrorf("no Jira issue key found in the commit body")
+		rule.addError(
+			"missing_jira_key_body",
+			"no Jira issue key found in the commit body",
+			nil,
+		)
 
 		return
 	}
@@ -375,7 +462,13 @@ func validateBodyReferences(rule *JiraReference, body string, validJiraProjects 
 			refsLineNum = ind
 		} else if strings.HasPrefix(line, "Refs:") {
 			// Line starts with Refs: but doesn't match the expected format
-			rule.addErrorf("invalid Refs format in commit body, should be 'Refs: PROJ-123' or 'Refs: PROJ-123, PROJ-456'")
+			rule.addError(
+				"invalid_refs_format",
+				"invalid Refs format in commit body, should be 'Refs: PROJ-123' or 'Refs: PROJ-123, PROJ-456'",
+				map[string]string{
+					"line": line,
+				},
+			)
 
 			return
 		}
@@ -383,14 +476,25 @@ func validateBodyReferences(rule *JiraReference, body string, validJiraProjects 
 
 	// Validate that Refs: exists
 	if !foundRefs {
-		rule.addErrorf("no Jira issue key found in the commit body with Refs: prefix")
+		rule.addError(
+			"missing_jira_key_body",
+			"no Jira issue key found in the commit body with Refs: prefix",
+			nil,
+		)
 
 		return
 	}
 
 	// Validate that Refs: appears before any Signed-off-by lines
 	if signOffFound && refsLineNum > signOffLineNum {
-		rule.addErrorf("Refs: line must appear before any Signed-off-by lines")
+		rule.addError(
+			"refs_after_signoff",
+			"Refs: line must appear before any Signed-off-by lines",
+			map[string]string{
+				"refs_line":    strconv.Itoa(refsLineNum),
+				"signoff_line": strconv.Itoa(signOffLineNum),
+			},
+		)
 
 		return
 	}
@@ -428,7 +532,13 @@ func validateBodyReferences(rule *JiraReference, body string, validJiraProjects 
 func validateJiraProject(rule *JiraReference, jiraKey string, validJiraProjects []string) bool {
 	// First, verify the key has the correct format
 	if !jiraKeyRegex.MatchString(jiraKey) {
-		rule.addErrorf("invalid Jira issue key format: %s (should be PROJECT-123)", jiraKey)
+		rule.addError(
+			"invalid_key_format",
+			"invalid Jira issue key format: "+jiraKey+" (should be PROJECT-123)",
+			map[string]string{
+				"key": jiraKey,
+			},
+		)
 
 		return false
 	}
@@ -441,7 +551,14 @@ func validateJiraProject(rule *JiraReference, jiraKey string, validJiraProjects 
 	// When project list is provided, validate against it
 	projectKey := strings.Split(jiraKey, "-")[0]
 	if !containsString(validJiraProjects, projectKey) {
-		rule.addErrorf("Jira project %s is not a valid project", projectKey)
+		rule.addError(
+			"invalid_project",
+			"Jira project "+projectKey+" is not a valid project",
+			map[string]string{
+				"project":        projectKey,
+				"valid_projects": strings.Join(validJiraProjects, ","),
+			},
+		)
 
 		return false
 	}

@@ -5,9 +5,10 @@
 package rule
 
 import (
-	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/itiquette/gommitlint/internal/model"
 )
 
 // SignOffRegex is the regular expression used to validate the Developer Certificate of Origin signature.
@@ -57,7 +58,7 @@ var SignOffRegex = regexp.MustCompile(`^Signed-off-by: ([^<]+) <([^<>@]+@[^<>]+)
 //     Signed by: John Smith (john@example.com)
 //     ```
 type SignOff struct {
-	errors []error
+	errors []*model.ValidationError
 }
 
 // Name returns the name of the rule.
@@ -75,13 +76,20 @@ func (rule SignOff) Result() string {
 }
 
 // Errors returns any violations of the rule.
-func (rule SignOff) Errors() []error {
+func (rule SignOff) Errors() []*model.ValidationError {
 	return rule.errors
 }
 
-// addErrorf adds an error to the rule's errors slice.
-func (rule *SignOff) addErrorf(format string, args ...interface{}) {
-	rule.errors = append(rule.errors, fmt.Errorf(format, args...))
+// addError adds a structured validation error.
+func (rule *SignOff) addError(code, message string, context map[string]string) {
+	err := model.NewValidationError("SignOff", code, message)
+
+	// Add any context values
+	for key, value := range context {
+		_ = err.WithContext(key, value)
+	}
+
+	rule.errors = append(rule.errors, err)
 }
 
 // Help returns a description of how to fix the rule violation.
@@ -91,6 +99,54 @@ func (rule SignOff) Help() string {
 		return noErrMsg
 	}
 
+	// Check error code for more targeted help
+	if len(rule.errors) > 0 {
+		switch rule.errors[0].Code {
+		case "empty_message":
+			return `Add a Developer Certificate of Origin sign-off to your commit message.
+Your commit message is currently empty. First, provide a meaningful commit message,
+then add a sign-off line at the end.
+
+You can add a sign-off automatically using 'git commit -s' or manually add:
+Signed-off-by: Your Name <your.email@example.com>
+
+The Developer Certificate of Origin is a statement that you have the right to 
+submit this contribution under the project's license.`
+
+		case "missing_signoff":
+			return `Add a Developer Certificate of Origin sign-off to your commit message.
+You can do this by:
+1. Using 'git commit -s' which will automatically add the sign-off
+2. Manually adding a line at the end of your commit message:
+   Signed-off-by: Your Name <your.email@example.com>
+
+The sign-off certifies you have the right to submit your contribution 
+under the project's license and follows the Developer Certificate of Origin.
+
+Example of a complete commit message with sign-off:
+feat: introduce rate limiting for API endpoints
+
+Adds rate limiting to prevent API abuse:
+- Implements token bucket algorithm
+- Configurable limits per endpoint
+
+Signed-off-by: Jane Doe <jane.doe@example.org>`
+
+		case "invalid_format":
+			return `Add a correctly formatted Developer Certificate of Origin sign-off to your commit message.
+The sign-off line must follow this exact format:
+Signed-off-by: Your Name <your.email@example.com>
+
+Common issues include:
+- Misspelling "Signed-off-by"
+- Using parentheses instead of angle brackets for email
+- Using incorrect email format
+
+You can add a correct sign-off automatically using 'git commit -s'`
+		}
+	}
+
+	// Default help text
 	return `Add a Developer Certificate of Origin sign-off to your commit message.
 You can do this by:
 1. Using 'git commit -s' which will automatically add the sign-off
@@ -135,21 +191,54 @@ func ValidateSignOff(body string) *SignOff {
 
 	// Handle empty body
 	if strings.TrimSpace(body) == "" {
-		rule.addErrorf("commit message body is empty; no sign-off found")
+		rule.addError(
+			"empty_message",
+			"commit message body is empty; no sign-off found",
+			nil,
+		)
 
 		return rule
 	}
 
 	// Check each line for a sign-off
-	for _, line := range strings.Split(body, "\n") {
+	allLines := strings.Split(body, "\n")
+	for _, line := range allLines {
 		trimmedLine := strings.TrimSpace(line)
 		if SignOffRegex.MatchString(trimmedLine) {
 			return rule // Found a valid sign-off
 		}
 	}
 
-	// No valid sign-off found
-	rule.addErrorf("commit must be signed-off using 'Signed-off-by: Name <email@example.com>' format")
+	// Check if there are any lines that attempt to be a sign-off but are formatted incorrectly
+	hasAttemptedSignOff := false
+
+	for _, line := range allLines {
+		trimmedLine := strings.TrimSpace(line)
+		if strings.Contains(trimmedLine, "Signed") && strings.Contains(trimmedLine, "by:") {
+			hasAttemptedSignOff = true
+
+			break
+		}
+	}
+
+	// No valid sign-off found - distinguish between format issues and completely missing signoff
+	if hasAttemptedSignOff {
+		rule.addError(
+			"invalid_format",
+			"commit must be signed-off using 'Signed-off-by: Name <email@example.com>' format",
+			map[string]string{
+				"message": body,
+			},
+		)
+	} else {
+		rule.addError(
+			"missing_signoff",
+			"commit must be signed-off using 'Signed-off-by: Name <email@example.com>' format",
+			map[string]string{
+				"message": body,
+			},
+		)
+	}
 
 	return rule
 }

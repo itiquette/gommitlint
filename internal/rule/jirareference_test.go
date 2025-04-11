@@ -30,6 +30,7 @@ func TestValidateJiraReference(t *testing.T) {
 		body                 string
 		isConventionalCommit bool
 		expectedErrors       bool
+		errorCode            string
 		errorContains        string
 	}{
 		// Conventional Commit Positive Cases
@@ -70,6 +71,7 @@ func TestValidateJiraReference(t *testing.T) {
 			subject:              "feat(auth): add user authentication",
 			isConventionalCommit: true,
 			expectedErrors:       true,
+			errorCode:            "missing_jira_key_subject",
 			errorContains:        "no Jira issue key found",
 		},
 		{
@@ -77,6 +79,7 @@ func TestValidateJiraReference(t *testing.T) {
 			subject:              "feat(auth): [PROJ-123] add user authentication",
 			isConventionalCommit: true,
 			expectedErrors:       true,
+			errorCode:            "key_not_at_end",
 			errorContains:        "must be at the end of the first line",
 		},
 		{
@@ -84,6 +87,7 @@ func TestValidateJiraReference(t *testing.T) {
 			subject:              "feat(auth): add user authentication [UNKNOWN-123]",
 			isConventionalCommit: true,
 			expectedErrors:       true,
+			errorCode:            "invalid_project",
 			errorContains:        "not a valid project",
 		},
 		{
@@ -91,6 +95,7 @@ func TestValidateJiraReference(t *testing.T) {
 			subject:              "",
 			isConventionalCommit: true,
 			expectedErrors:       true,
+			errorCode:            "empty_subject",
 			errorContains:        "commit subject is empty",
 		},
 		{
@@ -98,6 +103,7 @@ func TestValidateJiraReference(t *testing.T) {
 			subject:              "feat(auth): add user authentication [proj-123]", // lowercase project
 			isConventionalCommit: true,
 			expectedErrors:       true,
+			errorCode:            "missing_jira_key_subject",
 			errorContains:        "no Jira issue key found",
 		},
 
@@ -139,6 +145,7 @@ func TestValidateJiraReference(t *testing.T) {
 			subject:              "Implement user authentication",
 			isConventionalCommit: false,
 			expectedErrors:       true,
+			errorCode:            "missing_jira_key_subject",
 			errorContains:        "no Jira issue key found",
 		},
 		{
@@ -146,6 +153,7 @@ func TestValidateJiraReference(t *testing.T) {
 			subject:              "Implement UNKNOWN-123 feature",
 			isConventionalCommit: false,
 			expectedErrors:       true,
+			errorCode:            "invalid_project",
 			errorContains:        "not a valid project",
 		},
 	}
@@ -159,6 +167,12 @@ func TestValidateJiraReference(t *testing.T) {
 			// Check for expected errors
 			if tabletest.expectedErrors {
 				require.NotEmpty(t, result.Errors(), "Expected errors but found none")
+
+				// Check error code if specified
+				if tabletest.errorCode != "" {
+					assert.Equal(t, tabletest.errorCode, result.Errors()[0].Code,
+						"Error code should match expected")
+				}
 
 				// Check error message contains expected substring
 				if tabletest.errorContains != "" {
@@ -174,6 +188,10 @@ func TestValidateJiraReference(t *testing.T) {
 
 					require.True(t, found, "Expected error containing %q", tabletest.errorContains)
 				}
+
+				// Verify rule name is set in ValidationError
+				assert.Equal(t, "JiraReference", result.Errors()[0].Rule,
+					"Rule name should be set in ValidationError")
 
 				// Verify Help() method provides guidance
 				helpText := result.Help()
@@ -213,6 +231,7 @@ func TestValidateJiraReference(t *testing.T) {
 		body                 string
 		isConventionalCommit bool
 		expectedErrors       bool
+		errorCode            string
 		errorContains        string
 	}{
 		// Body validation positive cases
@@ -241,6 +260,7 @@ func TestValidateJiraReference(t *testing.T) {
 			subject:        "Fix bug",
 			body:           "This fixes a critical bug.",
 			expectedErrors: true,
+			errorCode:      "missing_jira_key_body",
 			errorContains:  "no Jira issue key found in the commit body",
 		},
 		{
@@ -248,6 +268,7 @@ func TestValidateJiraReference(t *testing.T) {
 			subject:        "Update API",
 			body:           "API changes.\n\nRefs: invalid-key",
 			expectedErrors: true,
+			errorCode:      "invalid_refs_format",
 			errorContains:  "invalid Refs format",
 		},
 		{
@@ -255,6 +276,7 @@ func TestValidateJiraReference(t *testing.T) {
 			subject:        "Refactor code",
 			body:           "Major refactoring.\n\nSigned-off-by: Developer <dev@example.com>\nRefs: PROJ-123",
 			expectedErrors: true,
+			errorCode:      "refs_after_signoff",
 			errorContains:  "Refs: line must appear before any Signed-off-by lines",
 		},
 		{
@@ -262,6 +284,7 @@ func TestValidateJiraReference(t *testing.T) {
 			subject:        "Update API",
 			body:           "API changes.\n\nRefs: PROJ-123: Added feature",
 			expectedErrors: true,
+			errorCode:      "invalid_refs_format",
 			errorContains:  "invalid Refs format",
 		},
 		{
@@ -269,6 +292,7 @@ func TestValidateJiraReference(t *testing.T) {
 			subject:        "Fix bug",
 			body:           "",
 			expectedErrors: true,
+			errorCode:      "missing_jira_key_body",
 			errorContains:  "no Jira issue key found in the commit body",
 		},
 	}
@@ -282,6 +306,12 @@ func TestValidateJiraReference(t *testing.T) {
 			// Check for expected errors
 			if tabletest.expectedErrors {
 				require.NotEmpty(t, result.Errors(), "Expected errors but found none")
+
+				// Check error code if specified
+				if tabletest.errorCode != "" {
+					assert.Equal(t, tabletest.errorCode, result.Errors()[0].Code,
+						"Error code should match expected")
+				}
 
 				// Check error message contains expected substring
 				if tabletest.errorContains != "" {
@@ -298,9 +328,21 @@ func TestValidateJiraReference(t *testing.T) {
 					require.True(t, found, "Expected error containing %q but got: %v", tabletest.errorContains, result.Errors())
 				}
 
+				// Verify rule name is set in ValidationError
+				assert.Equal(t, "JiraReference", result.Errors()[0].Rule,
+					"Rule name should be set in ValidationError")
+
 				// Verify Help() method provides guidance for body errors
 				helpText := result.Help()
 				assert.NotEmpty(t, helpText, "Help text should not be empty")
+
+				// Verify context information is present for specific error types
+				if tabletest.errorCode == "refs_after_signoff" {
+					assert.Contains(t, result.Errors()[0].Context, "refs_line",
+						"Context should contain refs_line information")
+					assert.Contains(t, result.Errors()[0].Context, "signoff_line",
+						"Context should contain signoff_line information")
+				}
 			} else {
 				require.Empty(t, result.Errors(), "Unexpected errors found: %v", result.Errors())
 				require.Equal(t, "Jira issues are valid", result.Result(), "Expected default valid message")
@@ -328,5 +370,26 @@ func TestValidateJiraReference(t *testing.T) {
 		// Invalid format should fail
 		result = rule.ValidateJiraReference("feat: add feature abc-123", "", emptyProjectConfig, true)
 		assert.NotEmpty(t, result.Errors(), "Should reject invalid format")
+		assert.Equal(t, "missing_jira_key_subject", result.Errors()[0].Code,
+			"Error code should be missing_jira_key_subject")
+	})
+
+	// Test context data in errors
+	t.Run("Context data in errors", func(t *testing.T) {
+		// Test invalid project error context
+		result := rule.ValidateJiraReference("feat: add feature INVALID-123", "", jiraConfig, true)
+		require.NotEmpty(t, result.Errors(), "Should have errors")
+		assert.Equal(t, "invalid_project", result.Errors()[0].Code, "Error code should be invalid_project")
+		assert.Equal(t, "INVALID", result.Errors()[0].Context["project"],
+			"Context should contain the invalid project")
+		assert.Contains(t, result.Errors()[0].Context["valid_projects"], validProjects[0],
+			"Context should list valid projects")
+
+		// Test key not at end error context
+		result = rule.ValidateJiraReference("feat: PROJ-123 add feature", "", jiraConfig, true)
+		require.NotEmpty(t, result.Errors(), "Should have errors")
+		assert.Equal(t, "key_not_at_end", result.Errors()[0].Code, "Error code should be key_not_at_end")
+		assert.Equal(t, "PROJ-123", result.Errors()[0].Context["key"],
+			"Context should contain the key that's not at the end")
 	})
 }

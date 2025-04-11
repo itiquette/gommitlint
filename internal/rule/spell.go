@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/golangci/misspell"
+	"github.com/itiquette/gommitlint/internal/model"
 )
 
 // Spell enforces correct spelling in commit messages by identifying common misspellings.
@@ -35,7 +36,7 @@ import (
 //     "Fix defenite issue" would fail (should be "definite")
 //     "Accidentally deleted file" would fail (should be "accidentally")
 type Spell struct {
-	errors []error
+	errors []*model.ValidationError
 }
 
 // Name returns the name of the rule.
@@ -55,8 +56,20 @@ func (rule Spell) Result() string {
 }
 
 // Errors returns any violations of the rule.
-func (rule Spell) Errors() []error {
+func (rule Spell) Errors() []*model.ValidationError {
 	return rule.errors
+}
+
+// addError adds a structured validation error.
+func (rule *Spell) addError(code, message string, context map[string]string) {
+	err := model.NewValidationError("Spell", code, message)
+
+	// Add any context values
+	for key, value := range context {
+		_ = err.WithContext(key, value)
+	}
+
+	rule.errors = append(rule.errors, err)
 }
 
 // Help returns a description of how to fix the rule violation.
@@ -66,7 +79,8 @@ func (rule Spell) Help() string {
 		return noErrMsg
 	}
 
-	if len(rule.errors) == 1 && strings.Contains(rule.errors[0].Error(), "unknown locale") {
+	// Check for specific error codes
+	if len(rule.errors) == 1 && rule.errors[0].Code == "invalid_locale" {
 		return "Use a supported locale for spell checking: 'US' (default), 'UK', or 'GB'."
 	}
 
@@ -81,6 +95,13 @@ func (rule Spell) Help() string {
 
 		corrections.WriteString("- ")
 		corrections.WriteString(err.Error())
+
+		// Add suggestion if available in context
+		if original, ok := err.Context["original"]; ok {
+			if corrected, ok := err.Context["corrected"]; ok {
+				corrections.WriteString(fmt.Sprintf(" (Replace '%s' with '%s')", original, corrected))
+			}
+		}
 	}
 
 	corrections.WriteString("\n\nIf any of these are intentional or domain-specific terms, consider rewording.")
@@ -126,7 +147,14 @@ func ValidateSpelling(message string, locale string) Spell {
 	case "UK", "GB":
 		replacer.AddRuleList(misspell.DictBritish)
 	default:
-		rule.addErrorf("unknown locale: %q", locale)
+		rule.addError(
+			"invalid_locale",
+			fmt.Sprintf("unknown locale: %q", locale),
+			map[string]string{
+				"locale":            locale,
+				"supported_locales": "US,UK,GB",
+			},
+		)
 
 		return rule
 	}
@@ -138,14 +166,16 @@ func ValidateSpelling(message string, locale string) Spell {
 	corrected, diffs := replacer.Replace(message)
 	if corrected != message {
 		for _, diff := range diffs {
-			rule.addErrorf("`%s` is a misspelling of `%s`", diff.Original, diff.Corrected)
+			rule.addError(
+				"misspelling",
+				fmt.Sprintf("`%s` is a misspelling of `%s`", diff.Original, diff.Corrected),
+				map[string]string{
+					"original":  diff.Original,
+					"corrected": diff.Corrected,
+				},
+			)
 		}
 	}
 
 	return rule
-}
-
-// addErrorf adds an error to the rule's errors slice.
-func (rule *Spell) addErrorf(format string, args ...interface{}) {
-	rule.errors = append(rule.errors, fmt.Errorf(format, args...))
 }

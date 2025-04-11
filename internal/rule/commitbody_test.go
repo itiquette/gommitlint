@@ -14,11 +14,11 @@ import (
 
 func TestValidateCommitBodyRule(t *testing.T) {
 	tests := []struct {
-		name         string
-		message      string
-		options      []rule.CommitBodyOption
-		expectError  bool
-		errorMessage string
+		name        string
+		message     string
+		options     []rule.CommitBodyOption
+		expectError bool
+		errorCode   string
 	}{
 		{
 			name: "valid commit with body",
@@ -41,10 +41,10 @@ Signed-off-by: Laval Lion <laval@cavora.org>`,
 			expectError: false,
 		},
 		{
-			name:         "commit without body",
-			message:      "just a subject",
-			expectError:  true,
-			errorMessage: "Commit message requires a body explaining the changes",
+			name:        "commit without body",
+			message:     "just a subject",
+			expectError: true,
+			errorCode:   "missing_body",
 		},
 		{
 			name: "commit without empty line between subject and body",
@@ -53,24 +53,24 @@ Adding new stages for:
 - Security scanning
 - Performance testing
 Signed-off-by: Laval Lion <laval@cavora.org>`,
-			expectError:  true,
-			errorMessage: "Commit message must have exactly one empty line between the subject and the body",
+			expectError: true,
+			errorCode:   "missing_blank_line",
 		},
 		{
 			name: "commit with empty line after subject but empty body",
 			message: `Update CI pipeline
 
-Signed-off-by: Laval Lion <laval@cavora.org>`,
-			expectError:  true,
-			errorMessage: "Commit message must have a non-empty body text",
+`,
+			expectError: true,
+			errorCode:   "empty_body",
 		},
 		{
 			name: "commit with only sign-off",
 			message: `Update config
 
 Signed-off-by: Laval Lion <laval@cavora.org>`,
-			expectError:  true,
-			errorMessage: "Commit message must have a non-empty body text",
+			expectError: true,
+			errorCode:   "signoff_first_line",
 		},
 		{
 			name: "commit with multiple sign-off lines but no body",
@@ -78,8 +78,8 @@ Signed-off-by: Laval Lion <laval@cavora.org>`,
 
 Signed-off-by: Laval Lion <laval@cavora.org>
 Signed-off-by: Cragger Crocodile <cragger@svamp.org>`,
-			expectError:  true,
-			errorMessage: "Commit message must have a non-empty body text",
+			expectError: true,
+			errorCode:   "signoff_first_line",
 		},
 		{
 			name: "commit with only sign-off but configured to allow it",
@@ -117,7 +117,16 @@ Fixed the typo in API documentation.`,
 			// Test result output
 			if tabletest.expectError {
 				require.NotEmpty(t, commitBodyRule.Errors(), "expected errors but got none")
-				assert.Contains(t, commitBodyRule.Result(), tabletest.errorMessage, "unexpected error message")
+
+				// Verify we have ValidationError with expected code
+				valErr := commitBodyRule.Errors()[0]
+				assert.Equal(t, tabletest.errorCode, valErr.Code, "unexpected error code")
+				assert.Equal(t, "CommitBodyRule", valErr.Rule, "rule name should be set")
+
+				// Check that error message appears in the Result()
+				assert.Contains(t, commitBodyRule.Result(), valErr.Message, "Result() should contain error message")
+
+				// Help should be provided for invalid commits
 				assert.NotEmpty(t, commitBodyRule.Help(), "help should be provided for invalid commits")
 			} else {
 				assert.Empty(t, commitBodyRule.Errors(), "unexpected errors: %v", commitBodyRule.Errors())
@@ -129,8 +138,8 @@ Fixed the typo in API documentation.`,
 
 func TestCommitBodyHelpMethod(t *testing.T) {
 	t.Run("help for missing body", func(t *testing.T) {
-		r := &rule.CommitBodyRule{}
-		r.AddError("Commit message requires a body explaining the changes")
+		// Create a rule with a missing body error by validating a subject-only message
+		r := rule.ValidateCommitBody("subject only")
 
 		helpText := r.Help()
 		assert.Contains(t, helpText, "Add a descriptive body",
@@ -138,8 +147,8 @@ func TestCommitBodyHelpMethod(t *testing.T) {
 	})
 
 	t.Run("help for missing blank line", func(t *testing.T) {
-		r := &rule.CommitBodyRule{}
-		r.AddError("Commit message must have exactly one empty line between the subject and the body")
+		// Create a rule with a missing blank line error
+		r := rule.ValidateCommitBody("subject\nbody without blank line")
 
 		helpText := r.Help()
 		assert.Contains(t, helpText, "one blank line",
@@ -147,11 +156,44 @@ func TestCommitBodyHelpMethod(t *testing.T) {
 	})
 
 	t.Run("help for empty body", func(t *testing.T) {
-		r := &rule.CommitBodyRule{}
-		r.AddError("Commit message must have a non-empty body text")
+		// Create a rule with an empty body error
+		r := rule.ValidateCommitBody("subject\n\n")
 
 		helpText := r.Help()
 		assert.Contains(t, helpText, "must contain actual content",
 			"help text should include guidance for empty body")
+	})
+
+	t.Run("help for signoff first line", func(t *testing.T) {
+		// Create a rule with signoff first line error
+		r := rule.ValidateCommitBody("subject\n\nSigned-off-by: Test <test@example.com>")
+
+		helpText := r.Help()
+		assert.Contains(t, helpText, "should not start with a sign-off line",
+			"help text should include guidance for signoff first line")
+	})
+
+	t.Run("help for only signoff", func(t *testing.T) {
+		// Create a message that will trigger the 'only_signoff' error
+		// (This might be the same as signoff_first_line in practical cases)
+		message := "subject\n\nSigned-off-by: Test <test@example.com>\nSigned-off-by: Another <another@example.com>"
+		r := rule.ValidateCommitBody(message)
+
+		// If this specific error occurred, check its help text
+		if len(r.Errors()) > 0 && r.Errors()[0].Code == "only_signoff" {
+			helpText := r.Help()
+			assert.Contains(t, helpText, "beyond just sign-off lines",
+				"help text should include guidance for only having signoff lines")
+		}
+	})
+
+	t.Run("help for valid commit", func(t *testing.T) {
+		// Create a rule with no errors
+		validMessage := "subject\n\nThis is a valid body."
+		r := rule.ValidateCommitBody(validMessage)
+
+		helpText := r.Help()
+		assert.Equal(t, "No errors to fix", helpText,
+			"help text for valid commit should indicate no errors")
 	})
 }

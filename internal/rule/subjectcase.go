@@ -5,10 +5,12 @@
 package rule
 
 import (
-	"fmt"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/itiquette/gommitlint/internal/model"
 )
 
 // SubjectCase enforces the case of the first word in the subject.
@@ -31,7 +33,7 @@ import (
 //     "Add new feature" would fail
 type SubjectCase struct {
 	subjectCase string
-	errors      []error
+	errors      []*model.ValidationError
 }
 
 // Name returns the validation rule name.
@@ -49,8 +51,20 @@ func (rule *SubjectCase) Result() string {
 }
 
 // Errors returns any validation errors.
-func (rule SubjectCase) Errors() []error {
+func (rule SubjectCase) Errors() []*model.ValidationError {
 	return rule.errors
+}
+
+// addError adds a structured validation error.
+func (rule *SubjectCase) addError(code, message string, context map[string]string) {
+	err := model.NewValidationError("SubjectCase", code, message)
+
+	// Add any context values
+	for key, value := range context {
+		_ = err.WithContext(key, value)
+	}
+
+	rule.errors = append(rule.errors, err)
 }
 
 // Help returns a description of how to fix the rule violation.
@@ -59,7 +73,37 @@ func (rule SubjectCase) Help() string {
 		return "No errors to fix"
 	}
 
-	errMsg := rule.errors[0].Error()
+	// Check for specific error codes
+	if len(rule.errors) > 0 {
+		switch rule.errors[0].Code {
+		case "empty_subject":
+			return "Provide a non-empty commit message subject with appropriate capitalization."
+
+		case "invalid_utf8":
+			return "Ensure your commit message begins with valid UTF-8 text. Remove any invalid characters from the start."
+
+		case "invalid_format":
+			return "Format your commit message according to the Conventional Commits specification: type(scope): subject\n" +
+				"Example: feat(auth): Add login feature"
+
+		case "missing_subject":
+			return "Add a subject after the type(scope): prefix in your conventional commit message.\n" +
+				"Example: fix(api): Resolve timeout issue"
+
+		case "wrong_case_upper":
+			return "Capitalize the first letter of your commit subject.\n" +
+				"Example for conventional commit: feat(auth): Add feature (not 'add feature')\n" +
+				"Example for standard commit: Add feature (not 'add feature')"
+
+		case "wrong_case_lower":
+			return "Use lowercase for the first letter of your commit subject.\n" +
+				"Example for conventional commit: feat(auth): add feature (not 'Add feature')\n" +
+				"Example for standard commit: add feature (not 'Add feature')"
+		}
+	}
+
+	// Fallback to checking the error message for backward compatibility
+	errMsg := rule.errors[0].Message
 
 	if strings.Contains(errMsg, "does not start with valid UTF-8") {
 		return "Ensure your commit message begins with valid UTF-8 text. Remove any invalid characters from the start."
@@ -122,7 +166,11 @@ func ValidateSubjectCase(subject, caseChoice string, isConventional bool) *Subje
 	rule := &SubjectCase{subjectCase: caseChoice}
 
 	if subject == "" {
-		rule.addErrorf("subject is empty")
+		rule.addError(
+			"empty_subject",
+			"subject is empty",
+			nil,
+		)
 
 		return rule
 	}
@@ -130,7 +178,20 @@ func ValidateSubjectCase(subject, caseChoice string, isConventional bool) *Subje
 	// Extract first word
 	firstWord, err := extractFirstWord(isConventional, subject)
 	if err != nil {
-		rule.addErrorf("%s", err.Error())
+		// Determine the specific error type
+		errorCode := "invalid_format"
+		if strings.Contains(err.Error(), "missing subject after type") {
+			errorCode = "missing_subject"
+		}
+
+		rule.addError(
+			errorCode,
+			err.Error(),
+			map[string]string{
+				"subject":         subject,
+				"is_conventional": strconv.FormatBool(isConventional),
+			},
+		)
 
 		return rule
 	}
@@ -138,7 +199,13 @@ func ValidateSubjectCase(subject, caseChoice string, isConventional bool) *Subje
 	// Decode first rune
 	first, size := utf8.DecodeRuneInString(firstWord)
 	if first == utf8.RuneError && size == 0 {
-		rule.addErrorf("subject does not start with valid UTF-8 text")
+		rule.addError(
+			"invalid_utf8",
+			"subject does not start with valid UTF-8 text",
+			map[string]string{
+				"subject": subject,
+			},
+		)
 
 		return rule
 	}
@@ -146,25 +213,34 @@ func ValidateSubjectCase(subject, caseChoice string, isConventional bool) *Subje
 	// Validate case
 	var valid bool
 
+	var errorCode string
+
 	switch caseChoice {
 	case "upper":
 		valid = unicode.IsUpper(first)
+		errorCode = "wrong_case_upper"
 	case "lower":
 		valid = unicode.IsLower(first)
+		errorCode = "wrong_case_lower"
 	case "ignore":
 		valid = true
 	default:
 		valid = unicode.IsLower(first) // Default to lowercase if unspecified
+		errorCode = "wrong_case_lower"
 	}
 
 	if !valid {
-		rule.addErrorf("commit subject case is not %s", caseChoice)
+		rule.addError(
+			errorCode,
+			"commit subject case is not "+caseChoice,
+			map[string]string{
+				"expected_case": caseChoice,
+				"actual_case":   map[bool]string{true: "upper", false: "lower"}[unicode.IsUpper(first)],
+				"first_word":    firstWord,
+				"subject":       subject,
+			},
+		)
 	}
 
 	return rule
-}
-
-// addErrorf adds an error to the rule's errors slice.
-func (rule *SubjectCase) addErrorf(format string, args ...interface{}) {
-	rule.errors = append(rule.errors, fmt.Errorf(format, args...))
 }

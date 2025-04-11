@@ -6,8 +6,11 @@ package rule
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/itiquette/gommitlint/internal/model"
 )
 
 // DefaultMaxCommitSubjectLength is the default maximum number of characters
@@ -38,7 +41,7 @@ const DefaultMaxCommitSubjectLength = 100
 // The rule properly handles Unicode characters by counting code points rather than bytes.
 type SubjectLength struct {
 	subjectLength int
-	errors        []error
+	errors        []*model.ValidationError
 }
 
 // Name returns the rule name.
@@ -55,13 +58,20 @@ func (rule SubjectLength) Result() string {
 	return fmt.Sprintf("Subject is %d characters", rule.subjectLength)
 }
 
-// addErrorf adds an error to the rule's errors slice.
-func (rule *SubjectLength) addErrorf(format string, args ...interface{}) {
-	rule.errors = append(rule.errors, fmt.Errorf(format, args...))
+// addError adds a structured validation error.
+func (rule *SubjectLength) addError(code, message string, context map[string]string) {
+	err := model.NewValidationError("SubjectLength", code, message)
+
+	// Add any context values
+	for key, value := range context {
+		_ = err.WithContext(key, value)
+	}
+
+	rule.errors = append(rule.errors, err)
 }
 
 // Errors returns validation errors.
-func (rule SubjectLength) Errors() []error {
+func (rule SubjectLength) Errors() []*model.ValidationError {
 	return rule.errors
 }
 
@@ -72,7 +82,22 @@ func (rule SubjectLength) Help() string {
 		return noErrMsg
 	}
 
-	errMsg := rule.errors[0].Error()
+	// Check for specific error codes
+	if len(rule.errors) > 0 && rule.errors[0].Code == "subject_too_long" {
+		var maxLength string
+		if maxVal, ok := rule.errors[0].Context["max_length"]; ok {
+			maxLength = maxVal
+		} else {
+			maxLength = strconv.Itoa(DefaultMaxCommitSubjectLength)
+		}
+
+		return fmt.Sprintf("Shorten your commit message subject line to be more concise. "+
+			"A good subject should be brief but descriptive, ideally under 50 characters "+
+			"and no more than %s characters. Consider using the commit body for additional details.", maxLength)
+	}
+
+	// Fallback to message checking for backward compatibility
+	errMsg := rule.errors[0].Message
 	if strings.Contains(errMsg, "subject too long") {
 		return "Shorten your commit message subject line to be more concise. " +
 			"A good subject should be brief but descriptive, ideally under 50 characters " +
@@ -103,10 +128,16 @@ func ValidateSubjectLength(subject string, maxLength int) *SubjectLength {
 
 	// Validate length
 	if subjectLength > maxLength {
-		rule.addErrorf(
-			"subject too long: %d characters (maximum allowed: %d)",
-			subjectLength,
-			maxLength,
+		rule.addError(
+			"subject_too_long",
+			fmt.Sprintf("subject too long: %d characters (maximum allowed: %d)",
+				subjectLength,
+				maxLength),
+			map[string]string{
+				"actual_length": strconv.Itoa(subjectLength),
+				"max_length":    strconv.Itoa(maxLength),
+				"subject":       subject,
+			},
 		)
 	}
 

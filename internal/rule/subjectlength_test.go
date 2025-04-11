@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/itiquette/gommitlint/internal/rule"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -22,6 +23,7 @@ func TestValidateSubjectLength(t *testing.T) {
 		expectedValid  bool
 		expectedLength int
 		expectedError  string
+		expectedCode   string
 	}{
 		{
 			name:           "Within default length",
@@ -45,6 +47,7 @@ func TestValidateSubjectLength(t *testing.T) {
 			maxLength:      0,
 			expectedValid:  false,
 			expectedLength: rule.DefaultMaxCommitSubjectLength + 1,
+			expectedCode:   "subject_too_long",
 			expectedError:  "subject too long: " + strconv.Itoa(rule.DefaultMaxCommitSubjectLength+1) + " characters (maximum allowed: " + strconv.Itoa(rule.DefaultMaxCommitSubjectLength) + ")",
 		},
 		{
@@ -53,6 +56,7 @@ func TestValidateSubjectLength(t *testing.T) {
 			maxLength:      20,
 			expectedValid:  false,
 			expectedLength: 46,
+			expectedCode:   "subject_too_long",
 			expectedError:  "subject too long: 46 characters (maximum allowed: 20)",
 		},
 		{
@@ -69,6 +73,7 @@ func TestValidateSubjectLength(t *testing.T) {
 			maxLength:      89,
 			expectedValid:  false,
 			expectedLength: 94,
+			expectedCode:   "subject_too_long",
 			expectedError:  "subject too long: 94 characters (maximum allowed: 89)",
 		},
 		{
@@ -86,6 +91,7 @@ func TestValidateSubjectLength(t *testing.T) {
 			expectedValid: false,
 			// Each code point counts as one rune in Go, including fancy Unicode and emoji components
 			expectedLength: 52,
+			expectedCode:   "subject_too_long",
 			expectedError:  "subject too long: 52 characters (maximum allowed: 50)",
 		},
 		{
@@ -102,6 +108,7 @@ func TestValidateSubjectLength(t *testing.T) {
 			maxLength:      0,
 			expectedValid:  false,
 			expectedLength: 1000,
+			expectedCode:   "subject_too_long",
 			expectedError:  fmt.Sprintf("subject too long: %d characters (maximum allowed: %d)", 1000, rule.DefaultMaxCommitSubjectLength),
 		},
 	}
@@ -127,6 +134,34 @@ func TestValidateSubjectLength(t *testing.T) {
 				require.NotEmpty(t, rule.Errors(), "Expected errors")
 				require.Equal(t, tabletest.expectedError, rule.Result(),
 					"Error message should match expected")
+
+				// Verify error code if specified
+				if tabletest.expectedCode != "" {
+					assert.Equal(t, tabletest.expectedCode, rule.Errors()[0].Code,
+						"Error code should match expected")
+				}
+
+				// Verify rule name is set in ValidationError
+				assert.Equal(t, "SubjectLength", rule.Errors()[0].Rule,
+					"Rule name should be set in ValidationError")
+
+				// Verify context information is present
+				assert.Contains(t, rule.Errors()[0].Context, "actual_length",
+					"Context should contain actual length")
+				assert.Contains(t, rule.Errors()[0].Context, "max_length",
+					"Context should contain maximum length")
+
+				// Check if context values are correct
+				assert.Equal(t, strconv.Itoa(tabletest.expectedLength), rule.Errors()[0].Context["actual_length"],
+					"Actual length in context should match expected length")
+
+				expectedMaxLength := tabletest.maxLength
+				if expectedMaxLength == 0 {
+					expectedMaxLength = 100
+				}
+
+				assert.Equal(t, strconv.Itoa(expectedMaxLength), rule.Errors()[0].Context["max_length"],
+					"Max length in context should match expected max length")
 			}
 
 			// Check name method
@@ -138,7 +173,23 @@ func TestValidateSubjectLength(t *testing.T) {
 				helpText := rule.Help()
 				require.NotEmpty(t, helpText, "Help text should not be empty for errors")
 				require.Contains(t, helpText, "Shorten your commit message", "Help should provide guidance on fixing long subjects")
+
+				// Check if help text includes the max length from context
+				if maxLength, ok := rule.Errors()[0].Context["max_length"]; ok {
+					assert.Contains(t, helpText, maxLength, "Help text should include the maximum length")
+				}
 			}
 		})
 	}
+
+	// Test for case with explicit context information in the help text
+	t.Run("Help message includes max length", func(t *testing.T) {
+		customMaxLength := 42
+		longSubject := strings.Repeat("a", customMaxLength+1)
+		rule := rule.ValidateSubjectLength(longSubject, customMaxLength)
+
+		helpText := rule.Help()
+		assert.Contains(t, helpText, strconv.Itoa(customMaxLength),
+			"Help text should include the custom maximum length")
+	})
 }

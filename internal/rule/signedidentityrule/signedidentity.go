@@ -5,11 +5,11 @@
 package signedidentityrule
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/itiquette/gommitlint/internal/model"
 )
 
 var MinimumRSABits uint16 = 2048
@@ -46,7 +46,7 @@ const (
 //	    fmt.Printf("Commit verified: %s\n", rule.Result())
 //	}
 type SignedIdentity struct {
-	errors        []error
+	errors        []*model.ValidationError
 	Identity      string // Email or name of the signer
 	SignatureType string // "GPG" or "SSH"
 }
@@ -65,8 +65,20 @@ func (s SignedIdentity) Result() string {
 	return fmt.Sprintf("Signed by %q using %s", s.Identity, s.SignatureType)
 }
 
-// Errors returns any violations detected by the rule.
-func (s SignedIdentity) Errors() []error {
+// addError adds a structured validation error.
+func (s *SignedIdentity) addError(code, message string, context map[string]string) {
+	err := model.NewValidationError("SignedIdentity", code, message)
+
+	// Add any context values
+	for key, value := range context {
+		_ = err.WithContext(key, value)
+	}
+
+	s.errors = append(s.errors, err)
+}
+
+// Errors returns validation errors.
+func (s SignedIdentity) Errors() []*model.ValidationError {
 	return s.errors
 }
 
@@ -76,6 +88,34 @@ func (s SignedIdentity) Help() string {
 		return "No errors to fix"
 	}
 
+	// First check for specific error codes
+	if len(s.errors) > 0 {
+		switch s.errors[0].Code {
+		case "commit_nil":
+			return "A valid commit object is required for signature verification"
+		case "no_key_dir":
+			return "Please provide a valid directory containing trusted public keys for verification"
+		case "invalid_key_dir":
+			return "The specified key directory is invalid or inaccessible. Please provide a valid path to a directory containing trusted public keys"
+		case "no_signature":
+			return "This commit is not signed. Please configure Git to sign your commits with either GPG or SSH"
+		case "invalid_signature_format":
+			return "The signature format is invalid or corrupted. Please ensure you're using a properly configured signing key"
+		case "key_not_trusted":
+			return "The signature was created with a key that is not in the trusted keys directory. Add the public key to your trusted keys directory"
+		case "weak_key":
+			keyType := s.errors[0].Context["key_type"]
+			bits := s.errors[0].Context["key_bits"]
+			required := s.errors[0].Context["required_bits"]
+
+			return fmt.Sprintf("The %s key used for signing (%s bits) does not meet the minimum strength requirement of %s bits. Please generate a stronger key",
+				keyType, bits, required)
+		case "verification_failed":
+			return "Signature verification failed. The signature may be invalid or the commit content may have been altered"
+		}
+	}
+
+	// Default comprehensive help
 	return fmt.Sprintf(
 		"Your commit has signature validation issues.\n"+
 			"Consider one of the following solutions:\n"+
@@ -99,13 +139,21 @@ func VerifySignatureIdentity(commit *object.Commit, signature string, keyDir str
 	rule := SignedIdentity{}
 
 	if commit == nil {
-		rule.errors = append(rule.errors, errors.New("commit cannot be nil"))
+		rule.addError(
+			"commit_nil",
+			"commit cannot be nil",
+			map[string]string{},
+		)
 
 		return rule
 	}
 
 	if keyDir == "" {
-		rule.errors = append(rule.errors, errors.New("no key directory provided"))
+		rule.addError(
+			"no_key_dir",
+			"no key directory provided",
+			map[string]string{},
+		)
 
 		return rule
 	}
@@ -113,13 +161,24 @@ func VerifySignatureIdentity(commit *object.Commit, signature string, keyDir str
 	// Sanitize keyDir to prevent path traversal
 	sanitizedKeyDir, err := sanitizePath(keyDir)
 	if err != nil {
-		rule.errors = append(rule.errors, fmt.Errorf("invalid key directory: %w", err))
+		rule.addError(
+			"invalid_key_dir",
+			fmt.Sprintf("invalid key directory: %s", err),
+			map[string]string{
+				"key_dir": keyDir,
+				"error":   err.Error(),
+			},
+		)
 
 		return rule
 	}
 
 	if signature == "" {
-		rule.errors = append(rule.errors, errors.New("no signature provided"))
+		rule.addError(
+			"no_signature",
+			"no signature provided",
+			map[string]string{},
+		)
 
 		return rule
 	}
@@ -127,7 +186,13 @@ func VerifySignatureIdentity(commit *object.Commit, signature string, keyDir str
 	// Get commit data
 	commitBytes, err := getCommitBytes(commit)
 	if err != nil {
-		rule.errors = append(rule.errors, fmt.Errorf("failed to prepare commit data: %w", err))
+		rule.addError(
+			"commit_data_error",
+			fmt.Sprintf("failed to prepare commit data: %s", err),
+			map[string]string{
+				"error": err.Error(),
+			},
+		)
 
 		return rule
 	}
@@ -135,13 +200,62 @@ func VerifySignatureIdentity(commit *object.Commit, signature string, keyDir str
 	// Auto-detect signature type
 	sigType := detectSignatureType(signature)
 
+	// Helper function to handle verification errors
+	handleVerificationError := func(err error, sigType string) bool {
+		if err == nil {
+			return false
+		}
+
+		// Determine error type and add appropriate validation error
+		if strings.Contains(err.Error(), "not verified with any trusted key") {
+			rule.addError(
+				"key_not_trusted",
+				err.Error(),
+				map[string]string{
+					"signature_type": sigType,
+				},
+			)
+		} else if strings.Contains(err.Error(), "key strength") {
+			// Extract key bits from error message
+			var bits, required string
+
+			if parts := strings.Split(err.Error(), "bits (required: "); len(parts) > 1 {
+				keyBitsParts := strings.Split(parts[0], "key strength: ")
+				if len(keyBitsParts) > 1 {
+					bits = strings.TrimSpace(keyBitsParts[1])
+				}
+
+				required = strings.TrimSuffix(parts[1], " bits)")
+			}
+
+			rule.addError(
+				"weak_key",
+				err.Error(),
+				map[string]string{
+					"signature_type": sigType,
+					"key_type":       sigType,
+					"key_bits":       bits,
+					"required_bits":  required,
+				},
+			)
+		} else {
+			rule.addError(
+				"verification_failed",
+				err.Error(),
+				map[string]string{
+					"signature_type": sigType,
+				},
+			)
+		}
+
+		return true
+	}
+
 	// Verify based on signature type
 	switch sigType {
 	case GPG:
 		identity, err := verifyGPGSignature(commitBytes, signature, sanitizedKeyDir)
-		if err != nil {
-			rule.errors = append(rule.errors, err)
-
+		if handleVerificationError(err, GPG) {
 			return rule
 		}
 
@@ -152,15 +266,20 @@ func VerifySignatureIdentity(commit *object.Commit, signature string, keyDir str
 		// Parse SSH signature from string
 		format, blob, err := parseSSHSignature(signature)
 		if err != nil {
-			rule.errors = append(rule.errors, fmt.Errorf("invalid SSH signature format: %w", err))
+			rule.addError(
+				"invalid_signature_format",
+				fmt.Sprintf("invalid SSH signature format: %s", err),
+				map[string]string{
+					"signature_type": SSH,
+					"error":          err.Error(),
+				},
+			)
 
 			return rule
 		}
 
 		identity, err := verifySSHSignature(commitBytes, format, blob, sanitizedKeyDir)
-		if err != nil {
-			rule.errors = append(rule.errors, err)
-
+		if handleVerificationError(err, SSH) {
 			return rule
 		}
 
@@ -168,7 +287,13 @@ func VerifySignatureIdentity(commit *object.Commit, signature string, keyDir str
 		rule.SignatureType = SSH
 
 	default:
-		rule.errors = append(rule.errors, errors.New("unknown signature type"))
+		rule.addError(
+			"unknown_signature_type",
+			"unknown signature type",
+			map[string]string{
+				"signature": signature,
+			},
+		)
 	}
 
 	return rule

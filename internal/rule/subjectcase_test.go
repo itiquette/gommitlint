@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/itiquette/gommitlint/internal/rule"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -17,6 +18,7 @@ func TestValidateSubjectCase(t *testing.T) {
 		subject         string
 		caseChoice      string
 		expectedValid   bool
+		errorCode       string
 		expectedMessage string
 		expectedErrors  bool
 	}{
@@ -34,6 +36,7 @@ func TestValidateSubjectCase(t *testing.T) {
 			isConventional:  true,
 			subject:         "feat: some feature description",
 			caseChoice:      "upper",
+			errorCode:       "wrong_case_upper",
 			expectedValid:   false,
 			expectedMessage: "commit subject case is not upper",
 			expectedErrors:  true,
@@ -52,6 +55,7 @@ func TestValidateSubjectCase(t *testing.T) {
 			isConventional:  true,
 			subject:         "feat: Some feature description",
 			caseChoice:      "lower",
+			errorCode:       "wrong_case_lower",
 			expectedValid:   false,
 			expectedMessage: "commit subject case is not lower",
 			expectedErrors:  true,
@@ -70,6 +74,7 @@ func TestValidateSubjectCase(t *testing.T) {
 			isConventional:  false,
 			subject:         "update something",
 			caseChoice:      "upper",
+			errorCode:       "wrong_case_upper",
 			expectedValid:   false,
 			expectedMessage: "commit subject case is not upper",
 			expectedErrors:  true,
@@ -79,6 +84,7 @@ func TestValidateSubjectCase(t *testing.T) {
 			isConventional:  false,
 			subject:         "Some message",
 			caseChoice:      "non-valid choice",
+			errorCode:       "wrong_case_lower", // Defaults to lower
 			expectedValid:   false,
 			expectedMessage: "commit subject case is not non-valid choice",
 			expectedErrors:  true,
@@ -88,6 +94,7 @@ func TestValidateSubjectCase(t *testing.T) {
 			isConventional:  false,
 			subject:         "",
 			caseChoice:      "upper",
+			errorCode:       "empty_subject",
 			expectedValid:   false,
 			expectedMessage: "subject is empty",
 			expectedErrors:  true,
@@ -97,6 +104,7 @@ func TestValidateSubjectCase(t *testing.T) {
 			isConventional:  true,
 			subject:         "this is missing the colon",
 			caseChoice:      "upper",
+			errorCode:       "invalid_format",
 			expectedValid:   false,
 			expectedMessage: "invalid conventional commit format",
 			expectedErrors:  true,
@@ -106,6 +114,7 @@ func TestValidateSubjectCase(t *testing.T) {
 			isConventional:  true,
 			subject:         "feat: ",
 			caseChoice:      "upper",
+			errorCode:       "invalid_format",
 			expectedValid:   false,
 			expectedMessage: "invalid conventional commit format",
 			expectedErrors:  true,
@@ -133,6 +142,24 @@ func TestValidateSubjectCase(t *testing.T) {
 				// Verify the error message
 				require.Equal(t, tabletest.expectedMessage, rule.Result(),
 					"Error message does not match expected")
+
+				// Verify error code if specified
+				if tabletest.errorCode != "" {
+					assert.Equal(t, tabletest.errorCode, rule.Errors()[0].Code,
+						"Error code should match expected")
+				}
+
+				// Verify rule name is set in ValidationError
+				assert.Equal(t, "SubjectCase", rule.Errors()[0].Rule,
+					"Rule name should be set in ValidationError")
+
+				// Verify context information is present
+				if tabletest.errorCode == "wrong_case_upper" || tabletest.errorCode == "wrong_case_lower" {
+					assert.Contains(t, rule.Errors()[0].Context, "expected_case",
+						"Context should contain expected case")
+					assert.Contains(t, rule.Errors()[0].Context, "actual_case",
+						"Context should contain actual case")
+				}
 			} else {
 				require.Empty(t, rule.Errors(), "Did not expect errors, but got some")
 				require.Equal(t, tabletest.expectedMessage, rule.Result(),
@@ -171,5 +198,27 @@ func TestSubjectCaseRuleMethods(t *testing.T) {
 		rule := rule.ValidateSubjectCase("lowercase start", "upper", false)
 		helpText := rule.Help()
 		require.Contains(t, helpText, "Capitalize the first letter", "Help should provide guidance on capitalizing")
+	})
+
+	t.Run("Test specific help messages by error code", func(t *testing.T) {
+		// Empty subject
+		emptyRule := rule.ValidateSubjectCase("", "upper", false)
+		assert.Contains(t, emptyRule.Help(), "Provide a non-empty commit message",
+			"Help for empty subject should suggest providing a subject")
+
+		// Invalid conventional format
+		invalidRule := rule.ValidateSubjectCase("not conventional", "upper", true)
+		assert.Contains(t, invalidRule.Help(), "Format your commit message according to the Conventional Commits",
+			"Help for invalid format should explain conventional format")
+
+		// Wrong case - upper
+		upperRule := rule.ValidateSubjectCase("lowercase", "upper", false)
+		assert.Contains(t, upperRule.Help(), "Capitalize the first letter",
+			"Help for uppercase violation should mention capitalization")
+
+		// Wrong case - lower
+		lowerRule := rule.ValidateSubjectCase("Uppercase", "lower", false)
+		assert.Contains(t, lowerRule.Help(), "Use lowercase",
+			"Help for lowercase violation should mention using lowercase")
 	})
 }

@@ -19,6 +19,7 @@ func TestValidateSpelling(t *testing.T) {
 		message        string
 		locale         string
 		expectedErrors int
+		expectedCode   string
 		expectedWords  []string
 	}{
 		{
@@ -33,6 +34,7 @@ func TestValidateSpelling(t *testing.T) {
 			message:        "This is definately a misspelling.", //nolint
 			locale:         "US",
 			expectedErrors: 1,
+			expectedCode:   "misspelling",
 			expectedWords:  []string{"definately", "definitely"}, //nolint
 		},
 		{
@@ -40,6 +42,7 @@ func TestValidateSpelling(t *testing.T) {
 			message:        "We occured a misspelling and we beleive it needs fixing.", //nolint
 			locale:         "US",
 			expectedErrors: 2,
+			expectedCode:   "misspelling",
 			expectedWords:  []string{"occured", "beleive"}, //nolint
 		},
 		{
@@ -68,6 +71,7 @@ func TestValidateSpelling(t *testing.T) {
 			message:        "This is a test.",
 			locale:         "FR",
 			expectedErrors: 1,
+			expectedCode:   "invalid_locale",
 			expectedWords:  []string{"unknown locale"},
 		},
 		{
@@ -88,12 +92,24 @@ func TestValidateSpelling(t *testing.T) {
 
 	for _, tabletest := range tests {
 		t.Run(tabletest.name, func(t *testing.T) {
-			// Call the rule with the updated function name
+			// Call the rule
 			rule := rule.ValidateSpelling(tabletest.message, tabletest.locale)
 
 			// Check for expected number of errors
 			errors := rule.Errors()
 			assert.Len(t, errors, tabletest.expectedErrors, "Incorrect number of errors")
+
+			// Check error code if specified
+			if tabletest.expectedCode != "" && len(errors) > 0 {
+				assert.Equal(t, tabletest.expectedCode, errors[0].Code,
+					"Error code should match expected")
+			}
+
+			// Verify rule name is set in ValidationError
+			if len(errors) > 0 {
+				assert.Equal(t, "Spell", errors[0].Rule,
+					"Rule name should be set in ValidationError")
+			}
 
 			// Check for expected words in error messages
 			if tabletest.expectedWords != nil && len(errors) > 0 {
@@ -117,10 +133,13 @@ func TestValidateSpelling(t *testing.T) {
 
 			// Verify Result() method
 			if tabletest.expectedErrors > 0 {
-				assert.Contains(t, rule.Result(), "misspelling", "Result should mention misspellings when errors are present")
-				assert.Contains(t, rule.Result(), strconv.Itoa(tabletest.expectedErrors), "Result should include the number of errors")
+				assert.Contains(t, rule.Result(), "misspelling",
+					"Result should mention misspellings when errors are present")
+				assert.Contains(t, rule.Result(), strconv.Itoa(tabletest.expectedErrors),
+					"Result should include the number of errors")
 			} else {
-				assert.Contains(t, rule.Result(), "No common misspellings found", "Result should indicate no misspellings")
+				assert.Contains(t, rule.Result(), "No common misspellings found",
+					"Result should indicate no misspellings")
 			}
 
 			// Verify Help() method
@@ -128,19 +147,55 @@ func TestValidateSpelling(t *testing.T) {
 			require.NotEmpty(t, helpText, "Help text should not be empty")
 
 			if tabletest.expectedErrors == 0 {
-				assert.Contains(t, helpText, "No errors to fix", "Help should indicate no errors to fix")
-			} else if len(errors) > 0 && strings.Contains(errors[0].Error(), "unknown locale") {
-				assert.Contains(t, helpText, "supported locale", "Help should mention supported locales")
+				assert.Contains(t, helpText, "No errors to fix",
+					"Help should indicate no errors to fix")
+			} else if len(errors) > 0 && errors[0].Code == "invalid_locale" {
+				assert.Contains(t, helpText, "supported locale",
+					"Help should mention supported locales")
 			} else if len(errors) > 0 {
-				assert.Contains(t, helpText, "Fix the following misspellings", "Help should provide guidance")
+				assert.Contains(t, helpText, "Fix the following misspellings",
+					"Help should provide guidance")
 
 				for _, err := range errors {
-					assert.Contains(t, helpText, err.Error(), "Help should include error details")
+					assert.Contains(t, helpText, err.Error(),
+						"Help should include error details")
 				}
 			}
 
 			// Verify Name() method
 			assert.Equal(t, "Spell", rule.Name(), "Rule name should be 'Spell'")
+
+			// Check context data
+			if tabletest.expectedCode == "misspelling" && len(errors) > 0 {
+				assert.Contains(t, errors[0].Context, "original",
+					"Context should contain original misspelled word")
+				assert.Contains(t, errors[0].Context, "corrected",
+					"Context should contain corrected spelling")
+			} else if tabletest.expectedCode == "invalid_locale" && len(errors) > 0 {
+				assert.Contains(t, errors[0].Context, "locale",
+					"Context should contain the invalid locale")
+				assert.Contains(t, errors[0].Context, "supported_locales",
+					"Context should contain supported locales")
+			}
 		})
 	}
+
+	// Test for context information in the help text
+	t.Run("Help text includes suggestions", func(t *testing.T) {
+		// Create a rule with a misspelling
+		rule := rule.ValidateSpelling("This is definately a mistake", "US") //nolint
+
+		// Verify that the help text includes the suggestion
+		helpText := rule.Help()
+		assert.Contains(t, helpText, "Replace", "Help text should include replacement suggestions")
+
+		// Check that both original and corrected words appear in the help text
+		if len(rule.Errors()) > 0 {
+			original := rule.Errors()[0].Context["original"]
+			corrected := rule.Errors()[0].Context["corrected"]
+
+			assert.Contains(t, helpText, original, "Help text should include original misspelled word")
+			assert.Contains(t, helpText, corrected, "Help text should include corrected spelling")
+		}
+	})
 }

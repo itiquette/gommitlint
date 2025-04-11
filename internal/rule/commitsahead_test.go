@@ -27,6 +27,7 @@ func TestValidateNumberOfCommits(t *testing.T) {
 		ref           string
 		maxCommits    int
 		expectError   bool
+		errorCode     string
 		errorContains string
 	}{
 		{
@@ -53,6 +54,7 @@ func TestValidateNumberOfCommits(t *testing.T) {
 			ref:           "main",
 			maxCommits:    1,
 			expectError:   true,
+			errorCode:     "too_many_commits",
 			errorContains: "HEAD is 2 commit(s) ahead of main (max: 1)",
 		},
 		{
@@ -102,6 +104,7 @@ func TestValidateNumberOfCommits(t *testing.T) {
 			ref:           "",
 			maxCommits:    20,
 			expectError:   true,
+			errorCode:     "empty_ref",
 			errorContains: "reference cannot be empty",
 		},
 		{
@@ -118,6 +121,7 @@ func TestValidateNumberOfCommits(t *testing.T) {
 			ref:           "main",
 			maxCommits:    20,
 			expectError:   true,
+			errorCode:     "too_many_commits",
 			errorContains: "HEAD is 30 commit(s) ahead of main (max: 20)",
 		},
 	}
@@ -169,17 +173,31 @@ func TestValidateNumberOfCommits(t *testing.T) {
 			if tabletest.expectError {
 				assert.NotEmpty(t, result.Errors(), "Expected error but got none")
 
+				valErr := result.Errors()[0]
+				assert.Equal(t, "CommitsAhead", valErr.Rule, "Rule name should be set in ValidationError")
+
+				if tabletest.errorCode != "" {
+					assert.Equal(t, tabletest.errorCode, valErr.Code, "Error code should match expected")
+				}
+
 				if tabletest.errorContains != "" {
-					assert.Contains(t, result.Errors()[0].Error(), tabletest.errorContains,
+					assert.Contains(t, valErr.Message, tabletest.errorContains,
 						"Error message doesn't contain expected text")
 				}
 
 				// Verify result string contains error message
-				assert.Contains(t, result.Result(), result.Errors()[0].Error(),
+				assert.Contains(t, result.Result(), valErr.Message,
 					"Result string should contain error message")
 
 				// Verify help method returns non-empty string
 				assert.NotEmpty(t, result.Help(), "Help should provide guidance")
+
+				// Verify context for too_many_commits error
+				if tabletest.errorCode == "too_many_commits" {
+					assert.Contains(t, valErr.Context, "actual")
+					assert.Contains(t, valErr.Context, "maximum")
+					assert.Contains(t, valErr.Context, "reference")
+				}
 			} else {
 				assert.Empty(t, result.Errors(), "Expected no errors but got: %v", result.Errors())
 				assert.Contains(t, result.Result(), fmt.Sprintf("HEAD is %d commit(s) ahead of", commitsCreated),
@@ -195,8 +213,11 @@ func TestValidateNumberOfCommitsWithNilRepo(t *testing.T) {
 
 	assert.NotNil(t, result, "Result should not be nil even with nil repo")
 	assert.NotEmpty(t, result.Errors(), "Should have errors with nil repo")
-	assert.Contains(t, result.Errors()[0].Error(), "repository cannot be nil",
-		"Error message should indicate nil repository")
+
+	valErr := result.Errors()[0]
+	assert.Equal(t, "CommitsAhead", valErr.Rule, "Rule name should be set")
+	assert.Equal(t, "nil_repo", valErr.Code, "Error code should indicate nil repository")
+	assert.Equal(t, "repository cannot be nil", valErr.Message, "Error message should indicate nil repository")
 }
 
 func TestCommitsAheadHelpMethod(t *testing.T) {
@@ -229,6 +250,22 @@ func TestCommitsAheadHelpMethod(t *testing.T) {
 	assert.Contains(t, helpText, "too many commits ahead", "Help should explain the issue")
 	assert.Contains(t, helpText, "Merge or rebase", "Help should suggest merging or rebasing")
 	assert.Contains(t, helpText, "splitting your changes", "Help should suggest splitting changes")
+
+	// Verify error code
+	assert.Equal(t, "too_many_commits", commitsAhead.Errors()[0].Code, "Error code should be 'too_many_commits'")
+
+	// Test different error codes' help messages
+	t.Run("help for nil repo", func(t *testing.T) {
+		result := rule.ValidateNumberOfCommits(nil, "main")
+		helpText := result.Help()
+		assert.Contains(t, helpText, "valid git repository", "Help should mention repository requirement")
+	})
+
+	t.Run("help for empty reference", func(t *testing.T) {
+		result := rule.ValidateNumberOfCommits(client, "")
+		helpText := result.Help()
+		assert.Contains(t, helpText, "valid reference branch", "Help should mention reference requirement")
+	})
 }
 
 // setupTestRepo creates a new Git repository for testing.

@@ -4,7 +4,6 @@
 package rule_test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/itiquette/gommitlint/internal/rule"
@@ -18,41 +17,46 @@ func TestValidateSubjectSuffix(t *testing.T) {
 		invalidSuffixes string
 		expectedValid   bool
 		expectedMessage string
+		expectedCode    string
 	}{
 		{
 			name:            "Valid subject without invalid suffix",
 			subject:         "Add new feature",
 			invalidSuffixes: ".:;",
 			expectedValid:   true,
-			expectedMessage: "Subject last character is valid",
+			expectedMessage: "Subject has valid suffix",
 		},
 		{
 			name:            "Subject ending with invalid suffix period",
 			subject:         "Update documentation.",
 			invalidSuffixes: ".:;",
 			expectedValid:   false,
-			expectedMessage: "subject has invalid suffix '.' (invalid suffixes: \".:;\")",
+			expectedMessage: "subject has invalid suffix \".\" (invalid suffixes: \".:;\")",
+			expectedCode:    "invalid_suffix",
 		},
 		{
 			name:            "Subject ending with invalid suffix colon",
 			subject:         "Fix bug:",
 			invalidSuffixes: ".:;",
 			expectedValid:   false,
-			expectedMessage: "subject has invalid suffix ':' (invalid suffixes: \".:;\")",
+			expectedMessage: "subject has invalid suffix \":\" (invalid suffixes: \".:;\")",
+			expectedCode:    "invalid_suffix",
 		},
 		{
 			name:            "Unicode subject with invalid suffix",
 			subject:         "Fix élément.",
 			invalidSuffixes: ".:;",
 			expectedValid:   false,
-			expectedMessage: "subject has invalid suffix '.' (invalid suffixes: \".:;\")",
+			expectedMessage: "subject has invalid suffix \".\" (invalid suffixes: \".:;\")",
+			expectedCode:    "invalid_suffix",
 		},
 		{
 			name:            "Unicode character as invalid suffix",
 			subject:         "Update description;",
 			invalidSuffixes: ";",
 			expectedValid:   false,
-			expectedMessage: "subject has invalid suffix ';' (invalid suffixes: \";\")",
+			expectedMessage: "subject has invalid suffix \";\" (invalid suffixes: \";\")",
+			expectedCode:    "invalid_suffix",
 		},
 		{
 			name:            "Empty subject",
@@ -60,34 +64,46 @@ func TestValidateSubjectSuffix(t *testing.T) {
 			invalidSuffixes: ".:;",
 			expectedValid:   false,
 			expectedMessage: "subject is empty",
+			expectedCode:    "subject_empty",
 		},
 		{
 			name:            "Subject with Unicode invalid suffix",
 			subject:         "Add new emoji😊",
 			invalidSuffixes: "😊😀",
 			expectedValid:   false,
-			expectedMessage: "subject has invalid suffix '😊' (invalid suffixes: \"😊😀\")",
+			expectedMessage: "subject has invalid suffix \"😊\" (invalid suffixes: \"😊😀\")",
+			expectedCode:    "invalid_suffix",
 		},
 		{
 			name:            "Subject with space as invalid suffix",
 			subject:         "Add feature ",
 			invalidSuffixes: " \t\n",
 			expectedValid:   false,
-			expectedMessage: "subject has invalid suffix ' ' (invalid suffixes: \" \\t\\n\")",
+			expectedMessage: "subject has invalid suffix \" \" (invalid suffixes: \" \\t\\n\")",
+			expectedCode:    "invalid_suffix",
 		},
 		{
 			name:            "Subject with tab as invalid suffix",
 			subject:         "Add feature\t",
 			invalidSuffixes: " \t\n",
 			expectedValid:   false,
-			expectedMessage: "subject has invalid suffix '\\t' (invalid suffixes: \" \\t\\n\")",
+			expectedMessage: "subject has invalid suffix \"\\t\" (invalid suffixes: \" \\t\\n\")",
+			expectedCode:    "invalid_suffix",
 		},
 		{
 			name:            "Valid Unicode subject",
 			subject:         "修复问题",
 			invalidSuffixes: ".:;",
 			expectedValid:   true,
-			expectedMessage: "Subject last character is valid",
+			expectedMessage: "Subject has valid suffix",
+		},
+		{
+			name:            "Default invalid suffixes",
+			subject:         "Update feature?",
+			invalidSuffixes: "",
+			expectedValid:   false,
+			expectedMessage: "subject has invalid suffix \"?\" (invalid suffixes: \".,;:!?\")",
+			expectedCode:    "invalid_suffix",
 		},
 	}
 
@@ -99,7 +115,7 @@ func TestValidateSubjectSuffix(t *testing.T) {
 			if tabletest.expectedValid {
 				require.Empty(t, result.Errors(), "Did not expect errors")
 				require.Equal(t,
-					"Subject last character is valid",
+					"Subject has valid suffix",
 					result.Result(),
 					"Message should be valid",
 				)
@@ -110,11 +126,29 @@ func TestValidateSubjectSuffix(t *testing.T) {
 					result.Result(),
 					"Error message should match expected",
 				)
+
+				// Check error code
+				require.Equal(t,
+					tabletest.expectedCode,
+					result.Errors()[0].Code,
+					"Error code should match expected",
+				)
+
+				// Verify context is set
+				require.NotEmpty(t, result.Errors()[0].Context, "Error context should not be empty")
+
+				// Check specific context values based on error type
+				if tabletest.expectedCode == "invalid_suffix" {
+					require.Contains(t, result.Errors()[0].Context, "last_char", "Context should contain last_char")
+					require.Contains(t, result.Errors()[0].Context, "invalid_suffixes", "Context should contain invalid_suffixes")
+				}
+
+				require.Contains(t, result.Errors()[0].Context, "subject", "Context should contain subject")
 			}
 
 			// Check name method
-			require.Equal(t, "SubjectSuffixRule", result.Name(),
-				"Name should always be 'SubjectSuffixRule'")
+			require.Equal(t, "SubjectSuffix", result.Name(),
+				"Name should be 'SubjectSuffix'")
 
 			// Check help method
 			helpText := result.Help()
@@ -122,12 +156,18 @@ func TestValidateSubjectSuffix(t *testing.T) {
 
 			// Verify help text is appropriate for the error
 			if !tabletest.expectedValid {
-				errMsg := result.Result()
+				errCode := ""
+				if len(result.Errors()) > 0 {
+					errCode = result.Errors()[0].Code
+				}
 
-				if strings.Contains(errMsg, "subject is empty") {
+				switch errCode {
+				case "subject_empty":
 					require.Contains(t, helpText, "Provide a non-empty subject")
-				} else if strings.Contains(errMsg, "invalid suffix") {
+				case "invalid_suffix":
 					require.Contains(t, helpText, "Remove the punctuation")
+				case "invalid_utf8":
+					require.Contains(t, helpText, "valid UTF-8")
 				}
 			} else {
 				require.Contains(t, helpText, "No errors to fix")

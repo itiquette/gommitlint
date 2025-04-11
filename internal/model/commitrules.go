@@ -7,7 +7,7 @@ package model
 type CommitRule interface {
 	Name() string
 	Result() string
-	Errors() []error
+	Errors() []*ValidationError
 }
 
 type CommitRules struct {

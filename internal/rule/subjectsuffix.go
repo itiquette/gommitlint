@@ -8,7 +8,13 @@ import (
 	"fmt"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/itiquette/gommitlint/internal/model"
 )
+
+// DefaultInvalidSuffixes is the default set of characters that should not appear
+// at the end of a commit subject line.
+const DefaultInvalidSuffixes = ".,;:!?"
 
 // SubjectSuffix enforces that the last character of the commit subject line
 // is not in a specified set of invalid suffixes.
@@ -35,12 +41,13 @@ import (
 //
 // The rule also handles empty subjects and invalid UTF-8 characters.
 type SubjectSuffix struct {
-	errors []error
+	lastChar rune
+	errors   []*model.ValidationError
 }
 
 // Name returns the name of the rule.
 func (rule SubjectSuffix) Name() string {
-	return "SubjectSuffixRule"
+	return "SubjectSuffix"
 }
 
 // Result returns the rule message.
@@ -49,21 +56,58 @@ func (rule SubjectSuffix) Result() string {
 		return rule.errors[0].Error()
 	}
 
-	return "Subject last character is valid"
+	return "Subject has valid suffix"
 }
 
-// Errors returns any violations of the rule.
-func (rule SubjectSuffix) Errors() []error {
+// addError adds a structured validation error.
+func (rule *SubjectSuffix) addError(code, message string, context map[string]string) {
+	err := model.NewValidationError("SubjectSuffix", code, message)
+
+	// Add any context values
+	for key, value := range context {
+		_ = err.WithContext(key, value)
+	}
+
+	rule.errors = append(rule.errors, err)
+}
+
+// Errors returns validation errors.
+func (rule SubjectSuffix) Errors() []*model.ValidationError {
 	return rule.errors
 }
 
-// addErrorf adds an error to the rule's errors slice.
-func (rule *SubjectSuffix) addErrorf(format string, args ...interface{}) {
-	rule.errors = append(rule.errors, fmt.Errorf(format, args...))
+// Help returns a description of how to fix the rule violation.
+func (rule SubjectSuffix) Help() string {
+	const noErrMsg = "No errors to fix"
+	if len(rule.errors) == 0 {
+		return noErrMsg
+	}
+
+	// Check for specific error codes
+	if len(rule.errors) > 0 {
+		switch rule.errors[0].Code {
+		case "subject_empty":
+			return "Provide a non-empty subject line for your commit message"
+		case "invalid_utf8":
+			return "Ensure your commit message contains only valid UTF-8 characters"
+		case "invalid_suffix":
+			var invalidSuffixes string
+			if suffixes, ok := rule.errors[0].Context["invalid_suffixes"]; ok {
+				invalidSuffixes = suffixes
+			} else {
+				invalidSuffixes = DefaultInvalidSuffixes
+			}
+
+			return fmt.Sprintf("Remove the punctuation or special character from the end of your subject line. "+
+				"The subject should end with a letter or number, not punctuation like: %s", invalidSuffixes)
+		}
+	}
+
+	return "Review and fix your commit message subject line according to the guidelines"
 }
 
 // ValidateSubjectSuffix checks if the subject ends with a character in the invalidSuffixes set.
-// It returns a SubjectSuffix with any validation errors.
+// If invalidSuffixes is empty, it uses the DefaultInvalidSuffixes.
 //
 // Parameters:
 //   - subject: The commit subject line to validate
@@ -71,52 +115,53 @@ func (rule *SubjectSuffix) addErrorf(format string, args ...interface{}) {
 //
 // Returns:
 //   - A SubjectSuffix instance with validation results
-func ValidateSubjectSuffix(subject, invalidSuffixes string) SubjectSuffix {
-	rule := SubjectSuffix{}
+func ValidateSubjectSuffix(subject, invalidSuffixes string) *SubjectSuffix {
+	if invalidSuffixes == "" {
+		invalidSuffixes = DefaultInvalidSuffixes
+	}
+
+	rule := &SubjectSuffix{}
 
 	if subject == "" {
-		rule.addErrorf("subject is empty")
+		rule.addError(
+			"subject_empty",
+			"subject is empty",
+			map[string]string{
+				"subject": subject,
+			},
+		)
 
 		return rule
 	}
 
 	lastChar, size := utf8.DecodeLastRuneInString(subject)
+	rule.lastChar = lastChar
 
 	// Check for invalid UTF-8
 	if lastChar == utf8.RuneError && size == 0 {
-		rule.addErrorf("subject does not end with valid UTF-8 text")
+		rule.addError(
+			"invalid_utf8",
+			"subject does not end with valid UTF-8 text",
+			map[string]string{
+				"subject": subject,
+			},
+		)
 
 		return rule
 	}
 
 	// Check if the last character is in the invalid suffix set
 	if strings.ContainsRune(invalidSuffixes, lastChar) {
-		rule.addErrorf("subject has invalid suffix %q (invalid suffixes: %q)", lastChar, invalidSuffixes)
+		rule.addError(
+			"invalid_suffix",
+			fmt.Sprintf("subject has invalid suffix %q (invalid suffixes: %q)", string(lastChar), invalidSuffixes),
+			map[string]string{
+				"subject":          subject,
+				"last_char":        string(lastChar),
+				"invalid_suffixes": invalidSuffixes,
+			},
+		)
 	}
 
 	return rule
-}
-
-// Help returns a description of how to fix the rule violation.
-func (rule SubjectSuffix) Help() string {
-	if len(rule.errors) == 0 {
-		return "No errors to fix"
-	}
-
-	errMsg := rule.errors[0].Error()
-
-	if strings.Contains(errMsg, "subject is empty") {
-		return "Provide a non-empty subject line for your commit message"
-	}
-
-	if strings.Contains(errMsg, "does not end with valid UTF-8") {
-		return "Ensure your commit message contains only valid UTF-8 characters"
-	}
-
-	if strings.Contains(errMsg, "invalid suffix") {
-		return "Remove the punctuation or special character from the end of your subject line. " +
-			"The subject should end with a letter or number, not punctuation."
-	}
-
-	return "Review and fix your commit message subject line according to the guidelines"
 }

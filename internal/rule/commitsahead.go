@@ -6,6 +6,7 @@ package rule
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/git"
@@ -44,7 +45,7 @@ type CommitsAhead struct {
 	ref    string
 	Ahead  int
 	config CommitsAheadConfig
-	errors []error
+	errors []*model.ValidationError
 }
 
 // Name returns the rule identifier.
@@ -62,7 +63,7 @@ func (c *CommitsAhead) Result() string {
 }
 
 // Errors returns any violations detected by the rule.
-func (c *CommitsAhead) Errors() []error {
+func (c *CommitsAhead) Errors() []*model.ValidationError {
 	return c.errors
 }
 
@@ -72,6 +73,30 @@ func (c *CommitsAhead) Help() string {
 		return "No errors to fix"
 	}
 
+	// Check for specific error codes
+	if len(c.errors) > 0 {
+		switch c.errors[0].Code {
+		case "nil_repo":
+			return "You must provide a valid git repository to check commits ahead."
+
+		case "empty_ref":
+			return "You must provide a valid reference branch name to compare against."
+
+		case "too_many_commits":
+			return fmt.Sprintf(
+				"Your current branch has too many commits ahead of %s.\n"+
+					"Consider one of the following solutions:\n"+
+					"1. Merge or rebase your branch with %s\n"+
+					"2. Consider splitting your changes into smaller, more manageable pull requests\n"+
+					"3. If this limit is too restrictive, you can configure a higher limit with WithMaxCommitsAhead option",
+				c.ref, c.ref)
+
+		case "git_error":
+			return "There was an error accessing the git repository. Please check permissions and ensure the repository is valid."
+		}
+	}
+
+	// Default help message
 	return fmt.Sprintf(
 		"Your current branch has too many commits ahead of %s.\n"+
 			"Consider one of the following solutions:\n"+
@@ -93,9 +118,16 @@ func WithMaxCommitsAhead(maxCommitsAhead int) Option {
 	}
 }
 
-// addErrorf adds an error to the rule's errors slice.
-func (c *CommitsAhead) addErrorf(format string, args ...interface{}) {
-	c.errors = append(c.errors, fmt.Errorf(format, args...))
+// addError adds a structured validation error.
+func (c *CommitsAhead) addError(code, message string, context map[string]string) {
+	err := model.NewValidationError("CommitsAhead", code, message)
+
+	// Add any context values
+	for key, value := range context {
+		_ = err.WithContext(key, value)
+	}
+
+	c.errors = append(c.errors, err)
 }
 
 // ValidateNumberOfCommits checks if the current HEAD exceeds the maximum
@@ -125,13 +157,21 @@ func ValidateNumberOfCommits(
 	}
 
 	if repo == nil {
-		rule.addErrorf("repository cannot be nil")
+		rule.addError(
+			"nil_repo",
+			"repository cannot be nil",
+			nil,
+		)
 
 		return rule
 	}
 
 	if ref == "" {
-		rule.addErrorf("reference cannot be empty")
+		rule.addError(
+			"empty_ref",
+			"reference cannot be empty",
+			nil,
+		)
 
 		return rule
 	}
@@ -142,7 +182,13 @@ func ValidateNumberOfCommits(
 	// Count commits ahead
 	ahead, err := countCommitsAhead(repo, fullRef)
 	if err != nil {
-		rule.addErrorf("failed to count commits: %v", err)
+		rule.addError(
+			"git_error",
+			fmt.Sprintf("failed to count commits: %v", err),
+			map[string]string{
+				"error_details": err.Error(),
+			},
+		)
 
 		return rule
 	}
@@ -151,8 +197,16 @@ func ValidateNumberOfCommits(
 
 	// Check if exceeds maximum allowed
 	if ahead > config.MaxCommitsAhead {
-		rule.addErrorf("HEAD is %d commit(s) ahead of %s (max: %d)",
-			ahead, ref, config.MaxCommitsAhead)
+		rule.addError(
+			"too_many_commits",
+			fmt.Sprintf("HEAD is %d commit(s) ahead of %s (max: %d)",
+				ahead, ref, config.MaxCommitsAhead),
+			map[string]string{
+				"actual":    strconv.Itoa(ahead),
+				"maximum":   strconv.Itoa(config.MaxCommitsAhead),
+				"reference": ref,
+			},
+		)
 	}
 
 	return rule

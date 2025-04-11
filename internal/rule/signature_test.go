@@ -45,6 +45,7 @@ FxlS+hzWnbOPMrRKuSfJ+H8mF6t1V3qUYtxHNQvHtcCvG0gx4auPSoxp7qVCVQ==
 		name         string
 		signature    string
 		expectError  bool
+		errorCode    string
 		errorMessage string
 	}{
 		{
@@ -61,66 +62,77 @@ FxlS+hzWnbOPMrRKuSfJ+H8mF6t1V3qUYtxHNQvHtcCvG0gx4auPSoxp7qVCVQ==
 			name:         "Missing signature",
 			signature:    "",
 			expectError:  true,
+			errorCode:    "missing_signature",
 			errorMessage: "commit does not have a SSH/GPG signature",
 		},
 		{
 			name:         "Empty signature with whitespace",
 			signature:    "   \t\n",
 			expectError:  true,
+			errorCode:    "missing_signature",
 			errorMessage: "commit does not have a SSH/GPG signature",
 		},
 		{
 			name:         "Invalid signature format",
 			signature:    "PARTIAL-SIGNATURE-EXAMPLE",
 			expectError:  true,
+			errorCode:    "unknown_signature_format",
 			errorMessage: "invalid signature format",
 		},
 		{
 			name:         "Incomplete gpg signature - missing end",
 			signature:    "-----BEGIN PGP SIGNATURE-----\nVersion: GnuPG v2\n\niQEcBAABCAAGBQJy...",
 			expectError:  true,
+			errorCode:    "incomplete_gpg_signature",
 			errorMessage: "incomplete GPG signature",
 		},
 		{
 			name:         "Incomplete ssh signature - missing end",
 			signature:    "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAg...",
 			expectError:  true,
+			errorCode:    "incomplete_ssh_signature",
 			errorMessage: "incomplete SSH signature",
 		},
 		{
 			name:         "Malformed gpg signature - missing version",
 			signature:    "-----BEGIN PGP SIGNATURE-----\n-----END PGP SIGNATURE-----",
 			expectError:  true,
+			errorCode:    "invalid_gpg_format",
 			errorMessage: "invalid GPG",
 		},
 		{
 			name:         "Malformed ssh signature - invalid structure",
 			signature:    "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHeHh4eA==\n-----END SSH SIGNATURE-----",
 			expectError:  true,
+			errorCode:    "invalid_ssh_format",
 			errorMessage: "malformed SSH signature: too short",
 		},
 		{
 			name:         "SSH signature with missing SSHSIG prefix",
 			signature:    "-----BEGIN SSH SIGNATURE-----\nSW52YWxpZFByZWZpeA==\n-----END SSH SIGNATURE-----",
 			expectError:  true,
+			errorCode:    "invalid_ssh_format",
 			errorMessage: "malformed SSH signature: missing SSHSIG prefix",
 		},
 		{
 			name:         "SSH signature too short",
 			signature:    "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAA==\n-----END SSH SIGNATURE-----",
 			expectError:  true,
+			errorCode:    "invalid_ssh_format",
 			errorMessage: "malformed SSH signature: too short",
 		},
 		{
 			name:         "GPG signature with invalid content",
 			signature:    "-----BEGIN PGP SIGNATURE-----\nVersion: GnuPG v2\n\nInvalid Content\n-----END PGP SIGNATURE-----",
 			expectError:  true,
+			errorCode:    "invalid_gpg_format",
 			errorMessage: "malformed GPG signature",
 		},
 		{
 			name:         "SSH signature with wrong marker",
 			signature:    "-----BEGIN SSH KEY-----\nU1NIU0lHAA==\n-----END SSH KEY-----",
 			expectError:  true,
+			errorCode:    "unknown_signature_format",
 			errorMessage: "invalid signature format",
 		},
 	}
@@ -134,6 +146,13 @@ FxlS+hzWnbOPMrRKuSfJ+H8mF6t1V3qUYtxHNQvHtcCvG0gx4auPSoxp7qVCVQ==
 			if tabletest.expectError {
 				require.NotEmpty(t, rule.Errors(), "expected errors but got none")
 
+				// Check error code if specified
+				if tabletest.errorCode != "" {
+					assert.Equal(t, tabletest.errorCode, rule.Errors()[0].Code,
+						"Error code should match expected")
+				}
+
+				// Check error message contains expected content
 				errorFound := false
 
 				for _, err := range rule.Errors() {
@@ -147,10 +166,34 @@ FxlS+hzWnbOPMrRKuSfJ+H8mF6t1V3qUYtxHNQvHtcCvG0gx4auPSoxp7qVCVQ==
 				assert.True(t, errorFound, "Expected error containing '%s', but got: %v",
 					tabletest.errorMessage, rule.Errors())
 
+				// Verify rule name is set in ValidationError
+				assert.Equal(t, "Signature", rule.Errors()[0].Rule,
+					"Rule name should be set in ValidationError")
+
+				// Verify context information exists for specific error types
+				if tabletest.errorCode == "invalid_gpg_format" ||
+					tabletest.errorCode == "invalid_ssh_format" {
+					assert.Contains(t, rule.Errors()[0].Context, "signature_type",
+						"Context should contain signature type")
+				}
+
 				// Verify Help() method provides guidance
 				helpText := rule.Help()
 				assert.NotEmpty(t, helpText, "Help text should not be empty")
 				assert.Contains(t, helpText, "Sign your commit", "Help should explain how to sign commits")
+
+				// Check for targeted help based on error code
+				switch tabletest.errorCode {
+				case "missing_signature":
+					assert.Contains(t, helpText, "verify your identity",
+						"Help should explain why signatures are important")
+				case "incomplete_gpg_signature":
+					assert.Contains(t, helpText, "GPG signature is incomplete",
+						"Help should explain the issue with the GPG signature")
+				case "incomplete_ssh_signature":
+					assert.Contains(t, helpText, "SSH signature is incomplete",
+						"Help should explain the issue with the SSH signature")
+				}
 			} else {
 				require.Empty(t, rule.Errors(), "unexpected errors: %v", rule.Errors())
 				require.Equal(t, "SSH/GPG signature found (format verified only, not cryptographically validated)", rule.Result(),
@@ -170,4 +213,20 @@ FxlS+hzWnbOPMrRKuSfJ+H8mF6t1V3qUYtxHNQvHtcCvG0gx4auPSoxp7qVCVQ==
 			assert.Equal(t, "Signature", rule.Name(), "Rule name should be 'Signature'")
 		})
 	}
+
+	// Additional tests for context information
+	t.Run("Context information in errors", func(t *testing.T) {
+		// Test context for SSH format error
+		sshResult := rule.ValidateSignature("-----BEGIN SSH SIGNATURE-----\nInvalid\n-----END SSH SIGNATURE-----")
+		require.NotEmpty(t, sshResult.Errors())
+		assert.Equal(t, "invalid_ssh_format", sshResult.Errors()[0].Code)
+		assert.Equal(t, "ssh", sshResult.Errors()[0].Context["signature_type"])
+		assert.Contains(t, sshResult.Errors()[0].Context["error_details"], "invalid SSH signature encoding")
+
+		// Test context for GPG format error
+		gpgResult := rule.ValidateSignature("-----BEGIN PGP SIGNATURE-----\nInvalid\n-----END PGP SIGNATURE-----")
+		require.NotEmpty(t, gpgResult.Errors())
+		assert.Equal(t, "invalid_gpg_format", gpgResult.Errors()[0].Code)
+		assert.Equal(t, "gpg", gpgResult.Errors()[0].Context["signature_type"])
+	})
 }

@@ -6,7 +6,6 @@
 package rule_test
 
 import (
-	"errors"
 	"strings"
 	"testing"
 
@@ -25,41 +24,47 @@ func TestConventionalCommitRule(t *testing.T) {
 		name        string
 		subject     string
 		expectValid bool
+		errorCode   string
 		errorMsg    string
 	}{
 		{
 			name:        "Valid conventional commit",
-			subject:     "feat(ui): add dark mode toggle",
+			subject:     "feat(ui): add dark mode :toggle",
 			expectValid: true,
 		},
 		{
 			name:        "Invalid type",
 			subject:     "invalid: this is not a valid type",
 			expectValid: false,
+			errorCode:   "invalid_type",
 			errorMsg:    "invalid type",
 		},
 		{
 			name:        "Invalid scope",
 			subject:     "feat(unknown): unknown scope",
 			expectValid: false,
+			errorCode:   "invalid_scope",
 			errorMsg:    "invalid scope",
 		},
 		{
 			name:        "Empty description",
 			subject:     "feat: ",
 			expectValid: false,
+			errorCode:   "invalid_format",
 			errorMsg:    "invalid conventional commit format",
 		},
 		{
 			name:        "Description too long",
 			subject:     "feat: " + repeat("a", 73),
 			expectValid: false,
+			errorCode:   "description_too_long",
 			errorMsg:    "description too long",
 		},
 		{
 			name:        "Invalid spacing after colon",
 			subject:     "feat:no space",
 			expectValid: false,
+			errorCode:   "invalid_format",
 			errorMsg:    "invalid conventional commit format",
 		},
 		{
@@ -76,12 +81,14 @@ func TestConventionalCommitRule(t *testing.T) {
 			name:        "Empty commit message",
 			subject:     "",
 			expectValid: false,
+			errorCode:   "invalid_format",
 			errorMsg:    "invalid conventional commit format",
 		},
 		{
 			name:        "Multiple spaces after colon",
 			subject:     "feat:  too many spaces",
 			expectValid: false,
+			errorCode:   "spacing_error",
 			errorMsg:    "spacing error",
 		},
 	}
@@ -96,8 +103,21 @@ func TestConventionalCommitRule(t *testing.T) {
 			} else {
 				assert.NotEmpty(t, result.Errors(), "Expected errors but got none")
 
+				valErr := result.Errors()[0]
+				assert.Equal(t, "ConventionalCommit", valErr.Rule, "Rule name should be set")
+
+				if tabletest.errorCode != "" {
+					assert.Equal(t, tabletest.errorCode, valErr.Code, "Error code should match expected")
+				}
+
 				if tabletest.errorMsg != "" {
-					assert.Contains(t, result.Errors()[0].Error(), tabletest.errorMsg)
+					assert.Contains(t, valErr.Message, tabletest.errorMsg, "Error message should contain expected text")
+				}
+
+				// Verify that context information is added
+				if tabletest.errorCode == "description_too_long" {
+					assert.Contains(t, valErr.Context, "actual_length")
+					assert.Contains(t, valErr.Context, "max_length")
 				}
 			}
 		})
@@ -117,6 +137,7 @@ func TestConventionalCommitEdgeCases(t *testing.T) {
 		scopes      []string
 		descLength  int
 		expectValid bool
+		errorCode   string
 		errorMsg    string
 	}{
 		{
@@ -158,6 +179,7 @@ func TestConventionalCommitEdgeCases(t *testing.T) {
 			scopes:      allowedScopes,
 			descLength:  72,
 			expectValid: false,
+			errorCode:   "description_too_long",
 			errorMsg:    "description too long",
 		},
 		{
@@ -199,6 +221,7 @@ func TestConventionalCommitEdgeCases(t *testing.T) {
 			scopes:      allowedScopes,
 			descLength:  72,
 			expectValid: false, // Should fail as the regex only allows \w (word chars) in type
+			errorCode:   "invalid_format",
 			errorMsg:    "invalid conventional commit format",
 		},
 	}
@@ -212,8 +235,15 @@ func TestConventionalCommitEdgeCases(t *testing.T) {
 			} else {
 				assert.NotEmpty(t, result.Errors(), "Expected errors but got none")
 
+				valErr := result.Errors()[0]
+				assert.Equal(t, "ConventionalCommit", valErr.Rule, "Rule name should be set")
+
+				if test.errorCode != "" {
+					assert.Equal(t, test.errorCode, valErr.Code, "Error code should match expected")
+				}
+
 				if test.errorMsg != "" {
-					assert.Contains(t, result.Errors()[0].Error(), test.errorMsg)
+					assert.Contains(t, valErr.Message, test.errorMsg, "Error message should contain expected text")
 				}
 			}
 		})
@@ -234,32 +264,29 @@ func TestConventionalCommitMethods(t *testing.T) {
 
 	t.Run("Result method with errors", func(t *testing.T) {
 		commit := rule.ConventionalCommit{}
-		err := errors.New("test error")
-		commit.AddTestError(err)
+		commit.AddTestError("invalid_format", "test error", nil)
 		assert.Equal(t, "test error", commit.Result())
 	})
 
 	t.Run("Errors method", func(t *testing.T) {
 		commit := rule.ConventionalCommit{}
-		err := errors.New("test error")
-		commit.AddTestError(err)
+		commit.AddTestError("invalid_format", "test error", nil)
 		errors := commit.Errors()
 		assert.Len(t, errors, 1)
-		assert.Equal(t, "test error", errors[0].Error())
+		assert.Equal(t, "test error", errors[0].Message)
 	})
 
 	t.Run("AddTestError method", func(t *testing.T) {
 		commit := rule.ConventionalCommit{}
-		err1 := errors.New("first error")
-		err2 := errors.New("second error")
-
-		commit.AddTestError(err1)
-		commit.AddTestError(err2)
+		commit.AddTestError("invalid_format", "first error", nil)
+		commit.AddTestError("invalid_type", "second error", nil)
 
 		errors := commit.Errors()
 		assert.Len(t, errors, 2)
-		assert.Equal(t, "first error", errors[0].Error())
-		assert.Equal(t, "second error", errors[1].Error())
+		assert.Equal(t, "first error", errors[0].Message)
+		assert.Equal(t, "second error", errors[1].Message)
+		assert.Equal(t, "invalid_format", errors[0].Code)
+		assert.Equal(t, "invalid_type", errors[1].Code)
 	})
 }
 
@@ -281,7 +308,7 @@ func TestHelpMethodOutput(t *testing.T) {
 			name: "Invalid format",
 			createCommit: func() rule.ConventionalCommit {
 				commit := rule.ConventionalCommit{}
-				commit.AddTestError(errors.New("invalid conventional commit format: bad format"))
+				commit.AddTestError("invalid_format", "invalid conventional commit format: bad format", nil)
 
 				return commit
 			},
@@ -291,7 +318,8 @@ func TestHelpMethodOutput(t *testing.T) {
 			name: "Invalid type",
 			createCommit: func() rule.ConventionalCommit {
 				commit := rule.ConventionalCommit{}
-				commit.AddTestError(errors.New("invalid type \"badtype\": allowed types are [feat fix]"))
+				commit.AddTestError("invalid_type", "invalid type \"badtype\": allowed types are [feat fix]",
+					map[string]string{"type": "badtype", "allowed_types": "feat,fix"})
 
 				return commit
 			},
@@ -301,7 +329,8 @@ func TestHelpMethodOutput(t *testing.T) {
 			name: "Invalid scope",
 			createCommit: func() rule.ConventionalCommit {
 				commit := rule.ConventionalCommit{}
-				commit.AddTestError(errors.New("invalid scope \"badscope\": allowed scopes are [ui api]"))
+				commit.AddTestError("invalid_scope", "invalid scope \"badscope\": allowed scopes are [ui api]",
+					map[string]string{"scope": "badscope", "allowed_scopes": "ui,api"})
 
 				return commit
 			},
@@ -311,7 +340,7 @@ func TestHelpMethodOutput(t *testing.T) {
 			name: "Empty description",
 			createCommit: func() rule.ConventionalCommit {
 				commit := rule.ConventionalCommit{}
-				commit.AddTestError(errors.New("empty description: description must contain non-whitespace characters"))
+				commit.AddTestError("empty_description", "empty description: description must contain non-whitespace characters", nil)
 
 				return commit
 			},
@@ -321,7 +350,8 @@ func TestHelpMethodOutput(t *testing.T) {
 			name: "Description too long",
 			createCommit: func() rule.ConventionalCommit {
 				commit := rule.ConventionalCommit{}
-				commit.AddTestError(errors.New("description too long: 80 characters (max: 72)"))
+				commit.AddTestError("description_too_long", "description too long: 80 characters (max: 72)",
+					map[string]string{"actual_length": "80", "max_length": "72"})
 
 				return commit
 			},
@@ -331,7 +361,7 @@ func TestHelpMethodOutput(t *testing.T) {
 			name: "Spacing error",
 			createCommit: func() rule.ConventionalCommit {
 				commit := rule.ConventionalCommit{}
-				commit.AddTestError(errors.New("spacing error: must have exactly one space after colon"))
+				commit.AddTestError("spacing_error", "spacing error: must have exactly one space after colon", nil)
 
 				return commit
 			},
@@ -341,7 +371,7 @@ func TestHelpMethodOutput(t *testing.T) {
 			name: "Unknown error",
 			createCommit: func() rule.ConventionalCommit {
 				commit := rule.ConventionalCommit{}
-				commit.AddTestError(errors.New("some unknown error"))
+				commit.AddTestError("unknown_error", "some unknown error", nil)
 
 				return commit
 			},

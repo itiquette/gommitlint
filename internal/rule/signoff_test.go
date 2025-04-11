@@ -17,6 +17,7 @@ func TestValidateSignOff(t *testing.T) {
 		name         string
 		message      string
 		expectError  bool
+		errorCode    string
 		errorMessage string
 	}{
 		{
@@ -44,6 +45,7 @@ Signed-off-by: Cragger Crocodile <cragger@svamp.org>`,
 			message: `Add feature
 Implement new logging system.`,
 			expectError:  true,
+			errorCode:    "missing_signoff",
 			errorMessage: "commit must be signed-off",
 		},
 		{
@@ -51,6 +53,7 @@ Implement new logging system.`,
 			message: `Add test
 Signed by: Laval Lion <laval.lion@cavora.org>`,
 			expectError:  true,
+			errorCode:    "invalid_format",
 			errorMessage: "commit must be signed-off",
 		},
 		{
@@ -58,6 +61,7 @@ Signed by: Laval Lion <laval.lion@cavora.org>`,
 			message: `Add test
 Signed-off-by: Phoenix Fire <invalid-email>`,
 			expectError:  true,
+			errorCode:    "invalid_format",
 			errorMessage: "commit must be signed-off",
 		},
 		{
@@ -65,31 +69,51 @@ Signed-off-by: Phoenix Fire <invalid-email>`,
 			message: `Add test
 Signed-off-by: <laval@cavora.org>`,
 			expectError:  true,
+			errorCode:    "invalid_format",
 			errorMessage: "commit must be signed-off",
 		},
 		{
 			name:         "Empty message",
 			message:      "",
 			expectError:  true,
+			errorCode:    "empty_message",
 			errorMessage: "commit message body is empty",
 		},
 		{
 			name:         "Whitespace only message",
 			message:      "   \n  \t  \n",
 			expectError:  true,
+			errorCode:    "empty_message",
 			errorMessage: "commit message body is empty",
 		},
 	}
 
 	for _, testtable := range tests {
 		t.Run(testtable.name, func(t *testing.T) {
-			// Call the rule with the updated function name
+			// Call the rule
 			rule := rule.ValidateSignOff(testtable.message)
 
 			// Check errors as expected
 			if testtable.expectError {
 				require.NotEmpty(t, rule.Errors(), "expected errors but got none")
+
+				// Check error code if specified
+				if testtable.errorCode != "" {
+					assert.Equal(t, testtable.errorCode, rule.Errors()[0].Code,
+						"Error code should match expected")
+				}
+
+				// Check error message
 				require.Contains(t, rule.Result(), testtable.errorMessage, "unexpected error message")
+
+				// Verify rule name is set in error
+				assert.Equal(t, "SignOff", rule.Errors()[0].Rule, "Rule name should be set in ValidationError")
+
+				// Verify context data exists for appropriate errors
+				if testtable.errorCode != "empty_message" {
+					assert.Contains(t, rule.Errors()[0].Context, "message",
+						"Context should contain the message")
+				}
 
 				// Verify Help() method provides guidance
 				helpText := rule.Help()
@@ -116,4 +140,22 @@ Signed-off-by: <laval@cavora.org>`,
 			assert.Equal(t, "SignOff", rule.Name(), "Rule name should be 'SignOff'")
 		})
 	}
+
+	// Test for specific help messages based on error type
+	t.Run("Specific help messages", func(t *testing.T) {
+		// Empty message case
+		emptyRule := rule.ValidateSignOff("")
+		assert.Contains(t, emptyRule.Help(), "is currently empty",
+			"Help for empty message should mention it's empty")
+
+		// Missing signoff case
+		missingRule := rule.ValidateSignOff("Add feature\nImplement new feature")
+		assert.Contains(t, missingRule.Help(), "git commit -s",
+			"Help for missing signoff should mention git commit -s")
+
+		// Invalid format case
+		invalidRule := rule.ValidateSignOff("Add feature\nSigned by: Invalid <format>")
+		assert.Contains(t, invalidRule.Help(), "correctly formatted",
+			"Help for invalid format should mention correct format")
+	})
 }

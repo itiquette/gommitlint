@@ -5,10 +5,12 @@
 package rule
 
 import (
-	"fmt"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
+
+	"github.com/itiquette/gommitlint/internal/model"
 )
 
 // SubjectRegex Format: type(scope)!: description.
@@ -49,7 +51,7 @@ var SubjectRegex = regexp.MustCompile(`^(\w+)(?:\(([\w,/-]+)\))?(!)?:[ ](.+)$`)
 // If configured with allowed types or scopes, the rule also validates that the
 // commit uses only approved types and scopes according to project conventions.
 type ConventionalCommit struct {
-	errors []error
+	errors []*model.ValidationError
 }
 
 // Name returns the rule identifier.
@@ -67,7 +69,7 @@ func (c ConventionalCommit) Result() string {
 }
 
 // Errors returns all validation errors.
-func (c ConventionalCommit) Errors() []error {
+func (c ConventionalCommit) Errors() []*model.ValidationError {
 	return c.errors
 }
 
@@ -77,10 +79,11 @@ func (c ConventionalCommit) Help() string {
 		return "No errors to fix"
 	}
 
-	errMsg := c.errors[0].Error()
-
-	if strings.Contains(errMsg, "invalid conventional commit format") {
-		return `Your commit message does not follow the conventional commit format.
+	// Check for specific error codes if available
+	if len(c.errors) > 0 {
+		switch c.errors[0].Code {
+		case "invalid_format":
+			return `Your commit message does not follow the conventional commit format.
 The correct format is: type(scope)!: description
 Examples:
 - feat: add new feature
@@ -91,36 +94,32 @@ Make sure:
 - The scope is in parentheses (if provided)
 - There's a colon followed by a single space
 - Include a description after the space`
-	}
 
-	if strings.Contains(errMsg, "invalid type") {
-		return `The commit type you used is not in the allowed list of types.
+		case "invalid_type":
+			return `The commit type you used is not in the allowed list of types.
 Your commit should use one of the approved types from the allowed list.
 Check your project documentation or configuration for the full list of allowed types.`
-	}
 
-	if strings.Contains(errMsg, "invalid scope") {
-		return `The scope you specified is not in the allowed list of scopes.
+		case "invalid_scope":
+			return `The scope you specified is not in the allowed list of scopes.
 Scopes define the section of the codebase your change affects.
 Check your project documentation or configuration for the full list of allowed scopes.`
-	}
 
-	if strings.Contains(errMsg, "empty description") {
-		return `Your commit message is missing a description.
+		case "empty_description":
+			return `Your commit message is missing a description.
 After the type(scope): prefix, you must include a description that explains what the commit does.
 Example: feat(ui): add new button component`
-	}
 
-	if strings.Contains(errMsg, "description too long") {
-		return `Your commit description exceeds the maximum allowed length.
+		case "description_too_long":
+			return `Your commit description exceeds the maximum allowed length.
 Keep your commit description concise while still being descriptive.
 Consider breaking down large changes into multiple smaller commits if possible.`
-	}
 
-	if strings.Contains(errMsg, "spacing error") {
-		return `There should be exactly one space after the colon in your commit message.
+		case "spacing_error":
+			return `There should be exactly one space after the colon in your commit message.
 Correct: feat: add feature
 Incorrect: feat:add feature or feat:  add feature`
+		}
 	}
 
 	// Default help message
@@ -133,14 +132,20 @@ Examples:
 - chore!: drop support for legacy systems`
 }
 
-// addErrorf adds an error to the rule's errors slice.
-func (c *ConventionalCommit) addErrorf(format string, args ...interface{}) {
-	c.errors = append(c.errors, fmt.Errorf(format, args...))
+// addError adds a structured validation error.
+func (c *ConventionalCommit) addError(code, message string, context map[string]string) {
+	err := model.NewValidationError("ConventionalCommit", code, message)
+
+	// Add any context values
+	for key, value := range context {
+		_ = err.WithContext(key, value)
+	}
+
+	c.errors = append(c.errors, err)
 }
 
-// AddTestError adds an error to the rule's errors slice (for testing only).
-func (c *ConventionalCommit) AddTestError(err error) {
-	c.errors = append(c.errors, err)
+func (c *ConventionalCommit) AddTestError(code, message string, context map[string]string) {
+	c.addError(code, message, context)
 }
 
 // ValidateConventionalCommit checks if a commit subject follows conventional format.
@@ -169,7 +174,13 @@ func ValidateConventionalCommit(subject string, types []string, scopes []string,
 
 	// Handle empty subject early
 	if strings.TrimSpace(subject) == "" {
-		rule.addErrorf("invalid conventional commit format: empty message")
+		rule.addError(
+			"invalid_format",
+			"invalid conventional commit format: empty message",
+			map[string]string{
+				"subject": subject,
+			},
+		)
 
 		return rule
 	}
@@ -181,14 +192,26 @@ func ValidateConventionalCommit(subject string, types []string, scopes []string,
 
 	// Validate basic format first
 	if !SubjectRegex.MatchString(subject) {
-		rule.addErrorf("invalid conventional commit format: %q", subject)
+		rule.addError(
+			"invalid_format",
+			"invalid conventional commit format: "+subject,
+			map[string]string{
+				"subject": subject,
+			},
+		)
 
 		return rule
 	}
 
 	//Simple check for ": " vs ":  " (one space vs multiple spaces)
 	if strings.Contains(subject, ":  ") {
-		rule.addErrorf("spacing error: must have exactly one space after colon")
+		rule.addError(
+			"spacing_error",
+			"spacing error: must have exactly one space after colon",
+			map[string]string{
+				"subject": subject,
+			},
+		)
 
 		return rule
 	}
@@ -196,7 +219,13 @@ func ValidateConventionalCommit(subject string, types []string, scopes []string,
 	// Parse the subject according to conventional commit format
 	matches := SubjectRegex.FindStringSubmatch(subject)
 	if len(matches) != 5 {
-		rule.addErrorf("invalid conventional commit format: %q", subject)
+		rule.addError(
+			"invalid_format",
+			"invalid conventional commit format: "+subject,
+			map[string]string{
+				"subject": subject,
+			},
+		)
 
 		return rule
 	}
@@ -208,7 +237,14 @@ func ValidateConventionalCommit(subject string, types []string, scopes []string,
 
 	// Validate type
 	if len(types) > 0 && !slices.Contains(types, commitType) {
-		rule.addErrorf("invalid type %q: allowed types are %v", commitType, types)
+		rule.addError(
+			"invalid_type",
+			"invalid type \""+commitType+"\": allowed types are "+strings.Join(types, ", "),
+			map[string]string{
+				"type":          commitType,
+				"allowed_types": strings.Join(types, ","),
+			},
+		)
 
 		return rule
 	}
@@ -216,9 +252,16 @@ func ValidateConventionalCommit(subject string, types []string, scopes []string,
 	// Validate scope if provided and scope list is defined
 	if scope != "" && len(scopes) > 0 {
 		scopesList := strings.Split(scope, ",")
-		for _, s := range scopesList {
-			if !slices.Contains(scopes, s) {
-				rule.addErrorf("invalid scope %q: allowed scopes are %v", s, scopes)
+		for _, scope := range scopesList {
+			if !slices.Contains(scopes, scope) {
+				rule.addError(
+					"invalid_scope",
+					"invalid scope \""+scope+"\": allowed scopes are "+strings.Join(scopes, ", "),
+					map[string]string{
+						"scope":          scope,
+						"allowed_scopes": strings.Join(scopes, ","),
+					},
+				)
 
 				return rule
 			}
@@ -227,14 +270,25 @@ func ValidateConventionalCommit(subject string, types []string, scopes []string,
 
 	// Validate description content
 	if strings.TrimSpace(description) == "" {
-		rule.addErrorf("empty description: description must contain non-whitespace characters")
+		rule.addError(
+			"empty_description",
+			"empty description: description must contain non-whitespace characters",
+			nil,
+		)
 
 		return rule
 	}
 
 	// Validate description length
 	if len(description) > descLength {
-		rule.addErrorf("description too long: %d characters (max: %d)", len(description), descLength)
+		rule.addError(
+			"description_too_long",
+			"description too long: "+strconv.Itoa(len(description))+" characters (max: "+strconv.Itoa(descLength)+")",
+			map[string]string{
+				"actual_length": strconv.Itoa(len(description)),
+				"max_length":    strconv.Itoa(descLength),
+			},
+		)
 
 		return rule
 	}
