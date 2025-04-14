@@ -36,7 +36,7 @@ type ColorScheme struct {
 }
 
 // PrintReport prints validation results.
-func PrintReport(rules []model.CommitRule, commitInfo *model.CommitInfo, opts *PrintOptions) error {
+var PrintReport = func(rules []model.CommitRule, commitInfo *model.CommitInfo, opts *PrintOptions) error {
 	// Default options if none provided
 	if opts == nil {
 		opts = &PrintOptions{

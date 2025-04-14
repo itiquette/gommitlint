@@ -13,6 +13,7 @@ path = [
   "**/*/valid.priv",
   "**/*/valid.pub",
   ".gitleaksignore",
+  "CLAUDE.md",
 ]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>"

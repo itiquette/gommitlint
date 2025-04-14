@@ -12,13 +12,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/fatih/color"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/itiquette/gommitlint/internal"
 	"github.com/itiquette/gommitlint/internal/configuration"
 	gitService "github.com/itiquette/gommitlint/internal/git"
+	"github.com/itiquette/gommitlint/internal/results"
 	"github.com/itiquette/gommitlint/internal/validation"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
@@ -99,7 +98,7 @@ Signed-off-by: Test User <test@example.com>`
 				return repoPath
 			},
 			args:           []string{"--git-reference", "refs/heads/main"},
-			expectedOutput: "✓ SubjectLength: Subject length OK",
+			expectedOutput: "SubjectLength: Subject length OK",
 			expectedError:  false,
 		},
 		{
@@ -152,7 +151,7 @@ Signed-off-by: Test User <test@example.com>`
 				return repoPath
 			},
 			args:           []string{"--base-branch", "main"},
-			expectedOutput: "✓ SubjectLength: Subject length OK",
+			expectedOutput: "SubjectLength: Subject length OK",
 			expectedError:  false,
 		},
 		{
@@ -191,7 +190,7 @@ Signed-off-by: Test User <test@example.com>`
 				return repoPath
 			},
 			args:           []string{"--revision-range", "HEAD~1..HEAD"},
-			expectedOutput: "✓ SubjectLength: Subject length OK",
+			expectedOutput: "SubjectLength: Subject length OK",
 			expectedError:  false,
 		},
 		{
@@ -354,7 +353,21 @@ Signed-off-by: Test User <test@example.com>`
 				return repoPath
 			},
 			args:           []string{"--revision-range", "HEAD~2..HEAD"},
-			expectedOutput: "✓ SubjectLength: Subject length OK",
+			expectedOutput: "SubjectLength: Subject length OK",
+			expectedError:  false,
+		},
+		// Test JSON output format
+		{
+			name: "validate_json_output",
+			setup: func(t *testing.T, path string) string {
+				t.Helper()
+				repoPath := filepath.Join(path, "json-output")
+				setupTestRepo(t, repoPath)
+
+				return repoPath
+			},
+			args:           []string{"--format", "json"},
+			expectedOutput: "\"status\":",
 			expectedError:  false,
 		},
 	}
@@ -399,8 +412,13 @@ Signed-off-by: Test User <test@example.com>`
 				require.NoError(t, err)
 				require.Contains(t, output, tabletest.expectedOutput, "Output: %s", output)
 
-				// Check that the output includes at least one passing rule
-				require.Contains(t, output, "✓", "Output should contain at least one passing rule check")
+				// For JSON output, we have different expectations
+				if tabletest.name == "validate_json_output" {
+					require.Contains(t, output, "\"commits\":")
+				} else {
+					// Check that the output includes at least one passing rule (except for JSON output)
+					require.Contains(t, output, "SubjectLength", "Output should contain at least one rule check")
+				}
 			}
 		})
 	}
@@ -408,101 +426,110 @@ Signed-off-by: Test User <test@example.com>`
 
 // createTestCommand creates a test-safe version of the validate command that doesn't use os.Exit.
 func createTestCommand() *cobra.Command {
-	return &cobra.Command{
+	var validateCmd = &cobra.Command{
 		Use:   "validate",
 		Short: "Validates commit messages against configured rules (test version)",
 		Long:  `Validates commit messages in the repository against the rules defined in your configuration file.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			// This code is the same as in the real command, but with os.Exit calls replaced with error returns
+			// This is a test-safe version that returns errors instead of calling os.Exit
 
 			// Get configuration
 			gommitLintConf, err := configuration.New()
 			if err != nil {
-				return fmt.Errorf("Failed to create validator: %w", err)
+				return fmt.Errorf("failed to create validator: %w", err)
 			}
 
 			// Create Git service
 			git, err := gitService.NewService()
 			if err != nil {
-				return fmt.Errorf("Failed to initialize git service: %w", err)
+				return fmt.Errorf("failed to initialize git service: %w", err)
 			}
 
 			// Process flags
 			opts, err := processFlags(cmd, git)
 			if err != nil {
-				return fmt.Errorf("Failed to process flags: %w", err)
+				return fmt.Errorf("failed to process flags: %w", err)
 			}
 
-			// Validate
+			// Create validator
 			validator, err := validation.NewValidator(opts, gommitLintConf.GommitConf)
 			if err != nil {
-				return fmt.Errorf("Failed to create validator: %w", err)
+				return fmt.Errorf("failed to create validator: %w", err)
 			}
 
 			// Get commits to validate
 			commits, err := validator.GetCommitsToValidate()
 			if err != nil {
-				return fmt.Errorf("Failed to get commits: %w", err)
+				return fmt.Errorf("failed to get commits: %w", err)
 			}
 
-			// Create printer options with proper verbose/help settings
-			printOpts := &internal.PrintOptions{
-				Verbose:        opts.Verbose,
-				ShowHelp:       opts.ShowHelp,
-				RuleToShowHelp: opts.RuleToShowHelp,
-				LightMode:      opts.LightMode,
-			}
+			// Create result aggregator
+			aggregator := results.NewAggregator()
 
-			passedCommits := 0
-
-			// For each commit, validate and print results
+			// For each commit, validate and add results to aggregator
 			for _, commitInfo := range commits {
 				// Validate the commit
 				rules, err := validator.ValidateCommit(commitInfo)
 				if err != nil {
+					// Just log error and continue with next commit
+					cmd.PrintErrf("Error validating commit %s: %v\n", commitInfo.RawCommit.Hash.String(), err)
+
 					continue
 				}
 
-				// Print report for this commit
-				err = internal.PrintReport(rules.All(), &commitInfo, printOpts)
-				if err != nil {
-					continue
-				}
-
-				// Track if this commit passed (all rules passed)
-				commitPassed := true
-				for _, rule := range rules.All() {
-					if len(rule.Errors()) > 0 {
-						commitPassed = false
-
-						break
-					}
-				}
-
-				if commitPassed {
-					passedCommits++
-				}
+				// Add results to aggregator
+				aggregator.AddCommitResult(commitInfo, rules.All())
 			}
 
-			// Print overall summary if multiple commits were validated
-			if len(commits) > 1 {
-				printOverallSummary(
-					len(commits),
-					passedCommits,
-					color.NoColor,  // Use the current global color setting
-					opts.LightMode, // Use light mode setting from options
-				)
+			// Determine output format
+			formatFlag, _ := cmd.Flags().GetString("format")
+			outputFormat := results.FormatText
+			if formatFlag == "json" {
+				outputFormat = results.FormatJSON
 			}
 
-			// Check for validation failures
-			if len(commits) != passedCommits {
-				// Return an error instead of exiting
-				return errors.New("Validation failed: some commits did not pass all rules")
+			// Create reporter options
+			verbose, _ := cmd.Flags().GetBool("verbose")
+			extraVerbose, _ := cmd.Flags().GetBool("extra-verbose")
+			lightMode, _ := cmd.Flags().GetBool("light-mode")
+			ruleHelp, _ := cmd.Flags().GetString("rulehelp")
+
+			reporterOptions := results.ReporterOptions{
+				Format:         outputFormat,
+				Verbose:        verbose,
+				ShowHelp:       extraVerbose || ruleHelp != "",
+				RuleToShowHelp: ruleHelp,
+				LightMode:      lightMode,
+				Writer:         cmd.OutOrStdout(),
+			}
+
+			// Create reporter and generate report
+			reporter := results.NewReporter(aggregator, reporterOptions)
+			if err := reporter.GenerateReport(); err != nil {
+				return fmt.Errorf("failed to generate report: %w", err)
+			}
+
+			// Return error if validation failed
+			if !aggregator.AllRulesPassed() {
+				return errors.New("validation failed: some commits did not pass all rules")
 			}
 
 			return nil
 		},
 	}
+
+	// Add all the flags from the original command
+	validateCmd.Flags().String("message-file", "", "commit message file path to validate")
+	validateCmd.Flags().String("git-reference", "", "git reference to validate (defaults to auto-detected main branch)")
+	validateCmd.Flags().String("revision-range", "", "range of commits to validate (<commit1>..<commit2>)")
+	validateCmd.Flags().String("base-branch", "", "base branch to compare with (sets revision-range to <base-branch>..HEAD and overrides git-reference)")
+	validateCmd.Flags().BoolP("verbose", "v", false, "show detailed validation results")
+	validateCmd.Flags().Bool("extra-verbose", false, "show extra detailed validation results")
+	validateCmd.Flags().Bool("light-mode", false, "use light background color scheme")
+	validateCmd.Flags().String("rulehelp", "", "show detailed help for a specific rule (e.g., --rulehelp=signature)")
+	validateCmd.Flags().String("format", "text", "output format: text or json")
+
+	return validateCmd
 }
 
 // executeCommandForTest executes a cobra command for testing and returns its output.
@@ -523,10 +550,6 @@ func executeCommandForTest(t *testing.T, cmd *cobra.Command, args ...string) (st
 		os.Stdout = stdout
 		os.Stderr = stderr
 	}()
-
-	// Copy any flags from the original validate command
-	originalCmd := newValidateCmd()
-	cmd.Flags().AddFlagSet(originalCmd.Flags())
 
 	// Set the command arguments
 	cmd.SetArgs(args)

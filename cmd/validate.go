@@ -6,119 +6,54 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"strings"
 
-	"github.com/fatih/color"
-	"github.com/itiquette/gommitlint/internal"
 	"github.com/itiquette/gommitlint/internal/configuration"
 	gitService "github.com/itiquette/gommitlint/internal/git"
 	"github.com/itiquette/gommitlint/internal/model"
+	"github.com/itiquette/gommitlint/internal/results"
 	"github.com/itiquette/gommitlint/internal/validation"
 	"github.com/spf13/cobra"
 )
 
-// exitCode 2 = validation failure.
-func handleCommandError(err error, message string, exitCode int) {
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %v\n", message, err)
-		os.Exit(exitCode)
-	}
-}
+// Note: Error handling is now done in runValidation function
 
 func newValidateCmd() *cobra.Command {
 	var validateCmd = &cobra.Command{
 		Use:   "validate",
 		Short: "Validates commit message/s against configured rules",
-		Long:  `Validates commit message/s against the a set of rules.`,
+		Long: `Validates commit message/s against a set of rules.
+
+Examples:
+  # Validate commits in the current branch against main
+  gommitlint validate --base-branch=main
+  
+  # Validate a specific commit
+  gommitlint validate --git-reference=HEAD
+  
+  # Validate a commit message from a file
+  gommitlint validate --message-file=/path/to/commit-msg.txt
+  
+  # Validate a range of commits
+  gommitlint validate --revision-range=main..HEAD`,
 		Run: func(cmd *cobra.Command, _ []string) {
-			// Get configuration
-			gommitLintConf, err := configuration.New()
+			// Process validation request
+			exitCode, err := runValidation(cmd)
 			if err != nil {
-				handleCommandError(err, "Failed to create validator", 1)
+				cmd.PrintErrf("Error: %v\n", err)
+				os.Exit(1)
 			}
 
-			// Create Git service
-			git, err := gitService.NewService()
-			if err != nil {
-				handleCommandError(err, "Failed to initialize git service", 3)
-			}
-
-			// Process flags
-			opts, err := processFlags(cmd, git)
-			if err != nil {
-				handleCommandError(err, "Failed to process flags", 1)
-			}
-
-			// Validate
-			validator, err := validation.NewValidator(opts, gommitLintConf.GommitConf)
-			if err != nil {
-				handleCommandError(err, "Failed to create validator", 1)
-			}
-
-			// Get commits to validate
-			commits, err := validator.GetCommitsToValidate()
-			if err != nil {
-				handleCommandError(err, "Failed to get commits", 1)
-			}
-
-			// Create printer options with proper verbose/help settings
-			printOpts := &internal.PrintOptions{
-				Verbose:        opts.Verbose,
-				ShowHelp:       opts.ShowHelp,
-				RuleToShowHelp: opts.RuleToShowHelp,
-				LightMode:      opts.LightMode,
-			}
-
-			passedCommits := 0
-
-			// For each commit, validate and print results
-			for _, commitInfo := range commits {
-				// Validate the commit
-				rules, err := validator.ValidateCommit(commitInfo)
-				if err != nil {
-					continue
-				}
-
-				// Print report for this commit
-				err = internal.PrintReport(rules.All(), &commitInfo, printOpts)
-				if err != nil {
-					continue
-				}
-
-				// Track if this commit passed (all rules passed)
-				commitPassed := true
-				for _, rule := range rules.All() {
-					if len(rule.Errors()) > 0 {
-						commitPassed = false
-
-						break
-					}
-				}
-
-				if commitPassed {
-					passedCommits++
-				}
-			}
-
-			// Print overall summary if multiple commits were validated
-			if len(commits) > 1 {
-				printOverallSummary(
-					len(commits),
-					passedCommits,
-					color.NoColor,  // Use the current global color setting
-					opts.LightMode, // Use light mode setting from options
-				)
-			}
-
-			// Check for validation failures
-			if len(commits) != passedCommits {
-				// Exit with status 2 for validation failures
-				fmt.Fprintln(os.Stderr, color.New(color.FgRed, color.Bold).Sprint("Validation failed: some commits did not pass all rules"))
-				os.Exit(2)
+			// Special exit codes:
+			// 0 - success
+			// 1 - system error
+			// 2 - validation failure
+			if exitCode > 0 {
+				os.Exit(exitCode)
 			}
 		},
 	}
 
+	// Add flags to the command
 	validateCmd.Flags().String("message-file", "", "commit message file path to validate")
 	validateCmd.Flags().String("git-reference", "", "git reference to validate (defaults to auto-detected main branch)")
 	validateCmd.Flags().String("revision-range", "", "range of commits to validate (<commit1>..<commit2>)")
@@ -127,40 +62,96 @@ func newValidateCmd() *cobra.Command {
 	validateCmd.Flags().Bool("extra-verbose", false, "show extra detailed validation results")
 	validateCmd.Flags().Bool("light-mode", false, "use light background color scheme")
 	validateCmd.Flags().String("rulehelp", "", "show detailed help for a specific rule (e.g., --rulehelp=signature)")
+	validateCmd.Flags().String("format", "text", "output format: text or json")
 
 	return validateCmd
 }
 
-// Print overall summary focused on commit success/failure.
-func printOverallSummary(totalCommits int, passedCommits int, noColor bool, lightMode bool) {
-	// Create a divider line
-	divider := strings.Repeat("=", 80)
-
-	// Define colors based on settings
-	var summaryColor func(format string, a ...interface{}) string
-
-	if noColor {
-		// No color mode - just use plain text
-		summaryColor = fmt.Sprintf
-	} else if lightMode {
-		// Light mode - use blue bold (works well on light backgrounds)
-		summaryColor = color.New(color.FgBlue, color.Bold).SprintfFunc()
-	} else {
-		// Dark mode - use cyan bold (works well on dark backgrounds)
-		summaryColor = color.New(color.FgHiBlue, color.Bold).SprintfFunc()
+// runValidation handles the core validation logic and returns an exit code.
+func runValidation(cmd *cobra.Command) (int, error) {
+	// Get configuration
+	gommitLintConf, err := configuration.New()
+	if err != nil {
+		return 1, fmt.Errorf("failed to create validator: %w", err)
 	}
 
-	// Calculate failed commits
-	failedCommits := totalCommits - passedCommits
+	// Create Git service
+	git, err := gitService.NewService()
+	if err != nil {
+		return 3, fmt.Errorf("failed to initialize git service: %w", err)
+	}
 
-	// Print the summary
-	fmt.Println(summaryColor(divider))
-	fmt.Println(summaryColor("OVERALL SUMMARY"))
-	fmt.Println(summaryColor(divider))
-	fmt.Printf("%s Validated %d commits\n", summaryColor("Result:"), totalCommits)
-	fmt.Printf("  %s %d commits passed\n", summaryColor("Passed:"), passedCommits)
-	fmt.Printf("  %s %d commits failed\n", summaryColor("Failed:"), failedCommits)
-	fmt.Println()
+	// Process flags
+	opts, err := processFlags(cmd, git)
+	if err != nil {
+		return 1, fmt.Errorf("failed to process flags: %w", err)
+	}
+
+	// Create validator
+	validator, err := validation.NewValidator(opts, gommitLintConf.GommitConf)
+	if err != nil {
+		return 1, fmt.Errorf("failed to create validator: %w", err)
+	}
+
+	// Get commits to validate
+	commits, err := validator.GetCommitsToValidate()
+	if err != nil {
+		return 1, fmt.Errorf("failed to get commits: %w", err)
+	}
+
+	// Create result aggregator
+	aggregator := results.NewAggregator()
+
+	// For each commit, validate and add results to aggregator
+	for _, commitInfo := range commits {
+		// Validate the commit
+		rules, err := validator.ValidateCommit(commitInfo)
+		if err != nil {
+			// Just log error and continue with next commit
+			cmd.PrintErrf("Error validating commit %s: %v\n", commitInfo.RawCommit.Hash.String(), err)
+
+			continue
+		}
+
+		// Add results to aggregator
+		aggregator.AddCommitResult(commitInfo, rules.All())
+	}
+
+	// Determine output format
+	formatFlag, _ := cmd.Flags().GetString("format")
+	outputFormat := results.FormatText
+
+	if formatFlag == "json" {
+		outputFormat = results.FormatJSON
+	}
+
+	// Create reporter options
+	verbose, _ := cmd.Flags().GetBool("verbose")
+	extraVerbose, _ := cmd.Flags().GetBool("extra-verbose")
+	lightMode, _ := cmd.Flags().GetBool("light-mode")
+	ruleHelp, _ := cmd.Flags().GetString("rulehelp")
+
+	reporterOptions := results.ReporterOptions{
+		Format:         outputFormat,
+		Verbose:        verbose,
+		ShowHelp:       extraVerbose || ruleHelp != "",
+		RuleToShowHelp: ruleHelp,
+		LightMode:      lightMode,
+		Writer:         cmd.OutOrStdout(),
+	}
+
+	// Create reporter and generate report
+	reporter := results.NewReporter(aggregator, reporterOptions)
+	if err := reporter.GenerateReport(); err != nil {
+		return 1, fmt.Errorf("failed to generate report: %w", err)
+	}
+
+	// Return success if all rules passed, validation failure code otherwise
+	if aggregator.AllRulesPassed() {
+		return 0, nil
+	}
+
+	return 2, nil
 }
 
 // processFlags handles all flag logic with clear precedence rules.

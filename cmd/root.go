@@ -5,7 +5,6 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	"github.com/rs/zerolog"
@@ -17,7 +16,7 @@ func newRootCommand(_ context.Context, versionString string) *cobra.Command {
 		Use:     "gommitlint",
 		Version: versionString,
 		Short:   "Commit validator.",
-		Long:    ``,
+		Long:    `A tool to validate git commit messages against configurable rules.`,
 	}
 
 	rootCmd.AddCommand(newValidateCmd())
@@ -31,7 +30,6 @@ func Execute(version, commitSHA, buildDate string) {
 	versionString := version + " (Commit SHA: " + commitSHA + ", Build date: " + buildDate + ")"
 	err := newRootCommand(ctx, versionString).Execute()
 
-	fmt.Printf("sadfasdf")
 	HandleError(ctx, err)
 }
 
