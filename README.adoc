@@ -2,10 +2,12 @@
 //
 // SPDX-License-Identifier: CC0-1.0
 = Gommitlint
+
 :revdate: {docdatetime}
 :doctype: article
 :imagesdir: assets
 :source-highlighter: rouge
+
 ifdef::env-github[]
 :tip-caption: :bulb:
 :note-caption: :information_source:
@@ -13,70 +15,172 @@ ifdef::env-github[]
 :caution-caption: :fire:
 :warning-caption: :warning:
 endif::[]
+
 image:https://img.shields.io/github/v/tag/itiquette/gommitlint?style=for-the-badge&color=yellow[Tag,link=https://github.com/itiquette/gommitlint/tags]
 https://scorecard.dev/viewer/?uri=github.com/itiquette/gommitlint[image:https://api.scorecard.dev/projects/github.com/itiquette/gommitlint/badge?style=for-the-badge[OpenSSF Scorecard]]
 link:LICENSE[image:https://img.shields.io/badge/License-EUPL%201.2-blue?style=for-the-badge[EUPL 1.2]]
 image:https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.reuse.software%2Fstatus%2Fgithub.com%2Fitiquette%2Fgommitlint&query=status&style=for-the-badge&label=REUSE[REUSE,link=https://api.reuse.software/info/github.com/itiquette/gommitlint]
 
-== What can this tool do for you?
-*Gommitlint* is a simple CLI-tool for validating Git commit messages and repository state.
-At the moment it is in early development.
+== Git Commit Message Linter
 
-== Where can you use it?
+NOTE: STILL BETA dont use yet
 
-* As a CLI-tool for pre-commit validation
-* In a CI/CD-pipeline to enforce team standards
-* As a Git hook for automatic validation
+**Gommitlint** validates Git commit messages to help you maintain a clean, consistent project history.
+Works out-of-the-box with zero configuration.
 
-=== Available validation rules:
+- **Zero Configuration** - Sensible defaults following industry best practices  
+- **Conventional Commits** - Enforces standard commit message format  
+- **CI/CD Ready** - Multiple output formats for automation  
+- **Git Hooks** - Validate commits before they're made  
+- **Flexible Rules** - Enable/disable rules as needed  
 
-TE
-==== Commit Message Rules
+== Quick Start
 
-* *CommitsAhead* - Limits how far a branch can diverge from a reference branch
-* *ConventionalCommit* - Enforces https://www.conventionalcommits.org[Conventional Commits] format with configurable types and scopes
-* *ImperativeVerb* - Validates that commit messages begin with a verb in the imperative mood
-* *JiraReference* - Verifies commits reference valid Jira issue keys in a consistent format
-* *SubjectCase* - Enforces consistent capitalization in commit subjects
-* *SubjectSuffix* - Prevents commit subjects from ending with specified characters
-* *SubjectLength* - Limits commit subject line length for readability (default: 100 chars)
-* *SignOff* - Ensures commits include a Developer Certificate of Origin sign-off line
-* *Spell* - Catches common spelling mistakes with locale-specific dictionaries
-* *Signature* - Verifies commits have a cryptographic signature (GPG or SSH)
-* *SignedIdentity* - Validates signatures against trusted keys with full cryptographic verification
+=== 1. Install
+[source,bash]
+----
+# Install with Go
+go install github.com/itiquette/gommitlint@latest
 
-== Getting Started
-TODO
-//1. Check out the link:docs/usage.adoc[Usage Guide] for a quick start.
-// 2. The link:INSTALL.adoc[Installation Guide] will get you up and running.
+# Or download binary from releases
+curl -L https://github.com/itiquette/gommitlint/releases/latest/download/gommitlint-linux-amd64 -o gommitlint
+chmod +x gommitlint
+----
 
-== Make Gommitlint better?
-ED: Currently I'm not reading PRs as there are a few base things to fix before that.
+=== 2. Validate Commits
+[source,bash]
+----
+# Validate last commit
+gommitlint validate
 
-Here's how you can contribute:
+# Validate commit range  
+gommitlint validate --revision-range=main..HEAD
 
-* Found a bug or have a great idea? Let us know in our https://github.com/itiquette/gommitlint/issues[Issue Tracker]
-* Want to contribute code? Check out our link:CONTRIBUTING.md[Contribution Guide] to get started.
+# Install git hook for automatic validation
+gommitlint install-hook
+----
 
-== For developers
-TODO
-//If you're interested in how it works, see the link:DEVELOPMENT.adoc[Development Guide].
+=== 3. CI/CD Integration
+[source,yaml]
+----
+# GitHub Actions example
+- name: Validate commits
+  run: |
+    go install github.com/itiquette/gommitlint@latest
+    gommitlint validate --base-branch=origin/${{ github.base_ref }} --format=github
+----
 
-== What's next?
-Check out our https://github.com/itiquette/gommitlint/issues[Issues page].
+== Available Rules
 
-== A friendly reminder
-**Please Note**: Gommitlint is currently in Alpha. This means:
+**Enabled by Default:**
+[cols="2,3", options="header"]
+|===
+|Rule |Description
 
-* APIs might change in breaking ways
-* Documentation is still being developed
-* Feel free to share ideas on how we can make it better
+|`subjectlength`
+|Subject line ≤ 72 characters
 
-== Credits & History
+|`conventional`  
+|https://conventionalcommits.org[Conventional Commits] format
 
-Gommitlint was inspired by Sidero Labs https://github.com/siderolabs/conform[Conform tool].
+|`signoff`
+|Requires Signed-off-by line
 
-== Legal Stuff
-Gommitlint is licensed under the EUPL 1.2 License.
-Most of the non-code bits are under Creative Commons CC0-1.0.
-For all the details, check out our link:LICENSE[LICENSE] file and the headers in each file.
+|`signature`
+|Validates GPG/SSH signatures
+
+|`identity`
+|Verifies committer identity
+
+|`branchahead`
+|Limits commits ahead of main branch
+|===
+
+**Disabled by Default:**
+[cols="2,3", options="header"]
+|===
+|Rule |Description
+
+|`commitbody`
+|Requires detailed commit body
+
+|`jirareference`
+|Requires JIRA ticket references
+
+|`spell`
+|Spell checking
+|===
+
+== Configuration
+
+Gommitlint works without configuration.
+To customize, create `.gommitlint.yaml`:
+
+See link:docs/usage.adoc[Usage Guide] for configuration options.
+
+== Integration Examples
+
+See link:docs/usage.adoc[Usage Guide] for CI/CD-integration options.
+
+== Output Formats
+
+=== Text (Default)
+[source,text]
+----
+✓ conventional     Valid conventional commit format
+✓ subjectlength    Subject is 43 characters (max: 72)
+✗ commitbody       Body too short (5 chars, min: 10)
+
+Validation failed: 1 error
+----
+
+=== JSON
+[source,json]
+----
+{
+  "summary": {
+    "all_passed": false,
+    "failed_commits": 1
+  },
+  "commits": [{
+    "commit": {"hash": "abc123"},
+    "passed": false,
+    "rule_results": [{
+      "name": "commitbody",
+      "status": "failed",
+      "errors": [{"message": "Body too short"}]
+    }]
+  }]
+}
+----
+
+== Exit Codes
+
+* `0` - All validations passed
+* `1` - Configuration or system error  
+* `2` - Validation failures found
+
+Perfect for automation and CI/CD pipelines.
+
+== Documentation
+
+* link:docs/usage.adoc[**Usage Guide**] - Complete configuration and examples
+* link:docs/ARCHITECTURE.md[**Architecture**] - Design principles (for developers)
+* link:.gommitlint-full-example.yaml[**Full Config Example**] - All available options
+
+== Contributing
+
+We welcome contributions! You can help by:
+
+* Reporting bugs in our https://github.com/itiquette/gommitlint/issues[Issue Tracker]
+* Suggesting improvements
+* Testing and providing feedback
+
+Check out our link:CONTRIBUTING.md[Contribution Guide] to get started.
+
+== License
+
+* Code: EUPL 1.2 (see link:LICENSE[LICENSE])
+* Documentation: CC0 1.0
+
+---

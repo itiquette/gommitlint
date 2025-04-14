@@ -1,0 +1,85 @@
+# SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+# Complete gommitlint configuration file with all possible fields
+# This file shows every configuration option available in gommitlint
+
+gommitlint:
+  # Message configuration (subject and body)
+  message:
+    subject:
+      max_length: 72 # Maximum allowed length for subject line
+      imperative: false # Require imperative mood (e.g., "Add" not "Added")
+      case: "sentence" # Case style: "sentence", "lower", "upper", "title"
+      forbid_endings: # List of forbidden subject line endings
+        - "."
+        - "!"
+
+    body:
+      min_length: 10 # Minimum number of characters in body
+      min_lines: 3 # Minimum number of lines in body
+      allow_signoff_only: false # Allow commits with only sign-off lines in body
+      require_sign_off: false # Require sign-off line in commits
+
+  # Conventional commits configuration
+  conventional:
+    require_scope: false # Require scope in conventional format (e.g., "feat(scope):")
+    types: # Allowed conventional commit types
+      - "feat"
+      - "fix"
+      - "docs"
+      - "style"
+      - "refactor"
+      - "test"
+      - "chore"
+    scopes: # Allowed scopes (empty means all scopes allowed)
+      # - "core"
+      # - "cli"
+      # - "api"
+    max_description_length: 72 # Maximum length for conventional description
+
+  # Signing and security configuration
+  signing:
+    require_gpg: false # Require GPG signatures
+    allow_multiple_signoffs: false # Allow multiple sign-off lines
+
+  # Repository configuration
+  repo:
+    max_commits_ahead: 10 # Maximum commits ahead of reference branch
+    branch: "origin/main" # Reference branch for ahead check
+
+  # Jira configuration
+  jira:
+    pattern: "([A-Z]+-\\d+)" # Regex pattern for Jira ticket references
+    projects: # Allowed project keys in Jira references
+      - "EXAMPLE"
+      - "DEMO"
+    check_body: true # Also check commit body for references
+
+  # Spell check configuration
+  spell:
+    language: "en_US" # Language for spell checking
+    ignore_words: # Words to ignore during spell check
+      - "gommitlint"
+      - "config"
+      - "repo"
+
+  # Rule configuration
+  rules:
+    enabled: # Rules to enable (takes priority over disabled)
+      - "Subject" # Consolidated rule: validates length, case, suffix, and imperative
+      - "ConventionalCommit"
+      - "CommitBody"
+      - "SignOff"
+      - "Signature"
+      - "JiraReference"
+      - "Spell"
+      - "SignedIdentity" # Updated name from "Identity"
+      - "BranchAhead"
+
+    disabled: # Rules to disable
+      # - "JiraReference"
+
+  # Output configuration
+  output: "text" # Output format: "text", "json", "github", "gitlab"

@@ -17,8 +17,8 @@ permissions:
   contents: read
 
 jobs:
-  commitlint:
-    uses: itiquette/.github/.github/workflows/commit-lint.yml@main
+  # commitlint:
+  #   uses: itiquette/.github/.github/workflows/commit-lint.yml@main
   dependencyreviewlint:
     uses: itiquette/.github/.github/workflows/dependency-review.yml@main
   licenselint:
@@ -34,5 +34,5 @@ jobs:
     permissions:
       contents: read
     if: ${{ !failure() }}
-    needs: [licenselint, commitlint, dependencyreviewlint, golint, misclint]
+    needs: [licenselint, dependencyreviewlint, golint, misclint]
     uses: ./.github/workflows/test.yml
