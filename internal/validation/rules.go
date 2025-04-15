@@ -4,108 +4,38 @@
 package validation
 
 import (
-	"github.com/itiquette/gommitlint/internal/configuration"
+	"context"
+
 	"github.com/itiquette/gommitlint/internal/model"
 	"github.com/itiquette/gommitlint/internal/rule"
 	"github.com/itiquette/gommitlint/internal/rule/signedidentityrule"
 )
 
-const (
-	DefaultSubjectDescriptionCase = "lower"
-	DefaultSubjectInvalidSuffixes = ".! ?"
-	DefaultSpellCheckLocale       = "UK"
-)
+// No longer needed since we're using defaults package
 
-var (
-	DefaultSubjectImperativeRequired = true
-	DefaultSignOffRequired           = true
-	DefaultOneCommitMax              = true
-)
-
-var DefaultConventionalTypes = []string{
-	"build", "chore", "ci", "docs", "feat", "fix",
-	"perf", "refactor", "revert", "style", "test",
-}
-
-// boolPtr returns a pointer to the given boolean value.
-func boolPtr(b bool) *bool {
-	return &b
-}
-
-func (v *Validator) checkValidity(commitRules *model.CommitRules, commitInfo model.CommitInfo) {
-	v.ensureDefaultValues()
-
-	if *v.config.IgnoreMergeCommits && commitInfo.IsMergeCommit {
-		//fmt.Printf("Ignoring merge commit")
+func (v *Validator) checkValidity(ctx context.Context, commitRules *model.CommitRules, commitInfo model.CommitInfo) {
+	// Check for cancellation
+	if ctx.Err() != nil {
 		return
 	}
 
-	v.checkSubjectRules(commitRules, commitInfo)
-	v.checkSignatureRules(commitRules, commitInfo)
-	v.checkConventionalRules(commitRules, commitInfo)
-	v.checkAdditionalRules(commitRules, commitInfo)
+	// Skip merge commits if configured to do so
+	if *v.config.IgnoreMergeCommits && commitInfo.IsMergeCommit {
+		return
+	}
+
+	v.checkSubjectRules(ctx, commitRules, commitInfo)
+	v.checkSignatureRules(ctx, commitRules, commitInfo)
+	v.checkConventionalRules(ctx, commitRules, commitInfo)
+	v.checkAdditionalRules(ctx, commitRules, commitInfo)
 }
 
-// ensureDefaultValues ensures all configuration values have appropriate defaults.
-func (v *Validator) ensureDefaultValues() {
-	// Subject defaults
-	if v.config.Subject != nil {
-		if v.config.Subject.Imperative == nil {
-			v.config.Subject.Imperative = boolPtr(DefaultSubjectImperativeRequired)
-		}
-
-		if v.config.Subject.Case == "" {
-			v.config.Subject.Case = DefaultSubjectDescriptionCase
-		}
-
-		if v.config.Subject.InvalidSuffixes == "" {
-			v.config.Subject.InvalidSuffixes = DefaultSubjectInvalidSuffixes
-		}
-
-		if v.config.Subject.Jira == nil {
-			v.config.Subject.Jira = &configuration.JiraRule{Required: false}
-		}
+func (v *Validator) checkSubjectRules(ctx context.Context, report *model.CommitRules, commitInfo model.CommitInfo) {
+	// Check for cancellation
+	if ctx.Err() != nil {
+		return
 	}
 
-	// Signature defaults
-	if v.config.SignOffRequired == nil {
-		v.config.SignOffRequired = boolPtr(DefaultSignOffRequired)
-	}
-
-	if v.config.Signature == nil {
-		v.config.Signature = &configuration.SignatureRule{Required: true}
-	}
-
-	// Conventional commit defaults
-	if v.config.ConventionalCommit == nil {
-		v.config.ConventionalCommit = &configuration.ConventionalRule{
-			Required: true,
-		}
-	}
-
-	if len(v.config.ConventionalCommit.Types) == 0 {
-		v.config.ConventionalCommit.Types = DefaultConventionalTypes
-	}
-
-	// Additional rules defaults
-	if v.config.SpellCheck == nil {
-		v.config.SpellCheck = &configuration.SpellingRule{Locale: DefaultSpellCheckLocale}
-	}
-
-	if v.config.Body == nil {
-		v.config.Body = &configuration.BodyRule{Required: false}
-	}
-
-	if v.config.NCommitsAhead == nil {
-		v.config.NCommitsAhead = boolPtr(DefaultOneCommitMax)
-	}
-
-	if v.config.IgnoreMergeCommits == nil {
-		v.config.IgnoreMergeCommits = boolPtr(true)
-	}
-}
-
-func (v *Validator) checkSubjectRules(report *model.CommitRules, commitInfo model.CommitInfo) {
 	if v.config.Subject == nil {
 		return
 	}
@@ -133,7 +63,12 @@ func (v *Validator) checkSubjectRules(report *model.CommitRules, commitInfo mode
 	}
 }
 
-func (v *Validator) checkSignatureRules(report *model.CommitRules, commitInfo model.CommitInfo) {
+func (v *Validator) checkSignatureRules(ctx context.Context, report *model.CommitRules, commitInfo model.CommitInfo) {
+	// Check for cancellation
+	if ctx.Err() != nil {
+		return
+	}
+
 	if *v.config.SignOffRequired {
 		signOffRule := rule.ValidateSignOff(commitInfo.Body)
 		report.Add(signOffRule)
@@ -150,7 +85,12 @@ func (v *Validator) checkSignatureRules(report *model.CommitRules, commitInfo mo
 	}
 }
 
-func (v *Validator) checkConventionalRules(report *model.CommitRules, commitInfo model.CommitInfo) {
+func (v *Validator) checkConventionalRules(ctx context.Context, report *model.CommitRules, commitInfo model.CommitInfo) {
+	// Check for cancellation
+	if ctx.Err() != nil {
+		return
+	}
+
 	if v.config.ConventionalCommit.Required {
 		conv := v.config.ConventionalCommit
 		ccRule := rule.ValidateConventionalCommit(commitInfo.Subject, conv.Types, conv.Scopes, conv.MaxDescriptionLength)
@@ -158,9 +98,17 @@ func (v *Validator) checkConventionalRules(report *model.CommitRules, commitInfo
 	}
 }
 
-func (v *Validator) checkAdditionalRules(report *model.CommitRules, commitInfo model.CommitInfo) {
-	spellRule := rule.ValidateSpelling(commitInfo.Message, v.config.SpellCheck.Locale)
-	report.Add(spellRule)
+func (v *Validator) checkAdditionalRules(ctx context.Context, report *model.CommitRules, commitInfo model.CommitInfo) {
+	// Check for cancellation
+	if ctx.Err() != nil {
+		return
+	}
+
+	// Only run spell checking if it's enabled
+	if v.config.SpellCheck.Enabled {
+		spellRule := rule.ValidateSpelling(commitInfo.Message, v.config.SpellCheck.Locale)
+		report.Add(spellRule)
+	}
 
 	if *v.config.NCommitsAhead {
 		commitsAhead := rule.ValidateNumberOfCommits(v.repo, v.options.CommitRef)

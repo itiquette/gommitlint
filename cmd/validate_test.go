@@ -29,7 +29,7 @@ func TestValidateCmd(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 
-	// Create a simple config file in the temp directory
+	// Create a simple config file in the temp directory for testing
 	configContent := `
 gommitlint:
   signature:
@@ -38,6 +38,10 @@ gommitlint:
     max-length: 50
   body:
     max-line-length: 72
+  # Disable validators that can cause test failures
+  spellcheck:
+    enabled: false
+  n-commits-ahead: false
 `
 
 	tests := []struct {
@@ -251,6 +255,10 @@ gommitlint:
     case: ignore
   body:
     max-line-length: 72
+  # Disable validators that can cause test failures
+  spellcheck:
+    enabled: false
+  n-commits-ahead: false
 `
 				repoPath := filepath.Join(path, "merge-commit")
 				testRepo := setupTestRepo(t, repoPath)

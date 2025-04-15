@@ -7,12 +7,16 @@ package validation
 import (
 	"fmt"
 	"strings"
+
+	"github.com/itiquette/gommitlint/internal"
 )
 
 func (v *Validator) parseRevisionRange() ([]string, error) {
 	revs := strings.Split(v.options.RevisionRange, "..")
 	if !v.isValidRevisionRange(revs) {
-		return nil, fmt.Errorf("invalid revision range: %s", v.options.RevisionRange)
+		return nil, internal.NewInputError(
+			fmt.Errorf("invalid revision range: %s", v.options.RevisionRange),
+			map[string]string{"revision_range": v.options.RevisionRange})
 	}
 
 	if len(revs) == 1 {

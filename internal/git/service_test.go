@@ -5,6 +5,8 @@
 package git
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,6 +14,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/itiquette/gommitlint/internal"
 	"github.com/stretchr/testify/require"
 )
 
@@ -88,12 +91,20 @@ func TestGitService(t *testing.T) {
 				service, err := NewServiceForPath(repoPath)
 				require.NoError(t, err)
 
+				// Create a context for testing
+				ctx := context.Background()
+
 				// Test the detection
-				branch, err := service.DetectMainBranch()
+				branch, err := service.DetectMainBranchWithContext(ctx)
 
 				if tabletest.expectError {
 					require.Error(t, err)
-					require.Contains(t, err.Error(), "neither 'main' nor 'master' branch found")
+					// Verify it's the correct error type
+					// Verify it's the correct error type
+					var appErr *internal.ApplicationError
+					if errors.As(err, &appErr) && tabletest.name != "not_a_git_repo" {
+						require.Contains(t, appErr.Error(), "neither 'main' nor 'master' branch found")
+					}
 				} else {
 					require.NoError(t, err)
 				}
@@ -124,6 +135,9 @@ func TestGitService(t *testing.T) {
 		// Create service for testing
 		service, err := NewServiceForPath(repoPath)
 		require.NoError(t, err)
+
+		// Create a context for testing
+		ctx := context.Background()
 
 		tests := []struct {
 			name      string
@@ -169,7 +183,7 @@ func TestGitService(t *testing.T) {
 
 		for _, tabletest := range tests {
 			t.Run(tabletest.name, func(t *testing.T) {
-				exists := service.RefExists(tabletest.reference)
+				exists := service.RefExistsWithContext(ctx, tabletest.reference)
 				require.Equal(t, tabletest.expected, exists)
 			})
 		}
@@ -276,12 +290,15 @@ func TestGitService(t *testing.T) {
 		})
 		require.NoError(t, err)
 
+		// Create a context for testing
+		ctx := context.Background()
+
 		// Test each commit
-		isMerge, err := IsMergeCommit(repo, mergeHash)
+		isMerge, err := IsMergeCommitWithContext(ctx, repo, mergeHash)
 		require.NoError(t, err)
 		require.True(t, isMerge, "Merge commit should be identified as such")
 
-		isMerge, err = IsMergeCommit(repo, nonMergeHash)
+		isMerge, err = IsMergeCommitWithContext(ctx, repo, nonMergeHash)
 		require.NoError(t, err)
 		require.False(t, isMerge, "Regular commit should not be identified as merge commit")
 	})

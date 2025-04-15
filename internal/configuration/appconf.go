@@ -72,6 +72,9 @@ type ConventionalRule struct {
 type SpellingRule struct {
 	// Locale specifies the language/locale to use for spell checking.
 	Locale string `koanf:"locale"`
+
+	// Enabled indicates whether spell checking is enabled.
+	Enabled bool `koanf:"enabled"`
 }
 
 // JiraRule defines configuration for Jira key validation.
@@ -82,8 +85,11 @@ type JiraRule struct {
 	// Required indicates whether a Jira key must be present.
 	Required bool `koanf:"required"`
 
-	// BodyRef indicates whether a Jira key must be present in body ref .
+	// BodyRef indicates whether a Jira key must be present in body ref.
 	BodyRef bool `koanf:"bodyref"`
+
+	// Pattern specifies the regex pattern for Jira keys.
+	Pattern string `koanf:"pattern"`
 }
 
 // BodyRule defines configuration for commit body validation.

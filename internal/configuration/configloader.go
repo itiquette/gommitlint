@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/itiquette/gommitlint/internal"
+	"github.com/itiquette/gommitlint/internal/defaults"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
@@ -20,16 +22,53 @@ type DefaultConfigLoader struct{}
 // LoadConfiguration loads the application configuration from various sources.
 // It reads from the configuration file and returns the populated AppConf.
 func (DefaultConfigLoader) LoadConfiguration() (*AppConf, error) {
-	appConfig := &AppConf{&GommitLintConfig{Subject: &SubjectRule{}}}
-	if err := ReadConfigurationFile(appConfig, ".gommitlint.yaml"); err != nil {
-		return nil, fmt.Errorf("failed to read configuration file: %w", err)
+	// Create AppConf with default values
+	ignoreCommits := defaults.IgnoreMergeCommitsDefault
+	nCommitsAhead := defaults.NCommitsAheadDefault
+	signOff := defaults.SignOffRequiredDefault
+	imperativeVal := defaults.SubjectImperativeDefault
+
+	jiraRequired := defaults.JIRARequiredDefault
+	conventional := defaults.ConventionalCommitRequiredDefault
+
+	// Initialize with defaults
+	appConfig := &AppConf{
+		GommitConf: &GommitLintConfig{
+			Subject: &SubjectRule{
+				Case:            defaults.SubjectCaseDefault,
+				Imperative:      &imperativeVal,
+				InvalidSuffixes: defaults.SubjectInvalidSuffixesDefault,
+				MaxLength:       defaults.SubjectMaxLengthDefault,
+				Jira: &JiraRule{
+					Required: jiraRequired,
+					Pattern:  defaults.JIRAPatternDefault,
+				},
+			},
+			Body: &BodyRule{
+				Required: defaults.BodyRequiredDefault,
+			},
+			ConventionalCommit: &ConventionalRule{
+				Types:                defaults.ConventionalCommitTypesDefault,
+				MaxDescriptionLength: defaults.ConventionalCommitMaxDescLengthDefault,
+				Required:             conventional,
+			},
+			SpellCheck: &SpellingRule{
+				Locale:  defaults.SpellcheckLocaleDefault,
+				Enabled: defaults.SpellcheckEnabledDefault,
+			},
+			Signature: &SignatureRule{
+				Required: defaults.SignatureRequiredDefault,
+			},
+			SignOffRequired:    &signOff,
+			NCommitsAhead:      &nCommitsAhead,
+			IgnoreMergeCommits: &ignoreCommits,
+		},
 	}
-	//TO-DO: validation
-	//	for _, config := range appConfig.Configurations {
-	// if err := validateConfiguration(config); err != nil {
-	// 	return nil, fmt.Errorf("failed to validate configuration: %w", err)
-	// }
-	//	}
+
+	if err := ReadConfigurationFile(appConfig, defaults.ConfigFileName); err != nil {
+		return nil, internal.NewConfigError(fmt.Errorf("failed to read configuration file: %w", err))
+	}
+
 	return appConfig, nil
 }
 
@@ -37,26 +76,23 @@ func (DefaultConfigLoader) LoadConfiguration() (*AppConf, error) {
 // It populates the provided appConfiguration with values from the found config files.
 // The function follows the XDG Base Directory Specification for configuration file locations.
 func ReadConfigurationFile(appConfiguration *AppConf, configfile string) error {
-	const (
-		xdgConfigHomeEnv        = "XDG_CONFIG_HOME"
-		xdgConfigHomeConfigPath = "/gommitlint/" + "gommitlint.yaml"
-	)
-
 	koanfConf := koanf.New(".")
-	xdgConfigfileExists, xdgConfigFilePath := hasXDGConfigFile(xdgConfigHomeEnv, xdgConfigHomeConfigPath)
+	xdgConfigfileExists, xdgConfigFilePath := hasXDGConfigFile("XDG_CONFIG_HOME", defaults.XDGConfigPath)
 	localConfigfileExists := hasLocalConfigFile(configfile)
 
 	// Load XDG config file if it exists
 	if xdgConfigfileExists {
 		if err := koanfConf.Load(file.Provider(xdgConfigFilePath), yaml.Parser()); err != nil {
-			return fmt.Errorf("error loading xdg_config_home configuration: %w", err)
+			return internal.NewConfigError(fmt.Errorf("error loading xdg_config_home configuration: %w", err),
+				map[string]string{"config_path": xdgConfigFilePath})
 		}
 	}
 
 	// Load local config file if it exists
 	if localConfigfileExists {
 		if err := koanfConf.Load(file.Provider(configfile), yaml.Parser()); err != nil {
-			return fmt.Errorf("error loading config: %w", err)
+			return internal.NewConfigError(fmt.Errorf("error loading config: %w", err),
+				map[string]string{"config_file": configfile})
 		}
 	}
 
@@ -67,7 +103,7 @@ func ReadConfigurationFile(appConfiguration *AppConf, configfile string) error {
 
 	// Unmarshal the YAML data into the config struct
 	if err := koanfConf.Unmarshal("", appConfiguration); err != nil {
-		return fmt.Errorf("error unmarshalling yaml config: %w", err)
+		return internal.NewConfigError(fmt.Errorf("error unmarshalling yaml config: %w", err))
 	}
 
 	return nil

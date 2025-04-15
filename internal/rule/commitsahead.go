@@ -22,7 +22,7 @@ type CommitsAheadConfig struct {
 // DefaultCommitsAheadConfig returns the default configuration.
 func DefaultCommitsAheadConfig() CommitsAheadConfig {
 	return CommitsAheadConfig{
-		MaxCommitsAhead: 20,
+		MaxCommitsAhead: 5,
 	}
 }
 

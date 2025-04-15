@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/itiquette/gommitlint/internal/defaults"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -166,7 +168,7 @@ func TestLoadConfiguration(t *testing.T) {
 
 			// For the partial configuration test
 			if tabletest.name == "Partial configuration with only subject" {
-				require.Nil(t, config.GommitConf.ConventionalCommit)
+				// ConventionalCommit will no longer be nil due to defaults
 				require.NotNil(t, config.GommitConf.Subject)
 				require.Equal(t, 50, config.GommitConf.Subject.MaxLength)
 				require.Equal(t, "lower", config.GommitConf.Subject.Case)
@@ -176,6 +178,28 @@ func TestLoadConfiguration(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDefaultValueLoading(t *testing.T) {
+	// Skip directory change to avoid issues with temporary directories
+	// Create a config loader
+	loader := DefaultConfigLoader{}
+
+	// Load configuration (with no files present, should use defaults)
+	config, err := loader.LoadConfiguration()
+	require.NoError(t, err)
+
+	// Verify default values are set correctly
+	assert.Equal(t, defaults.SubjectCaseDefault, config.GommitConf.Subject.Case)
+	assert.NotNil(t, config.GommitConf.Subject.Imperative)
+	assert.Equal(t, defaults.SubjectImperativeDefault, *config.GommitConf.Subject.Imperative)
+	assert.Equal(t, defaults.SubjectMaxLengthDefault, config.GommitConf.Subject.MaxLength)
+	assert.Equal(t, defaults.BodyRequiredDefault, config.GommitConf.Body.Required)
+	assert.Equal(t, defaults.ConventionalCommitTypesDefault, config.GommitConf.ConventionalCommit.Types)
+	assert.Equal(t, defaults.SpellcheckLocaleDefault, config.GommitConf.SpellCheck.Locale)
+	assert.NotNil(t, config.GommitConf.SignOffRequired)
+	assert.Equal(t, defaults.SignOffRequiredDefault, *config.GommitConf.SignOffRequired)
+	assert.Equal(t, defaults.IgnoreMergeCommitsDefault, *config.GommitConf.IgnoreMergeCommits)
 }
 
 func TestReadConfigurationFile(t *testing.T) {

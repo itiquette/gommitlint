@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/itiquette/gommitlint/internal/rule"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestConventionalCommitRule covers the basic validation functionality.
@@ -98,29 +98,29 @@ func TestConventionalCommitRule(t *testing.T) {
 			result := rule.ValidateConventionalCommit(tabletest.subject, allowedTypes, allowedScopes, maxDescLength)
 
 			if tabletest.expectValid {
-				assert.Empty(t, result.Errors(), "Expected no errors but got: %v", result.Errors())
-				assert.Equal(t, "Valid conventional commit format", result.Result())
+				require.Empty(t, result.Errors(), "Expected no errors but got: %v", result.Errors())
+				require.Equal(t, "Valid conventional commit format", result.Result())
 			} else {
-				assert.NotEmpty(t, result.Errors(), "Expected errors but got none")
+				require.NotEmpty(t, result.Errors(), "Expected errors but got none")
 
 				valErr := result.Errors()[0]
-				assert.Equal(t, "ConventionalCommit", valErr.Rule, "Rule name should be set")
+				require.Equal(t, "ConventionalCommit", valErr.Rule, "Rule name should be set")
 
 				if tabletest.errorCode != "" {
-					assert.Equal(t, tabletest.errorCode, valErr.Code, "Error code should match expected")
+					require.Equal(t, tabletest.errorCode, valErr.Code, "Error code should match expected")
 				}
 
 				if tabletest.errorMsg != "" {
-					assert.Contains(t, valErr.Message, tabletest.errorMsg, "Error message should contain expected text")
+					require.Contains(t, valErr.Message, tabletest.errorMsg, "Error message should contain expected text")
 				}
 
 				// Verify that context information is added
 				if tabletest.errorCode == "description_too_long" {
-					assert.Contains(t, valErr.Context, "actual_length")
-					assert.Contains(t, valErr.Context, "max_length")
+					require.Contains(t, valErr.Context, "actual_length")
+					require.Contains(t, valErr.Context, "max_length")
 				}
 
-				assert.Equal(t, "Invalid conventional commit format", result.Result())
+				require.Equal(t, "Invalid conventional commit format", result.Result())
 			}
 		})
 	}
@@ -220,7 +220,7 @@ func TestVerboseResultContents(t *testing.T) {
 
 			// Now we can test the VerboseResult method
 			verboseResult := result.VerboseResult()
-			assert.Contains(t, verboseResult, tabletest.expectedPhrase,
+			require.Contains(t, verboseResult, tabletest.expectedPhrase,
 				"VerboseResult should contain expected phrase: %s", tabletest.expectedPhrase)
 
 			// Additional debug information if test fails
@@ -235,9 +235,9 @@ func TestVerboseResultContents(t *testing.T) {
 
 			// Verify our test assumptions are correct
 			if tabletest.expectValid {
-				assert.Empty(t, result.Errors(), "Expected no errors but got: %v", result.Errors())
+				require.Empty(t, result.Errors(), "Expected no errors but got: %v", result.Errors())
 			} else {
-				assert.NotEmpty(t, result.Errors(), "Expected errors but got none")
+				require.NotEmpty(t, result.Errors(), "Expected errors but got none")
 			}
 		})
 	}
@@ -350,19 +350,19 @@ func TestConventionalCommitEdgeCases(t *testing.T) {
 			result := rule.ValidateConventionalCommit(test.subject, test.types, test.scopes, test.descLength)
 
 			if test.expectValid {
-				assert.Empty(t, result.Errors(), "Expected no errors but got: %v", result.Errors())
+				require.Empty(t, result.Errors(), "Expected no errors but got: %v", result.Errors())
 			} else {
-				assert.NotEmpty(t, result.Errors(), "Expected errors but got none")
+				require.NotEmpty(t, result.Errors(), "Expected errors but got none")
 
 				valErr := result.Errors()[0]
-				assert.Equal(t, "ConventionalCommit", valErr.Rule, "Rule name should be set")
+				require.Equal(t, "ConventionalCommit", valErr.Rule, "Rule name should be set")
 
 				if test.errorCode != "" {
-					assert.Equal(t, test.errorCode, valErr.Code, "Error code should match expected")
+					require.Equal(t, test.errorCode, valErr.Code, "Error code should match expected")
 				}
 
 				if test.errorMsg != "" {
-					assert.Contains(t, valErr.Message, test.errorMsg, "Error message should contain expected text")
+					require.Contains(t, valErr.Message, test.errorMsg, "Error message should contain expected text")
 				}
 			}
 		})
@@ -373,26 +373,26 @@ func TestConventionalCommitEdgeCases(t *testing.T) {
 func TestConventionalCommitMethods(t *testing.T) {
 	t.Run("Name method", func(t *testing.T) {
 		commit := rule.ConventionalCommit{}
-		assert.Equal(t, "ConventionalCommit", commit.Name())
+		require.Equal(t, "ConventionalCommit", commit.Name())
 	})
 
 	t.Run("Result method with no errors", func(t *testing.T) {
 		commit := rule.ConventionalCommit{}
-		assert.Equal(t, "Valid conventional commit format", commit.Result())
+		require.Equal(t, "Valid conventional commit format", commit.Result())
 	})
 
 	t.Run("Result method with errors", func(t *testing.T) {
 		commit := rule.ConventionalCommit{}
 		commit.AddTestError("invalid_format", "test error", nil)
-		assert.Equal(t, "Invalid conventional commit format", commit.Result())
+		require.Equal(t, "Invalid conventional commit format", commit.Result())
 	})
 
 	t.Run("Errors method", func(t *testing.T) {
 		commit := rule.ConventionalCommit{}
 		commit.AddTestError("invalid_format", "test error", nil)
 		errors := commit.Errors()
-		assert.Len(t, errors, 1)
-		assert.Equal(t, "test error", errors[0].Message)
+		require.Len(t, errors, 1)
+		require.Equal(t, "test error", errors[0].Message)
 	})
 
 	t.Run("AddTestError method", func(t *testing.T) {
@@ -401,11 +401,11 @@ func TestConventionalCommitMethods(t *testing.T) {
 		commit.AddTestError("invalid_type", "second error", nil)
 
 		errors := commit.Errors()
-		assert.Len(t, errors, 2)
-		assert.Equal(t, "first error", errors[0].Message)
-		assert.Equal(t, "second error", errors[1].Message)
-		assert.Equal(t, "invalid_format", errors[0].Code)
-		assert.Equal(t, "invalid_type", errors[1].Code)
+		require.Len(t, errors, 2)
+		require.Equal(t, "first error", errors[0].Message)
+		require.Equal(t, "second error", errors[1].Message)
+		require.Equal(t, "invalid_format", errors[0].Code)
+		require.Equal(t, "invalid_type", errors[1].Code)
 	})
 }
 
@@ -502,7 +502,7 @@ func TestHelpMethodOutput(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			commit := test.createCommit()
 			helpText := commit.Help()
-			assert.Contains(t, helpText, test.expectedHelp)
+			require.Contains(t, helpText, test.expectedHelp)
 		})
 	}
 }

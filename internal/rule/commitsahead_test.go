@@ -13,7 +13,6 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/itiquette/gommitlint/internal/model"
@@ -41,10 +40,10 @@ func TestValidateNumberOfCommits(t *testing.T) {
 				return 1
 			},
 			ref:                     "main",
-			maxCommits:              20, // default
+			maxCommits:              5, // default
 			expectError:             false,
 			expectedResult:          "HEAD is 1 commit(s) ahead of main",
-			expectedVerboseContains: []string{"HEAD is 1 commit ahead of main", "within limit of 20"},
+			expectedVerboseContains: []string{"HEAD is 1 commit ahead of main", "within limit of 5"},
 		},
 		{
 			name: "commits ahead exceed custom limit",
@@ -157,7 +156,7 @@ func TestValidateNumberOfCommits(t *testing.T) {
 
 			// Run the validation with options if provided
 			var opts []rule.Option
-			if tabletest.maxCommits != 20 { // Only add option if different from default
+			if tabletest.maxCommits != 5 { // Only add option if different from default
 				opts = append(opts, rule.WithMaxCommitsAhead(tabletest.maxCommits))
 			}
 
@@ -165,59 +164,59 @@ func TestValidateNumberOfCommits(t *testing.T) {
 			result := rule.ValidateNumberOfCommits(client, tabletest.ref, opts...)
 
 			// Verify the result
-			assert.Equal(t, commitsCreated, result.Ahead, "Number of commits ahead should match")
+			require.Equal(t, commitsCreated, result.Ahead, "Number of commits ahead should match")
 
 			// Check rule name
-			assert.Equal(t, "CommitsAhead", result.Name(), "Rule name should be correct")
+			require.Equal(t, "CommitsAhead", result.Name(), "Rule name should be correct")
 
 			// Check Result() output
 			if tabletest.expectedResult != "" {
-				assert.Contains(t, result.Result(), tabletest.expectedResult, "Result() should match expected value")
+				require.Contains(t, result.Result(), tabletest.expectedResult, "Result() should match expected value")
 			}
 
 			// Check VerboseResult() output
 			verboseResult := result.VerboseResult()
-			assert.NotEmpty(t, verboseResult, "VerboseResult should not be empty")
+			require.NotEmpty(t, verboseResult, "VerboseResult should not be empty")
 
 			// The verbose output should be different from the regular result
 			if !tabletest.expectError || commitsCreated > 0 { // Skip this check for errors with 0 commits
-				assert.NotEqual(t, result.Result(), verboseResult,
+				require.NotEqual(t, result.Result(), verboseResult,
 					"VerboseResult should differ from Result to provide more details")
 			}
 
 			// Verify expected phrases in verbose output
 			for _, phrase := range tabletest.expectedVerboseContains {
-				assert.Contains(t, verboseResult, phrase,
+				require.Contains(t, verboseResult, phrase,
 					"VerboseResult should contain expected phrase: %s", phrase)
 			}
 
 			// Check errors
 			if tabletest.expectError {
-				assert.NotEmpty(t, result.Errors(), "Expected error but got none")
+				require.NotEmpty(t, result.Errors(), "Expected error but got none")
 
 				valErr := result.Errors()[0]
-				assert.Equal(t, "CommitsAhead", valErr.Rule, "Rule name should be set in ValidationError")
+				require.Equal(t, "CommitsAhead", valErr.Rule, "Rule name should be set in ValidationError")
 
 				if tabletest.errorCode != "" {
-					assert.Equal(t, tabletest.errorCode, valErr.Code, "Error code should match expected")
+					require.Equal(t, tabletest.errorCode, valErr.Code, "Error code should match expected")
 				}
 
 				if tabletest.errorContains != "" {
-					assert.Contains(t, valErr.Message, tabletest.errorContains,
+					require.Contains(t, valErr.Message, tabletest.errorContains,
 						"Error message doesn't contain expected text")
 				}
 
 				// Verify help method returns non-empty string
-				assert.NotEmpty(t, result.Help(), "Help should provide guidance")
+				require.NotEmpty(t, result.Help(), "Help should provide guidance")
 
 				// Verify context for too_many_commits error
 				if tabletest.errorCode == "too_many_commits" {
-					assert.Contains(t, valErr.Context, "actual")
-					assert.Contains(t, valErr.Context, "maximum")
-					assert.Contains(t, valErr.Context, "reference")
+					require.Contains(t, valErr.Context, "actual")
+					require.Contains(t, valErr.Context, "maximum")
+					require.Contains(t, valErr.Context, "reference")
 				}
 			} else {
-				assert.Empty(t, result.Errors(), "Expected no errors but got: %v", result.Errors())
+				require.Empty(t, result.Errors(), "Expected no errors but got: %v", result.Errors())
 			}
 		})
 	}
@@ -227,17 +226,17 @@ func TestValidateNumberOfCommitsWithNilRepo(t *testing.T) {
 	// Test with nil repository
 	result := rule.ValidateNumberOfCommits(nil, "main")
 
-	assert.NotNil(t, result, "Result should not be nil even with nil repo")
-	assert.NotEmpty(t, result.Errors(), "Should have errors with nil repo")
+	require.NotNil(t, result, "Result should not be nil even with nil repo")
+	require.NotEmpty(t, result.Errors(), "Should have errors with nil repo")
 
 	valErr := result.Errors()[0]
-	assert.Equal(t, "CommitsAhead", valErr.Rule, "Rule name should be set")
-	assert.Equal(t, "nil_repo", valErr.Code, "Error code should indicate nil repository")
-	assert.Equal(t, "repository cannot be nil", valErr.Message, "Error message should indicate nil repository")
+	require.Equal(t, "CommitsAhead", valErr.Rule, "Rule name should be set")
+	require.Equal(t, "nil_repo", valErr.Code, "Error code should indicate nil repository")
+	require.Equal(t, "repository cannot be nil", valErr.Message, "Error message should indicate nil repository")
 
 	// Also test verbose result for nil repo
 	verboseResult := result.VerboseResult()
-	assert.Contains(t, verboseResult, "Repository object is nil",
+	require.Contains(t, verboseResult, "Repository object is nil",
 		"VerboseResult should explain the nil repository issue")
 }
 
@@ -268,30 +267,30 @@ func TestCommitsAheadHelpMethod(t *testing.T) {
 
 	// Verify help content
 	helpText := commitsAhead.Help()
-	assert.Contains(t, helpText, "too many commits ahead", "Help should explain the issue")
-	assert.Contains(t, helpText, "Merge or rebase", "Help should suggest merging or rebasing")
-	assert.Contains(t, helpText, "splitting your changes", "Help should suggest splitting changes")
+	require.Contains(t, helpText, "too many commits ahead", "Help should explain the issue")
+	require.Contains(t, helpText, "Merge or rebase", "Help should suggest merging or rebasing")
+	require.Contains(t, helpText, "splitting your changes", "Help should suggest splitting changes")
 
 	// Verify error code
-	assert.Equal(t, "too_many_commits", commitsAhead.Errors()[0].Code, "Error code should be 'too_many_commits'")
+	require.Equal(t, "too_many_commits", commitsAhead.Errors()[0].Code, "Error code should be 'too_many_commits'")
 
 	// Test and verify verbose output
 	verboseOutput := commitsAhead.VerboseResult()
-	assert.Contains(t, verboseOutput, "HEAD is 25 commit(s) ahead of main")
-	assert.Contains(t, verboseOutput, "maximum allowed: 20")
-	assert.Contains(t, verboseOutput, "Consider merging or rebasing")
+	require.Contains(t, verboseOutput, "HEAD is 25 commit(s) ahead of main")
+	require.Contains(t, verboseOutput, "maximum allowed: 5") // Default is now 5
+	require.Contains(t, verboseOutput, "Consider merging or rebasing")
 
 	// Test different error codes' help messages
 	t.Run("help for nil repo", func(t *testing.T) {
 		result := rule.ValidateNumberOfCommits(nil, "main")
 		helpText := result.Help()
-		assert.Contains(t, helpText, "valid git repository", "Help should mention repository requirement")
+		require.Contains(t, helpText, "valid git repository", "Help should mention repository requirement")
 	})
 
 	t.Run("help for empty reference", func(t *testing.T) {
 		result := rule.ValidateNumberOfCommits(client, "")
 		helpText := result.Help()
-		assert.Contains(t, helpText, "valid reference branch", "Help should mention reference requirement")
+		require.Contains(t, helpText, "valid reference branch", "Help should mention reference requirement")
 	})
 }
 

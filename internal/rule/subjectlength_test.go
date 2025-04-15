@@ -10,7 +10,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/itiquette/gommitlint/internal/rule"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -132,27 +131,27 @@ func TestValidateSubjectLength(t *testing.T) {
 					"Result message should indicate subject is too long")
 
 				// Check detailed error message in the error object
-				assert.Equal(t, tabletest.expectedError, vrule.Errors()[0].Error(),
+				require.Equal(t, tabletest.expectedError, vrule.Errors()[0].Error(),
 					"Detailed error message should match expected")
 
 				// Verify error code if specified
 				if tabletest.expectedCode != "" {
-					assert.Equal(t, tabletest.expectedCode, vrule.Errors()[0].Code,
+					require.Equal(t, tabletest.expectedCode, vrule.Errors()[0].Code,
 						"Error code should match expected")
 				}
 
 				// Verify rule name is set in ValidationError
-				assert.Equal(t, "SubjectLength", vrule.Errors()[0].Rule,
+				require.Equal(t, "SubjectLength", vrule.Errors()[0].Rule,
 					"Rule name should be set in ValidationError")
 
 				// Verify context information is present
-				assert.Contains(t, vrule.Errors()[0].Context, "actual_length",
+				require.Contains(t, vrule.Errors()[0].Context, "actual_length",
 					"Context should contain actual length")
-				assert.Contains(t, vrule.Errors()[0].Context, "max_length",
+				require.Contains(t, vrule.Errors()[0].Context, "max_length",
 					"Context should contain maximum length")
 
 				// Check if context values are correct
-				assert.Equal(t, strconv.Itoa(tabletest.expectedLength), vrule.Errors()[0].Context["actual_length"],
+				require.Equal(t, strconv.Itoa(tabletest.expectedLength), vrule.Errors()[0].Context["actual_length"],
 					"Actual length in context should match expected length")
 
 				expectedMaxLength := tabletest.maxLength
@@ -160,7 +159,7 @@ func TestValidateSubjectLength(t *testing.T) {
 					expectedMaxLength = rule.DefaultMaxCommitSubjectLength
 				}
 
-				assert.Equal(t, strconv.Itoa(expectedMaxLength), vrule.Errors()[0].Context["max_length"],
+				require.Equal(t, strconv.Itoa(expectedMaxLength), vrule.Errors()[0].Context["max_length"],
 					"Max length in context should match expected max length")
 			}
 
@@ -176,7 +175,7 @@ func TestValidateSubjectLength(t *testing.T) {
 
 				// Check if help text includes the max length from context
 				if maxLength, ok := vrule.Errors()[0].Context["max_length"]; ok {
-					assert.Contains(t, helpText, maxLength, "Help text should include the maximum length")
+					require.Contains(t, helpText, maxLength, "Help text should include the maximum length")
 				}
 			}
 		})
@@ -189,7 +188,7 @@ func TestValidateSubjectLength(t *testing.T) {
 		rule := rule.ValidateSubjectLength(longSubject, customMaxLength)
 
 		helpText := rule.Help()
-		assert.Contains(t, helpText, strconv.Itoa(customMaxLength),
+		require.Contains(t, helpText, strconv.Itoa(customMaxLength),
 			"Help text should include the custom maximum length")
 	})
 
@@ -202,7 +201,7 @@ func TestValidateSubjectLength(t *testing.T) {
 		if verboseRule, ok := interface{}(validRule).(interface{ VerboseResult() string }); ok {
 			// Valid case - short subject
 			result := verboseRule.VerboseResult()
-			assert.Contains(t, result, "well within the limit",
+			require.Contains(t, result, "well within the limit",
 				"Verbose result for short subject should mention it's well within limits")
 
 			// Valid case - approaching limit
@@ -211,7 +210,7 @@ func TestValidateSubjectLength(t *testing.T) {
 			approachingRule := rule.ValidateSubjectLength(approachingLimit, 100)
 			if verboseApproaching, ok := interface{}(approachingRule).(interface{ VerboseResult() string }); ok {
 				result = verboseApproaching.VerboseResult()
-				assert.Contains(t, result, "within the limit",
+				require.Contains(t, result, "within the limit",
 					"Verbose result for approaching limit should mention it's within limits")
 			}
 
@@ -221,7 +220,7 @@ func TestValidateSubjectLength(t *testing.T) {
 			closeRule := rule.ValidateSubjectLength(closeToLimit, 100)
 			if verboseClose, ok := interface{}(closeRule).(interface{ VerboseResult() string }); ok {
 				result = verboseClose.VerboseResult()
-				assert.Contains(t, result, "close to the limit",
+				require.Contains(t, result, "close to the limit",
 					"Verbose result for close to limit should mention it's close to limits")
 			}
 
@@ -231,7 +230,7 @@ func TestValidateSubjectLength(t *testing.T) {
 			longRule := rule.ValidateSubjectLength(tooLong, 100)
 			if verboseLong, ok := interface{}(longRule).(interface{ VerboseResult() string }); ok {
 				result = verboseLong.VerboseResult()
-				assert.Contains(t, result, "exceeds maximum length",
+				require.Contains(t, result, "exceeds maximum length",
 					"Verbose result for too long should mention it exceeds limits")
 			}
 		}
