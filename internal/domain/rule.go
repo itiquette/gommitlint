@@ -4,6 +4,8 @@
 
 package domain
 
+import "context"
+
 // SeverityLevel represents the severity of a rule violation.
 type SeverityLevel string
 
@@ -44,7 +46,7 @@ const (
 	ValidationErrorInvalidScope       ValidationErrorCode = "invalid_scope"
 	ValidationErrorEmptyDescription   ValidationErrorCode = "empty_description"
 	ValidationErrorDescriptionTooLong ValidationErrorCode = "description_too_long"
-	ValidationErrorTooLong            ValidationErrorCode = "description_too_long" // Alias for backward compatibility
+	ValidationErrorTooLong            ValidationErrorCode = "description_too_long" // Standard alias
 	ValidationErrorInvalidCase        ValidationErrorCode = "invalid_case"
 	ValidationErrorInvalidSuffix      ValidationErrorCode = "invalid_suffix"
 	ValidationErrorNonImperative      ValidationErrorCode = "non_imperative"
@@ -117,6 +119,17 @@ func NewStandardValidationError(rule string, code ValidationErrorCode, message s
 	return NewValidationError(rule, string(code), message)
 }
 
+// NewValidationErrorWithContext creates a validation error with context in one step.
+func NewValidationErrorWithContext(rule, code, message string, context map[string]string) *ValidationError {
+	err := NewValidationError(rule, code, message)
+
+	for key, value := range context {
+		err = err.WithContext(key, value)
+	}
+
+	return err
+}
+
 // Rule defines the interface for all validation rules.
 type Rule interface {
 	// Name returns the rule's name.
@@ -136,6 +149,14 @@ type Rule interface {
 
 	// Errors returns all validation errors found by this rule.
 	Errors() []*ValidationError
+}
+
+// ContextualRule extends Rule with context-aware methods.
+type ContextualRule interface {
+	Rule
+
+	// ValidateWithContext performs validation with context.
+	ValidateWithContext(ctx context.Context, commit *CommitInfo) []*ValidationError
 }
 
 // RuleProvider defines an interface for retrieving validation rules.

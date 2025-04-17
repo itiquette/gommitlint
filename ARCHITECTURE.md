@@ -11,6 +11,12 @@ The hexagonal architecture divides the application into layers:
 3. **Ports Layer**: Interfaces that connect the application to the outside world
 4. **Adapters/Infrastructure Layer**: Implementation of interfaces defined in the ports layer
 
+This architectural approach provides several benefits:
+- Clear separation of concerns
+- Domain logic isolated from infrastructure details
+- Testability through interface-based design
+- Flexibility to change implementation details without affecting core business logic
+
 ```javascript
 ┌───────────────────────────────────────────────────────────────┐
 │                      Infrastructure Layer                      │
@@ -47,11 +53,11 @@ The hexagonal architecture divides the application into layers:
 └───────────────────────────────────────────────────────────────┘
 ```
 
-## Layer Details
+## Project Structure
 
 ### Domain Layer
 
-The domain layer defines the core business objects and rules of the application:
+The domain layer is the heart of the application, containing the core business logic and entities:
 
 - `/internal/domain/commit.go`: Commit-related domain entities
 - `/internal/domain/rule.go`: Rule interfaces and validation errors
@@ -69,7 +75,7 @@ Key interfaces:
 
 ### Core Layer
 
-The core layer implements the validation rules and business logic:
+The core layer contains the business rules implementation:
 
 - `/internal/core/validation/engine.go`: Validation engine
 - `/internal/core/validation/rule_provider.go`: Rule provider
@@ -84,7 +90,14 @@ The application layer orchestrates the domain layer:
 - `/internal/application/validate/service.go`: Validation service
 - `/internal/application/report/generator.go`: Report generator
 
-### Infrastructure Layer
+### Ports Layer
+
+The ports layer provides interfaces to the outside world:
+
+- `/internal/ports/cli/validate.go`: CLI validation command
+- `/internal/ports/fileio/`: File I/O interfaces
+
+### Infrastructure Layer (Adapters)
 
 The infrastructure layer provides concrete implementations of interfaces:
 
@@ -93,12 +106,6 @@ The infrastructure layer provides concrete implementations of interfaces:
 - `/internal/infrastructure/git/repository_factory.go`: Factory for creating repository interfaces
 - `/internal/infrastructure/config/provider.go`: Configuration provider
 - `/internal/infrastructure/output/`: Output formatters (text, JSON)
-
-### Ports Layer
-
-The ports layer provides interfaces to the outside world:
-
-- `/internal/ports/cli/validate.go`: CLI validation command
 
 ## Interface Segregation
 
@@ -147,6 +154,8 @@ type GitRepositoryService interface {
 }
 ```
 
+These specialized interfaces allow clients to depend only on what they need, reducing coupling.
+
 ## Domain Collections
 
 The `CommitCollection` type provides domain-specific operations on groups of commits:
@@ -167,6 +176,15 @@ func (c *CommitCollection) FilterByAuthor(author string) *CommitCollection {
     // Implementation...
 }
 ```
+
+## Repository Pattern
+
+For Git operations, Gommitlint uses:
+
+1. Repository interfaces in the domain layer
+2. A repository adapter in the infrastructure layer
+3. A factory to create specific repository interfaces
+4. Helper methods to reduce complexity
 
 ## Factory Pattern
 
@@ -189,6 +207,37 @@ func (f *RepositoryFactory) CreateHistoryReader() domain.CommitHistoryReader {
 }
 ```
 
+## Dependency Injection
+
+Dependencies are injected through:
+
+1. Constructor parameters
+2. Factory pattern for creating repositories
+3. Functional options pattern for configuration
+
+## Error Handling
+
+The application uses a structured approach to error handling:
+
+1. Domain-specific errors with context information
+2. Error wrapping for maintaining context
+3. Standardized validation error format
+4. Error templates with consistent formatting for messages and help text
+
+The error template system centralizes error message formats:
+
+1. Each error type has a predefined template with consistent wording
+2. Templates include both error messages and help text
+3. Helper functions ensure uniform context handling
+4. Standardized error codes are mapped to templates
+5. Consistent formatting across all validation rules
+
+The template system is implemented in the errorx package:
+- `ErrorTemplate` struct defines standardized formats for messages and help text
+- `NewValidationError` creates templated errors with proper formatting
+- `CreateValidationError` provides a standardized way to create errors with context
+- `WithContext` provides a standardized way to add context information
+
 ## Validation Rule Design
 
 Validation rules follow these principles:
@@ -197,6 +246,8 @@ Validation rules follow these principles:
 2. **Functional Options**: Rules use the functional options pattern for configuration
 3. **Immutability**: Rules are immutable after creation
 4. **Self-Contained**: Each rule contains all logic needed for validation
+5. **Plugin-Based**: Rules are registered through a provider
+6. **Focused**: Each rule focuses on a specific aspect of commit message validation
 
 ### Rule Interface
 
@@ -224,12 +275,13 @@ type Rule interface {
 
 ## Testing
 
-Tests for the architecture follow these principles:
+The application is designed for testability:
 
 1. **Unit Tests**: Each component is tested in isolation
 2. **Table-Driven Tests**: Tests use the table-driven pattern for comprehensive coverage
 3. **Mock Interfaces**: Tests use mocks for dependencies
 4. **Co-located Tests**: Tests are next to the code they test
+5. **Interface-Based Design**: Interface-based design allows for easy mocking
 
 ## Benefits of the Architecture
 

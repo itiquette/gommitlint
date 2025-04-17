@@ -19,7 +19,7 @@ type mockCommitReader struct {
 	commits map[string]*domain.CommitInfo
 }
 
-func (m *mockCommitReader) GetCommit(hash string) (*domain.CommitInfo, error) {
+func (m *mockCommitReader) GetCommit(_ context.Context, hash string) (*domain.CommitInfo, error) {
 	if commit, ok := m.commits[hash]; ok {
 		return commit, nil
 	}
@@ -33,7 +33,7 @@ type mockHistoryReader struct {
 	ranges      map[string]map[string][]*domain.CommitInfo
 }
 
-func (m *mockHistoryReader) GetHeadCommits(count int) ([]*domain.CommitInfo, error) {
+func (m *mockHistoryReader) GetHeadCommits(_ context.Context, count int) ([]*domain.CommitInfo, error) {
 	if count >= len(m.headCommits) {
 		return m.headCommits, nil
 	}
@@ -41,7 +41,7 @@ func (m *mockHistoryReader) GetHeadCommits(count int) ([]*domain.CommitInfo, err
 	return m.headCommits[:count], nil
 }
 
-func (m *mockHistoryReader) GetCommitRange(fromHash, toHash string) ([]*domain.CommitInfo, error) {
+func (m *mockHistoryReader) GetCommitRange(_ context.Context, fromHash, toHash string) ([]*domain.CommitInfo, error) {
 	if toRanges, ok := m.ranges[toHash]; ok {
 		if commits, ok := toRanges[fromHash]; ok {
 			return commits, nil
@@ -58,15 +58,15 @@ type mockInfoProvider struct {
 	isValid       bool
 }
 
-func (m *mockInfoProvider) GetCurrentBranch() (string, error) {
+func (m *mockInfoProvider) GetCurrentBranch(_ context.Context) (string, error) {
 	return m.currentBranch, nil
 }
 
-func (m *mockInfoProvider) GetRepositoryName() string {
+func (m *mockInfoProvider) GetRepositoryName(_ context.Context) string {
 	return m.repoName
 }
 
-func (m *mockInfoProvider) IsValid() bool {
+func (m *mockInfoProvider) IsValid(_ context.Context) bool {
 	return m.isValid
 }
 

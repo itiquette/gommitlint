@@ -41,8 +41,15 @@ func (e *Engine) ValidateCommit(ctx context.Context, commit *domain.CommitInfo) 
 			break
 		}
 
-		// Run the rule
-		errors := rule.Validate(commit)
+		// Check if the rule supports context
+		var errors []*domain.ValidationError
+		if contextualRule, ok := rule.(domain.ContextualRule); ok {
+			// Use the context-aware validation method
+			errors = contextualRule.ValidateWithContext(ctx, commit)
+		} else {
+			// Fall back to the regular validation method
+			errors = rule.Validate(commit)
+		}
 
 		// Create rule result
 		ruleResult := domain.RuleResult{

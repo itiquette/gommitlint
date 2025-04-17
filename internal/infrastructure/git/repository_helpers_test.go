@@ -7,6 +7,7 @@ package git
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/go-git/go-git/v5"
@@ -35,23 +36,40 @@ func cleanupTestRepo(tempDir string) {
 	os.RemoveAll(tempDir)
 }
 
+func TestFindGitDir(t *testing.T) {
+	// Create temporary git repository
+	_, tempDir := setupTestRepo(t)
+	defer cleanupTestRepo(tempDir)
+
+	// Test finding git directory from the repo root
+	gitDir, err := findGitDir(tempDir)
+	require.NoError(t, err)
+	assert.Equal(t, tempDir, gitDir)
+
+	// Test finding git directory from a subdirectory
+	subDir := filepath.Join(tempDir, "subdir")
+	err = os.Mkdir(subDir, 0755)
+	require.NoError(t, err)
+
+	gitDir, err = findGitDir(subDir)
+	require.NoError(t, err)
+	assert.Equal(t, tempDir, gitDir)
+
+	// Test finding git directory from a non-existent path
+	_, err = findGitDir("/path/that/does/not/exist")
+	assert.Error(t, err)
+}
+
 func TestResolveRevision(t *testing.T) {
-	// This test requires integration with a real git repository,
-	// but we'll skip it for now and add a placeholder
-	t.Skip("Skipping test that requires a real git repository")
+	// This test requires integration with a real git repository with commits
+	t.Skip("Skipping test that requires a real git repository with commits")
 }
 
 func TestCollectCommits(t *testing.T) {
 	t.Run("Should limit commits", func(t *testing.T) {
 		// Create test repository
-		repo, tempDir := setupTestRepo(t)
+		_, tempDir := setupTestRepo(t)
 		defer cleanupTestRepo(tempDir)
-
-		// Create repository adapter
-		adapter := &RepositoryAdapter{
-			repo: repo,
-			path: tempDir,
-		}
 
 		// Create a mock iterator function for testing
 		mockIter := &mockCommitIter{
@@ -63,7 +81,7 @@ func TestCollectCommits(t *testing.T) {
 		}
 
 		// Collect commits with limit
-		commits, err := adapter.collectCommits(mockIter, 2, nil)
+		commits, err := collectCommits(mockIter, 2, nil)
 
 		// Verify results
 		require.NoError(t, err)
@@ -72,14 +90,8 @@ func TestCollectCommits(t *testing.T) {
 
 	t.Run("Should stop at condition", func(t *testing.T) {
 		// Create test repository
-		repo, tempDir := setupTestRepo(t)
+		_, tempDir := setupTestRepo(t)
 		defer cleanupTestRepo(tempDir)
-
-		// Create repository adapter
-		adapter := &RepositoryAdapter{
-			repo: repo,
-			path: tempDir,
-		}
 
 		// Create test commits with distinct hashes
 		hash1 := plumbing.NewHash("aaa1111111111111111111111111111111111111")
@@ -112,7 +124,7 @@ func TestCollectCommits(t *testing.T) {
 		require.Equal(t, hash1, collectedCommits[0].Hash, "Test setup should collect only commit1")
 
 		// Now test the actual collectCommits function with a real stop condition
-		commits, err := adapter.collectCommits(&mockCommitIter{commits: []*object.Commit{commit1, commit2, commit3}}, 0, stopOnHash2)
+		commits, err := collectCommits(&mockCommitIter{commits: []*object.Commit{commit1, commit2, commit3}}, 0, stopOnHash2)
 
 		// Verify results
 		require.NoError(t, err)
@@ -132,14 +144,8 @@ func TestCollectCommits(t *testing.T) {
 
 	t.Run("Should handle nil commit", func(t *testing.T) {
 		// Create test repository
-		repo, tempDir := setupTestRepo(t)
+		_, tempDir := setupTestRepo(t)
 		defer cleanupTestRepo(tempDir)
-
-		// Create repository adapter
-		adapter := &RepositoryAdapter{
-			repo: repo,
-			path: tempDir,
-		}
 
 		// Create a mock iterator function for testing
 		mockIter := &mockCommitIter{
@@ -151,12 +157,22 @@ func TestCollectCommits(t *testing.T) {
 		}
 
 		// Collect commits with nil commit
-		_, err := adapter.collectCommits(mockIter, 0, nil)
+		_, err := collectCommits(mockIter, 0, nil)
 
 		// Verify results
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "nil commit")
 	})
+}
+
+func TestGetCommitByHash(t *testing.T) {
+	// This test requires integration with a real git repository with commits
+	t.Skip("Skipping test that requires a real git repository with commits")
+}
+
+func TestFindMergeBase(t *testing.T) {
+	// This test requires integration with a real git repository with commits
+	t.Skip("Skipping test that requires a real git repository with commits")
 }
 
 // mockCommitIter is a mock implementation of object.CommitIter for testing.

@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/errorx"
 )
 
 // DefaultInvalidSuffixes is the default set of characters that should not appear
@@ -181,11 +182,20 @@ func (r *SubjectSuffixRule) Errors() []*domain.ValidationError {
 
 // addError adds a structured validation error.
 func (r *SubjectSuffixRule) addError(code, message string, context map[string]string) {
-	err := domain.NewValidationError(r.Name(), code, message)
+	// Use error templates for suffix validation
+	var err *domain.ValidationError
 
-	// Add any context values
-	for key, value := range context {
-		_ = err.WithContext(key, value)
+	if code == "invalid_suffix" && context != nil {
+		// For suffix errors, use the template
+		lastChar := context["last_char"]
+		if lastChar != "" {
+			err = errorx.NewErrorWithContext(r.Name(), errorx.ErrSubjectSuffix, context, lastChar)
+		} else {
+			err = domain.NewValidationErrorWithContext(r.Name(), code, message, context)
+		}
+	} else {
+		// Fall back to standard error
+		err = domain.NewValidationErrorWithContext(r.Name(), code, message, context)
 	}
 
 	r.errors = append(r.errors, err)

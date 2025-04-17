@@ -59,259 +59,320 @@ type RuleConfiguration struct {
 	DisabledRules []string
 }
 
-// DefaultRuleProvider provides a default implementation of the RuleProvider interface.
-type DefaultRuleProvider struct {
-	allRules      []domain.Rule
-	activeRules   []domain.Rule
+// RuleRegistry provides a map-based registry for validation rules.
+type RuleRegistry struct {
+	rules         map[string]domain.Rule
+	activeRules   map[string]bool
 	configuration *RuleConfiguration
 }
 
-// NewDefaultRuleProvider creates a new DefaultRuleProvider with the given configuration.
-func NewDefaultRuleProvider(config *RuleConfiguration) *DefaultRuleProvider {
-	provider := &DefaultRuleProvider{
+// NewRuleRegistry creates a new RuleRegistry with the given configuration.
+func NewRuleRegistry(config *RuleConfiguration) *RuleRegistry {
+	registry := &RuleRegistry{
+		rules:         make(map[string]domain.Rule),
+		activeRules:   make(map[string]bool),
 		configuration: config,
 	}
 
-	// Initialize rules
-	provider.initializeRules()
+	// Initialize the registry with rules
+	registry.registerRules()
 
-	return provider
+	return registry
 }
 
-// initializeRules initializes all available rules.
-func (p *DefaultRuleProvider) initializeRules() {
-	// Initialize all rules
-	p.allRules = []domain.Rule{
-		// Core rule: Subject Length
-		rules.NewSubjectLengthRule(p.configuration.MaxSubjectLength),
+// registerRules registers all available validation rules.
+func (r *RuleRegistry) registerRules() {
+	// Register Subject Length rule
+	r.registerRule(rules.NewSubjectLengthRule(r.configuration.MaxSubjectLength))
 
-		// Core rule: Conventional Commit
-		rules.NewConventionalCommitRule(
-			p.configuration.ConventionalTypes,
-			p.configuration.ConventionalScopes,
-			p.configuration.MaxDescLength,
-		),
+	// Register Conventional Commit rule
+	r.registerRule(rules.NewConventionalCommitRule(
+		r.configuration.ConventionalTypes,
+		r.configuration.ConventionalScopes,
+		r.configuration.MaxDescLength,
+	))
 
-		// Core rule: Imperative Verb
-		rules.NewImperativeVerbRule(p.configuration.IsConventionalCommit),
+	// Register Imperative Verb rule
+	r.registerRule(rules.NewImperativeVerbRule(r.configuration.IsConventionalCommit))
 
-		// Core rule: Jira Reference
-		func() domain.Rule {
-			var opts []rules.JiraReferenceOption
+	// Register Jira Reference rule
+	r.registerRule(createJiraRule(r.configuration))
 
-			// Add options based on configuration
-			if p.configuration.IsConventionalCommit {
-				opts = append(opts, rules.WithConventionalCommit())
-			}
+	// Register Signature rule
+	r.registerRule(createSignatureRule(r.configuration))
 
-			if p.configuration.JiraBodyRef {
-				opts = append(opts, rules.WithBodyRefChecking())
-			}
+	// Register SignOff rule
+	r.registerRule(createSignOffRule(r.configuration))
 
-			if len(p.configuration.JiraValidProjects) > 0 {
-				opts = append(opts, rules.WithValidProjects(p.configuration.JiraValidProjects))
-			}
+	// Register Spell rule
+	r.registerRule(createSpellRule(r.configuration))
 
-			return rules.NewJiraReferenceRule(opts...)
-		}(),
+	// Register Subject Case rule
+	r.registerRule(createSubjectCaseRule(r.configuration))
 
-		// Core rule: Signature
-		func() domain.Rule {
-			var opts []rules.SignatureOption
+	// Register Subject Suffix rule
+	r.registerRule(createSubjectSuffixRule(r.configuration))
 
-			// Add options based on configuration
-			opts = append(opts, rules.WithRequireSignature(p.configuration.RequireSignature))
+	// Register Commit Body rule
+	r.registerRule(createCommitBodyRule(r.configuration))
 
-			if len(p.configuration.AllowedSignatureTypes) > 0 {
-				opts = append(opts, rules.WithAllowedSignatureTypes(p.configuration.AllowedSignatureTypes))
-			}
-
-			return rules.NewSignatureRule(opts...)
-		}(),
-
-		// Core rule: SignOff
-		func() domain.Rule {
-			var opts []rules.SignOffOption
-
-			// Add options based on configuration
-			opts = append(opts, rules.WithRequireSignOff(p.configuration.RequireSignOff))
-			opts = append(opts, rules.WithAllowMultipleSignOffs(p.configuration.AllowMultipleSignOffs))
-
-			return rules.NewSignOffRule(opts...)
-		}(),
-
-		// Core rule: Spell
-		func() domain.Rule {
-			var opts []rules.SpellRuleOption
-
-			// Add options based on configuration
-			if p.configuration.SpellLocale != "" {
-				opts = append(opts, rules.WithLocale(p.configuration.SpellLocale))
-			}
-
-			if len(p.configuration.SpellIgnoreWords) > 0 {
-				opts = append(opts, rules.WithIgnoreWords(p.configuration.SpellIgnoreWords))
-			}
-
-			if len(p.configuration.SpellCustomWords) > 0 {
-				opts = append(opts, rules.WithCustomWords(p.configuration.SpellCustomWords))
-			}
-
-			if p.configuration.SpellMaxErrors > 0 {
-				opts = append(opts, rules.WithMaxErrors(p.configuration.SpellMaxErrors))
-			}
-
-			return rules.NewSpellRule(opts...)
-		}(),
-
-		// Core rule: Subject Case
-		func() domain.Rule {
-			var opts []rules.SubjectCaseOption
-
-			// Add options based on configuration
-			if p.configuration.SubjectCaseChoice != "" {
-				opts = append(opts, rules.WithCaseChoice(p.configuration.SubjectCaseChoice))
-			}
-
-			if p.configuration.IsConventionalCommit {
-				opts = append(opts, rules.WithConventionalCommitCase())
-			}
-
-			if p.configuration.SubjectCaseAllowNonAlpha {
-				opts = append(opts, rules.WithAllowNonAlphaCase())
-			}
-
-			return rules.NewSubjectCaseRule(opts...)
-		}(),
-
-		// Core rule: Subject Suffix
-		func() domain.Rule {
-			var opts []rules.SubjectSuffixOption
-
-			// Add options based on configuration
-			if p.configuration.SubjectInvalidSuffixes != "" {
-				opts = append(opts, rules.WithInvalidSuffixes(p.configuration.SubjectInvalidSuffixes))
-			}
-
-			return rules.NewSubjectSuffixRule(opts...)
-		}(),
-
-		// Core rule: Commit Body
-		func() domain.Rule {
-			var opts []rules.CommitBodyOption
-
-			// Add options based on configuration
-			opts = append(opts, rules.WithRequireBody(p.configuration.RequireBody))
-			opts = append(opts, rules.WithAllowSignOffOnly(p.configuration.AllowSignOffOnly))
-
-			return rules.NewCommitBodyRule(opts...)
-		}(),
-
-		// Core rule: Commits Ahead
-		func() domain.Rule {
-			var opts []rules.CommitsAheadOption
-
-			// Add options based on configuration
-			if p.configuration.Reference != "" {
-				opts = append(opts, rules.WithReference(p.configuration.Reference))
-			}
-
-			if p.configuration.MaxCommitsAhead > 0 {
-				opts = append(opts, rules.WithMaxCommitsAhead(p.configuration.MaxCommitsAhead))
-			}
-
-			// Add repository getter
-			opts = append(opts, rules.WithRepositoryGetter(func() domain.CommitAnalyzer {
-				// This will be injected at runtime by the validation service
-				return nil
-			}))
-
-			return rules.NewCommitsAheadRule(opts...)
-		}(),
-
-		// Add more rules here as they are implemented
-	}
-
-	// By default, all rules are active
-	p.activeRules = p.allRules
+	// Register Commits Ahead rule
+	r.registerRule(createCommitsAheadRule(r.configuration))
 
 	// Apply enabled/disabled rules configuration
-	if len(p.configuration.EnabledRules) > 0 {
-		p.SetActiveRules(p.configuration.EnabledRules)
-	} else if len(p.configuration.DisabledRules) > 0 {
-		p.DisableRules(p.configuration.DisabledRules)
+	r.applyRuleConfiguration()
+}
+
+// Helper functions to create rules with options.
+func createJiraRule(config *RuleConfiguration) domain.Rule {
+	var opts []rules.JiraReferenceOption
+
+	if config.IsConventionalCommit {
+		opts = append(opts, rules.WithConventionalCommit())
+	}
+
+	if config.JiraBodyRef {
+		opts = append(opts, rules.WithBodyRefChecking())
+	}
+
+	if len(config.JiraValidProjects) > 0 {
+		opts = append(opts, rules.WithValidProjects(config.JiraValidProjects))
+	}
+
+	return rules.NewJiraReferenceRule(opts...)
+}
+
+func createSignatureRule(config *RuleConfiguration) domain.Rule {
+	var opts []rules.SignatureOption
+
+	opts = append(opts, rules.WithRequireSignature(config.RequireSignature))
+
+	if len(config.AllowedSignatureTypes) > 0 {
+		opts = append(opts, rules.WithAllowedSignatureTypes(config.AllowedSignatureTypes))
+	}
+
+	return rules.NewSignatureRule(opts...)
+}
+
+func createSignOffRule(config *RuleConfiguration) domain.Rule {
+	var opts []rules.SignOffOption
+
+	opts = append(opts, rules.WithRequireSignOff(config.RequireSignOff))
+	opts = append(opts, rules.WithAllowMultipleSignOffs(config.AllowMultipleSignOffs))
+
+	return rules.NewSignOffRule(opts...)
+}
+
+func createSpellRule(config *RuleConfiguration) domain.Rule {
+	var opts []rules.SpellRuleOption
+
+	if config.SpellLocale != "" {
+		opts = append(opts, rules.WithLocale(config.SpellLocale))
+	}
+
+	if len(config.SpellIgnoreWords) > 0 {
+		opts = append(opts, rules.WithIgnoreWords(config.SpellIgnoreWords))
+	}
+
+	if len(config.SpellCustomWords) > 0 {
+		opts = append(opts, rules.WithCustomWords(config.SpellCustomWords))
+	}
+
+	if config.SpellMaxErrors > 0 {
+		opts = append(opts, rules.WithMaxErrors(config.SpellMaxErrors))
+	}
+
+	return rules.NewSpellRule(opts...)
+}
+
+func createSubjectCaseRule(config *RuleConfiguration) domain.Rule {
+	var opts []rules.SubjectCaseOption
+
+	if config.SubjectCaseChoice != "" {
+		opts = append(opts, rules.WithCaseChoice(config.SubjectCaseChoice))
+	}
+
+	if config.IsConventionalCommit {
+		opts = append(opts, rules.WithConventionalCommitCase())
+	}
+
+	if config.SubjectCaseAllowNonAlpha {
+		opts = append(opts, rules.WithAllowNonAlphaCase())
+	}
+
+	return rules.NewSubjectCaseRule(opts...)
+}
+
+func createSubjectSuffixRule(config *RuleConfiguration) domain.Rule {
+	var opts []rules.SubjectSuffixOption
+
+	if config.SubjectInvalidSuffixes != "" {
+		opts = append(opts, rules.WithInvalidSuffixes(config.SubjectInvalidSuffixes))
+	}
+
+	return rules.NewSubjectSuffixRule(opts...)
+}
+
+func createCommitBodyRule(config *RuleConfiguration) domain.Rule {
+	var opts []rules.CommitBodyOption
+
+	opts = append(opts, rules.WithRequireBody(config.RequireBody))
+	opts = append(opts, rules.WithAllowSignOffOnly(config.AllowSignOffOnly))
+
+	return rules.NewCommitBodyRule(opts...)
+}
+
+func createCommitsAheadRule(config *RuleConfiguration) domain.Rule {
+	var opts []rules.CommitsAheadOption
+
+	if config.Reference != "" {
+		opts = append(opts, rules.WithReference(config.Reference))
+	}
+
+	if config.MaxCommitsAhead > 0 {
+		opts = append(opts, rules.WithMaxCommitsAhead(config.MaxCommitsAhead))
+	}
+
+	// Add repository getter
+	opts = append(opts, rules.WithRepositoryGetter(func() domain.CommitAnalyzer {
+		// This will be injected at runtime by the validation service
+		return nil
+	}))
+
+	return rules.NewCommitsAheadRule(opts...)
+}
+
+// registerRule adds a rule to the registry and marks it as active by default.
+func (r *RuleRegistry) registerRule(rule domain.Rule) {
+	name := rule.Name()
+	r.rules[name] = rule
+	r.activeRules[name] = true
+}
+
+// applyRuleConfiguration applies the enabled/disabled rules settings.
+func (r *RuleRegistry) applyRuleConfiguration() {
+	// If specific rules are enabled, disable all others
+	if len(r.configuration.EnabledRules) > 0 {
+		// First, set all rules as inactive
+		for name := range r.activeRules {
+			r.activeRules[name] = false
+		}
+
+		// Then enable only the specified rules
+		for _, name := range r.configuration.EnabledRules {
+			if _, exists := r.rules[name]; exists {
+				r.activeRules[name] = true
+			}
+		}
+	} else if len(r.configuration.DisabledRules) > 0 {
+		// Just disable the specified rules
+		for _, name := range r.configuration.DisabledRules {
+			r.activeRules[name] = false
+		}
 	}
 }
 
 // GetRules returns all available validation rules.
-func (p *DefaultRuleProvider) GetRules() []domain.Rule {
-	return p.allRules
+func (r *RuleRegistry) GetRules() []domain.Rule {
+	rules := make([]domain.Rule, 0, len(r.rules))
+	for _, rule := range r.rules {
+		rules = append(rules, rule)
+	}
+
+	return rules
 }
 
-// GetActiveRules returns all active validation rules based on configuration.
-func (p *DefaultRuleProvider) GetActiveRules() []domain.Rule {
-	return p.activeRules
+// GetActiveRules returns all active validation rules.
+func (r *RuleRegistry) GetActiveRules() []domain.Rule {
+	activeRules := make([]domain.Rule, 0)
+	for name, active := range r.activeRules {
+		if active {
+			activeRules = append(activeRules, r.rules[name])
+		}
+	}
+
+	return activeRules
 }
 
 // SetActiveRules sets which rules are active based on a list of rule names.
-func (p *DefaultRuleProvider) SetActiveRules(ruleNames []string) {
+func (r *RuleRegistry) SetActiveRules(ruleNames []string) {
 	// If the list is empty, enable all rules
 	if len(ruleNames) == 0 {
-		p.activeRules = p.allRules
+		for name := range r.rules {
+			r.activeRules[name] = true
+		}
 
 		return
 	}
 
-	// Otherwise, only enable the specified rules
-	p.activeRules = []domain.Rule{}
-	for _, rule := range p.allRules {
-		for _, name := range ruleNames {
-			if rule.Name() == name {
-				p.activeRules = append(p.activeRules, rule)
+	// First, disable all rules
+	for name := range r.activeRules {
+		r.activeRules[name] = false
+	}
 
-				break
-			}
+	// Then enable only the specified rules
+	for _, name := range ruleNames {
+		if _, exists := r.rules[name]; exists {
+			r.activeRules[name] = true
 		}
 	}
 }
 
 // DisableRules disables specific rules by name.
-func (p *DefaultRuleProvider) DisableRules(ruleNames []string) {
+func (r *RuleRegistry) DisableRules(ruleNames []string) {
 	// If no rules to disable, do nothing
 	if len(ruleNames) == 0 {
 		return
 	}
 
-	// Create a new active rule list excluding disabled rules
-	activeRules := []domain.Rule{}
-	for _, rule := range p.activeRules {
-		disabled := false
-
-		for _, name := range ruleNames {
-			if rule.Name() == name {
-				disabled = true
-
-				break
-			}
-		}
-
-		if !disabled {
-			activeRules = append(activeRules, rule)
+	// Disable the specified rules
+	for _, name := range ruleNames {
+		if _, exists := r.rules[name]; exists {
+			r.activeRules[name] = false
 		}
 	}
+}
 
-	p.activeRules = activeRules
+// GetRuleByName returns a rule by its name.
+func (r *RuleRegistry) GetRuleByName(name string) domain.Rule {
+	return r.rules[name]
+}
+
+// DefaultRuleProvider is a legacy provider that we'll phase out in favor of the RuleRegistry.
+type DefaultRuleProvider struct {
+	registry *RuleRegistry
+}
+
+// NewDefaultRuleProvider creates a new DefaultRuleProvider with the given configuration.
+func NewDefaultRuleProvider(config *RuleConfiguration) *DefaultRuleProvider {
+	return &DefaultRuleProvider{
+		registry: NewRuleRegistry(config),
+	}
+}
+
+// GetRules returns all available validation rules.
+func (p *DefaultRuleProvider) GetRules() []domain.Rule {
+	return p.registry.GetRules()
+}
+
+// GetActiveRules returns all active validation rules based on configuration.
+func (p *DefaultRuleProvider) GetActiveRules() []domain.Rule {
+	return p.registry.GetActiveRules()
+}
+
+// SetActiveRules sets which rules are active based on a list of rule names.
+func (p *DefaultRuleProvider) SetActiveRules(ruleNames []string) {
+	p.registry.SetActiveRules(ruleNames)
+}
+
+// DisableRules disables specific rules by name.
+func (p *DefaultRuleProvider) DisableRules(ruleNames []string) {
+	p.registry.DisableRules(ruleNames)
 }
 
 // GetRuleByName returns a rule by its name.
 func (p *DefaultRuleProvider) GetRuleByName(name string) domain.Rule {
-	for _, rule := range p.allRules {
-		if rule.Name() == name {
-			return rule
-		}
-	}
-
-	return nil
+	return p.registry.GetRuleByName(name)
 }
 
 // DefaultConfiguration returns a default rule configuration.

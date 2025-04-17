@@ -6,6 +6,7 @@
 package git
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/itiquette/gommitlint/internal/domain"
@@ -74,8 +75,8 @@ type CommitReaderAdapter struct {
 }
 
 // GetCommit retrieves a commit by its hash.
-func (a *CommitReaderAdapter) GetCommit(hash string) (*domain.CommitInfo, error) {
-	return a.adapter.GetCommit(hash)
+func (a *CommitReaderAdapter) GetCommit(ctx context.Context, hash string) (*domain.CommitInfo, error) {
+	return a.adapter.GetCommit(ctx, hash)
 }
 
 // HistoryReaderAdapter adapts the repository to the CommitHistoryReader interface.
@@ -84,13 +85,13 @@ type HistoryReaderAdapter struct {
 }
 
 // GetHeadCommits retrieves the specified number of commits from HEAD.
-func (a *HistoryReaderAdapter) GetHeadCommits(count int) ([]*domain.CommitInfo, error) {
-	return a.adapter.GetHeadCommits(count)
+func (a *HistoryReaderAdapter) GetHeadCommits(ctx context.Context, count int) ([]*domain.CommitInfo, error) {
+	return a.adapter.GetHeadCommits(ctx, count)
 }
 
 // GetCommitRange retrieves all commits in the given range.
-func (a *HistoryReaderAdapter) GetCommitRange(fromHash, toHash string) ([]*domain.CommitInfo, error) {
-	return a.adapter.GetCommitRange(fromHash, toHash)
+func (a *HistoryReaderAdapter) GetCommitRange(ctx context.Context, fromHash, toHash string) ([]*domain.CommitInfo, error) {
+	return a.adapter.GetCommitRange(ctx, fromHash, toHash)
 }
 
 // InfoProviderAdapter adapts the repository to the RepositoryInfoProvider interface.
@@ -99,18 +100,18 @@ type InfoProviderAdapter struct {
 }
 
 // GetCurrentBranch returns the name of the current branch.
-func (a *InfoProviderAdapter) GetCurrentBranch() (string, error) {
-	return a.adapter.GetCurrentBranch()
+func (a *InfoProviderAdapter) GetCurrentBranch(ctx context.Context) (string, error) {
+	return a.adapter.GetCurrentBranch(ctx)
 }
 
 // GetRepositoryName returns the name of the repository.
-func (a *InfoProviderAdapter) GetRepositoryName() string {
-	return a.adapter.GetRepositoryName()
+func (a *InfoProviderAdapter) GetRepositoryName(ctx context.Context) string {
+	return a.adapter.GetRepositoryName(ctx)
 }
 
 // IsValid checks if the repository is valid.
-func (a *InfoProviderAdapter) IsValid() bool {
-	return a.adapter.IsValid()
+func (a *InfoProviderAdapter) IsValid(ctx context.Context) bool {
+	return a.adapter.IsValid(ctx)
 }
 
 // CommitAnalyzerAdapter adapts the repository to the CommitAnalyzer interface.
@@ -119,6 +120,6 @@ type CommitAnalyzerAdapter struct {
 }
 
 // GetCommitsAhead returns the number of commits ahead of the given reference.
-func (a *CommitAnalyzerAdapter) GetCommitsAhead(reference string) (int, error) {
-	return a.adapter.GetCommitsAhead(reference)
+func (a *CommitAnalyzerAdapter) GetCommitsAhead(ctx context.Context, reference string) (int, error) {
+	return a.adapter.GetCommitsAhead(ctx, reference)
 }

@@ -6,6 +6,7 @@
 package git
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -54,7 +55,12 @@ func NewRepositoryAdapter(path string) (*RepositoryAdapter, error) {
 }
 
 // GetCommit returns a commit by its hash.
-func (g *RepositoryAdapter) GetCommit(hash string) (*domain.CommitInfo, error) {
+func (g *RepositoryAdapter) GetCommit(ctx context.Context, hash string) (*domain.CommitInfo, error) {
+	// Check for context cancellation
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	// Resolve the hash (handles empty hash for HEAD)
 	resolvedHash, err := g.resolveRevision(hash)
 	if err != nil {
@@ -72,7 +78,12 @@ func (g *RepositoryAdapter) GetCommit(hash string) (*domain.CommitInfo, error) {
 }
 
 // GetCommitRange returns all commits in the given range.
-func (g *RepositoryAdapter) GetCommitRange(fromHash, toHash string) ([]*domain.CommitInfo, error) {
+func (g *RepositoryAdapter) GetCommitRange(ctx context.Context, fromHash, toHash string) ([]*domain.CommitInfo, error) {
+	// Check for context cancellation
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	// Resolve the "to" hash
 	toRevision, err := g.resolveRevision(toHash)
 	if err != nil {
@@ -91,6 +102,11 @@ func (g *RepositoryAdapter) GetCommitRange(fromHash, toHash string) ([]*domain.C
 		return nil, err
 	}
 
+	// Check for context cancellation before proceeding with potentially lengthy operation
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	// Collect and convert commits until we reach the "from" commit
 	domainCommits, err := g.collectAndConvertCommits(iter, 0, func(commit *object.Commit) bool {
 		return commit.Hash == from
@@ -104,6 +120,11 @@ func (g *RepositoryAdapter) GetCommitRange(fromHash, toHash string) ([]*domain.C
 
 	// If "from" commit is not already included, add it
 	if !collection.Contains(from.String()) {
+		// Check for context cancellation
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
 		// Get the "from" commit
 		fromCommit, err := g.getCommitByHash(from)
 		if err != nil {
@@ -123,7 +144,12 @@ func (g *RepositoryAdapter) GetCommitRange(fromHash, toHash string) ([]*domain.C
 }
 
 // GetHeadCommits returns the specified number of commits from HEAD.
-func (g *RepositoryAdapter) GetHeadCommits(count int) ([]*domain.CommitInfo, error) {
+func (g *RepositoryAdapter) GetHeadCommits(ctx context.Context, count int) ([]*domain.CommitInfo, error) {
+	// Check for context cancellation
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	// Resolve HEAD hash
 	headHash, err := g.resolveRevision("")
 	if err != nil {
@@ -136,12 +162,22 @@ func (g *RepositoryAdapter) GetHeadCommits(count int) ([]*domain.CommitInfo, err
 		return nil, err
 	}
 
+	// Check for context cancellation before proceeding with potentially lengthy operation
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	// Collect and convert commits with limit
 	return g.collectAndConvertCommits(iter, count, nil)
 }
 
 // GetCurrentBranch returns the name of the current branch.
-func (g *RepositoryAdapter) GetCurrentBranch() (string, error) {
+func (g *RepositoryAdapter) GetCurrentBranch(ctx context.Context) (string, error) {
+	// Check for context cancellation
+	if ctx.Err() != nil {
+		return "", ctx.Err()
+	}
+
 	// Get the HEAD reference
 	ref, err := g.repo.Head()
 	if err != nil {
@@ -156,6 +192,11 @@ func (g *RepositoryAdapter) GetCurrentBranch() (string, error) {
 	// We're in detached HEAD state, try to find the branch that contains HEAD
 	headHash := ref.Hash()
 
+	// Check for context cancellation before proceeding with potentially lengthy operation
+	if ctx.Err() != nil {
+		return "", ctx.Err()
+	}
+
 	// Get all branches
 	branches, err := g.repo.Branches()
 	if err != nil {
@@ -166,6 +207,11 @@ func (g *RepositoryAdapter) GetCurrentBranch() (string, error) {
 	var branchName string
 
 	err = branches.ForEach(func(branch *plumbing.Reference) error {
+		// Check for context cancellation during iteration
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
 		if branch.Hash() == headHash {
 			branchName = branch.Name().Short()
 
@@ -175,8 +221,10 @@ func (g *RepositoryAdapter) GetCurrentBranch() (string, error) {
 		return nil
 	})
 
-	// ForEach returns a "stop" error when we've found the branch
-	if err != nil && err.Error() != "stop" {
+	// ForEach returns a "stop" error when we've found the branch, or ctx.Err() when cancelled
+	if ctx.Err() != nil {
+		return "", ctx.Err()
+	} else if err != nil && err.Error() != "stop" {
 		return "", fmt.Errorf("failed to iterate branches: %w", err)
 	}
 
@@ -189,44 +237,13 @@ func (g *RepositoryAdapter) GetCurrentBranch() (string, error) {
 }
 
 // GetRepositoryName returns the name of the repository.
-func (g *RepositoryAdapter) GetRepositoryName() string {
+func (g *RepositoryAdapter) GetRepositoryName(_ context.Context) string {
+	// No need to check for context cancellation for this simple operation
 	// Extract the repository name from the path
 	return filepath.Base(g.path)
 }
 
-// findGitDir finds the Git directory from a starting path.
-func findGitDir(start string) (string, error) {
-	// Check if the directory exists
-	info, err := os.Stat(start)
-	if err != nil {
-		return "", fmt.Errorf("failed to stat path %s: %w", start, err)
-	}
-
-	// If it's not a directory, use the parent directory
-	if !info.IsDir() {
-		start = filepath.Dir(start)
-	}
-
-	// Try to find .git directory by traversing up the directory tree
-	current := start
-
-	for {
-		// Check if .git directory exists
-		gitDir := filepath.Join(current, ".git")
-		if _, err := os.Stat(gitDir); err == nil {
-			return current, nil // Found .git directory
-		}
-
-		// Go up one level
-		parent := filepath.Dir(current)
-		if parent == current {
-			// Reached the root directory, .git not found
-			return "", fmt.Errorf("git repository not found in %s or any parent directory", start)
-		}
-
-		current = parent
-	}
-}
+// findGitDir is moved to repository_helpers.go
 
 // convertCommit converts a go-git commit to a domain commit.
 func (g *RepositoryAdapter) convertCommit(commit *object.Commit) (*domain.CommitInfo, error) {
@@ -256,13 +273,19 @@ func (g *RepositoryAdapter) convertCommit(commit *object.Commit) (*domain.Commit
 }
 
 // IsValid checks if the repository is a valid Git repository.
-func (g *RepositoryAdapter) IsValid() bool {
+func (g *RepositoryAdapter) IsValid(_ context.Context) bool {
+	// No need to check for context cancellation for this simple operation
 	// We were able to open the repository, so it's valid
 	return g.repo != nil
 }
 
 // GetCommitsAhead returns the number of commits ahead of the given reference.
-func (g *RepositoryAdapter) GetCommitsAhead(reference string) (int, error) {
+func (g *RepositoryAdapter) GetCommitsAhead(ctx context.Context, reference string) (int, error) {
+	// Check for context cancellation
+	if ctx.Err() != nil {
+		return 0, ctx.Err()
+	}
+
 	// Resolve HEAD
 	head, err := g.resolveRevision("")
 	if err != nil {
@@ -273,6 +296,11 @@ func (g *RepositoryAdapter) GetCommitsAhead(reference string) (int, error) {
 	ref, err := g.resolveRevision(reference)
 	if err != nil {
 		return 0, fmt.Errorf("failed to resolve reference %s: %w", reference, err)
+	}
+
+	// Check for context cancellation
+	if ctx.Err() != nil {
+		return 0, ctx.Err()
 	}
 
 	// Find merge base
@@ -287,10 +315,26 @@ func (g *RepositoryAdapter) GetCommitsAhead(reference string) (int, error) {
 		return 0, err
 	}
 
+	// Check for context cancellation before proceeding with potentially lengthy operation
+	if ctx.Err() != nil {
+		return 0, ctx.Err()
+	}
+
 	// Collect commits between HEAD and merge base
 	commits, err := g.collectCommits(iter, 0, func(commit *object.Commit) bool {
+		// Check for context cancellation during iteration (this check has minimal performance impact)
+		if ctx.Err() != nil {
+			return true // Break the iteration
+		}
+
 		return commit.Hash == mergeBase
 	})
+
+	// Handle context cancellation that might have happened during commit collection
+	if ctx.Err() != nil {
+		return 0, ctx.Err()
+	}
+
 	if err != nil {
 		return 0, fmt.Errorf("failed to count commits ahead: %w", err)
 	}
@@ -301,126 +345,23 @@ func (g *RepositoryAdapter) GetCommitsAhead(reference string) (int, error) {
 
 // findMergeBase finds the common ancestor of two commits.
 func (g *RepositoryAdapter) findMergeBase(hash1, hash2 plumbing.Hash) (plumbing.Hash, error) {
-	// Get the first commit and its ancestors
-	commit1, err := g.repo.CommitObject(hash1)
-	if err != nil {
-		return plumbing.ZeroHash, fmt.Errorf("failed to get commit %s: %w", hash1.String(), err)
-	}
-
-	ancestors1 := make(map[plumbing.Hash]bool)
-
-	err = g.getAncestors(commit1, ancestors1)
-	if err != nil {
-		return plumbing.ZeroHash, fmt.Errorf("failed to get ancestors of %s: %w", hash1.String(), err)
-	}
-
-	// Get the second commit
-	commit2, err := g.repo.CommitObject(hash2)
-	if err != nil {
-		return plumbing.ZeroHash, fmt.Errorf("failed to get commit %s: %w", hash2.String(), err)
-	}
-
-	// Walk up the ancestry chain to find the first common ancestor
-	queue := []*object.Commit{commit2}
-	visited := make(map[plumbing.Hash]bool)
-
-	for len(queue) > 0 {
-		current := queue[0]
-		queue = queue[1:]
-
-		// Skip if already visited
-		if visited[current.Hash] {
-			continue
-		}
-
-		visited[current.Hash] = true
-
-		// Check if this is a common ancestor
-		if ancestors1[current.Hash] {
-			return current.Hash, nil
-		}
-
-		// Add parents to the queue
-		for _, parentHash := range current.ParentHashes {
-			parent, err := g.repo.CommitObject(parentHash)
-			if err != nil {
-				continue
-			}
-
-			queue = append(queue, parent)
-		}
-	}
-
-	// No common ancestor found (should not happen in a normal Git repository)
-	return plumbing.ZeroHash, fmt.Errorf("no common ancestor found between %s and %s", hash1.String(), hash2.String())
-}
-
-// getAncestors builds a map of all ancestors of a commit.
-func (g *RepositoryAdapter) getAncestors(commit *object.Commit, ancestors map[plumbing.Hash]bool) error {
-	// Mark this commit as an ancestor
-	ancestors[commit.Hash] = true
-
-	// Process parents
-	for _, parentHash := range commit.ParentHashes {
-		// Skip if already processed
-		if ancestors[parentHash] {
-			continue
-		}
-
-		parent, err := g.repo.CommitObject(parentHash)
-		if err != nil {
-			continue
-		}
-
-		err = g.getAncestors(parent, ancestors)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return findMergeBase(g.repo, hash1, hash2)
 }
 
 // resolveRevision resolves a revision to a hash.
 // If the revision is empty, HEAD is used.
 func (g *RepositoryAdapter) resolveRevision(revision string) (plumbing.Hash, error) {
-	// Default to HEAD if no revision provided
-	if revision == "" {
-		ref, err := g.repo.Head()
-		if err != nil {
-			return plumbing.ZeroHash, fmt.Errorf("failed to get HEAD: %w", err)
-		}
-
-		return ref.Hash(), nil
-	}
-
-	// Resolve symbolic references like "HEAD", "main", etc.
-	hash, err := g.repo.ResolveRevision(plumbing.Revision(revision))
-	if err != nil {
-		return plumbing.ZeroHash, fmt.Errorf("failed to resolve revision %s: %w", revision, err)
-	}
-
-	return *hash, nil
+	return resolveRevision(g.repo, revision)
 }
 
 // getCommitByHash gets a commit by its hash.
 func (g *RepositoryAdapter) getCommitByHash(hash plumbing.Hash) (*object.Commit, error) {
-	commit, err := g.repo.CommitObject(hash)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get commit %s: %w", hash.String(), err)
-	}
-
-	return commit, nil
+	return getCommitByHash(g.repo, hash)
 }
 
 // createCommitIterator creates a commit iterator starting from the given hash.
 func (g *RepositoryAdapter) createCommitIterator(hash plumbing.Hash) (object.CommitIter, error) {
-	iter, err := g.repo.Log(&git.LogOptions{From: hash})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create commit iterator: %w", err)
-	}
-
-	return iter, nil
+	return createCommitIterator(g.repo, hash)
 }
 
 // collectCommits collects commits from an iterator, with optional limit and stop condition.
@@ -429,45 +370,7 @@ func (g *RepositoryAdapter) collectCommits(
 	limit int,
 	stopFn func(*object.Commit) bool,
 ) ([]*object.Commit, error) {
-	var commits []*object.Commit
-
-	count := 0
-
-	// Iterate through the commits
-	err := iter.ForEach(func(commit *object.Commit) error {
-		// Check for nil commit
-		if commit == nil {
-			return errors.New("nil commit encountered")
-		}
-
-		// Check if we should stop processing
-		if stopFn != nil && stopFn(commit) {
-			return errors.New("stop")
-		}
-
-		// Add the commit to the list
-		commits = append(commits, commit)
-		count++
-
-		// Check if we've reached the limit
-		if limit > 0 && count >= limit {
-			return errors.New("limit")
-		}
-
-		return nil
-	})
-
-	// The iterator will return an error if we stopped early
-	if err != nil {
-		if err.Error() == "stop" || err.Error() == "limit" {
-			// These are expected control-flow errors, not actual errors
-			return commits, nil
-		}
-
-		return nil, fmt.Errorf("error iterating commits: %w", err)
-	}
-
-	return commits, nil
+	return collectCommits(iter, limit, stopFn)
 }
 
 // collectAndConvertCommits collects commits from an iterator, converts them to domain commits.

@@ -5,6 +5,7 @@
 package rules_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/itiquette/gommitlint/internal/core/rules"
@@ -19,7 +20,7 @@ type mockCommitAnalyzer struct {
 	err          error
 }
 
-func (m *mockCommitAnalyzer) GetCommitsAhead(_ string) (int, error) {
+func (m *mockCommitAnalyzer) GetCommitsAhead(_ context.Context, _ string) (int, error) {
 	return m.commitsAhead, m.err
 }
 

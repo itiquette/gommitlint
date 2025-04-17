@@ -37,35 +37,35 @@ func TestConventionalCommitRule(t *testing.T) {
 			subject:     "invalid: this is not a valid type",
 			expectValid: false,
 			errorCode:   "invalid_type",
-			errorMsg:    "invalid type",
+			errorMsg:    "Invalid commit type",
 		},
 		{
 			name:        "Invalid scope",
 			subject:     "feat(unknown): unknown scope",
 			expectValid: false,
 			errorCode:   "invalid_scope",
-			errorMsg:    "invalid scope",
+			errorMsg:    "Invalid commit scope",
 		},
 		{
 			name:        "Empty description",
 			subject:     "feat: ",
 			expectValid: false,
 			errorCode:   "invalid_format",
-			errorMsg:    "invalid conventional commit format",
+			errorMsg:    "Invalid format",
 		},
 		{
 			name:        "Description too long",
 			subject:     "feat: " + repeat(73),
 			expectValid: false,
 			errorCode:   "description_too_long",
-			errorMsg:    "description too long",
+			errorMsg:    "Subject exceeds maximum length",
 		},
 		{
 			name:        "Invalid spacing after colon",
 			subject:     "feat:no space",
 			expectValid: false,
 			errorCode:   "invalid_format",
-			errorMsg:    "invalid conventional commit format",
+			errorMsg:    "Invalid format",
 		},
 		{
 			name:        "Valid with multiple scopes",
@@ -82,14 +82,14 @@ func TestConventionalCommitRule(t *testing.T) {
 			subject:     "",
 			expectValid: false,
 			errorCode:   "invalid_format",
-			errorMsg:    "invalid conventional commit format",
+			errorMsg:    "Invalid format",
 		},
 		{
 			name:        "Multiple spaces after colon",
 			subject:     "feat:  too many spaces",
 			expectValid: false,
-			errorCode:   "spacing_error",
-			errorMsg:    "spacing error",
+			errorCode:   "invalid_format",
+			errorMsg:    "Invalid format",
 		},
 	}
 
@@ -197,7 +197,7 @@ func TestVerboseResultContents(t *testing.T) {
 			types:          allowedTypes,
 			scopes:         allowedScopes,
 			expectValid:    false,
-			expectedPhrase: "Spacing error",
+			expectedPhrase: "Invalid format",
 		},
 		{
 			name:           "Invalid format",
@@ -282,7 +282,7 @@ func TestHelpMethodOutput(t *testing.T) {
 
 				return rule, commit
 			},
-			expectedHelp: "Your commit message does not follow the conventional commit format",
+			expectedHelp: "Ensure commit message follows the pattern",
 		},
 		{
 			name: "Invalid type",
@@ -294,7 +294,7 @@ func TestHelpMethodOutput(t *testing.T) {
 
 				return rule, commit
 			},
-			expectedHelp: "The commit type you used is not in the allowed list of types",
+			expectedHelp: "Use one of the allowed commit types",
 		},
 		{
 			name: "Invalid scope",
@@ -306,7 +306,7 @@ func TestHelpMethodOutput(t *testing.T) {
 
 				return rule, commit
 			},
-			expectedHelp: "The scope you specified is not in the allowed list of scopes",
+			expectedHelp: "Use one of the allowed commit scopes",
 		},
 		{
 			name: "Empty description",
@@ -318,7 +318,7 @@ func TestHelpMethodOutput(t *testing.T) {
 
 				return rule, commit
 			},
-			expectedHelp: "Your commit message does not follow the conventional commit format",
+			expectedHelp: "Ensure commit message follows the pattern",
 		},
 		{
 			name: "Description too long",
@@ -330,7 +330,7 @@ func TestHelpMethodOutput(t *testing.T) {
 
 				return rule, commit
 			},
-			expectedHelp: "Your commit description exceeds the maximum allowed length",
+			expectedHelp: "Keep the subject line to",
 		},
 		{
 			name: "Spacing error",
@@ -342,7 +342,7 @@ func TestHelpMethodOutput(t *testing.T) {
 
 				return rule, commit
 			},
-			expectedHelp: "There should be exactly one space after the colon in your commit message",
+			expectedHelp: "Ensure commit message follows the pattern",
 		},
 	}
 

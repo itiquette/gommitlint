@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/errorx"
 )
 
 // SubjectLengthRule validates that the commit subject is not too long.
@@ -47,16 +48,13 @@ func (r *SubjectLengthRule) Validate(commit *domain.CommitInfo) []*domain.Valida
 
 	// Check if subject is too long
 	if subjectLength > r.maxLength {
-		// Create error with context
-		err := domain.NewStandardValidationError(
-			r.Name(),
-			domain.ValidationErrorTooLong,
-			fmt.Sprintf("subject too long: %d characters (maximum allowed: %d)", subjectLength, r.maxLength),
-		)
+		// Create error with context in one step
+		context := map[string]string{
+			"actual_length": strconv.Itoa(subjectLength),
+			"max_length":    strconv.Itoa(r.maxLength),
+		}
 
-		// Add context
-		_ = err.WithContext("actual_length", strconv.Itoa(subjectLength))
-		_ = err.WithContext("max_length", strconv.Itoa(r.maxLength))
+		err := errorx.NewErrorWithContext(r.Name(), errorx.ErrSubjectTooLong, context, subjectLength, r.maxLength)
 
 		// Add to errors
 		r.errors = append(r.errors, err)
@@ -104,15 +102,18 @@ func (r *SubjectLengthRule) Help() string {
 	}
 
 	// Get max length from context
-	maxLength := strconv.Itoa(r.maxLength)
+	maxLength := r.maxLength
 
 	if ctx := r.errors[0].Context; ctx != nil {
 		if val, ok := ctx["max_length"]; ok {
-			maxLength = val
+			if parsedVal, err := strconv.Atoi(val); err == nil {
+				maxLength = parsedVal
+			}
 		}
 	}
 
-	return fmt.Sprintf("Shorten your commit message subject to a maximum of %s characters. The subject should be a concise summary of the changes.", maxLength)
+	// Use the template-based help message
+	return errorx.FormatHelp(errorx.ErrSubjectTooLong, maxLength)
 }
 
 // Errors returns all validation errors.

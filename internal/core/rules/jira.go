@@ -218,8 +218,44 @@ func (j *JiraReferenceRule) Help() string {
 	// Check error code
 	if len(j.errors) > 0 {
 		switch j.errors[0].Code {
+		case string(domain.ValidationErrorMissingJira):
+			// For missing Jira references, use template help
+			if j.validateBodyRef {
+				return `Include a valid Jira issue key (e.g., PROJECT-123) in your commit body with the "Refs:" prefix.
+
+Examples:
+- Refs: PROJECT-123
+- Refs: PROJECT-123, PROJECT-456
+- Refs: PROJECT-123, PROJECT-456, PROJECT-789
+
+The Refs: line should appear at the end of the commit body, before any Signed-off-by lines.`
+			}
+
+			return `Include a valid Jira issue key (e.g., PROJECT-123) in your commit subject.
+
+For conventional commits, place the Jira key at the end of the first line:
+- feat(auth): add login feature PROJ-123
+- fix: resolve timeout issue [PROJ-123]
+- docs(readme): update installation steps (PROJ-123)
+
+For other commit formats, include the Jira key anywhere in the subject.`
+
+		case string(domain.ValidationErrorInvalidType):
+			// For invalid project types
+			projectKeys := j.validProjects
+			if len(projectKeys) > 0 {
+				return `The Jira project reference is not recognized as a valid project.
+
+Valid projects: ` + strings.Join(projectKeys, ", ") + `
+
+Please use one of these project keys in your Jira reference.`
+			}
+
+			return `The Jira project reference is not valid.
+Jira project keys should be uppercase letters followed by a hyphen and numbers (e.g., PROJECT-123).`
+
 		case string(domain.ValidationErrorInvalidFormat):
-			// This handles multiple former error types: empty_subject, key_not_at_end, invalid_refs_format, refs_after_signoff
+			// This handles multiple format errors with specific messages
 			if j.validateBodyRef {
 				// For body validation errors
 				if strings.Contains(j.errors[0].Message, "must appear before") {
@@ -260,6 +296,11 @@ Avoid putting the Jira key in the middle of the line:
 - INCORRECT: fix: PROJ-123 resolve timeout issue`
 			} else if strings.Contains(j.errors[0].Message, "empty") {
 				return "Provide a non-empty commit message with a Jira issue reference"
+			} else if strings.Contains(j.errors[0].Message, "invalid Jira issue key format") {
+				// Use the general format template
+				return `Invalid Jira issue key format. Make sure it follows the pattern PROJECT-123.
+
+Jira keys should be uppercase letters followed by a hyphen and numbers (e.g., PROJECT-123).`
 			}
 
 			// General invalid format
@@ -272,42 +313,6 @@ For body references:
 - Subject line
 - 
 - Refs: PROJ-123`
-
-		case string(domain.ValidationErrorMissingJira):
-			// This handles former error types: missing_jira_key_subject, missing_jira_key_body
-			if j.validateBodyRef {
-				return `Include a valid Jira issue key (e.g., PROJECT-123) in your commit body with the "Refs:" prefix.
-
-Examples:
-- Refs: PROJECT-123
-- Refs: PROJECT-123, PROJECT-456
-- Refs: PROJECT-123, PROJECT-456, PROJECT-789
-
-The Refs: line should appear at the end of the commit body, before any Signed-off-by lines.`
-			}
-
-			return `Include a valid Jira issue key (e.g., PROJECT-123) in your commit subject.
-
-For conventional commits, place the Jira key at the end of the first line:
-- feat(auth): add login feature PROJ-123
-- fix: resolve timeout issue [PROJ-123]
-- docs(readme): update installation steps (PROJ-123)
-
-For other commit formats, include the Jira key anywhere in the subject.`
-
-		case string(domain.ValidationErrorInvalidType):
-			// This handles the former invalid_project error
-			projectKeys := j.validProjects
-			if len(projectKeys) > 0 {
-				return `The Jira project reference is not recognized as a valid project.
-
-Valid projects: ` + strings.Join(projectKeys, ", ") + `
-
-Please use one of these project keys in your Jira reference.`
-			}
-
-			return `The Jira project reference is not valid.
-Jira project keys should be uppercase letters followed by a hyphen and numbers (e.g., PROJECT-123).`
 		}
 	}
 
@@ -318,11 +323,15 @@ The Jira issue key should follow the format PROJECT-123.`
 
 // addError adds a structured validation error.
 func (j *JiraReferenceRule) addError(code domain.ValidationErrorCode, message string, context map[string]string) {
-	err := domain.NewStandardValidationError(j.Name(), code, message)
+	// Create error using standard error creation with context in one step
+	var err *domain.ValidationError
 
-	// Add any context values
-	for key, value := range context {
-		_ = err.WithContext(key, value)
+	if context != nil {
+		// Use withContext version when context is provided
+		err = domain.NewValidationErrorWithContext(j.Name(), string(code), message, context)
+	} else {
+		// Use simpler version when no context is needed
+		err = domain.NewValidationError(j.Name(), string(code), message)
 	}
 
 	j.errors = append(j.errors, err)

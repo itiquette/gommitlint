@@ -4,37 +4,39 @@
 
 package domain
 
+import "context"
+
 // CommitReader provides read access to individual commits.
 type CommitReader interface {
 	// GetCommit returns a commit by its hash.
-	GetCommit(hash string) (*CommitInfo, error)
+	GetCommit(ctx context.Context, hash string) (*CommitInfo, error)
 }
 
 // CommitHistoryReader provides read access to commit history.
 type CommitHistoryReader interface {
 	// GetCommitRange returns all commits in the given range.
-	GetCommitRange(fromHash, toHash string) ([]*CommitInfo, error)
+	GetCommitRange(ctx context.Context, fromHash, toHash string) ([]*CommitInfo, error)
 
 	// GetHeadCommits returns the specified number of commits from HEAD.
-	GetHeadCommits(count int) ([]*CommitInfo, error)
+	GetHeadCommits(ctx context.Context, count int) ([]*CommitInfo, error)
 }
 
 // RepositoryInfoProvider provides general information about the repository.
 type RepositoryInfoProvider interface {
 	// GetCurrentBranch returns the name of the current branch.
-	GetCurrentBranch() (string, error)
+	GetCurrentBranch(ctx context.Context) (string, error)
 
 	// GetRepositoryName returns the name of the repository.
-	GetRepositoryName() string
+	GetRepositoryName(ctx context.Context) string
 
 	// IsValid checks if the repository is a valid Git repository.
-	IsValid() bool
+	IsValid(ctx context.Context) bool
 }
 
 // CommitAnalyzer provides analysis functionality for commits.
 type CommitAnalyzer interface {
 	// GetCommitsAhead returns the number of commits ahead of the given reference.
-	GetCommitsAhead(reference string) (int, error)
+	GetCommitsAhead(ctx context.Context, reference string) (int, error)
 }
 
 // GitRepositoryService combines all Git repository interfaces.

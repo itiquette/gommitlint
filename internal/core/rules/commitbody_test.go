@@ -239,8 +239,8 @@ func TestCommitBodyHelpMethod(t *testing.T) {
 		_ = r.Validate(commit)
 
 		helpText := r.Help()
-		assert.Contains(t, helpText, "Add a descriptive body",
-			"help text should have guidance for missing body")
+		assert.Contains(t, helpText, "Ensure your commit message follows this structure",
+			"help text should have standard structure intro")
 	})
 
 	t.Run("help for missing blank line", func(t *testing.T) {
@@ -254,9 +254,9 @@ func TestCommitBodyHelpMethod(t *testing.T) {
 		_ = r.Validate(commit)
 
 		helpText := r.Help()
-		// This will actually trigger the "missing_body" error first in the validation logic
-		assert.Contains(t, helpText, "Add a descriptive body",
-			"help text should include guidance")
+		// This will trigger a standard error message for invalid body
+		assert.Contains(t, helpText, "Format the commit body correctly",
+			"help text should include guidance about formatting")
 	})
 
 	t.Run("help for empty body", func(t *testing.T) {
@@ -270,8 +270,8 @@ func TestCommitBodyHelpMethod(t *testing.T) {
 		_ = r.Validate(commit)
 
 		helpText := r.Help()
-		assert.Contains(t, helpText, "must contain actual content",
-			"help text should include guidance for empty body")
+		assert.Contains(t, helpText, "Format the commit body correctly",
+			"help text should include standard guidance for formatting")
 	})
 
 	t.Run("help for valid commit", func(t *testing.T) {

@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/errorx"
 )
 
 // subjectCaseFirstWordRegex is the regular expression used to find the first word in a commit.
@@ -305,11 +306,25 @@ func (r *SubjectCaseRule) Errors() []*domain.ValidationError {
 
 // addError adds a structured validation error.
 func (r *SubjectCaseRule) addError(code domain.ValidationErrorCode, message string, context map[string]string) {
-	err := domain.NewStandardValidationError(r.Name(), code, message)
+	// Use error templates for case validation
+	var err *domain.ValidationError
 
-	// Add any context values
-	for key, value := range context {
-		_ = err.WithContext(key, value)
+	if code == domain.ValidationErrorInvalidCase && context != nil {
+		// For case errors, use the template
+		actual := context["actual_case"]
+		expected := context["expected_case"]
+
+		if actual != "" && expected != "" {
+			err = errorx.NewErrorWithContext(r.Name(), errorx.ErrSubjectCase, context, actual, expected)
+		} else {
+			err = domain.NewValidationErrorWithContext(r.Name(), string(code), message, context)
+		}
+	} else if context != nil {
+		// Use WithContext for errors with context
+		err = domain.NewValidationErrorWithContext(r.Name(), string(code), message, context)
+	} else {
+		// Fall back to standard error for errors without context
+		err = domain.NewStandardValidationError(r.Name(), code, message)
 	}
 
 	r.errors = append(r.errors, err)

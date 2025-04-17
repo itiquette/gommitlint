@@ -73,7 +73,7 @@ func NewValidationService(
 // ValidateCommit validates a single commit.
 func (s *ValidationService) ValidateCommit(ctx context.Context, hash string) (domain.CommitResult, error) {
 	// Get the commit from the git repository
-	commit, err := s.commitReader.GetCommit(hash)
+	commit, err := s.commitReader.GetCommit(ctx, hash)
 	if err != nil {
 		return domain.CommitResult{}, fmt.Errorf("failed to get commit: %w", err)
 	}
@@ -85,7 +85,7 @@ func (s *ValidationService) ValidateCommit(ctx context.Context, hash string) (do
 // ValidateHeadCommits validates the specified number of commits from HEAD.
 func (s *ValidationService) ValidateHeadCommits(ctx context.Context, count int, skipMerge bool) (*domain.ValidationResults, error) {
 	// Get the commits from the git repository
-	commits, err := s.historyReader.GetHeadCommits(count)
+	commits, err := s.historyReader.GetHeadCommits(ctx, count)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get head commits: %w", err)
 	}
@@ -103,7 +103,7 @@ func (s *ValidationService) ValidateHeadCommits(ctx context.Context, count int, 
 // ValidateCommitRange validates all commits in the given range.
 func (s *ValidationService) ValidateCommitRange(ctx context.Context, fromHash, toHash string, skipMerge bool) (*domain.ValidationResults, error) {
 	// Get the commits from the git repository
-	commits, err := s.historyReader.GetCommitRange(fromHash, toHash)
+	commits, err := s.historyReader.GetCommitRange(ctx, fromHash, toHash)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get commit range: %w", err)
 	}

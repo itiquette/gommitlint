@@ -463,11 +463,14 @@ func (r *SignatureRule) Errors() []*domain.ValidationError {
 
 // addError adds a structured validation error.
 func (r *SignatureRule) addError(code domain.ValidationErrorCode, message string, context map[string]string) {
-	err := domain.NewStandardValidationError(r.Name(), code, message)
+	var err *domain.ValidationError
 
-	// Add any context values
-	for key, value := range context {
-		_ = err.WithContext(key, value)
+	if context != nil {
+		// Use the simplified error creation with context in one step
+		err = domain.NewValidationErrorWithContext(r.Name(), string(code), message, context)
+	} else {
+		// Use standard error creation without context
+		err = domain.NewStandardValidationError(r.Name(), code, message)
 	}
 
 	r.errors = append(r.errors, err)

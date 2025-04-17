@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/errorx"
 )
 
 // Signs off commit messages line.
@@ -195,42 +196,30 @@ func (r *CommitBodyRule) Help() string {
 		return "No errors to fix"
 	}
 
-	// Since all errors use ValidationErrorInvalidBody, differentiate by message content
+	// Use templated help messages based on the error type
+	var helpMessage string
+
 	if domain.ValidationErrorCode(r.errors[0].Code) == domain.ValidationErrorInvalidBody {
-		msg := r.errors[0].Message
-
-		if strings.Contains(msg, "requires a body") {
-			return `Add a descriptive body to your commit message that explains:
-- Why the change was made
-- What problem it solves
-- Any important implementation details
-
-Separate the subject from the body with one blank line.`
-		} else if strings.Contains(msg, "empty line") {
-			return `Your commit message should have exactly one blank line between the subject and body.
-
-Example format:
-feat: your subject line here
-
-Your body text starts here and can
-span multiple lines.`
-		} else if strings.Contains(msg, "non-empty body") {
-			return `Your commit message body must contain actual content.
-Add descriptive text explaining the purpose and impact of your changes.`
-		} else if strings.Contains(msg, "sign-off line") {
-			return `Your commit message body should not start with a sign-off line.
-Begin with actual content explaining your changes, then add sign-off lines at the end.`
-		} else if strings.Contains(msg, "meaningful content") {
-			return `Your commit message must include meaningful content beyond just sign-off lines.
-Explain the reasons and details of your changes.`
+		// Extract helpful details from the error message
+		details := "format the body correctly"
+		if r.errors[0].Message != "" {
+			details = r.errors[0].Message
 		}
+
+		// Use the error template helper
+		helpMessage = errorx.FormatHelp(errorx.ErrInvalidBody, details)
+	} else {
+		// Generic help for unknown errors
+		helpMessage = r.errors[0].Error()
 	}
 
-	// Default help for any other error
+	// Return structured help message
 	return `Ensure your commit message follows this structure:
 1. Subject line (brief summary)
 2. One blank line
-3. Body with detailed explanation`
+3. Body with detailed explanation
+
+` + helpMessage
 }
 
 // Errors returns all validation errors found.
@@ -240,12 +229,7 @@ func (r *CommitBodyRule) Errors() []*domain.ValidationError {
 
 // addError adds a structured validation error.
 func (r *CommitBodyRule) addError(_ domain.ValidationErrorCode, message string, context map[string]string) {
-	err := domain.NewStandardValidationError(r.Name(), domain.ValidationErrorInvalidBody, message)
-
-	// Add any context values
-	for key, value := range context {
-		_ = err.WithContext(key, value)
-	}
-
+	// Create a validation error with context in one step
+	err := domain.NewValidationErrorWithContext(r.Name(), string(domain.ValidationErrorInvalidBody), message, context)
 	r.errors = append(r.errors, err)
 }

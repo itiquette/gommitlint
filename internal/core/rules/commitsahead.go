@@ -5,10 +5,12 @@
 package rules
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/errorx"
 )
 
 // CommitsAheadRule enforces a maximum number of commits ahead of a reference.
@@ -71,7 +73,15 @@ func (r *CommitsAheadRule) Name() string {
 }
 
 // Validate checks if the current HEAD exceeds the maximum allowed commits ahead of the reference branch.
-func (r *CommitsAheadRule) Validate(_ *domain.CommitInfo) []*domain.ValidationError {
+func (r *CommitsAheadRule) Validate(commitInfo *domain.CommitInfo) []*domain.ValidationError {
+	// Create a background context for backward compatibility
+	ctx := context.Background()
+
+	return r.ValidateWithContext(ctx, commitInfo)
+}
+
+// ValidateWithContext checks if the current HEAD exceeds the maximum allowed commits ahead of the reference branch.
+func (r *CommitsAheadRule) ValidateWithContext(ctx context.Context, _ *domain.CommitInfo) []*domain.ValidationError {
 	// Reset errors
 	r.errors = []*domain.ValidationError{}
 
@@ -111,8 +121,19 @@ func (r *CommitsAheadRule) Validate(_ *domain.CommitInfo) []*domain.ValidationEr
 		return r.errors
 	}
 
+	// Check for context cancellation
+	if ctx.Err() != nil {
+		r.addError(
+			"context_cancelled",
+			"operation cancelled by context",
+			nil,
+		)
+
+		return r.errors
+	}
+
 	// Get commits ahead count
-	commitsAhead, err := analyzer.GetCommitsAhead(r.ref)
+	commitsAhead, err := analyzer.GetCommitsAhead(ctx, r.ref)
 	if err != nil {
 		r.addError(
 			"git_error",
@@ -162,6 +183,8 @@ func (r *CommitsAheadRule) VerboseResult() string {
 			return "Repository object is nil. Cannot validate commits ahead."
 		case "empty_ref":
 			return "Reference branch name is empty. Cannot validate commits ahead."
+		case "context_cancelled":
+			return "Operation was cancelled by context. Cannot validate commits ahead."
 		case "too_many_commits":
 			return fmt.Sprintf(
 				"HEAD is %d commit(s) ahead of %s (maximum allowed: %d). Consider merging or rebasing with %s.",
@@ -211,6 +234,9 @@ func (r *CommitsAheadRule) Help() string {
 		case "empty_ref":
 			return "You must provide a valid reference branch name to compare against."
 
+		case "context_cancelled":
+			return "The operation was cancelled. Try running the validation again with a longer timeout."
+
 		case "too_many_commits":
 			return fmt.Sprintf(
 				"Your current branch has too many commits ahead of %s.\n"+
@@ -242,11 +268,25 @@ func (r *CommitsAheadRule) Errors() []*domain.ValidationError {
 
 // addError adds a structured validation error.
 func (r *CommitsAheadRule) addError(code, message string, context map[string]string) {
-	err := domain.NewValidationError("CommitsAhead", code, message)
+	var err *domain.ValidationError
 
-	// Add any context values
-	for key, value := range context {
-		_ = err.WithContext(key, value)
+	// Use templated errors for known error types
+	if code == "too_many_commits" && context != nil {
+		if countStr, ok := context["count"]; ok {
+			if maxStr, ok := context["max"]; ok {
+				count, _ := strconv.Atoi(countStr)
+				maxValue, _ := strconv.Atoi(maxStr)
+
+				// Create error using the template with context in one step
+				err = errorx.NewErrorWithContext(r.Name(), errorx.ErrTooManyCommits, context, count, maxValue)
+			}
+		}
+	} else if context != nil {
+		// For other codes with context, use ValidationErrorWithContext
+		err = domain.NewValidationErrorWithContext(r.Name(), code, message, context)
+	} else {
+		// For simple errors without context
+		err = domain.NewValidationError(r.Name(), code, message)
 	}
 
 	r.errors = append(r.errors, err)

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/errorx"
 )
 
 // SignOffRegex is the regular expression used to validate the Developer Certificate of Origin signature.
@@ -300,11 +301,18 @@ Signed-off-by: Jane Doe <jane.doe@example.org>`
 
 // addError adds a structured validation error.
 func (r *SignOffRule) addError(code, message string, context map[string]string) {
-	err := domain.NewValidationError(r.Name(), code, message)
+	var err *domain.ValidationError
 
-	// Add any context values
-	for key, value := range context {
-		_ = err.WithContext(key, value)
+	if code == "missing_signoff" {
+		// Use the error template for missing signoff with context in one step
+		err = errorx.NewErrorWithContext(r.Name(), errorx.ErrMissingSignoff, context)
+	} else if code == "invalid_format" {
+		// Use a more consistent error message for invalid format
+		standardMessage := "Invalid sign-off format. Must use 'Signed-off-by: Name <email@example.com>' format"
+		err = domain.NewValidationErrorWithContext(r.Name(), code, standardMessage, context)
+	} else {
+		// For other codes, use context if available
+		err = domain.NewValidationErrorWithContext(r.Name(), code, message, context)
 	}
 
 	r.errors = append(r.errors, err)

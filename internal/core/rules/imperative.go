@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/errorx"
 	"github.com/kljensen/snowball"
 )
 
@@ -154,13 +155,12 @@ func (r *ImperativeVerbRule) Validate(commit *domain.CommitInfo) []*domain.Valid
 // validateNonEmptyMessage checks if the commit message is empty.
 func (r *ImperativeVerbRule) validateNonEmptyMessage(subject string) bool {
 	if subject == "" {
-		r.addError(
-			domain.ValidationErrorEmptyMessage,
-			"empty message",
-			map[string]string{
-				"word": "(empty message)",
-			},
-		)
+		context := map[string]string{
+			"word": "(empty message)",
+		}
+		err := errorx.NewErrorWithContext(r.Name(), errorx.ErrMissingSubject, context)
+		r.errors = append(r.errors, err)
+		r.firstWord = "(empty message)"
 
 		return false
 	}
@@ -176,24 +176,22 @@ func (r *ImperativeVerbRule) validateFormat(subject string) bool {
 			// If it doesn't match the pattern fully, figure out specific issue
 			if regexp.MustCompile(`^([a-z]+)(?:\(([\w,/-]+)\))?(!)?:[ ]$`).MatchString(subject) {
 				// Empty subject after colon
-				r.addError(
-					domain.ValidationErrorMissingSubject,
-					"missing subject after type",
-					map[string]string{
-						"subject": subject,
-						"word":    "(missing subject)",
-					},
-				)
+				context := map[string]string{
+					"subject": subject,
+					"word":    "(missing subject)",
+				}
+				err := errorx.NewErrorWithContext(r.Name(), errorx.ErrMissingSubject, context)
+				r.errors = append(r.errors, err)
+				r.firstWord = "(missing subject)"
 			} else {
 				// General format issue
-				r.addError(
-					domain.ValidationErrorInvalidFormat,
-					"invalid conventional commit format",
-					map[string]string{
-						"subject": subject,
-						"word":    "(invalid format)",
-					},
-				)
+				context := map[string]string{
+					"subject": subject,
+					"word":    "(invalid format)",
+				}
+				err := errorx.NewErrorWithContext(r.Name(), errorx.ErrInvalidFormat, context, "conventional commit")
+				r.errors = append(r.errors, err)
+				r.firstWord = "(invalid format)"
 			}
 
 			return false
@@ -201,14 +199,13 @@ func (r *ImperativeVerbRule) validateFormat(subject string) bool {
 	} else {
 		// For non-conventional commits, check if it starts with a valid character
 		if !regexp.MustCompile(`^[a-zA-Z0-9]`).MatchString(strings.TrimSpace(subject)) {
-			r.addError(
-				domain.ValidationErrorInvalidFormat,
-				"invalid commit format",
-				map[string]string{
-					"subject": subject,
-					"word":    "(invalid format)",
-				},
-			)
+			context := map[string]string{
+				"subject": subject,
+				"word":    "(invalid format)",
+			}
+			err := errorx.NewErrorWithContext(r.Name(), errorx.ErrInvalidFormat, context, "commit message")
+			r.errors = append(r.errors, err)
+			r.firstWord = "(invalid format)"
 
 			return false
 		}
@@ -429,12 +426,8 @@ func (r *ImperativeVerbRule) Errors() []*domain.ValidationError {
 
 // addError adds a structured validation error using standard error codes.
 func (r *ImperativeVerbRule) addError(code domain.ValidationErrorCode, message string, context map[string]string) {
-	err := domain.NewStandardValidationError(r.Name(), code, message)
-
-	// Add any context values
-	for key, value := range context {
-		err = err.WithContext(key, value)
-	}
+	// Create a validation error with context in one step
+	err := domain.NewValidationErrorWithContext(r.Name(), string(code), message, context)
 
 	// Store verb type for verbose output
 	if context != nil {

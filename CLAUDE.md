@@ -20,9 +20,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Testing: Use table-driven tests with testify/require and assert
 - Documentation: Full godoc comments for all exported functions/types
 - Naming: PascalCase for exported, camelCase for non-exported identifiers
+- Keep it simple and maintainable
+- Keep it idiomatic go lang
 
 ## Commit Style
-- Follow conventional commits format: `type(scope): description`
-- Commits require sign-off: `git commit --signoff -m "..."`
-- GPG signing recommended: `git commit --signoff --gpg-sign -m "..."`
+- Dont ever do git add or git commit
 - Commit linting: `make quality/commit`

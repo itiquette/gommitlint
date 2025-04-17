@@ -10,6 +10,7 @@ import (
 
 	"github.com/golangci/misspell"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/errorx"
 )
 
 // SpellRule checks for spelling errors in commit messages.
@@ -306,11 +307,27 @@ func (r *SpellRule) Errors() []*domain.ValidationError {
 
 // addError adds a structured validation error.
 func (r *SpellRule) addError(code domain.ValidationErrorCode, message string, context map[string]string) {
-	err := domain.NewStandardValidationError(r.Name(), code, message)
+	// Create a validation error using templates if applicable
+	var err *domain.ValidationError
 
-	// Add any context values
-	for key, value := range context {
-		_ = err.WithContext(key, value)
+	if code == domain.ValidationErrorSpelling && context != nil {
+		// For spelling errors, use the template with word and location
+		word := context["word"]
+		location := context["location"]
+
+		if word != "" && location != "" {
+			err = errorx.NewErrorWithContext(r.Name(), errorx.ErrSpelling, context, word, location)
+		} else if context != nil {
+			// Fall back to standard error with context
+			err = domain.NewValidationErrorWithContext(r.Name(), string(code), message, context)
+		} else {
+			err = domain.NewStandardValidationError(r.Name(), code, message)
+		}
+	} else if context != nil {
+		// Fall back to standard error with context
+		err = domain.NewValidationErrorWithContext(r.Name(), string(code), message, context)
+	} else {
+		err = domain.NewStandardValidationError(r.Name(), code, message)
 	}
 
 	r.errors = append(r.errors, err)

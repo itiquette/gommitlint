@@ -72,7 +72,7 @@ func TestImperativeVerbRule(t *testing.T) {
 			isConventional: false,
 			message:        "",
 			expectedValid:  false,
-			expectedCode:   string(domain.ValidationErrorEmptyMessage),
+			expectedCode:   string(domain.ValidationErrorMissingSubject),
 		},
 		{
 			name:           "Invalid conventional commit format",
