@@ -1,28 +1,24 @@
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
+
+// This file contains the new architecture validate command using the hexagonal architecture.
 package cmd
 
 import (
-	"errors"
 	"fmt"
 	"os"
 
-	"github.com/itiquette/gommitlint/internal"
-	"github.com/itiquette/gommitlint/internal/configuration"
-	gitService "github.com/itiquette/gommitlint/internal/git"
-	"github.com/itiquette/gommitlint/internal/model"
-	"github.com/itiquette/gommitlint/internal/results"
-	"github.com/itiquette/gommitlint/internal/validation"
+	"github.com/itiquette/gommitlint/internal/application/report"
+	"github.com/itiquette/gommitlint/internal/application/validate"
 	"github.com/spf13/cobra"
 )
 
-// Note: Error handling is now done in runValidation function
-
+// newValidateCmd creates a new validate command.
 func newValidateCmd() *cobra.Command {
 	var validateCmd = &cobra.Command{
 		Use:   "validate",
-		Short: "Validates commit message/s against configured rules",
+		Short: "Validates commit messages",
 		Long: `Validates commit message/s against a set of rules.
 
 Examples:
@@ -39,7 +35,7 @@ Examples:
   gommitlint validate --revision-range=main..HEAD`,
 		Run: func(cmd *cobra.Command, _ []string) {
 			// Process validation request
-			exitCode, err := runValidation(cmd)
+			exitCode, err := runNewValidation(cmd)
 			if err != nil {
 				cmd.PrintErrf("Error: %v\n", err)
 				os.Exit(1)
@@ -55,381 +51,149 @@ Examples:
 		},
 	}
 
-	// Add flags to the command
+	// Add flags to the command - use the same flags as the old command for compatibility
 	validateCmd.Flags().String("message-file", "", "commit message file path to validate")
-	validateCmd.Flags().String("git-reference", "", "git reference to validate (defaults to auto-detected main branch)")
+	validateCmd.Flags().String("git-reference", "", "git reference to validate (defaults to HEAD)")
+	validateCmd.Flags().Int("commit-count", 1, "number of commits from HEAD to validate")
 	validateCmd.Flags().String("revision-range", "", "range of commits to validate (<commit1>..<commit2>)")
-	validateCmd.Flags().String("base-branch", "", "base branch to compare with (sets revision-range to <base-branch>..HEAD and overrides git-reference)")
+	validateCmd.Flags().String("base-branch", "", "base branch to compare with (sets revision-range to <base-branch>..HEAD)")
 	validateCmd.Flags().BoolP("verbose", "v", false, "show detailed validation results")
 	validateCmd.Flags().Bool("extra-verbose", false, "show extra detailed validation results")
 	validateCmd.Flags().Bool("light-mode", false, "use light background color scheme")
-	validateCmd.Flags().String("rulehelp", "", "show detailed help for a specific rule (e.g., --rulehelp=signature)")
+	validateCmd.Flags().String("rulehelp", "", "show detailed help for a specific rule")
 	validateCmd.Flags().String("format", "text", "output format: text or json")
+	validateCmd.Flags().Bool("skip-merge-commits", true, "skip merge commits in validation")
+	validateCmd.Flags().String("repo-path", "", "path to the repository to validate")
 
 	return validateCmd
 }
 
-// runValidation handles the core validation logic and returns an exit code.
-func runValidation(cmd *cobra.Command) (int, error) {
-	// Setup phase
-	validator, _, err := setupValidation(cmd)
+// runNewValidation handles the core validation logic and returns an exit code.
+func runNewValidation(cmd *cobra.Command) (int, error) {
+	// Get flags
+	messageFile, _ := cmd.Flags().GetString("message-file")
+	gitReference, _ := cmd.Flags().GetString("git-reference")
+	commitCount, _ := cmd.Flags().GetInt("commit-count")
+	revisionRange, _ := cmd.Flags().GetString("revision-range")
+	baseBranch, _ := cmd.Flags().GetString("base-branch")
+	verbose, _ := cmd.Flags().GetBool("verbose")
+	extraVerbose, _ := cmd.Flags().GetBool("extra-verbose")
+	lightMode, _ := cmd.Flags().GetBool("light-mode")
+	ruleHelp, _ := cmd.Flags().GetString("rulehelp")
+	format, _ := cmd.Flags().GetString("format")
+	skipMergeCommits, _ := cmd.Flags().GetBool("skip-merge-commits")
+	repoPath, _ := cmd.Flags().GetString("repo-path")
+
+	// Create context
+	ctx := cmd.Context()
+
+	// Create validation service
+	service, err := validate.CreateDefaultValidationService(repoPath)
 	if err != nil {
-		return 1, err
+		return 1, fmt.Errorf("failed to create validation service: %w", err)
 	}
 
-	// Validation phase
-	aggregator, err := validateCommits(cmd, validator)
-	if err != nil {
-		return 1, err
+	// Process validation flags with precedence
+	opts := validate.ValidationOptions{
+		SkipMergeCommits: skipMergeCommits,
 	}
 
-	// Reporting phase
-	if err := generateReport(cmd, aggregator); err != nil {
-		return 1, err
+	// Default to validating HEAD if no other option is provided
+	if gitReference == "" && revisionRange == "" && baseBranch == "" && messageFile == "" && commitCount <= 0 {
+		// Default behavior uses HEAD
+		opts.CommitHash = "HEAD"
+	}
+
+	// Apply validation source with precedence order
+	if messageFile != "" {
+		// 1. Message from file (highest priority)
+		opts.MessageFile = messageFile
+	} else if baseBranch != "" {
+		// 2. Base branch comparison
+		opts.FromHash = baseBranch
+		opts.ToHash = "HEAD"
+	} else if revisionRange != "" {
+		// 3. Revision range
+		// Parse revision range (format: from..to)
+		parts := parseRevisionRange(revisionRange)
+		if len(parts) == 2 {
+			opts.FromHash = parts[0]
+			opts.ToHash = parts[1]
+		} else {
+			return 1, fmt.Errorf("invalid revision range format: %s (expected format: from..to)", revisionRange)
+		}
+	} else if gitReference != "" {
+		// 4. Single git reference
+		opts.CommitHash = gitReference
+	} else if commitCount > 0 {
+		// 5. Commit count
+		opts.CommitCount = commitCount
+	}
+
+	// Validate according to options
+	results, err := service.ValidateWithOptions(ctx, opts)
+	if err != nil {
+		return 1, fmt.Errorf("validation failed: %w", err)
+	}
+
+	// Create report generator
+	reportOptions := &report.Options{
+		Format:         getReportFormat(format),
+		Verbose:        verbose,
+		ShowHelp:       extraVerbose || ruleHelp != "",
+		RuleToShowHelp: ruleHelp,
+		LightMode:      lightMode,
+		Writer:         cmd.OutOrStdout(),
+	}
+
+	reportGenerator := report.NewGenerator(reportOptions)
+
+	// Generate report
+	err = reportGenerator.Generate(results)
+	if err != nil {
+		return 1, fmt.Errorf("failed to generate report: %w", err)
 	}
 
 	// Return success if all rules passed, validation failure code otherwise
-	if aggregator.AllRulesPassed() {
+	if results.AllPassed() {
 		return 0, nil
 	}
 
 	return 2, nil
 }
 
-// setupValidation prepares the validation environment.
-func setupValidation(cmd *cobra.Command) (*validation.Validator, gitService.Service, error) {
-	// Get configuration
-	gommitLintConf, err := configuration.New()
-	if err != nil {
-		return nil, nil, internal.NewConfigError(fmt.Errorf("failed to load configuration: %w", err))
+// parseRevisionRange parses a revision range string (e.g., "main..HEAD") into a slice of parts.
+func parseRevisionRange(revisionRange string) []string {
+	// Split by ".." to get from and to
+	parts := []string{}
+
+	// Handle both ".." and "..." formats
+	if idx := indexOf(revisionRange, "..."); idx >= 0 {
+		parts = append(parts, revisionRange[:idx], revisionRange[idx+3:])
+	} else if idx := indexOf(revisionRange, ".."); idx >= 0 {
+		parts = append(parts, revisionRange[:idx], revisionRange[idx+2:])
 	}
 
-	// Create Git service
-	git, err := gitService.NewService()
-	if err != nil {
-		return nil, nil, internal.NewGitError(fmt.Errorf("failed to initialize git service: %w", err))
-	}
-
-	// Process flags
-	opts, err := processFlags(cmd, git)
-	if err != nil {
-		// Error is already wrapped with specific type in processFlags functions
-		return nil, nil, err
-	}
-
-	// Create validator
-	validator, err := validation.NewValidator(opts, gommitLintConf.GommitConf)
-	if err != nil {
-		return nil, nil, internal.NewConfigError(fmt.Errorf("failed to create validator: %w", err))
-	}
-
-	return validator, git, nil
+	return parts
 }
 
-// validateCommits processes all commits and collects validation results.
-func validateCommits(cmd *cobra.Command, validator *validation.Validator) (*results.Aggregator, error) {
-	// Create context for the validation with cancellation
-	ctx := cmd.Context()
-
-	// Get commits to validate using context
-	commits, err := validator.GetCommitsToValidateWithContext(ctx)
-	if err != nil {
-		return nil, internal.NewValidationError(fmt.Errorf("failed to get commits: %w", err))
-	}
-
-	if len(commits) == 0 {
-		return nil, internal.NewInputError(errors.New("no commits found to validate"))
-	}
-
-	// Create result aggregator
-	aggregator := results.NewAggregator()
-
-	// For each commit, validate and add results to aggregator
-	for _, commitInfo := range commits {
-		// Check for context cancellation
-		if ctx.Err() != nil {
-			return nil, internal.NewApplicationError(ctx.Err(), 1, "Validation")
+// indexOf returns the index of the first occurrence of substring in s, or -1 if not found.
+func indexOf(s, substring string) int {
+	for i := 0; i <= len(s)-len(substring); i++ {
+		if s[i:i+len(substring)] == substring {
+			return i
 		}
-
-		// Validate the commit with context
-		rules, err := validator.ValidateCommitWithContext(ctx, commitInfo)
-		if err != nil {
-			// Just log error and continue with next commit
-			hash := "unknown"
-			if commitInfo.RawCommit != nil {
-				hash = commitInfo.RawCommit.Hash.String()
-			}
-
-			cmd.PrintErrf("Error validating commit %s: %v\n", hash, err)
-
-			continue
-		}
-
-		// Add results to aggregator
-		aggregator.AddCommitResult(commitInfo, rules.All())
 	}
 
-	return aggregator, nil
+	return -1
 }
 
-// generateReport creates and displays the validation report.
-func generateReport(cmd *cobra.Command, aggregator *results.Aggregator) error {
-	// Create reporter options
-	reporterOptions, err := createReporterOptions(cmd)
-	if err != nil {
-		return internal.NewConfigError(fmt.Errorf("failed to create reporter options: %w", err))
+// getReportFormat converts a string format to the report.Format type.
+func getReportFormat(format string) report.Format {
+	switch format {
+	case "json":
+		return report.FormatJSON
+	default:
+		return report.FormatText
 	}
-
-	// Create reporter and generate report
-	reporter := results.NewReporter(aggregator, reporterOptions)
-	if err := reporter.GenerateReport(); err != nil {
-		return internal.NewApplicationError(
-			fmt.Errorf("failed to generate report: %w", err),
-			1,
-			"Reporting",
-		)
-	}
-
-	return nil
-}
-
-// createReporterOptions builds the options for the validation reporter.
-func createReporterOptions(cmd *cobra.Command) (results.ReporterOptions, error) {
-	// Determine output format
-	formatFlag, err := cmd.Flags().GetString("format")
-	if err != nil {
-		return results.ReporterOptions{}, fmt.Errorf("failed to get format flag: %w", err)
-	}
-
-	outputFormat := results.FormatText
-	if formatFlag == "json" {
-		outputFormat = results.FormatJSON
-	}
-
-	// Get display flags
-	verbose, err := cmd.Flags().GetBool("verbose")
-	if err != nil {
-		return results.ReporterOptions{}, fmt.Errorf("failed to get verbose flag: %w", err)
-	}
-
-	extraVerbose, err := cmd.Flags().GetBool("extra-verbose")
-	if err != nil {
-		return results.ReporterOptions{}, fmt.Errorf("failed to get extra-verbose flag: %w", err)
-	}
-
-	lightMode, err := cmd.Flags().GetBool("light-mode")
-	if err != nil {
-		return results.ReporterOptions{}, fmt.Errorf("failed to get light-mode flag: %w", err)
-	}
-
-	ruleHelp, err := cmd.Flags().GetString("rulehelp")
-	if err != nil {
-		return results.ReporterOptions{}, fmt.Errorf("failed to get rulehelp flag: %w", err)
-	}
-
-	return results.ReporterOptions{
-		Format:         outputFormat,
-		Verbose:        verbose,
-		ShowHelp:       extraVerbose || ruleHelp != "",
-		RuleToShowHelp: ruleHelp,
-		LightMode:      lightMode,
-		Writer:         cmd.OutOrStdout(),
-	}, nil
-}
-
-// processFlags handles all flag logic with clear precedence rules.
-func processFlags(cmd *cobra.Command, git gitService.Service) (*model.Options, error) {
-	opts := model.NewOptions()
-
-	// Process display and help flags
-	if err := processDisplayFlags(cmd, opts); err != nil {
-		return nil, internal.NewInputError(fmt.Errorf("failed to process display flags: %w", err))
-	}
-
-	// Detect main branch
-	if err := detectAndSetMainBranch(cmd, git, opts); err != nil {
-		return nil, err
-	}
-
-	// Apply validation source with precedence order:
-	// 1. Message from file (highest priority)
-	// 2. Base branch comparison
-	// 3. Revision range
-	// 4. Single git reference
-	// 5. Default to main branch (already set above)
-	if processed, err := processMessageFromFile(cmd, opts); err != nil {
-		return nil, err
-	} else if processed {
-		return opts, nil
-	}
-
-	if processed, err := processBaseBranch(cmd, opts); err != nil {
-		return nil, err
-	} else if processed {
-		return opts, nil
-	}
-
-	if processed, err := processRevisionRange(cmd, opts); err != nil {
-		return nil, err
-	} else if processed {
-		return opts, nil
-	}
-
-	if processed, err := processGitReference(cmd, git, opts); err != nil {
-		return nil, err
-	} else if processed {
-		return opts, nil
-	}
-
-	return opts, nil
-}
-
-// processDisplayFlags handles flags related to output display options.
-func processDisplayFlags(cmd *cobra.Command, opts *model.Options) error {
-	// Process verbose flag
-	verbose, err := cmd.Flags().GetBool("verbose")
-	if err != nil {
-		return fmt.Errorf("failed to get verbose flag: %w", err)
-	}
-
-	opts.Verbose = verbose
-
-	// Process extra-verbose flag
-	extraVerbose, err := cmd.Flags().GetBool("extra-verbose")
-	if err != nil {
-		return fmt.Errorf("failed to get extra-verbose flag: %w", err)
-	}
-
-	opts.ShowHelp = extraVerbose
-
-	// Process rule help flag
-	helpRule, err := cmd.Flags().GetString("rulehelp")
-	if err != nil {
-		return fmt.Errorf("failed to get rulehelp flag: %w", err)
-	}
-
-	if helpRule != "" {
-		opts.ShowHelp = true
-		opts.RuleToShowHelp = helpRule
-	}
-
-	// Process light mode flag
-	lightMode, err := cmd.Flags().GetBool("light-mode")
-	if err != nil {
-		return fmt.Errorf("failed to get light-mode flag: %w", err)
-	}
-
-	opts.LightMode = lightMode
-
-	return nil
-}
-
-// detectAndSetMainBranch detects the main branch and sets it as default commit reference.
-func detectAndSetMainBranch(cmd *cobra.Command, git gitService.Service, opts *model.Options) error {
-	ctx := cmd.Context()
-
-	mainBranch, err := git.DetectMainBranchWithContext(ctx)
-	if err != nil || mainBranch == "" {
-		return internal.NewGitError(
-			fmt.Errorf("failed to detect main branch: %w", err),
-			map[string]string{"action": "detect_main_branch"},
-		)
-	}
-
-	opts.CommitRef = "refs/heads/" + mainBranch
-	cmd.Printf("Auto-detected main branch: %s\n", mainBranch)
-
-	return nil
-}
-
-// processMessageFromFile checks for commit message file and configures options if present.
-// Returns true if processed and should exit the flag processing pipeline.
-func processMessageFromFile(cmd *cobra.Command, opts *model.Options) (bool, error) {
-	msgFromFile, err := cmd.Flags().GetString("message-file")
-	if err != nil {
-		return false, internal.NewInputError(
-			fmt.Errorf("failed to get message-file flag: %w", err),
-			map[string]string{"flag": "message-file"},
-		)
-	}
-
-	if msgFromFile != "" {
-		opts.MsgFromFile = &msgFromFile
-
-		return true, nil
-	}
-
-	return false, nil
-}
-
-// processBaseBranch checks for base branch flag and configures options if present.
-// Returns true if processed and should exit the flag processing pipeline.
-func processBaseBranch(cmd *cobra.Command, opts *model.Options) (bool, error) {
-	baseBranch, err := cmd.Flags().GetString("base-branch")
-	if err != nil {
-		return false, internal.NewInputError(
-			fmt.Errorf("failed to get base-branch flag: %w", err),
-			map[string]string{"flag": "base-branch"},
-		)
-	}
-
-	if baseBranch != "" {
-		opts.RevisionRange = baseBranch + "..HEAD"
-		opts.CommitRef = "refs/heads/" + baseBranch
-		cmd.Printf("Using base-branch: %s (overrides git-reference if provided)\n", baseBranch)
-
-		return true, nil
-	}
-
-	return false, nil
-}
-
-// processRevisionRange checks for revision range flag and configures options if present.
-// Returns true if processed and should exit the flag processing pipeline.
-func processRevisionRange(cmd *cobra.Command, opts *model.Options) (bool, error) {
-	revisionRange, err := cmd.Flags().GetString("revision-range")
-	if err != nil {
-		return false, internal.NewInputError(
-			fmt.Errorf("failed to get revision-range flag: %w", err),
-			map[string]string{"flag": "revision-range"},
-		)
-	}
-
-	if revisionRange != "" {
-		opts.RevisionRange = revisionRange
-
-		return true, nil
-	}
-
-	return false, nil
-}
-
-// processGitReference checks for git reference flag and configures options if present.
-// Returns true if processed and should exit the flag processing pipeline.
-func processGitReference(cmd *cobra.Command, git gitService.Service, opts *model.Options) (bool, error) {
-	ctx := cmd.Context()
-
-	commitRef, err := cmd.Flags().GetString("git-reference")
-	if err != nil {
-		return false, internal.NewInputError(
-			fmt.Errorf("failed to get git-reference flag: %w", err),
-			map[string]string{"flag": "git-reference"},
-		)
-	}
-
-	if commitRef != "" {
-		refExists := git.RefExistsWithContext(ctx, commitRef)
-		if !refExists {
-			return false, internal.NewGitError(
-				fmt.Errorf("git reference not found: %s", commitRef),
-				map[string]string{"reference": commitRef},
-			)
-		}
-
-		opts.CommitRef = commitRef
-
-		return true, nil
-	}
-
-	return false, nil
 }

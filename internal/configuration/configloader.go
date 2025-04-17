@@ -2,137 +2,263 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
+// Package configuration provides configuration loading and access.
 package configuration
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
-	"github.com/itiquette/gommitlint/internal"
-	"github.com/itiquette/gommitlint/internal/defaults"
-	"github.com/knadh/koanf/parsers/yaml"
-	"github.com/knadh/koanf/providers/file"
-	"github.com/knadh/koanf/v2"
+	"github.com/itiquette/gommitlint/internal/core/validation"
+	"github.com/itiquette/gommitlint/internal/infrastructure/config"
 )
 
-// DefaultConfigLoader implements the ConfigLoader interface with default behavior.
-type DefaultConfigLoader struct{}
+// ConfigManager manages loading and validating configuration.
+type ConfigManager struct {
+	provider *config.Provider
+	cache    *AppConf
+}
 
-// LoadConfiguration loads the application configuration from various sources.
-// It reads from the configuration file and returns the populated AppConf.
-func (DefaultConfigLoader) LoadConfiguration() (*AppConf, error) {
-	// Create AppConf with default values
-	ignoreCommits := defaults.IgnoreMergeCommitsDefault
-	nCommitsAhead := defaults.NCommitsAheadDefault
-	signOff := defaults.SignOffRequiredDefault
-	imperativeVal := defaults.SubjectImperativeDefault
+// CreateDefaultConfigManager creates a new ConfigManager with default configuration.
+func CreateDefaultConfigManager() *ConfigManager {
+	// Create config provider from infrastructure layer
+	provider, err := config.NewProvider()
+	if err != nil {
+		// If there's an error, create with empty provider
+		return &ConfigManager{
+			provider: &config.Provider{},
+		}
+	}
 
-	jiraRequired := defaults.JIRARequiredDefault
-	conventional := defaults.ConventionalCommitRequiredDefault
+	return &ConfigManager{
+		provider: provider,
+	}
+}
 
-	// Initialize with defaults
-	appConfig := &AppConf{
+// GetConfiguration returns the application configuration.
+func (c *ConfigManager) GetConfiguration() (*AppConf, error) {
+	// Return cached configuration if available
+	if c.cache != nil {
+		return c.cache, nil
+	}
+
+	// Create default configuration
+	providerConfig := c.provider.GetConfig()
+	if providerConfig == nil || providerConfig.GommitConf == nil {
+		return nil, errors.New("invalid configuration")
+	}
+
+	// Convert provider config to AppConf
+	provConfig := providerConfig.GommitConf
+	appConf := &AppConf{
 		GommitConf: &GommitLintConfig{
 			Subject: &SubjectRule{
-				Case:            defaults.SubjectCaseDefault,
-				Imperative:      &imperativeVal,
-				InvalidSuffixes: defaults.SubjectInvalidSuffixesDefault,
-				MaxLength:       defaults.SubjectMaxLengthDefault,
-				Jira: &JiraRule{
-					Required: jiraRequired,
-					Pattern:  defaults.JIRAPatternDefault,
-				},
-			},
-			Body: &BodyRule{
-				Required: defaults.BodyRequiredDefault,
+				MaxLength: provConfig.Subject.MaxLength,
+				Case:      "lower", // Default
 			},
 			ConventionalCommit: &ConventionalRule{
-				Types:                defaults.ConventionalCommitTypesDefault,
-				MaxDescriptionLength: defaults.ConventionalCommitMaxDescLengthDefault,
-				Required:             conventional,
+				Types:                provConfig.ConventionalCommit.Types,
+				Scopes:               provConfig.ConventionalCommit.Scopes,
+				MaxDescriptionLength: provConfig.ConventionalCommit.MaxDescriptionLength,
+				Required:             true,
 			},
-			SpellCheck: &SpellingRule{
-				Locale:  defaults.SpellcheckLocaleDefault,
-				Enabled: defaults.SpellcheckEnabledDefault,
-			},
-			Signature: &SignatureRule{
-				Required: defaults.SignatureRequiredDefault,
-			},
-			SignOffRequired:    &signOff,
-			NCommitsAhead:      &nCommitsAhead,
-			IgnoreMergeCommits: &ignoreCommits,
+			SignOffRequired: &provConfig.RequireSignature,
 		},
 	}
 
-	if err := ReadConfigurationFile(appConfig, defaults.ConfigFileName); err != nil {
-		return nil, internal.NewConfigError(fmt.Errorf("failed to read configuration file: %w", err))
-	}
+	// Cache the configuration
+	c.cache = appConf
 
-	return appConfig, nil
+	return appConf, nil
 }
 
-// ReadConfigurationFile loads configuration from XDG config directory or local file.
-// It populates the provided appConfiguration with values from the found config files.
-// The function follows the XDG Base Directory Specification for configuration file locations.
-func ReadConfigurationFile(appConfiguration *AppConf, configfile string) error {
-	koanfConf := koanf.New(".")
-	xdgConfigfileExists, xdgConfigFilePath := hasXDGConfigFile("XDG_CONFIG_HOME", defaults.XDGConfigPath)
-	localConfigfileExists := hasLocalConfigFile(configfile)
+// GetRuleConfiguration returns the rule configuration for the validation engine.
+func (c *ConfigManager) GetRuleConfiguration() (*validation.RuleConfiguration, error) {
+	// Get gommit config from provider
+	gommitConf := c.provider.GetGommitConfig()
+	if gommitConf == nil {
+		return validation.DefaultConfiguration(), nil
+	}
 
-	// Load XDG config file if it exists
-	if xdgConfigfileExists {
-		if err := koanfConf.Load(file.Provider(xdgConfigFilePath), yaml.Parser()); err != nil {
-			return internal.NewConfigError(fmt.Errorf("error loading xdg_config_home configuration: %w", err),
-				map[string]string{"config_path": xdgConfigFilePath})
+	// Create rule configuration from provider's configuration
+	ruleConfig := &validation.RuleConfiguration{
+		// Subject configuration
+		MaxSubjectLength: gommitConf.Subject.MaxLength,
+
+		// Conventional commit configuration
+		ConventionalTypes:    gommitConf.ConventionalCommit.Types,
+		MaxDescLength:        gommitConf.ConventionalCommit.MaxDescriptionLength,
+		ConventionalScopes:   gommitConf.ConventionalCommit.Scopes,
+		IsConventionalCommit: true, // Default to true for now
+	}
+
+	return ruleConfig, nil
+}
+
+// FindConfigFile finds the configuration file in standard locations.
+func FindConfigFile() (string, error) {
+	// XDG specification locations
+	configDirs := []string{
+		".", // Current directory
+	}
+
+	// Add XDG_CONFIG_HOME if available
+	if xdgConfigHome := os.Getenv("XDG_CONFIG_HOME"); xdgConfigHome != "" {
+		configDirs = append(configDirs, filepath.Join(xdgConfigHome, "gommitlint"))
+	} else {
+		// Default XDG location
+		home, err := os.UserHomeDir()
+		if err == nil {
+			configDirs = append(configDirs, filepath.Join(home, ".config", "gommitlint"))
 		}
 	}
 
-	// Load local config file if it exists
-	if localConfigfileExists {
-		if err := koanfConf.Load(file.Provider(configfile), yaml.Parser()); err != nil {
-			return internal.NewConfigError(fmt.Errorf("error loading config: %w", err),
-				map[string]string{"config_file": configfile})
+	// Add system-wide config location
+	configDirs = append(configDirs, "/etc/gommitlint")
+
+	// File names to check
+	configFiles := []string{
+		"gommitlint.yaml",
+		"gommitlint.yml",
+		"gommitlint.json",
+		"gommitlint.toml",
+		".gommitlint.yaml",
+		".gommitlint.yml",
+		".gommitlint.json",
+		".gommitlint.toml",
+	}
+
+	// Check all possible file locations
+	for _, dir := range configDirs {
+		for _, file := range configFiles {
+			path := filepath.Join(dir, file)
+			if fileExists(path) {
+				return path, nil
+			}
 		}
 	}
 
-	// Return early if no configuration files found
-	if !localConfigfileExists && !xdgConfigfileExists {
-		return nil
-	}
-
-	// Unmarshal the YAML data into the config struct
-	if err := koanfConf.Unmarshal("", appConfiguration); err != nil {
-		return internal.NewConfigError(fmt.Errorf("error unmarshalling yaml config: %w", err))
-	}
-
-	return nil
+	// No config file found
+	return "", errors.New("no configuration file found in standard locations")
 }
 
-// hasXDGConfigFile checks if a configuration file exists in the XDG config directory.
-// Returns whether the file exists and, if so, its full path.
-func hasXDGConfigFile(xdgconfighome string, xdgconfighomeconfigpath string) (bool, string) {
-	xdgConfigfileExists := false
+// fileExists checks if a file exists.
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
 
-	var xdgConfigFilePath string
+	return err == nil || !os.IsNotExist(err)
+}
 
-	envValue, xdgHomeIsSet := os.LookupEnv(xdgconfighome)
-	if xdgHomeIsSet {
-		xdgConfigFilePath = filepath.Join(envValue, xdgconfighomeconfigpath)
-		if _, err := os.Stat(xdgConfigFilePath); err == nil {
-			xdgConfigfileExists = true
+// LoadConfigFile loads configuration from a file.
+func LoadConfigFile(path string) (*config.Config, error) {
+	// Check if file exists
+	_, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("configuration file not found: %s", path)
+		}
+
+		return nil, fmt.Errorf("failed to access configuration file: %w", err)
+	}
+
+	// Read file
+	_, err = os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read configuration file: %w", err)
+	}
+
+	// Parse file based on extension
+	ext := filepath.Ext(path)
+	switch ext {
+	case ".yaml", ".yml":
+		// TODO: Implement YAML parsing
+		return nil, errors.New("YAML parsing not implemented")
+	case ".json":
+		// TODO: Implement JSON parsing
+		return nil, errors.New("JSON parsing not implemented")
+	case ".toml":
+		// TODO: Implement TOML parsing
+		return nil, errors.New("TOML parsing not implemented")
+	default:
+		return nil, fmt.Errorf("unsupported configuration file format: %s", ext)
+	}
+}
+
+// FindGitConfigDir finds the Git configuration directory.
+func FindGitConfigDir(startPath string) (string, error) {
+	// Use provided path or current directory
+	path := startPath
+	if path == "" {
+		var err error
+
+		path, err = os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("failed to get current directory: %w", err)
 		}
 	}
 
-	return xdgConfigfileExists, xdgConfigFilePath
+	// Walk up the directory tree to find .git directory
+	for {
+		gitPath := filepath.Join(path, ".git")
+		if info, err := os.Stat(gitPath); err == nil && info.IsDir() {
+			return gitPath, nil
+		}
+
+		// Check if .git is a file (submodule or worktree)
+		if info, err := os.Stat(gitPath); err == nil && !info.IsDir() {
+			// TODO: Handle submodules and worktrees
+			return gitPath, nil
+		}
+
+		// Go up one level
+		parent := filepath.Dir(path)
+		if parent == path {
+			// Reached root directory
+			return "", errors.New("not a Git repository (or any of the parent directories)")
+		}
+
+		path = parent
+	}
 }
 
-// hasLocalConfigFile checks if a configuration file exists in the current directory.
-// Returns whether the file exists.
-func hasLocalConfigFile(configFile string) bool {
-	if _, err := os.Stat(configFile); err == nil {
-		return true
+// LoadGitConfig loads Git configuration for commit validation.
+func LoadGitConfig(gitDir string) (*config.Config, error) {
+	// Check if hooks directory exists
+	hooksDir := filepath.Join(gitDir, "hooks")
+	if _, err := os.Stat(hooksDir); err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("hooks directory not found: %s", hooksDir)
+		}
+
+		return nil, fmt.Errorf("failed to access hooks directory: %w", err)
 	}
 
-	return false
+	// Check if commit-msg hook exists
+	commitMsgHook := filepath.Join(hooksDir, "commit-msg")
+	if _, err := os.Stat(commitMsgHook); os.IsNotExist(err) {
+		// No commit-msg hook
+		return nil, fs.ErrNotExist
+	}
+
+	// TODO: Parse commit-msg hook to extract configuration
+
+	// Return default configuration for now
+	return &config.Config{
+		GommitConf: &config.GommitLintConfig{
+			Subject: &config.SubjectConfig{
+				MaxLength: 100,
+			},
+			ConventionalCommit: &config.ConventionalConfig{
+				MaxDescriptionLength: 72,
+				Types: []string{
+					"feat", "fix", "docs", "style", "refactor",
+					"perf", "test", "build", "ci", "chore", "revert",
+				},
+				Scopes: []string{},
+			},
+		},
+	}, nil
 }

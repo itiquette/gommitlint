@@ -11,13 +11,11 @@ type AppConf struct {
 
 // New loads the gommitlint configuration and returns an AppConf instance.
 // Returns an error if configuration loading fails.
+// This is a convenience function that uses the default configuration manager.
 func New() (*AppConf, error) {
-	gommitLintConf, err := DefaultConfigLoader{}.LoadConfiguration()
-	if err != nil {
-		return nil, err
-	}
+	manager := CreateDefaultConfigManager()
 
-	return gommitLintConf, nil
+	return manager.GetConfiguration()
 }
 
 // GommitLintConfig defines the complete configuration for commit linting rules.
@@ -31,8 +29,9 @@ type GommitLintConfig struct {
 	Signature       *SignatureRule `koanf:"signature"`
 	SignOffRequired *bool          `koanf:"sign-off"`
 	// Misc validation rules
-	NCommitsAhead      *bool `koanf:"n-commits-ahead"`
-	IgnoreMergeCommits *bool `koanf:"ignore-merge-commit"`
+	NCommitsAhead      *bool  `koanf:"n-commits-ahead"`
+	IgnoreMergeCommits *bool  `koanf:"ignore-merge-commit"`
+	Reference          string `koanf:"reference"`
 }
 
 // SubjectRule defines configuration for commit subject validation.
@@ -79,8 +78,8 @@ type SpellingRule struct {
 
 // JiraRule defines configuration for Jira key validation.
 type JiraRule struct {
-	// Keys specifies the allowed Jira project keys.
-	Keys []string `koanf:"keys"`
+	// Projects specifies the allowed Jira project keys.
+	Projects []string `koanf:"keys"`
 
 	// Required indicates whether a Jira key must be present.
 	Required bool `koanf:"required"`
@@ -90,6 +89,9 @@ type JiraRule struct {
 
 	// Pattern specifies the regex pattern for Jira keys.
 	Pattern string `koanf:"pattern"`
+
+	// Strict enables additional validation checks.
+	Strict bool `koanf:"strict"`
 }
 
 // BodyRule defines configuration for commit body validation.

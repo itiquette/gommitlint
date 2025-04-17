@@ -19,6 +19,7 @@ func newRootCommand(_ context.Context, versionString string) *cobra.Command {
 		Long:    `A tool to validate git commit messages against configurable rules.`,
 	}
 
+	// Add commands - using the new hexagonal architecture
 	rootCmd.AddCommand(newValidateCmd())
 
 	return rootCmd

@@ -30,4 +30,4 @@ go.work
 generated
 /gommitlint
 
-./CLAUDE.md
+#CLAUDE.md
