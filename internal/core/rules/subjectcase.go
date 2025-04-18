@@ -203,14 +203,16 @@ func (r *SubjectCaseRule) Result() string {
 		// Check for case-specific error
 		errors := r.Errors()
 		if len(errors) > 0 {
+			// nolint:exhaustive // Only handling relevant error codes
 			switch appErrors.ValidationErrorCode(errors[0].Code) {
 			case appErrors.ErrSubjectCase:
-			default:
 				return "Subject should start with " + r.caseChoice
 			case appErrors.ErrEmptyDescription, appErrors.ErrEmptyMessage:
 				return "Subject is empty"
 			case appErrors.ErrInvalidFormat:
 				return "Invalid format"
+			default:
+				return "Subject case validation failed"
 			}
 		}
 

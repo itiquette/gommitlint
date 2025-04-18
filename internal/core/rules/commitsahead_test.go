@@ -42,9 +42,9 @@ func TestCommitsAheadRuleNilRepo(t *testing.T) {
 	validationErr := errors[0]
 	assert.Equal(t, string(appErrors.ErrInvalidRepo), validationErr.Code)
 	assert.Equal(t, "CommitsAhead", rule.Name())
-	assert.Contains(t, rule.Result(), "Too many commits ahead of reference branch")
+	assert.Contains(t, rule.Result(), "Repository object is nil - Git repository not accessible")
 	assert.Contains(t, rule.VerboseResult(), "Repository object is nil")
-	assert.Contains(t, rule.Help(), "Configure the repository correctly")
+	assert.Contains(t, rule.Help(), "Git repository is not accessible")
 }
 
 func TestCommitsAheadRuleNilRepoInsideGetter(t *testing.T) {
@@ -66,9 +66,9 @@ func TestCommitsAheadRuleNilRepoInsideGetter(t *testing.T) {
 	require.NotEmpty(t, errors)
 	validationErr := errors[0]
 	assert.Equal(t, string(appErrors.ErrInvalidRepo), validationErr.Code)
-	assert.Contains(t, rule.Result(), "Too many commits ahead of reference branch")
+	assert.Contains(t, rule.Result(), "Repository object is nil - Git repository not accessible")
 	assert.Contains(t, rule.VerboseResult(), "Repository object is nil")
-	assert.Contains(t, rule.Help(), "Configure the repository correctly")
+	assert.Contains(t, rule.Help(), "Git repository is not accessible")
 }
 
 func TestCommitsAheadRuleEmptyReference(t *testing.T) {
@@ -90,7 +90,7 @@ func TestCommitsAheadRuleEmptyReference(t *testing.T) {
 	require.NotEmpty(t, errors)
 	validationErr := errors[0]
 	assert.Equal(t, string(appErrors.ErrInvalidConfig), validationErr.Code)
-	assert.Contains(t, rule.Result(), "Too many commits ahead of ")
+	assert.Contains(t, rule.Result(), "Too many commits ahead of reference branch")
 	assert.Contains(t, rule.VerboseResult(), "Reference branch name is empty")
 	assert.Contains(t, rule.Help(), "reference branch name")
 }
@@ -138,7 +138,7 @@ func TestCommitsAheadRuleTooManyCommits(t *testing.T) {
 	require.NotEmpty(t, errors)
 	validationErr := errors[0]
 	assert.Equal(t, string(appErrors.ErrTooManyCommits), validationErr.Code)
-	assert.Contains(t, rule.Result(), "Too many commits ahead of reference branch")
-	assert.Contains(t, rule.VerboseResult(), "10 commit(s) ahead of main (maximum allowed: 5)")
-	assert.Contains(t, rule.Help(), "Ensure your branch is not more than 5 commits ahead of main by regularly merging or rebasing.")
+	assert.Contains(t, rule.Result(), "Too many commits ahead of main (10 > 5)")
+	assert.Contains(t, rule.VerboseResult(), "HEAD is 10 commit(s) ahead of main (maximum allowed: 5)")
+	assert.Contains(t, rule.Help(), "Your branch is too far ahead of main")
 }

@@ -29,9 +29,9 @@ type CommitsAheadRule struct {
 type CommitsAheadOption func(*CommitsAheadRule)
 
 // WithMaxCommitsAhead sets the maximum number of commits allowed ahead of the reference.
-func WithMaxCommitsAhead(max int) CommitsAheadOption {
+func WithMaxCommitsAhead(maxCommits int) CommitsAheadOption {
 	return func(r *CommitsAheadRule) {
-		r.maxCommitsAhead = max
+		r.maxCommitsAhead = maxCommits
 	}
 }
 
@@ -47,6 +47,12 @@ func WithRepositoryGetter(getter func() domain.CommitAnalyzer) CommitsAheadOptio
 	return func(r *CommitsAheadRule) {
 		r.repositoryGetter = getter
 	}
+}
+
+// SetRepositoryGetter allows updating the repository getter after the rule is created.
+// This is used by the validation service to inject the proper repository.
+func (r *CommitsAheadRule) SetRepositoryGetter(getter func() domain.CommitAnalyzer) {
+	r.repositoryGetter = getter
 }
 
 // NewCommitsAheadRule creates a new CommitsAheadRule with the given options.
@@ -196,6 +202,13 @@ func (r *CommitsAheadRule) addError(code, message string, context map[string]str
 // Result returns a concise result message.
 func (r *CommitsAheadRule) Result() string {
 	if r.HasErrors() {
+		errors := r.Errors()
+		if len(errors) > 0 && appErrors.ValidationErrorCode(errors[0].Code) == appErrors.ErrTooManyCommits {
+			return fmt.Sprintf("Too many commits ahead of %s (%d > %d)", r.ref, r.ahead, r.maxCommitsAhead)
+		} else if len(errors) > 0 && appErrors.ValidationErrorCode(errors[0].Code) == appErrors.ErrInvalidRepo {
+			return "Repository object is nil - Git repository not accessible"
+		}
+
 		return "Too many commits ahead of reference branch"
 	}
 
@@ -214,13 +227,13 @@ func (r *CommitsAheadRule) VerboseResult() string {
 		// errors[0] is already a ValidationError, so no need for type assertion
 		validationErr := errors[0]
 
+		// nolint:exhaustive // Only handle errors relevant to this rule
 		switch appErrors.ValidationErrorCode(validationErr.Code) {
 		case appErrors.ErrInvalidRepo:
-		default:
 			return "Repository object is nil. Cannot validate commits ahead."
 		case appErrors.ErrInvalidConfig:
 			return "Reference branch name is empty. Cannot validate commits ahead."
-		case appErrors.ErrCancelled:
+		case appErrors.ErrContextCancelled:
 			return "Operation was cancelled by context. Cannot validate commits ahead."
 		case appErrors.ErrTooManyCommits:
 			return fmt.Sprintf(
@@ -239,10 +252,9 @@ func (r *CommitsAheadRule) VerboseResult() string {
 			}
 
 			return "Failed to get commits ahead: " + errorDetails
+		default:
+			return validationErr.Message
 		}
-
-		// Fallback
-		return validationErr.Message
 	}
 
 	// Success message with details
@@ -262,9 +274,9 @@ func (r *CommitsAheadRule) Help() string {
 		// errors[0] is already a ValidationError, so no need for type assertion
 		validationErr := errors[0]
 
+		// nolint:exhaustive // Only handle errors relevant to this rule
 		switch appErrors.ValidationErrorCode(validationErr.Code) {
 		case appErrors.ErrTooManyCommits:
-		default:
 			return fmt.Sprintf(`Your branch is too far ahead of %s. To fix this, either:
 
 1. Merge %s into your branch:
@@ -281,7 +293,7 @@ func (r *CommitsAheadRule) Help() string {
 The maximum allowed commits ahead is %d, but your branch is %d commits ahead.`,
 				r.ref, r.ref, r.ref, r.ref, r.ref, r.ahead, r.maxCommitsAhead, r.ahead)
 		case appErrors.ErrInvalidRepo:
-			return "Configure the repository correctly to enable commit validation."
+			return "The Git repository is not accessible. Ensure you are in a valid Git repository and have appropriate permissions."
 		case appErrors.ErrInvalidConfig:
 			return "Specify a valid reference branch name in the configuration."
 		case appErrors.ErrGitOperationFailed:

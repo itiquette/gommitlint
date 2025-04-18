@@ -1,0 +1,9 @@
+gommitlint:
+  subject:
+    jira:
+      required: true
+  body:
+    required: true
+  conventional-commit:
+    required: true
+  sign-off: true

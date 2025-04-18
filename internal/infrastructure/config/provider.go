@@ -81,5 +81,9 @@ func (p *Provider) GetConfig() *Config {
 
 // GetGommitConfig returns the GommitLintConfig.
 func (p *Provider) GetGommitConfig() *GommitLintConfig {
+	if p.config == nil || p.config.GommitConf == nil {
+		return nil
+	}
+
 	return p.config.GommitConf
 }

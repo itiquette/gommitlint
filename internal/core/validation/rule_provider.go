@@ -24,6 +24,7 @@ type RuleConfiguration struct {
 	// Jira configuration
 	JiraValidProjects []string
 	JiraBodyRef       bool
+	JiraRequired      bool
 
 	// Signature configuration
 	RequireSignature      bool
@@ -98,8 +99,10 @@ func (r *RuleRegistry) registerRules() {
 		rules.WithImperativeConventionalCommit(r.configuration.IsConventionalCommit),
 	))
 
-	// Register Jira Reference rule
-	r.registerRule(createJiraRule(r.configuration))
+	// Register Jira Reference rule only if enabled
+	if r.configuration.JiraRequired || !contains(r.configuration.DisabledRules, "JiraReference") {
+		r.registerRule(createJiraRule(r.configuration))
+	}
 
 	// Register Signature rule
 	r.registerRule(createSignatureRule(r.configuration))
@@ -395,6 +398,7 @@ func DefaultConfiguration() *RuleConfiguration {
 		// Default Jira configuration
 		JiraValidProjects: []string{}, // Empty means all projects are allowed
 		JiraBodyRef:       false,      // Default to checking in subject line
+		JiraRequired:      false,      // Default to not requiring Jira references
 
 		// Default Signature configuration
 		RequireSignature:      true,                   // By default, require signatures
@@ -429,4 +433,15 @@ func DefaultConfiguration() *RuleConfiguration {
 		EnabledRules:  []string{},
 		DisabledRules: []string{},
 	}
+}
+
+// contains checks if a string is present in a slice of strings.
+func contains(slice []string, value string) bool {
+	for _, item := range slice {
+		if item == value {
+			return true
+		}
+	}
+
+	return false
 }

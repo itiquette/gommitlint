@@ -7,6 +7,7 @@ go 1.24.1
 
 require (
 	github.com/ProtonMail/go-crypto v1.1.6
+	github.com/fatih/color v1.18.0
 	github.com/go-git/go-git/v5 v5.14.0
 	github.com/golangci/misspell v0.6.0
 	github.com/knadh/koanf/parsers/yaml v0.1.0
@@ -18,7 +19,6 @@ require (
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/fatih/color v1.18.0 // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect
 	github.com/knadh/koanf/maps v0.1.1 // indirect

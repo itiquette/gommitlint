@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -19,6 +20,7 @@ import (
 // ConfigManager manages loading and validating configuration.
 type ConfigManager struct {
 	provider *config.Provider
+	loader   *ConfigLoader
 	cache    *AppConf
 }
 
@@ -28,13 +30,15 @@ func CreateDefaultConfigManager() *ConfigManager {
 	provider, err := config.NewProvider()
 	if err != nil {
 		// If there's an error, create with empty provider
-		return &ConfigManager{
-			provider: &config.Provider{},
-		}
+		provider = &config.Provider{}
 	}
+
+	// Create config loader with default paths
+	loader := NewConfigLoader(nil) // No validator for now
 
 	return &ConfigManager{
 		provider: provider,
+		loader:   loader,
 	}
 }
 
@@ -45,29 +49,19 @@ func (c *ConfigManager) GetConfiguration() (*AppConf, error) {
 		return c.cache, nil
 	}
 
-	// Create default configuration
-	providerConfig := c.provider.GetConfig()
-	if providerConfig == nil || providerConfig.GommitConf == nil {
-		return nil, errors.New("invalid configuration")
+	// Use the Koanf-based loader to load configuration
+	if c.loader != nil {
+		appConf, err := c.loader.LoadConfiguration()
+		if err == nil && appConf != nil {
+			// Cache the configuration
+			c.cache = appConf
+
+			return appConf, nil
+		}
 	}
 
-	// Convert provider config to AppConf
-	provConfig := providerConfig.GommitConf
-	appConf := &AppConf{
-		GommitConf: &GommitLintConfig{
-			Subject: &SubjectRule{
-				MaxLength: provConfig.Subject.MaxLength,
-				Case:      "lower", // Default
-			},
-			ConventionalCommit: &ConventionalRule{
-				Types:                provConfig.ConventionalCommit.Types,
-				Scopes:               provConfig.ConventionalCommit.Scopes,
-				MaxDescriptionLength: provConfig.ConventionalCommit.MaxDescriptionLength,
-				Required:             true,
-			},
-			SignOffRequired: &provConfig.RequireSignature,
-		},
-	}
+	// Fallback to default configuration
+	appConf := DefaultConfiguration()
 
 	// Cache the configuration
 	c.cache = appConf
@@ -77,22 +71,47 @@ func (c *ConfigManager) GetConfiguration() (*AppConf, error) {
 
 // GetRuleConfiguration returns the rule configuration for the validation engine.
 func (c *ConfigManager) GetRuleConfiguration() (*validation.RuleConfiguration, error) {
-	// Get gommit config from provider
-	gommitConf := c.provider.GetGommitConfig()
-	if gommitConf == nil {
+	// First get the application configuration
+	appConf, err := c.GetConfiguration()
+	if err != nil {
+		// Log the error but continue with defaults
+		log.Printf("Error loading configuration: %v, using defaults", err)
 		return validation.DefaultConfiguration(), nil
 	}
 
-	// Create rule configuration from provider's configuration
+	if appConf == nil || appConf.GommitConf == nil {
+		return validation.DefaultConfiguration(), nil
+	}
+
+	// Use the loaded AppConf to create rule configuration
+	conf := appConf.GommitConf
+
+	// Create rule configuration
 	ruleConfig := &validation.RuleConfiguration{
 		// Subject configuration
-		MaxSubjectLength: gommitConf.Subject.MaxLength,
+		MaxSubjectLength: conf.Subject.MaxLength,
 
 		// Conventional commit configuration
-		ConventionalTypes:    gommitConf.ConventionalCommit.Types,
-		MaxDescLength:        gommitConf.ConventionalCommit.MaxDescriptionLength,
-		ConventionalScopes:   gommitConf.ConventionalCommit.Scopes,
-		IsConventionalCommit: true, // Default to true for now
+		ConventionalTypes:    conf.ConventionalCommit.Types,
+		MaxDescLength:        conf.ConventionalCommit.MaxDescriptionLength,
+		ConventionalScopes:   conf.ConventionalCommit.Scopes,
+		IsConventionalCommit: conf.ConventionalCommit.Required,
+
+		// Jira configuration - only set if Jira rule is configured
+		JiraRequired: false, // Default value
+	}
+
+	// Check if Jira rule is configured
+	if conf.Subject != nil && conf.Subject.Jira != nil {
+		ruleConfig.JiraRequired = conf.Subject.Jira.Required
+
+		// If Jira is not required, add it to the disabled rules
+		if !conf.Subject.Jira.Required {
+			ruleConfig.DisabledRules = append(ruleConfig.DisabledRules, "JiraReference")
+		}
+	} else {
+		// If Jira rule is not configured, disable it by default
+		ruleConfig.DisabledRules = append(ruleConfig.DisabledRules, "JiraReference")
 	}
 
 	return ruleConfig, nil

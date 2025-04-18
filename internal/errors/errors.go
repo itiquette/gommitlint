@@ -88,7 +88,7 @@ const (
 	ErrUnknown ValidationErrorCode = "unknown_error"
 )
 
-// Error templates for common error messages
+// Error templates for common error messages.
 var errorTemplates = map[ValidationErrorCode]struct {
 	Format  string
 	HelpFmt string
@@ -244,6 +244,7 @@ func WithContextMap(ctx map[string]string) ErrorOption {
 		if err.Context == nil {
 			err.Context = make(map[string]string)
 		}
+
 		for k, v := range ctx {
 			err.Context[k] = v
 		}
@@ -253,7 +254,7 @@ func WithContextMap(ctx map[string]string) ErrorOption {
 // WithHelp adds a help message to the error context.
 func WithHelp(help string) ErrorOption {
 	return func(err *ValidationError) {
-		err.WithContext("help", help)
+		_ = err.WithContext("help", help)
 	}
 }
 
@@ -293,6 +294,7 @@ func FormatError(code ValidationErrorCode, args ...interface{}) string {
 	if !exists {
 		return fmt.Sprintf("Error: %s", code)
 	}
+
 	return fmt.Sprintf(template.Format, args...)
 }
 
@@ -302,6 +304,7 @@ func FormatHelp(code ValidationErrorCode, args ...interface{}) string {
 	if !exists {
 		return "Fix the error and try again"
 	}
+
 	return fmt.Sprintf(template.HelpFmt, args...)
 }
 
@@ -309,11 +312,9 @@ func FormatHelp(code ValidationErrorCode, args ...interface{}) string {
 func NewErrorWithContext(rule string, code ValidationErrorCode, contextMap map[string]string, args ...interface{}) ValidationError {
 	err := New(rule, code, FormatError(code, args...))
 
-	// Add context if provided
-	if contextMap != nil {
-		for key, value := range contextMap {
-			err = err.WithContext(key, value)
-		}
+	// Add context if any
+	for key, value := range contextMap {
+		err = err.WithContext(key, value)
 	}
 
 	return err

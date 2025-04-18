@@ -193,8 +193,8 @@ func (p *AppConfigProvider) ConvertToRuleConfiguration(appConf *AppConf) (*valid
 		IsConventionalCommit: conf.ConventionalCommit.Required,
 
 		// Jira configuration
-		JiraBodyRef:  false,
-		JiraRequired: false, // Default to not requiring Jira references
+		JiraBodyRef: false,
+			JiraRequired: false, // Default to not requiring Jira references
 
 		// SignOff configuration
 		RequireSignOff: *conf.SignOffRequired,

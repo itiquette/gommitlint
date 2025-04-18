@@ -63,6 +63,9 @@ func WithConventionalCommit() JiraReferenceOption {
 	}
 }
 
+// WithJiraRequired is removed as the Jira requirement is now handled
+// by marking the rule as run when disabled
+
 // NewJiraReferenceRule creates a new JiraReferenceRule with the specified options.
 func NewJiraReferenceRule(options ...JiraReferenceOption) *JiraReferenceRule {
 	rule := &JiraReferenceRule{

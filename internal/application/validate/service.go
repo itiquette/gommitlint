@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/configuration"
+	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/core/validation"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/infrastructure/git"
@@ -221,6 +222,15 @@ func CreateDefaultValidationService(repoPath string) (*ValidationService, error)
 
 	// Create rule provider with configuration
 	ruleProvider := validation.NewDefaultRuleProvider(ruleConfig)
+
+	// Set repository getter for CommitsAhead rule if it exists
+	if commitsAheadRule, ok := ruleProvider.GetRuleByName("CommitsAhead").(*rules.CommitsAheadRule); ok && commitsAheadRule != nil {
+		analyzer := factory.CreateCommitAnalyzer()
+
+		commitsAheadRule.SetRepositoryGetter(func() domain.CommitAnalyzer {
+			return analyzer
+		})
+	}
 
 	// Create validation engine
 	engine := validation.NewEngine(ruleProvider)

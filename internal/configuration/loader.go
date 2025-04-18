@@ -11,12 +11,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	stderrors "errors"
 	"github.com/itiquette/gommitlint/internal/defaults"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
-	stderrors "errors"
 )
 
 // ConfigLoader handles loading configuration from files.
@@ -47,6 +47,11 @@ func (l *ConfigLoader) LoadConfiguration() (*AppConf, error) {
 	loaded := false
 
 	for _, path := range l.paths {
+		// Check if file exists before trying to load
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			continue
+		}
+
 		err := l.loadFromFile(path, config)
 		if err == nil {
 			loaded = true
