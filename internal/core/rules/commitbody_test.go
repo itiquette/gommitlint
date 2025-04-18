@@ -9,6 +9,7 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
+	appErrors "github.com/itiquette/gommitlint/internal/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -31,7 +32,7 @@ This commit adds new validation rules for:
 - Email format
 - Username requirements`,
 			expectError:    false,
-			expectedResult: "Commit body is valid",
+			expectedResult: "Valid commit body",
 		},
 		{
 			name: "valid commit with body and sign-off",
@@ -42,14 +43,14 @@ Add more examples
 
 Signed-off-by: Laval Lion <laval@cavora.org>`,
 			expectError:    false,
-			expectedResult: "Commit body is valid",
+			expectedResult: "Valid commit body",
 		},
 		{
 			name:           "commit without body",
 			message:        "just a subject",
 			expectError:    true,
-			errorCode:      string(domain.ValidationErrorInvalidBody),
-			expectedResult: "Invalid commit message body",
+			errorCode:      string(appErrors.ErrInvalidBody),
+			expectedResult: "Invalid commit body",
 		},
 		{
 			name: "commit without empty line between subject and body",
@@ -59,8 +60,8 @@ Adding new stages for:
 - Performance testing
 Signed-off-by: Laval Lion <laval@cavora.org>`,
 			expectError:    true,
-			errorCode:      string(domain.ValidationErrorInvalidBody),
-			expectedResult: "Invalid commit message body",
+			errorCode:      string(appErrors.ErrInvalidBody),
+			expectedResult: "Invalid commit body",
 		},
 		{
 			name: "commit with empty line after subject but empty body",
@@ -68,8 +69,8 @@ Signed-off-by: Laval Lion <laval@cavora.org>`,
 
 `,
 			expectError:    true,
-			errorCode:      string(domain.ValidationErrorInvalidBody),
-			expectedResult: "Invalid commit message body",
+			errorCode:      string(appErrors.ErrInvalidBody),
+			expectedResult: "Invalid commit body",
 		},
 		{
 			name: "commit with only sign-off",
@@ -77,8 +78,8 @@ Signed-off-by: Laval Lion <laval@cavora.org>`,
 
 Signed-off-by: Laval Lion <laval@cavora.org>`,
 			expectError:    true,
-			errorCode:      string(domain.ValidationErrorInvalidBody),
-			expectedResult: "Invalid commit message body",
+			errorCode:      string(appErrors.ErrInvalidBody),
+			expectedResult: "Invalid commit body",
 		},
 		{
 			name: "commit with multiple sign-off lines but no body",
@@ -87,8 +88,8 @@ Signed-off-by: Laval Lion <laval@cavora.org>`,
 Signed-off-by: Laval Lion <laval@cavora.org>
 Signed-off-by: Cragger Crocodile <cragger@svamp.org>`,
 			expectError:    true,
-			errorCode:      string(domain.ValidationErrorInvalidBody),
-			expectedResult: "Invalid commit message body",
+			errorCode:      string(appErrors.ErrInvalidBody),
+			expectedResult: "Invalid commit body",
 		},
 		{
 			name: "commit with only sign-off but configured to allow it",
@@ -99,14 +100,14 @@ Signed-off-by: Laval Lion <laval@cavora.org>`,
 				rules.WithAllowSignOffOnly(true),
 			},
 			expectError:    false,
-			expectedResult: "Commit body is valid",
+			expectedResult: "Valid commit body",
 		},
 		{
 			name:           "body not required when configured",
 			message:        "just a subject line",
 			options:        []rules.CommitBodyOption{rules.WithRequireBody(false)},
 			expectError:    false,
-			expectedResult: "Commit body is valid",
+			expectedResult: "Valid commit body",
 		},
 		{
 			name: "commit with empty body line but content after",
@@ -114,7 +115,7 @@ Signed-off-by: Laval Lion <laval@cavora.org>`,
 
 Fixed the typo in API documentation.`,
 			expectError:    false,
-			expectedResult: "Commit body is valid",
+			expectedResult: "Valid commit body",
 		},
 	}
 
@@ -126,13 +127,15 @@ Fixed the typo in API documentation.`,
 			}
 
 			// Create the rule with optional configuration
-			commitBodyRule := rules.NewCommitBodyRule(tabletest.options...)
+			// Always require body for test cases unless specified otherwise in options
+			options := append([]rules.CommitBodyOption{rules.WithRequireBody(true)}, tabletest.options...)
+			commitBodyRule := rules.NewCommitBodyRule(options...)
 
 			// Validate the commit
 			errors := commitBodyRule.Validate(commit)
 
 			// Verify name is correct
-			assert.Equal(t, "CommitBodyRule", commitBodyRule.Name())
+			assert.Equal(t, "CommitBody", commitBodyRule.Name())
 
 			// Test result output
 			assert.Equal(t, tabletest.expectedResult, commitBodyRule.Result(), "Result() should return expected output")
@@ -140,10 +143,10 @@ Fixed the typo in API documentation.`,
 			if tabletest.expectError {
 				require.NotEmpty(t, errors, "expected errors but got none")
 
-				// Verify we have ValidationError with expected code
+				// Access ValidationError directly (no type assertion needed)
 				valErr := errors[0]
 				assert.Equal(t, tabletest.errorCode, valErr.Code, "unexpected error code")
-				assert.Equal(t, "CommitBodyRule", valErr.Rule, "rule name should be set")
+				assert.Equal(t, "CommitBody", valErr.Rule, "rule name should be set")
 
 				// Check VerboseResult contains more detailed information
 				verboseResult := commitBodyRule.VerboseResult()
@@ -214,8 +217,8 @@ func TestCommitBodyVerboseResult(t *testing.T) {
 				Message: tabletest.message,
 			}
 
-			// Create rule
-			rule := rules.NewCommitBodyRule()
+			// Create rule with body required
+			rule := rules.NewCommitBodyRule(rules.WithRequireBody(true))
 
 			// Validate
 			_ = rule.Validate(commit)
@@ -234,12 +237,12 @@ func TestCommitBodyHelpMethod(t *testing.T) {
 			Message: "subject only",
 		}
 
-		// Create a rule and validate
-		r := rules.NewCommitBodyRule()
+		// Create a rule with body required and validate
+		r := rules.NewCommitBodyRule(rules.WithRequireBody(true))
 		_ = r.Validate(commit)
 
 		helpText := r.Help()
-		assert.Contains(t, helpText, "Ensure your commit message follows this structure",
+		assert.Contains(t, helpText, "Commit messages should include a descriptive body",
 			"help text should have standard structure intro")
 	})
 
@@ -249,13 +252,13 @@ func TestCommitBodyHelpMethod(t *testing.T) {
 			Message: "subject\nbody without blank line",
 		}
 
-		// Create a rule and validate
-		r := rules.NewCommitBodyRule()
+		// Create a rule with body required and validate
+		r := rules.NewCommitBodyRule(rules.WithRequireBody(true))
 		_ = r.Validate(commit)
 
 		helpText := r.Help()
 		// This will trigger a standard error message for invalid body
-		assert.Contains(t, helpText, "Format the commit body correctly",
+		assert.Contains(t, helpText, "commit message format is",
 			"help text should include guidance about formatting")
 	})
 
@@ -265,12 +268,12 @@ func TestCommitBodyHelpMethod(t *testing.T) {
 			Message: "subject\n\n",
 		}
 
-		// Create a rule and validate
-		r := rules.NewCommitBodyRule()
+		// Create a rule with body required and validate
+		r := rules.NewCommitBodyRule(rules.WithRequireBody(true))
 		_ = r.Validate(commit)
 
 		helpText := r.Help()
-		assert.Contains(t, helpText, "Format the commit body correctly",
+		assert.Contains(t, helpText, "Include meaningful content",
 			"help text should include standard guidance for formatting")
 	})
 
@@ -280,8 +283,8 @@ func TestCommitBodyHelpMethod(t *testing.T) {
 			Message: "subject\n\nThis is a valid body.",
 		}
 
-		// Create a rule and validate
-		r := rules.NewCommitBodyRule()
+		// Create a rule with body required and validate
+		r := rules.NewCommitBodyRule(rules.WithRequireBody(true))
 		_ = r.Validate(commit)
 
 		helpText := r.Help()

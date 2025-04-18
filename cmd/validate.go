@@ -51,7 +51,7 @@ Examples:
 		},
 	}
 
-	// Add flags to the command - use the same flags as the old command for compatibility
+	// Add flags to the command
 	validateCmd.Flags().String("message-file", "", "commit message file path to validate")
 	validateCmd.Flags().String("git-reference", "", "git reference to validate (defaults to HEAD)")
 	validateCmd.Flags().Int("commit-count", 1, "number of commits from HEAD to validate")

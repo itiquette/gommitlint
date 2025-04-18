@@ -12,7 +12,7 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/core/validation"
 	"github.com/itiquette/gommitlint/internal/defaults"
-	"github.com/itiquette/gommitlint/internal/errorsx"
+	"github.com/itiquette/gommitlint/internal/errors"
 )
 
 // AppConfigProvider provides application configuration from various sources.
@@ -176,7 +176,7 @@ func (p *AppConfigProvider) GetConfiguration() (*AppConf, error) {
 // ConvertToRuleConfiguration converts the AppConf to RuleConfiguration.
 func (p *AppConfigProvider) ConvertToRuleConfiguration(appConf *AppConf) (*validation.RuleConfiguration, error) {
 	if appConf == nil || appConf.GommitConf == nil {
-		return nil, errorsx.NewConfigError("invalid configuration", nil)
+		return nil, errors.NewConfigError("invalid configuration", nil)
 	}
 
 	// Extract configuration values

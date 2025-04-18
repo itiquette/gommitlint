@@ -10,30 +10,27 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/application/validate"
 	"github.com/itiquette/gommitlint/internal/domain"
+	appErrors "github.com/itiquette/gommitlint/internal/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// mockCommitReader implements the domain.CommitReader interface for testing.
-type mockCommitReader struct {
-	commits map[string]*domain.CommitInfo
-}
-
-func (m *mockCommitReader) GetCommit(_ context.Context, hash string) (*domain.CommitInfo, error) {
-	if commit, ok := m.commits[hash]; ok {
-		return commit, nil
-	}
-
-	return nil, &domain.ValidationError{Message: "commit not found"}
-}
-
-// mockHistoryReader implements the domain.CommitHistoryReader interface for testing.
-type mockHistoryReader struct {
+// mockGitCommitService implements the domain.GitCommitService interface for testing.
+type mockGitCommitService struct {
+	commits     map[string]*domain.CommitInfo
 	headCommits []*domain.CommitInfo
 	ranges      map[string]map[string][]*domain.CommitInfo
 }
 
-func (m *mockHistoryReader) GetHeadCommits(_ context.Context, count int) ([]*domain.CommitInfo, error) {
+func (m *mockGitCommitService) GetCommit(_ context.Context, hash string) (*domain.CommitInfo, error) {
+	if commit, ok := m.commits[hash]; ok {
+		return commit, nil
+	}
+
+	return nil, appErrors.New("MockService", appErrors.ErrCommitNotFound, "commit not found")
+}
+
+func (m *mockGitCommitService) GetHeadCommits(_ context.Context, count int) ([]*domain.CommitInfo, error) {
 	if count >= len(m.headCommits) {
 		return m.headCommits, nil
 	}
@@ -41,14 +38,14 @@ func (m *mockHistoryReader) GetHeadCommits(_ context.Context, count int) ([]*dom
 	return m.headCommits[:count], nil
 }
 
-func (m *mockHistoryReader) GetCommitRange(_ context.Context, fromHash, toHash string) ([]*domain.CommitInfo, error) {
+func (m *mockGitCommitService) GetCommitRange(_ context.Context, fromHash, toHash string) ([]*domain.CommitInfo, error) {
 	if toRanges, ok := m.ranges[toHash]; ok {
 		if commits, ok := toRanges[fromHash]; ok {
 			return commits, nil
 		}
 	}
 
-	return nil, &domain.ValidationError{Message: "range not found"}
+	return nil, appErrors.New("MockService", appErrors.ErrRangeNotFound, "range not found")
 }
 
 // mockInfoProvider implements the domain.RepositoryInfoProvider interface for testing.
@@ -93,7 +90,7 @@ func (m *mockValidationEngine) ValidateCommits(ctx context.Context, commits []*d
 
 func TestValidationService_ValidateCommit(t *testing.T) {
 	// Create mocks
-	mockReader := &mockCommitReader{
+	mockCommit := &mockGitCommitService{
 		commits: map[string]*domain.CommitInfo{
 			"abc123": {
 				Hash:    "abc123",
@@ -107,7 +104,6 @@ func TestValidationService_ValidateCommit(t *testing.T) {
 		},
 	}
 
-	mockHistory := &mockHistoryReader{}
 	mockInfo := &mockInfoProvider{
 		currentBranch: "main",
 		repoName:      "gommitlint",
@@ -120,8 +116,7 @@ func TestValidationService_ValidateCommit(t *testing.T) {
 	// Create service with mock engine
 	service := validate.NewValidationService(
 		mockEngine,
-		mockReader,
-		mockHistory,
+		mockCommit,
 		mockInfo,
 	)
 
@@ -160,8 +155,7 @@ func TestValidationService_ValidateHeadCommits(t *testing.T) {
 	}
 
 	// Create mocks
-	mockReader := &mockCommitReader{}
-	mockHistory := &mockHistoryReader{
+	mockCommit := &mockGitCommitService{
 		headCommits: commits,
 	}
 	mockInfo := &mockInfoProvider{}
@@ -172,8 +166,7 @@ func TestValidationService_ValidateHeadCommits(t *testing.T) {
 	// Create service with mock engine
 	service := validate.NewValidationService(
 		mockEngine,
-		mockReader,
-		mockHistory,
+		mockCommit,
 		mockInfo,
 	)
 
@@ -212,8 +205,7 @@ func TestValidationService_ValidateCommitRange(t *testing.T) {
 	}
 
 	// Create mocks
-	mockReader := &mockCommitReader{}
-	mockHistory := &mockHistoryReader{
+	mockCommit := &mockGitCommitService{
 		ranges: map[string]map[string][]*domain.CommitInfo{
 			"master": {
 				"feature": commits,
@@ -228,8 +220,7 @@ func TestValidationService_ValidateCommitRange(t *testing.T) {
 	// Create service with mock engine
 	service := validate.NewValidationService(
 		mockEngine,
-		mockReader,
-		mockHistory,
+		mockCommit,
 		mockInfo,
 	)
 
@@ -263,14 +254,11 @@ func TestValidationService_ValidateWithOptions(t *testing.T) {
 	}
 
 	// Create mocks
-	mockReader := &mockCommitReader{
+	mockCommit := &mockGitCommitService{
 		commits: map[string]*domain.CommitInfo{
 			"abc123": testCommit,
 			"HEAD":   testCommit,
 		},
-	}
-
-	mockHistory := &mockHistoryReader{
 		headCommits: []*domain.CommitInfo{testCommit},
 		ranges: map[string]map[string][]*domain.CommitInfo{
 			"to": {
@@ -287,8 +275,7 @@ func TestValidationService_ValidateWithOptions(t *testing.T) {
 	// Create service with mock engine
 	service := validate.NewValidationService(
 		mockEngine,
-		mockReader,
-		mockHistory,
+		mockCommit,
 		mockInfo,
 	)
 

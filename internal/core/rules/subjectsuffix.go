@@ -10,7 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/itiquette/gommitlint/internal/domain"
-	"github.com/itiquette/gommitlint/internal/errorx"
+	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
 
 // DefaultInvalidSuffixes is the default set of characters that should not appear
@@ -25,7 +25,7 @@ const DefaultInvalidSuffixes = ".,;:!?"
 // commas, or other punctuation marks that can affect readability and
 // automated processing of commit messages.
 type SubjectSuffixRule struct {
-	errors          []*domain.ValidationError
+	errors          []appErrors.ValidationError
 	lastChar        rune
 	invalidSuffixes string
 }
@@ -43,7 +43,7 @@ func WithInvalidSuffixes(suffixes string) SubjectSuffixOption {
 // NewSubjectSuffixRule creates a new SubjectSuffixRule with the specified options.
 func NewSubjectSuffixRule(options ...SubjectSuffixOption) *SubjectSuffixRule {
 	rule := &SubjectSuffixRule{
-		errors:          make([]*domain.ValidationError, 0),
+		errors:          make([]appErrors.ValidationError, 0),
 		invalidSuffixes: DefaultInvalidSuffixes,
 	}
 
@@ -66,9 +66,9 @@ func (r *SubjectSuffixRule) Name() string {
 }
 
 // Validate validates that the subject doesn't end with invalid characters.
-func (r *SubjectSuffixRule) Validate(commit *domain.CommitInfo) []*domain.ValidationError {
+func (r *SubjectSuffixRule) Validate(commit *domain.CommitInfo) []appErrors.ValidationError {
 	// Reset errors
-	r.errors = make([]*domain.ValidationError, 0)
+	r.errors = make([]appErrors.ValidationError, 0)
 
 	subject := commit.Subject
 
@@ -116,50 +116,65 @@ func (r *SubjectSuffixRule) Validate(commit *domain.CommitInfo) []*domain.Valida
 	return r.errors
 }
 
-// Result returns a concise result message.
+// Result returns a concise validation result.
 func (r *SubjectSuffixRule) Result() string {
-	if len(r.errors) > 0 {
-		return "Invalid subject suffix"
+	if len(r.errors) == 0 {
+		return "Valid subject suffix"
 	}
 
-	return "Valid subject suffix"
+	return "Invalid subject suffix"
 }
 
-// VerboseResult returns a more detailed explanation for verbose mode.
+// VerboseResult returns a more detailed result message.
 func (r *SubjectSuffixRule) VerboseResult() string {
+	if len(r.errors) == 0 {
+		return "Subject ends with valid character"
+	}
+
+	// If we have an error, provide details based on the error type
 	if len(r.errors) > 0 {
-		switch r.errors[0].Code {
-		case "subject_empty":
-			return "Subject is empty. Cannot validate suffix."
-		case "invalid_utf8":
-			return "Subject ends with invalid UTF-8 character sequence."
-		case "invalid_suffix":
-			return fmt.Sprintf("Subject ends with forbidden character '%s'. Avoid ending with any of these: %s",
-				string(r.lastChar),
-				strings.Join(strings.Split(r.invalidSuffixes, ""), ", "))
-		default:
-			return r.errors[0].Error()
+		code := r.errors[0].Code
+		if code == "subject_empty" || code == string(appErrors.ErrMissingSubject) {
+			return "Subject is empty"
+		}
+
+		if code == "invalid_utf8" || code == string(appErrors.ErrInvalidFormat) {
+			return "Subject contains invalid UTF-8 characters"
+		}
+
+		// If we have a more specific error message from the validation, use it
+		message := r.errors[0].Message
+		if message != "" {
+			return message
 		}
 	}
 
-	return "Subject ends with valid character '" + string(r.lastChar) + "' (not in invalid set: " +
-		strings.Join(strings.Split(r.invalidSuffixes, ""), ", ") + ")"
+	// Default message
+	return fmt.Sprintf("Subject ends with invalid character (invalid suffixes: %s)", r.invalidSuffixes)
 }
 
-// Help returns a description of how to fix the rule violation.
+// Help returns guidance on how to fix rule violations.
 func (r *SubjectSuffixRule) Help() string {
 	if len(r.errors) == 0 {
 		return "No errors to fix"
 	}
 
-	// Check for specific error codes
+	// Check for specific error codes and provide appropriate help messages
 	if len(r.errors) > 0 {
-		switch r.errors[0].Code {
-		case "subject_empty":
+		code := r.errors[0].Code
+
+		// Check for missing subject errors
+		if code == string(appErrors.ErrMissingSubject) || code == "subject_empty" {
 			return "Provide a non-empty subject line for your commit message"
-		case "invalid_utf8":
+		}
+
+		// Check for invalid UTF-8 errors
+		if code == string(appErrors.ErrInvalidFormat) || code == "invalid_utf8" {
 			return "Ensure your commit message contains only valid UTF-8 characters"
-		case "invalid_suffix":
+		}
+
+		// Check for invalid suffix errors
+		if code == string(appErrors.ErrSubjectSuffix) || code == "invalid_suffix" {
 			var invalidSuffixes string
 			if suffixes, ok := r.errors[0].Context["invalid_suffixes"]; ok {
 				invalidSuffixes = suffixes
@@ -176,26 +191,50 @@ func (r *SubjectSuffixRule) Help() string {
 }
 
 // Errors returns all validation errors.
-func (r *SubjectSuffixRule) Errors() []*domain.ValidationError {
+func (r *SubjectSuffixRule) Errors() []appErrors.ValidationError {
 	return r.errors
 }
 
 // addError adds a structured validation error.
 func (r *SubjectSuffixRule) addError(code, message string, context map[string]string) {
-	// Use error templates for suffix validation
-	var err *domain.ValidationError
+	// Create the validation error directly with the app errors package
+	var err appErrors.ValidationError
 
-	if code == "invalid_suffix" && context != nil {
-		// For suffix errors, use the template
-		lastChar := context["last_char"]
-		if lastChar != "" {
-			err = errorx.NewErrorWithContext(r.Name(), errorx.ErrSubjectSuffix, context, lastChar)
-		} else {
-			err = domain.NewValidationErrorWithContext(r.Name(), code, message, context)
-		}
-	} else {
-		// Fall back to standard error
-		err = domain.NewValidationErrorWithContext(r.Name(), code, message, context)
+	switch code {
+	case "invalid_suffix":
+		// Map to appropriate error code
+		err = appErrors.New(
+			r.Name(),
+			appErrors.ErrSubjectSuffix,
+			message,
+			appErrors.WithContextMap(context),
+		)
+	case "subject_empty":
+		// Map to missing subject code
+		err = appErrors.New(
+			r.Name(),
+			appErrors.ErrMissingSubject,
+			message,
+			appErrors.WithHelp("Provide a non-empty subject"),
+			appErrors.WithContextMap(context),
+		)
+	case "invalid_utf8":
+		// Map to invalid format code
+		err = appErrors.New(
+			r.Name(),
+			appErrors.ErrInvalidFormat,
+			message,
+			appErrors.WithHelp("Ensure your subject contains valid UTF-8 characters"),
+			appErrors.WithContextMap(context),
+		)
+	default:
+		// Fall back to unknown error code
+		err = appErrors.New(
+			r.Name(),
+			appErrors.ErrUnknown,
+			message,
+			appErrors.WithContextMap(context),
+		)
 	}
 
 	r.errors = append(r.errors, err)

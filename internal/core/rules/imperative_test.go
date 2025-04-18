@@ -10,6 +10,7 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
+	appErrors "github.com/itiquette/gommitlint/internal/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -51,42 +52,42 @@ func TestImperativeVerbRule(t *testing.T) {
 			isConventional: false,
 			message:        "Added new feature",
 			expectedValid:  false,
-			expectedCode:   string(domain.ValidationErrorPastTense),
+			expectedCode:   string(appErrors.ErrPastTense),
 		},
 		{
 			name:           "Non-imperative gerund",
 			isConventional: false,
 			message:        "Adding new feature",
 			expectedValid:  false,
-			expectedCode:   string(domain.ValidationErrorGerund),
+			expectedCode:   string(appErrors.ErrGerund),
 		},
 		{
 			name:           "Non-imperative third person",
 			isConventional: false,
 			message:        "Adds new feature",
 			expectedValid:  false,
-			expectedCode:   string(domain.ValidationErrorThirdPerson),
+			expectedCode:   string(appErrors.ErrThirdPerson),
 		},
 		{
 			name:           "Empty message",
 			isConventional: false,
 			message:        "",
 			expectedValid:  false,
-			expectedCode:   string(domain.ValidationErrorMissingSubject),
+			expectedCode:   string(appErrors.ErrMissingSubject),
 		},
 		{
 			name:           "Invalid conventional commit format",
 			isConventional: true,
 			message:        "invalid-format",
 			expectedValid:  false,
-			expectedCode:   string(domain.ValidationErrorInvalidFormat),
+			expectedCode:   string(appErrors.ErrInvalidFormat),
 		},
 		{
 			name:           "Invalid conventional commit - missing subject",
 			isConventional: true,
 			message:        "feat: ",
 			expectedValid:  false,
-			expectedCode:   string(domain.ValidationErrorMissingSubject),
+			expectedCode:   string(appErrors.ErrMissingSubject),
 		},
 		{
 			name:           "Unicode characters",
@@ -99,14 +100,14 @@ func TestImperativeVerbRule(t *testing.T) {
 			isConventional: true,
 			message:        "fix(core): Added new validation",
 			expectedValid:  false,
-			expectedCode:   string(domain.ValidationErrorPastTense),
+			expectedCode:   string(appErrors.ErrPastTense),
 		},
 		{
 			name:           "Non-verb word",
 			isConventional: false,
 			message:        "The new feature",
 			expectedValid:  false,
-			expectedCode:   string(domain.ValidationErrorNonVerb),
+			expectedCode:   string(appErrors.ErrNonVerb),
 		},
 		{
 			name:           "Leading whitespace",
@@ -137,21 +138,21 @@ func TestImperativeVerbRule(t *testing.T) {
 			isConventional: true,
 			message:        "Feat: Add feature",
 			expectedValid:  false,
-			expectedCode:   string(domain.ValidationErrorInvalidFormat),
+			expectedCode:   string(appErrors.ErrInvalidFormat),
 		},
 		{
 			name:           "Conventional commit - no space after colon",
 			isConventional: true,
 			message:        "feat:Add feature",
 			expectedValid:  false,
-			expectedCode:   string(domain.ValidationErrorInvalidFormat),
+			expectedCode:   string(appErrors.ErrInvalidFormat),
 		},
 		{
 			name:           "Invalid non-conventional format",
 			isConventional: false,
 			message:        "!@#$ invalid start",
 			expectedValid:  false,
-			expectedCode:   string(domain.ValidationErrorInvalidFormat),
+			expectedCode:   string(appErrors.ErrInvalidFormat),
 		},
 	}
 
@@ -217,7 +218,7 @@ func TestImperativeVerbRuleOptions(t *testing.T) {
 
 		// Should be marked as non-verb due to our custom setting
 		require.NotEmpty(t, errors, "Should reject custom non-verb")
-		assert.Equal(t, string(domain.ValidationErrorNonVerb), errors[0].Code, "Error code should be ValidationErrorNonVerb")
+		assert.Equal(t, string(appErrors.ErrNonVerb), errors[0].Code, "Error code should be ValidationErrorNonVerb")
 	})
 
 	t.Run("Custom base forms with ED", func(t *testing.T) {
@@ -254,7 +255,7 @@ func TestImperativeVerbRuleOptions(t *testing.T) {
 		badCommit := &domain.CommitInfo{Subject: "feat(api): Execute function"}
 		badErrors := rule.Validate(badCommit)
 		require.NotEmpty(t, badErrors, "Should fail with custom non-verb")
-		assert.Equal(t, string(domain.ValidationErrorNonVerb), badErrors[0].Code, "Should have correct error code")
+		assert.Equal(t, string(appErrors.ErrNonVerb), badErrors[0].Code, "Should have correct error code")
 	})
 }
 

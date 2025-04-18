@@ -10,7 +10,7 @@ import (
 
 	"github.com/golangci/misspell"
 	"github.com/itiquette/gommitlint/internal/domain"
-	"github.com/itiquette/gommitlint/internal/errorx"
+	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
 
 // SpellRule checks for spelling errors in commit messages.
@@ -21,7 +21,7 @@ type SpellRule struct {
 	maxErrors   int
 	ignoreWords []string
 	customWords map[string]string
-	errors      []*domain.ValidationError
+	errors      []appErrors.ValidationError
 	diffs       []misspell.Diff
 }
 
@@ -71,7 +71,7 @@ func NewSpellRule(options ...SpellRuleOption) *SpellRule {
 		maxErrors:   20,   // Default max errors to report
 		ignoreWords: []string{},
 		customWords: make(map[string]string),
-		errors:      []*domain.ValidationError{},
+		errors:      []appErrors.ValidationError{},
 	}
 
 	// Apply options
@@ -88,9 +88,9 @@ func (r *SpellRule) Name() string {
 }
 
 // Validate checks for spelling errors in the commit message.
-func (r *SpellRule) Validate(commit *domain.CommitInfo) []*domain.ValidationError {
+func (r *SpellRule) Validate(commit *domain.CommitInfo) []appErrors.ValidationError {
 	// Reset errors
-	r.errors = []*domain.ValidationError{}
+	r.errors = []appErrors.ValidationError{}
 	r.diffs = []misspell.Diff{}
 
 	// Skip empty messages
@@ -123,7 +123,7 @@ func (r *SpellRule) Validate(commit *domain.CommitInfo) []*domain.ValidationErro
 		r.locale = strings.ToUpper(r.locale)
 	default:
 		r.addError(
-			domain.ValidationErrorUnknown,
+			appErrors.ErrUnknown,
 			fmt.Sprintf("unknown locale: %q", r.locale),
 			map[string]string{
 				"locale":            r.locale,
@@ -141,7 +141,7 @@ func (r *SpellRule) Validate(commit *domain.CommitInfo) []*domain.ValidationErro
 		for original, corrected := range r.customWords {
 			if strings.Contains(fullMessage, original) {
 				r.addError(
-					domain.ValidationErrorSpelling,
+					appErrors.ErrSpelling,
 					fmt.Sprintf("%q is a misspelling of %q", original, corrected),
 					map[string]string{
 						"original":  original,
@@ -201,7 +201,7 @@ func (r *SpellRule) Validate(commit *domain.CommitInfo) []*domain.ValidationErro
 			}
 
 			r.addError(
-				domain.ValidationErrorSpelling,
+				appErrors.ErrSpelling,
 				fmt.Sprintf("%q is a misspelling of %q", diff.Original, diff.Corrected),
 				map[string]string{
 					"original":  diff.Original,
@@ -235,7 +235,7 @@ func (r *SpellRule) VerboseResult() string {
 	}
 
 	// For locale errors, provide guidance on supported locales
-	if len(r.errors) == 1 && domain.ValidationErrorCode(r.errors[0].Code) == domain.ValidationErrorUnknown {
+	if len(r.errors) == 1 && r.errors[0].Code == string(appErrors.ErrUnknown) {
 		return fmt.Sprintf("Invalid locale %q. Supported locales: US (default), UK, GB", r.locale)
 	}
 
@@ -270,7 +270,7 @@ func (r *SpellRule) Help() string {
 	}
 
 	// For locale errors, provide guidance on supported locales
-	if len(r.errors) == 1 && domain.ValidationErrorCode(r.errors[0].Code) == domain.ValidationErrorUnknown {
+	if len(r.errors) == 1 && r.errors[0].Code == string(appErrors.ErrUnknown) {
 		return "Use a supported locale for spell checking: 'US' (default), 'UK', or 'GB'."
 	}
 
@@ -301,33 +301,19 @@ func (r *SpellRule) Help() string {
 }
 
 // Errors returns all validation errors found by this rule.
-func (r *SpellRule) Errors() []*domain.ValidationError {
+func (r *SpellRule) Errors() []appErrors.ValidationError {
 	return r.errors
 }
 
 // addError adds a structured validation error.
-func (r *SpellRule) addError(code domain.ValidationErrorCode, message string, context map[string]string) {
-	// Create a validation error using templates if applicable
-	var err *domain.ValidationError
+func (r *SpellRule) addError(code appErrors.ValidationErrorCode, message string, context map[string]string) {
+	// Create a validation error
+	var err appErrors.ValidationError
 
-	if code == domain.ValidationErrorSpelling && context != nil {
-		// For spelling errors, use the template with word and location
-		word := context["word"]
-		location := context["location"]
-
-		if word != "" && location != "" {
-			err = errorx.NewErrorWithContext(r.Name(), errorx.ErrSpelling, context, word, location)
-		} else if context != nil {
-			// Fall back to standard error with context
-			err = domain.NewValidationErrorWithContext(r.Name(), string(code), message, context)
-		} else {
-			err = domain.NewStandardValidationError(r.Name(), code, message)
-		}
-	} else if context != nil {
-		// Fall back to standard error with context
-		err = domain.NewValidationErrorWithContext(r.Name(), string(code), message, context)
+	if context != nil {
+		err = appErrors.New(r.Name(), code, message, appErrors.WithContextMap(context))
 	} else {
-		err = domain.NewStandardValidationError(r.Name(), code, message)
+		err = appErrors.New(r.Name(), code, message)
 	}
 
 	r.errors = append(r.errors, err)

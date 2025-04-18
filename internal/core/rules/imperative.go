@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/domain"
-	"github.com/itiquette/gommitlint/internal/errorx"
+	appErrors "github.com/itiquette/gommitlint/internal/errors"
 	"github.com/kljensen/snowball"
 )
 
@@ -32,7 +32,7 @@ type ImperativeVerbRule struct {
 	customNonImperativeStarters map[string]bool
 	baseFormsEndingWithED       map[string]bool
 	baseFormsEndingWithS        map[string]bool
-	errors                      []*domain.ValidationError
+	errors                      []appErrors.ValidationError
 	firstWord                   string // Store the first word for verbose output
 	verbType                    string // Store the type of verb issue for verbose output
 }
@@ -109,7 +109,7 @@ func NewImperativeVerbRule(isConventional bool, options ...ImperativeVerbOption)
 			"bless":   true,
 			"stress":  true,
 		},
-		errors: make([]*domain.ValidationError, 0),
+		errors: make([]appErrors.ValidationError, 0),
 	}
 
 	// Apply options
@@ -126,9 +126,9 @@ func (r *ImperativeVerbRule) Name() string {
 }
 
 // Validate validates that the first word of a commit message is in imperative form.
-func (r *ImperativeVerbRule) Validate(commit *domain.CommitInfo) []*domain.ValidationError {
+func (r *ImperativeVerbRule) Validate(commit *domain.CommitInfo) []appErrors.ValidationError {
 	// Reset errors and state
-	r.errors = make([]*domain.ValidationError, 0)
+	r.errors = make([]appErrors.ValidationError, 0)
 	r.firstWord = ""
 	r.verbType = ""
 
@@ -158,7 +158,7 @@ func (r *ImperativeVerbRule) validateNonEmptyMessage(subject string) bool {
 		context := map[string]string{
 			"word": "(empty message)",
 		}
-		err := errorx.NewErrorWithContext(r.Name(), errorx.ErrMissingSubject, context)
+		err := appErrors.NewErrorWithContext(r.Name(), appErrors.ErrMissingSubject, context)
 		r.errors = append(r.errors, err)
 		r.firstWord = "(empty message)"
 
@@ -180,7 +180,7 @@ func (r *ImperativeVerbRule) validateFormat(subject string) bool {
 					"subject": subject,
 					"word":    "(missing subject)",
 				}
-				err := errorx.NewErrorWithContext(r.Name(), errorx.ErrMissingSubject, context)
+				err := appErrors.NewErrorWithContext(r.Name(), appErrors.ErrMissingSubject, context)
 				r.errors = append(r.errors, err)
 				r.firstWord = "(missing subject)"
 			} else {
@@ -189,7 +189,7 @@ func (r *ImperativeVerbRule) validateFormat(subject string) bool {
 					"subject": subject,
 					"word":    "(invalid format)",
 				}
-				err := errorx.NewErrorWithContext(r.Name(), errorx.ErrInvalidFormat, context, "conventional commit")
+				err := appErrors.NewErrorWithContext(r.Name(), appErrors.ErrInvalidFormat, context, "conventional commit")
 				r.errors = append(r.errors, err)
 				r.firstWord = "(invalid format)"
 			}
@@ -203,7 +203,7 @@ func (r *ImperativeVerbRule) validateFormat(subject string) bool {
 				"subject": subject,
 				"word":    "(invalid format)",
 			}
-			err := errorx.NewErrorWithContext(r.Name(), errorx.ErrInvalidFormat, context, "commit message")
+			err := appErrors.NewErrorWithContext(r.Name(), appErrors.ErrInvalidFormat, context, "commit message")
 			r.errors = append(r.errors, err)
 			r.firstWord = "(invalid format)"
 
@@ -222,7 +222,7 @@ func (r *ImperativeVerbRule) validateFirstWord(subject string) bool {
 		// Map generic errors to specific error codes
 		if strings.Contains(err.Error(), "invalid conventional commit format") {
 			r.addError(
-				domain.ValidationErrorInvalidFormat,
+				appErrors.ErrInvalidFormat,
 				err.Error(),
 				map[string]string{
 					"subject": subject,
@@ -231,7 +231,7 @@ func (r *ImperativeVerbRule) validateFirstWord(subject string) bool {
 			)
 		} else if strings.Contains(err.Error(), "missing subject after type") {
 			r.addError(
-				domain.ValidationErrorMissingSubject,
+				appErrors.ErrMissingSubject,
 				err.Error(),
 				map[string]string{
 					"subject": subject,
@@ -240,7 +240,7 @@ func (r *ImperativeVerbRule) validateFirstWord(subject string) bool {
 			)
 		} else if strings.Contains(err.Error(), "no valid first word found") {
 			r.addError(
-				domain.ValidationErrorNoFirstWord,
+				appErrors.ErrNoFirstWord,
 				err.Error(),
 				map[string]string{
 					"subject": subject,
@@ -250,7 +250,7 @@ func (r *ImperativeVerbRule) validateFirstWord(subject string) bool {
 		} else {
 			// Generic error fallback
 			r.addError(
-				domain.ValidationErrorUnknown,
+				appErrors.ErrUnknown,
 				err.Error(),
 				map[string]string{
 					"subject": subject,
@@ -285,33 +285,33 @@ func (r *ImperativeVerbRule) VerboseResult() string {
 	if len(r.errors) > 0 {
 		// Return a more detailed error message based on error code
 		//nolint:exhaustive
-		switch domain.ValidationErrorCode(r.errors[0].Code) {
-		case domain.ValidationErrorInvalidFormat:
+		switch appErrors.ValidationErrorCode(r.errors[0].Code) {
+		case appErrors.ErrInvalidFormat:
 			if strings.Contains(r.errors[0].Message, "conventional") {
 				return "Invalid conventional commit format. Must follow 'type(scope): description' pattern."
 			}
 
 			return "Invalid commit format. Commit message should start with an imperative verb."
 
-		case domain.ValidationErrorEmptyMessage:
+		case appErrors.ErrEmptyMessage:
 			return "Commit message is empty. Cannot validate imperative verb."
 
-		case domain.ValidationErrorMissingSubject:
+		case appErrors.ErrMissingSubject:
 			return "Missing subject after conventional commit type. Nothing to validate."
 
-		case domain.ValidationErrorNoFirstWord:
+		case appErrors.ErrNoFirstWord:
 			return "No valid first word found in commit message."
 
-		case domain.ValidationErrorNonVerb:
+		case appErrors.ErrNonVerb:
 			return "'" + r.firstWord + "' is a non-verb word (article, pronoun, etc.). Use an action verb instead."
 
-		case domain.ValidationErrorPastTense:
+		case appErrors.ErrPastTense:
 			return "'" + r.firstWord + "' is in past tense. Use present imperative form instead (e.g., 'Add' not 'Added')."
 
-		case domain.ValidationErrorGerund:
+		case appErrors.ErrGerund:
 			return "'" + r.firstWord + "' is a gerund (-ing form). Use present imperative form instead (e.g., 'Add' not 'Adding')."
 
-		case domain.ValidationErrorThirdPerson:
+		case appErrors.ErrThirdPerson:
 			return "'" + r.firstWord + "' is in third person form. Use present imperative form instead (e.g., 'Add' not 'Adds')."
 
 		default:
@@ -336,8 +336,8 @@ func (r *ImperativeVerbRule) Help() string {
 	// Check error code
 	if len(r.errors) > 0 {
 		//nolint:exhaustive
-		switch domain.ValidationErrorCode(r.errors[0].Code) {
-		case domain.ValidationErrorInvalidFormat:
+		switch appErrors.ValidationErrorCode(r.errors[0].Code) {
+		case appErrors.ErrInvalidFormat:
 			if strings.Contains(r.errors[0].Message, "conventional") {
 				return `Format your commit message according to the Conventional Commits specification.
 Example: feat(auth): Add login feature
@@ -349,16 +349,16 @@ The correct format is: type(scope): subject
 
 			return "Make sure your commit message starts with an imperative verb (e.g., 'Add', 'Fix', 'Update')."
 
-		case domain.ValidationErrorEmptyMessage:
+		case appErrors.ErrEmptyMessage:
 			return "Provide a non-empty commit message with a verb in the imperative mood."
 
-		case domain.ValidationErrorMissingSubject:
+		case appErrors.ErrMissingSubject:
 			return "Add a description after the type and colon in your conventional commit message."
 
-		case domain.ValidationErrorNoFirstWord:
+		case appErrors.ErrNoFirstWord:
 			return "Start your commit message with a word (letters or numbers). Remove any leading special characters."
 
-		case domain.ValidationErrorNonVerb:
+		case appErrors.ErrNonVerb:
 			return `Use the imperative mood for the first word in your commit message.
 Examples of imperative verbs:
 - Add, Fix, Update, Remove, Change, Refactor, Implement
@@ -370,19 +370,19 @@ Avoid:
 The imperative form is preferred because it completes the sentence:
 "If applied, this commit will [your commit message]"`
 
-		case domain.ValidationErrorPastTense:
+		case appErrors.ErrPastTense:
 			return `Avoid using past tense verbs at the start of commit messages.
 Instead of "Added feature", use "Add feature".
 Use the imperative mood that completes the sentence:
 "If applied, this commit will [your commit message]"`
 
-		case domain.ValidationErrorGerund:
+		case appErrors.ErrGerund:
 			return `Avoid using gerund (-ing) forms at the start of commit messages.
 Instead of "Adding feature", use "Add feature".
 Use the imperative mood that completes the sentence:
 "If applied, this commit will [your commit message]"`
 
-		case domain.ValidationErrorThirdPerson:
+		case appErrors.ErrThirdPerson:
 			return `Avoid using third-person present verbs at the start of commit messages.
 Instead of "Adds feature", use "Add feature".
 Use the imperative mood that completes the sentence:
@@ -420,14 +420,14 @@ The imperative form is preferred because it completes the sentence:
 }
 
 // Errors returns all validation errors.
-func (r *ImperativeVerbRule) Errors() []*domain.ValidationError {
+func (r *ImperativeVerbRule) Errors() []appErrors.ValidationError {
 	return r.errors
 }
 
 // addError adds a structured validation error using standard error codes.
-func (r *ImperativeVerbRule) addError(code domain.ValidationErrorCode, message string, context map[string]string) {
+func (r *ImperativeVerbRule) addError(code appErrors.ValidationErrorCode, message string, context map[string]string) {
 	// Create a validation error with context in one step
-	err := domain.NewValidationErrorWithContext(r.Name(), string(code), message, context)
+	err := appErrors.New(r.Name(), code, message, appErrors.WithContextMap(context))
 
 	// Store verb type for verbose output
 	if context != nil {
@@ -437,13 +437,13 @@ func (r *ImperativeVerbRule) addError(code domain.ValidationErrorCode, message s
 
 		if word, ok := context["word"]; ok {
 			r.firstWord = word
-		} else if code == domain.ValidationErrorInvalidFormat {
+		} else if code == appErrors.ErrInvalidFormat {
 			r.firstWord = "(invalid format)"
-		} else if code == domain.ValidationErrorMissingSubject {
+		} else if code == appErrors.ErrMissingSubject {
 			r.firstWord = "(missing subject)"
-		} else if code == domain.ValidationErrorEmptyMessage {
+		} else if code == appErrors.ErrEmptyMessage {
 			r.firstWord = "(empty message)"
-		} else if code == domain.ValidationErrorNoFirstWord {
+		} else if code == appErrors.ErrNoFirstWord {
 			r.firstWord = "(no valid first word)"
 		}
 	}
@@ -503,7 +503,7 @@ func (r *ImperativeVerbRule) validateIsImperative(word string) {
 
 	if nonImperativeStarters[wordLower] {
 		r.addError(
-			domain.ValidationErrorNonVerb,
+			appErrors.ErrNonVerb,
 			"first word of commit must be an imperative verb: \""+word+"\" is not a verb",
 			map[string]string{
 				"word": word,
@@ -527,7 +527,7 @@ func (r *ImperativeVerbRule) validateIsImperative(word string) {
 	// Past tense verbs often end in "ed" and their stem is different
 	if strings.HasSuffix(wordLower, "ed") && stem != wordLower && !r.isBaseFormWithEDEnding(wordLower) {
 		r.addError(
-			domain.ValidationErrorPastTense,
+			appErrors.ErrPastTense,
 			"first word of commit must be an imperative verb: \""+word+"\" appears to be past tense",
 			map[string]string{
 				"word": word,
@@ -541,7 +541,7 @@ func (r *ImperativeVerbRule) validateIsImperative(word string) {
 	// Gerunds end in "ing"
 	if strings.HasSuffix(wordLower, "ing") && len(wordLower) > 4 {
 		r.addError(
-			domain.ValidationErrorGerund,
+			appErrors.ErrGerund,
 			"first word of commit must be an imperative verb: \""+word+"\" appears to be a gerund",
 			map[string]string{
 				"word": word,
@@ -555,7 +555,7 @@ func (r *ImperativeVerbRule) validateIsImperative(word string) {
 	// 3rd person singular typically ends in "s" and stem is different
 	if strings.HasSuffix(wordLower, "s") && stem != wordLower && !r.isBaseFormWithSEnding(wordLower) {
 		r.addError(
-			domain.ValidationErrorThirdPerson,
+			appErrors.ErrThirdPerson,
 			"first word of commit must be an imperative verb: \""+word+"\" appears to be 3rd person present",
 			map[string]string{
 				"word": word,
@@ -575,7 +575,7 @@ func (r *ImperativeVerbRule) validateWithSimpleRules(wordLower, originalWord str
 	// Simple pattern checks for non-imperative forms
 	if strings.HasSuffix(wordLower, "ed") && !r.isBaseFormWithEDEnding(wordLower) {
 		r.addError(
-			domain.ValidationErrorPastTense,
+			appErrors.ErrPastTense,
 			"first word of commit must be an imperative verb: \""+originalWord+"\" appears to be past tense",
 			map[string]string{
 				"word": originalWord,
@@ -588,7 +588,7 @@ func (r *ImperativeVerbRule) validateWithSimpleRules(wordLower, originalWord str
 
 	if strings.HasSuffix(wordLower, "ing") && len(wordLower) > 4 {
 		r.addError(
-			domain.ValidationErrorGerund,
+			appErrors.ErrGerund,
 			"first word of commit must be an imperative verb: \""+originalWord+"\" appears to be a gerund",
 			map[string]string{
 				"word": originalWord,
@@ -601,7 +601,7 @@ func (r *ImperativeVerbRule) validateWithSimpleRules(wordLower, originalWord str
 
 	if strings.HasSuffix(wordLower, "s") && !r.isBaseFormWithSEnding(wordLower) && len(wordLower) > 2 {
 		r.addError(
-			domain.ValidationErrorThirdPerson,
+			appErrors.ErrThirdPerson,
 			"first word of commit must be an imperative verb: \""+originalWord+"\" appears to be 3rd person present",
 			map[string]string{
 				"word": originalWord,

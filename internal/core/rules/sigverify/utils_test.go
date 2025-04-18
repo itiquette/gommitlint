@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
-package signedidentityrule
+package sigverify
 
 import (
 	"os"

@@ -50,22 +50,19 @@ type ValidationEngine interface {
 // ValidationService orchestrates commit validation operations.
 type ValidationService struct {
 	engine        ValidationEngine
-	commitReader  domain.CommitReader
-	historyReader domain.CommitHistoryReader
+	commitService domain.GitCommitService
 	infoProvider  domain.RepositoryInfoProvider
 }
 
 // NewValidationService creates a new ValidationService.
 func NewValidationService(
 	engine ValidationEngine,
-	commitReader domain.CommitReader,
-	historyReader domain.CommitHistoryReader,
+	commitService domain.GitCommitService,
 	infoProvider domain.RepositoryInfoProvider,
 ) *ValidationService {
 	return &ValidationService{
 		engine:        engine,
-		commitReader:  commitReader,
-		historyReader: historyReader,
+		commitService: commitService,
 		infoProvider:  infoProvider,
 	}
 }
@@ -73,7 +70,7 @@ func NewValidationService(
 // ValidateCommit validates a single commit.
 func (s *ValidationService) ValidateCommit(ctx context.Context, hash string) (domain.CommitResult, error) {
 	// Get the commit from the git repository
-	commit, err := s.commitReader.GetCommit(ctx, hash)
+	commit, err := s.commitService.GetCommit(ctx, hash)
 	if err != nil {
 		return domain.CommitResult{}, fmt.Errorf("failed to get commit: %w", err)
 	}
@@ -85,7 +82,7 @@ func (s *ValidationService) ValidateCommit(ctx context.Context, hash string) (do
 // ValidateHeadCommits validates the specified number of commits from HEAD.
 func (s *ValidationService) ValidateHeadCommits(ctx context.Context, count int, skipMerge bool) (*domain.ValidationResults, error) {
 	// Get the commits from the git repository
-	commits, err := s.historyReader.GetHeadCommits(ctx, count)
+	commits, err := s.commitService.GetHeadCommits(ctx, count)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get head commits: %w", err)
 	}
@@ -103,7 +100,7 @@ func (s *ValidationService) ValidateHeadCommits(ctx context.Context, count int, 
 // ValidateCommitRange validates all commits in the given range.
 func (s *ValidationService) ValidateCommitRange(ctx context.Context, fromHash, toHash string, skipMerge bool) (*domain.ValidationResults, error) {
 	// Get the commits from the git repository
-	commits, err := s.historyReader.GetCommitRange(ctx, fromHash, toHash)
+	commits, err := s.commitService.GetCommitRange(ctx, fromHash, toHash)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get commit range: %w", err)
 	}
@@ -207,8 +204,7 @@ func CreateDefaultValidationService(repoPath string) (*ValidationService, error)
 	}
 
 	// Get specialized repository interfaces
-	commitReader := factory.CreateCommitReader()
-	historyReader := factory.CreateHistoryReader()
+	commitService := factory.CreateGitCommitService()
 	infoProvider := factory.CreateInfoProvider()
 
 	// Create config manager
@@ -230,5 +226,5 @@ func CreateDefaultValidationService(repoPath string) (*ValidationService, error)
 	engine := validation.NewEngine(ruleProvider)
 
 	// Create validation service
-	return NewValidationService(engine, commitReader, historyReader, infoProvider), nil
+	return NewValidationService(engine, commitService, infoProvider), nil
 }

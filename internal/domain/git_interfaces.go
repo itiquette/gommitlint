@@ -6,14 +6,12 @@ package domain
 
 import "context"
 
-// CommitReader provides read access to individual commits.
-type CommitReader interface {
+// GitCommitService provides a unified interface for git commit-related operations.
+// It combines the functionality of reading individual commits and commit history.
+type GitCommitService interface {
 	// GetCommit returns a commit by its hash.
 	GetCommit(ctx context.Context, hash string) (*CommitInfo, error)
-}
 
-// CommitHistoryReader provides read access to commit history.
-type CommitHistoryReader interface {
 	// GetCommitRange returns all commits in the given range.
 	GetCommitRange(ctx context.Context, fromHash, toHash string) ([]*CommitInfo, error)
 
@@ -42,8 +40,7 @@ type CommitAnalyzer interface {
 // GitRepositoryService combines all Git repository interfaces.
 // It provides a complete interface for Git repository operations.
 type GitRepositoryService interface {
-	CommitReader
-	CommitHistoryReader
+	GitCommitService
 	RepositoryInfoProvider
 	CommitAnalyzer
 }

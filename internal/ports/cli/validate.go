@@ -157,7 +157,7 @@ func (c *ValidateCommand) outputGitHubResults(results *domain.ValidationResults)
 					fmt.Printf("::error file=%s,line=1,title=%s::%s\n",
 						commitResult.CommitInfo.Hash,
 						ruleResult.RuleName,
-						err.Message)
+						err.Error())
 				}
 			}
 

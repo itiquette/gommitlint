@@ -87,13 +87,16 @@ func (r *RuleRegistry) registerRules() {
 
 	// Register Conventional Commit rule
 	r.registerRule(rules.NewConventionalCommitRule(
-		r.configuration.ConventionalTypes,
-		r.configuration.ConventionalScopes,
-		r.configuration.MaxDescLength,
+		rules.WithAllowedTypes(r.configuration.ConventionalTypes),
+		rules.WithAllowedScopes(r.configuration.ConventionalScopes),
+		rules.WithMaxDescLength(r.configuration.MaxDescLength),
 	))
 
 	// Register Imperative Verb rule
-	r.registerRule(rules.NewImperativeVerbRule(r.configuration.IsConventionalCommit))
+	r.registerRule(rules.NewImperativeVerbRule(
+		r.configuration.IsConventionalCommit,
+		rules.WithImperativeConventionalCommit(r.configuration.IsConventionalCommit),
+	))
 
 	// Register Jira Reference rule
 	r.registerRule(createJiraRule(r.configuration))
@@ -193,11 +196,11 @@ func createSubjectCaseRule(config *RuleConfiguration) domain.Rule {
 	}
 
 	if config.IsConventionalCommit {
-		opts = append(opts, rules.WithConventionalCommitCase())
+		opts = append(opts, rules.WithSubjectCaseCommitFormat(true))
 	}
 
 	if config.SubjectCaseAllowNonAlpha {
-		opts = append(opts, rules.WithAllowNonAlphaCase())
+		opts = append(opts, rules.WithAllowNonAlpha(true))
 	}
 
 	return rules.NewSubjectCaseRule(opts...)

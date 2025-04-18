@@ -11,13 +11,13 @@ import (
 	"unicode/utf8"
 
 	"github.com/itiquette/gommitlint/internal/domain"
-	"github.com/itiquette/gommitlint/internal/errorx"
+	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
 
 // SubjectLengthRule validates that the commit subject is not too long.
 type SubjectLengthRule struct {
 	maxLength int
-	errors    []*domain.ValidationError
+	errors    []appErrors.ValidationError
 }
 
 // NewSubjectLengthRule creates a new SubjectLengthRule.
@@ -29,7 +29,7 @@ func NewSubjectLengthRule(maxLength int) *SubjectLengthRule {
 
 	return &SubjectLengthRule{
 		maxLength: maxLength,
-		errors:    make([]*domain.ValidationError, 0),
+		errors:    make([]appErrors.ValidationError, 0),
 	}
 }
 
@@ -39,9 +39,9 @@ func (r *SubjectLengthRule) Name() string {
 }
 
 // Validate validates the commit subject length.
-func (r *SubjectLengthRule) Validate(commit *domain.CommitInfo) []*domain.ValidationError {
+func (r *SubjectLengthRule) Validate(commit *domain.CommitInfo) []appErrors.ValidationError {
 	// Reset errors
-	r.errors = make([]*domain.ValidationError, 0)
+	r.errors = make([]appErrors.ValidationError, 0)
 
 	// Calculate subject length
 	subjectLength := utf8.RuneCountInString(commit.Subject)
@@ -54,7 +54,13 @@ func (r *SubjectLengthRule) Validate(commit *domain.CommitInfo) []*domain.Valida
 			"max_length":    strconv.Itoa(r.maxLength),
 		}
 
-		err := errorx.NewErrorWithContext(r.Name(), errorx.ErrSubjectTooLong, context, subjectLength, r.maxLength)
+		// Create error with app errors package
+		err := appErrors.New(
+			r.Name(),
+			appErrors.ErrSubjectTooLong,
+			fmt.Sprintf("Subject length (%d) exceeds maximum allowed (%d)", subjectLength, r.maxLength),
+			appErrors.WithContextMap(context),
+		)
 
 		// Add to errors
 		r.errors = append(r.errors, err)
@@ -113,10 +119,10 @@ func (r *SubjectLengthRule) Help() string {
 	}
 
 	// Use the template-based help message
-	return errorx.FormatHelp(errorx.ErrSubjectTooLong, maxLength)
+	return appErrors.FormatHelp(appErrors.ErrSubjectTooLong, maxLength)
 }
 
 // Errors returns all validation errors.
-func (r *SubjectLengthRule) Errors() []*domain.ValidationError {
+func (r *SubjectLengthRule) Errors() []appErrors.ValidationError {
 	return r.errors
 }

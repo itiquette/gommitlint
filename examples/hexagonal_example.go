@@ -78,7 +78,7 @@ func printResults(result domain.CommitResult) {
 		// Print errors for failed rules
 		if ruleResult.Status == domain.StatusFailed {
 			for _, err := range ruleResult.Errors {
-				fmt.Printf("   - %s\n", err.Message)
+				fmt.Printf("   - %s\n", err.Error())
 			}
 
 			// Print help message
@@ -111,9 +111,9 @@ func exampleManualValidation() {
 	// Create validation rules
 	subjectRule := rules.NewSubjectLengthRule(72)
 	conventionalRule := rules.NewConventionalCommitRule(
-		[]string{"feat", "fix", "docs"},
-		[]string{"core", "ui"},
-		100,
+		rules.WithAllowedTypes([]string{"feat", "fix", "docs"}),
+		rules.WithAllowedScopes([]string{"core", "ui"}),
+		rules.WithMaxDescLength(100),
 	)
 
 	// Create context

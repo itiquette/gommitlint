@@ -12,6 +12,7 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
+	appErrors "github.com/itiquette/gommitlint/internal/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -71,7 +72,7 @@ func TestSubjectLengthRule(t *testing.T) {
 				// Check error details
 				err := errors[0]
 				require.Equal(t, "SubjectLength", err.Rule, "Rule name should be set in ValidationError")
-				require.Equal(t, string(domain.ValidationErrorTooLong), err.Code, "Error code should match expected")
+				require.Equal(t, string(appErrors.ErrSubjectTooLong), err.Code, "Error code should match expected")
 
 				// Check context
 				require.Contains(t, err.Context, "actual_length", "Context should contain actual length")

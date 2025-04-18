@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -63,7 +64,7 @@ func TestRuleRegistry_GetRules(t *testing.T) {
 		"Spell",
 		"SubjectCase",
 		"SubjectSuffix",
-		"CommitBodyRule", // This is the actual name, not "CommitBody"
+		"CommitBody", // Changed from CommitBodyRule
 		"CommitsAhead",
 	}
 
@@ -186,7 +187,7 @@ func TestRuleRegistry_RuleConfigurationOptions(t *testing.T) {
 
 	// Use reflection to check rule's configuration
 	// This is a bit brittle but useful for testing
-	validateCommit := func(_ *testing.T, rule domain.Rule, commit *domain.CommitInfo) []*domain.ValidationError {
+	validateCommit := func(_ *testing.T, rule domain.Rule, commit *domain.CommitInfo) []errors.ValidationError {
 		return rule.Validate(commit)
 	}
 

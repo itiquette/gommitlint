@@ -10,6 +10,7 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
+	appErrors "github.com/itiquette/gommitlint/internal/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -38,11 +39,12 @@ func TestCommitsAheadRuleNilRepo(t *testing.T) {
 
 	// Verify the error
 	require.NotEmpty(t, errors)
-	assert.Equal(t, "nil_repo", errors[0].Code)
+	validationErr := errors[0]
+	assert.Equal(t, string(appErrors.ErrInvalidRepo), validationErr.Code)
 	assert.Equal(t, "CommitsAhead", rule.Name())
-	assert.Contains(t, rule.Result(), "Too many commits ahead of main")
+	assert.Contains(t, rule.Result(), "Too many commits ahead of reference branch")
 	assert.Contains(t, rule.VerboseResult(), "Repository object is nil")
-	assert.Contains(t, rule.Help(), "valid git repository")
+	assert.Contains(t, rule.Help(), "Configure the repository correctly")
 }
 
 func TestCommitsAheadRuleNilRepoInsideGetter(t *testing.T) {
@@ -62,10 +64,11 @@ func TestCommitsAheadRuleNilRepoInsideGetter(t *testing.T) {
 
 	// Verify the error
 	require.NotEmpty(t, errors)
-	assert.Equal(t, "nil_repo", errors[0].Code)
-	assert.Contains(t, rule.Result(), "Too many commits ahead of main")
+	validationErr := errors[0]
+	assert.Equal(t, string(appErrors.ErrInvalidRepo), validationErr.Code)
+	assert.Contains(t, rule.Result(), "Too many commits ahead of reference branch")
 	assert.Contains(t, rule.VerboseResult(), "Repository object is nil")
-	assert.Contains(t, rule.Help(), "valid git repository")
+	assert.Contains(t, rule.Help(), "Configure the repository correctly")
 }
 
 func TestCommitsAheadRuleEmptyReference(t *testing.T) {
@@ -85,7 +88,8 @@ func TestCommitsAheadRuleEmptyReference(t *testing.T) {
 
 	// Verify the error
 	require.NotEmpty(t, errors)
-	assert.Equal(t, "empty_ref", errors[0].Code)
+	validationErr := errors[0]
+	assert.Equal(t, string(appErrors.ErrInvalidConfig), validationErr.Code)
 	assert.Contains(t, rule.Result(), "Too many commits ahead of ")
 	assert.Contains(t, rule.VerboseResult(), "Reference branch name is empty")
 	assert.Contains(t, rule.Help(), "reference branch name")
@@ -132,8 +136,9 @@ func TestCommitsAheadRuleTooManyCommits(t *testing.T) {
 
 	// Should have an error
 	require.NotEmpty(t, errors)
-	assert.Equal(t, "too_many_commits", errors[0].Code)
-	assert.Contains(t, rule.Result(), "Too many commits ahead of main")
+	validationErr := errors[0]
+	assert.Equal(t, string(appErrors.ErrTooManyCommits), validationErr.Code)
+	assert.Contains(t, rule.Result(), "Too many commits ahead of reference branch")
 	assert.Contains(t, rule.VerboseResult(), "10 commit(s) ahead of main (maximum allowed: 5)")
-	assert.Contains(t, rule.Help(), "too many commits ahead of main")
+	assert.Contains(t, rule.Help(), "Ensure your branch is not more than 5 commits ahead of main by regularly merging or rebasing.")
 }

@@ -6,17 +6,17 @@
 package configuration
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/defaults"
-	"github.com/itiquette/gommitlint/internal/errorsx"
+	appErrors "github.com/itiquette/gommitlint/internal/errors"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
+	stderrors "errors"
 )
 
 // ConfigLoader handles loading configuration from files.
@@ -73,7 +73,7 @@ func (l *ConfigLoader) LoadConfiguration() (*AppConf, error) {
 				errMsgs = append(errMsgs, err.Error())
 			}
 
-			return nil, errorsx.NewConfigError("Configuration validation failed: "+strings.Join(errMsgs, "; "), nil)
+			return nil, appErrors.NewConfigError("Configuration validation failed: "+strings.Join(errMsgs, "; "), nil)
 		}
 	}
 
@@ -88,7 +88,7 @@ func (l *ConfigLoader) LoadFromPath(path string) (*AppConf, error) {
 	// Load from the specified path
 	err := l.loadFromFile(path, config)
 	if err != nil {
-		return nil, errorsx.NewConfigError("Failed to load configuration from "+path, err)
+		return nil, appErrors.NewConfigError("Failed to load configuration from "+path, err)
 	}
 
 	// Validate configuration
@@ -100,7 +100,7 @@ func (l *ConfigLoader) LoadFromPath(path string) (*AppConf, error) {
 				errMsgs = append(errMsgs, err.Error())
 			}
 
-			return nil, errorsx.NewConfigError("Configuration validation failed: "+strings.Join(errMsgs, "; "), nil)
+			return nil, appErrors.NewConfigError("Configuration validation failed: "+strings.Join(errMsgs, "; "), nil)
 		}
 	}
 
@@ -111,7 +111,7 @@ func (l *ConfigLoader) LoadFromPath(path string) (*AppConf, error) {
 func (l *ConfigLoader) loadFromFile(path string, config *AppConf) error {
 	// Check if file exists
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return errors.New("configuration file does not exist")
+		return stderrors.New("configuration file does not exist")
 	}
 
 	// Using koanf for configuration parsing
@@ -128,7 +128,7 @@ func (l *ConfigLoader) loadFromFile(path string, config *AppConf) error {
 			return fmt.Errorf("failed to parse JSON: %w", err)
 		}
 	default:
-		return errors.New("unsupported configuration file format")
+		return stderrors.New("unsupported configuration file format")
 	}
 
 	// Unmarshal into config struct

@@ -31,16 +31,10 @@ func TestRepositoryFactory(t *testing.T) {
 	require.NotNil(t, factory, "Factory should not be nil")
 
 	// Test creating different interface implementations
-	t.Run("Create CommitReader", func(t *testing.T) {
-		reader := factory.CreateCommitReader()
-		assert.NotNil(t, reader, "CommitReader should not be nil")
-		assert.Implements(t, (*domain.CommitReader)(nil), reader)
-	})
-
-	t.Run("Create CommitHistoryReader", func(t *testing.T) {
-		reader := factory.CreateHistoryReader()
-		assert.NotNil(t, reader, "CommitHistoryReader should not be nil")
-		assert.Implements(t, (*domain.CommitHistoryReader)(nil), reader)
+	t.Run("Create GitCommitService", func(t *testing.T) {
+		service := factory.CreateGitCommitService()
+		assert.NotNil(t, service, "GitCommitService should not be nil")
+		assert.Implements(t, (*domain.GitCommitService)(nil), service)
 	})
 
 	t.Run("Create RepositoryInfoProvider", func(t *testing.T) {
@@ -61,8 +55,7 @@ func TestRepositoryFactory(t *testing.T) {
 		assert.Implements(t, (*domain.GitRepositoryService)(nil), service)
 
 		// Verify it implements all the specialized interfaces
-		assert.Implements(t, (*domain.CommitReader)(nil), service)
-		assert.Implements(t, (*domain.CommitHistoryReader)(nil), service)
+		assert.Implements(t, (*domain.GitCommitService)(nil), service)
 		assert.Implements(t, (*domain.RepositoryInfoProvider)(nil), service)
 		assert.Implements(t, (*domain.CommitAnalyzer)(nil), service)
 	})

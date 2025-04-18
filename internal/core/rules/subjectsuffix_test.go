@@ -67,7 +67,7 @@ func TestSubjectSuffixRule(t *testing.T) {
 			invalidSuffixes: ".:;",
 			expectedValid:   false,
 			expectedMessage: "Invalid subject suffix",
-			expectedCode:    "subject_empty",
+			expectedCode:    "missing_subject",
 		},
 		{
 			name:            "Subject with Unicode invalid suffix",
@@ -139,13 +139,14 @@ func TestSubjectSuffixRule(t *testing.T) {
 				assert.NotEmpty(t, result, "Expected validation errors")
 				assert.Equal(t, testCase.expectedMessage, rule.Result(), "Expected error message doesn't match")
 
-				// Check error code
-				assert.Equal(t, testCase.expectedCode, result[0].Code, "Error code should match expected")
+				// Access validation error directly
+				validationErr := result[0]
+				assert.Equal(t, testCase.expectedCode, validationErr.Code, "Error code should match expected")
 
 				// Check that context contains required fields
 				if testCase.expectedCode == "invalid_suffix" {
-					assert.Contains(t, result[0].Context, "last_char", "Context should contain last_char")
-					assert.Contains(t, result[0].Context, "invalid_suffixes", "Context should contain invalid_suffixes")
+					assert.Contains(t, validationErr.Context, "last_char", "Context should contain last_char")
+					assert.Contains(t, validationErr.Context, "invalid_suffixes", "Context should contain invalid_suffixes")
 
 					// For special characters like Unicode emoji or tab, don't check the exact character
 					if testCase.subject != "" &&
@@ -158,7 +159,7 @@ func TestSubjectSuffixRule(t *testing.T) {
 				}
 
 				// Check context contains subject
-				assert.Contains(t, result[0].Context, "subject", "Context should contain subject")
+				assert.Contains(t, validationErr.Context, "subject", "Context should contain subject")
 			}
 
 			// Check name
@@ -171,7 +172,7 @@ func TestSubjectSuffixRule(t *testing.T) {
 			// Verify help text is appropriate for the error
 			if !testCase.expectedValid {
 				switch testCase.expectedCode {
-				case "subject_empty":
+				case "missing_subject":
 					assert.Contains(t, helpText, "Provide a non-empty subject")
 				case "invalid_suffix":
 					assert.Contains(t, helpText, "Remove the punctuation")
@@ -203,7 +204,9 @@ func TestSubjectSuffixOptions(t *testing.T) {
 		}
 		errors = rule.Validate(invalidCommit)
 		assert.NotEmpty(t, errors, "Default config should reject subject ending with period")
-		assert.Equal(t, "invalid_suffix", errors[0].Code, "Error code should be 'invalid_suffix'")
+
+		validationErr := errors[0]
+		assert.Equal(t, "invalid_suffix", validationErr.Code, "Error code should be 'invalid_suffix'")
 	})
 
 	t.Run("With custom invalid suffixes", func(t *testing.T) {
@@ -216,10 +219,12 @@ func TestSubjectSuffixOptions(t *testing.T) {
 		}
 		errors := rule.Validate(commit)
 		assert.NotEmpty(t, errors, "Should reject subject with configured invalid suffix")
-		assert.Equal(t, "invalid_suffix", errors[0].Code, "Error code should be 'invalid_suffix'")
+
+		validationErr := errors[0]
+		assert.Equal(t, "invalid_suffix", validationErr.Code, "Error code should be 'invalid_suffix'")
 
 		// Verify context contains the correct invalid suffixes
-		assert.Equal(t, "!@#", errors[0].Context["invalid_suffixes"],
+		assert.Equal(t, "!@#", validationErr.Context["invalid_suffixes"],
 			"Context should contain the custom invalid suffixes")
 
 		// Create commit with period (should be allowed with custom config)
@@ -240,7 +245,9 @@ func TestSubjectSuffixOptions(t *testing.T) {
 		}
 		errors := rule.Validate(commit)
 		assert.NotEmpty(t, errors, "Should reject subject with default invalid suffix")
-		assert.Equal(t, rules.DefaultInvalidSuffixes, errors[0].Context["invalid_suffixes"],
+
+		validationErr := errors[0]
+		assert.Equal(t, rules.DefaultInvalidSuffixes, validationErr.Context["invalid_suffixes"],
 			"Should fall back to default invalid suffixes")
 	})
 }

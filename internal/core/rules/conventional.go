@@ -5,226 +5,284 @@
 package rules
 
 import (
+	"fmt"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/domain"
-	"github.com/itiquette/gommitlint/internal/errorx"
+	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
 
-// subjectRegex Format: type(scope)!: description.
-var subjectRegex = regexp.MustCompile(`^(\w+)(?:\(([\w,/-]+)\))?(!)?:[ ](.+)$`)
-
-// ConventionalCommitRule enforces the Conventional Commits specification format for commit messages.
+// ConventionalCommitRule validates that commit messages follow the Conventional Commits specification.
 //
-// This rule validates that commit messages follow the structured format defined by the
-// Conventional Commits specification (https://www.conventionalcommits.org/), which provides
-// a standardized way to communicate the purpose and scope of changes.
+// Conventional Commits format provides a standard way to structure commit messages,
+// making them machine-readable and establishing a clear connection between commits
+// and project features or fixes. This rule enforces that commit messages follow this format.
+//
+// The standard format is:
+//
+//	<type>[optional scope][optional !]: <description>
+//
+// Example: feat(auth): add login functionality
+// Example with breaking change: feat(api)!: change auth endpoint structure
+//
+// See https://www.conventionalcommits.org/ for more information.
 type ConventionalCommitRule struct {
-	allowedTypes  []string
-	allowedScopes []string
-	maxDescLength int
-	errors        []*domain.ValidationError
-	commitType    string // Store for verbose output
-	scope         string // Store for verbose output
-	hasBreaking   bool   // Store for verbose output
+	*BaseRule
+	allowedTypes     []string
+	allowedScopes    []string
+	requireScope     bool
+	validateBreaking bool
+	maxDescLength    int
+
+	// Captured values for better reporting
+	commitType  string
+	scope       string
+	hasBreaking bool
 }
 
-// NewConventionalCommitRule creates a new ConventionalCommitRule with specified configuration.
-func NewConventionalCommitRule(types []string, scopes []string, maxDescLength int) *ConventionalCommitRule {
-	// Default description length if not specified
-	if maxDescLength <= 0 {
-		maxDescLength = 72
-	}
+// ConventionalCommitOption is a function that configures a ConventionalCommitRule.
+type ConventionalCommitOption func(*ConventionalCommitRule)
 
-	return &ConventionalCommitRule{
-		allowedTypes:  types,
-		allowedScopes: scopes,
-		maxDescLength: maxDescLength,
-		errors:        make([]*domain.ValidationError, 0),
+// WithAllowedTypes sets the allowed commit types.
+func WithAllowedTypes(types []string) ConventionalCommitOption {
+	return func(r *ConventionalCommitRule) {
+		r.allowedTypes = types
 	}
 }
 
-// Name returns the rule identifier.
-func (r *ConventionalCommitRule) Name() string {
-	return "ConventionalCommit"
+// WithAllowedScopes sets the allowed commit scopes.
+func WithAllowedScopes(scopes []string) ConventionalCommitOption {
+	return func(r *ConventionalCommitRule) {
+		r.allowedScopes = scopes
+	}
+}
+
+// WithRequiredScope makes the scope mandatory in commit messages.
+func WithRequiredScope() ConventionalCommitOption {
+	return func(r *ConventionalCommitRule) {
+		r.requireScope = true
+	}
+}
+
+// WithBreakingChangeValidation enables validation of the breaking change marker.
+func WithBreakingChangeValidation() ConventionalCommitOption {
+	return func(r *ConventionalCommitRule) {
+		r.validateBreaking = true
+	}
+}
+
+// WithMaxDescLength sets the maximum description length.
+func WithMaxDescLength(maxLength int) ConventionalCommitOption {
+	return func(r *ConventionalCommitRule) {
+		// Skip if the value is 0 or negative
+		if maxLength > 0 {
+			r.maxDescLength = maxLength
+		}
+	}
+}
+
+// NewConventionalCommitRule creates a new rule with the specified options.
+func NewConventionalCommitRule(options ...ConventionalCommitOption) *ConventionalCommitRule {
+	rule := &ConventionalCommitRule{
+		BaseRule: NewBaseRule("ConventionalCommit"),
+		allowedTypes: []string{
+			"feat", "fix", "docs", "style", "refactor", "perf",
+			"test", "build", "ci", "chore", "revert",
+		},
+		allowedScopes:    []string{}, // Empty means all scopes are allowed
+		requireScope:     false,      // Default to not requiring scope
+		validateBreaking: false,      // Default to not validating breaking changes
+		maxDescLength:    72,         // Default max length for description
+	}
+
+	// Apply options
+	for _, option := range options {
+		option(rule)
+	}
+
+	return rule
+}
+
+// addError is a helper that adds errors using the new error system.
+func (r *ConventionalCommitRule) addError(code appErrors.ValidationErrorCode, message string, context map[string]string) {
+	r.AddErrorWithContext(code, message, context)
 }
 
 // Validate validates a commit against the conventional commit rules.
-func (r *ConventionalCommitRule) Validate(commit *domain.CommitInfo) []*domain.ValidationError {
+func (r *ConventionalCommitRule) Validate(commit *domain.CommitInfo) []appErrors.ValidationError {
 	// Reset errors and state
-	r.errors = make([]*domain.ValidationError, 0)
+	r.ClearErrors()
 	r.commitType = ""
 	r.scope = ""
 	r.hasBreaking = false
 
-	subject := commit.Subject
+	// Mark the rule as having been run
+	r.MarkAsRun()
 
-	// Validate the basic structure of the commit
-	if !r.validateBasicFormat(subject) {
-		return r.errors
+	// Get the subject
+	subject := strings.TrimSpace(commit.Subject)
+
+	// Compile the regex (optimally this would be compiled once at rule creation)
+	pattern := `^(?P<type>[a-z]+)(?:\((?P<scope>[a-z0-9/-]+)\))?(?P<breaking>!)?:\s?(?P<description>.*)`
+	regex := regexp.MustCompile(pattern)
+
+	// Check if the subject follows the pattern
+	matches := regex.FindStringSubmatch(subject)
+	if len(matches) == 0 {
+		r.addError(
+			appErrors.ErrInvalidFormat,
+			"commit message doesn't follow conventional format: type(scope)!: description",
+			nil,
+		)
+
+		return r.Errors()
 	}
 
-	// Parse and extract components
-	commitType, scope, hasBreaking, description := r.extractComponents(subject)
-
-	// Store for verbose output
-	r.commitType = commitType
-	r.scope = scope
-	r.hasBreaking = hasBreaking
-
-	// Validate type, scope, and description
-	if !r.validateType(commitType) ||
-		!r.validateScope(scope) ||
-		!r.validateDescription(description) {
-		return r.errors
-	}
-
-	return r.errors
-}
-
-// validateBasicFormat validates the basic format of the commit subject.
-func (r *ConventionalCommitRule) validateBasicFormat(subject string) bool {
-	// Handle empty subject early
-	if strings.TrimSpace(subject) == "" {
-		r.errors = append(r.errors, errorx.NewErrorWithContext(
-			r.Name(),
-			errorx.ErrInvalidFormat,
-			map[string]string{"subject": subject},
-			"empty message",
-		))
-
-		return false
-	}
-
-	// Simple check for ": " vs ":  " (one space vs multiple spaces)
+	// Check for spacing issues
 	if strings.Contains(subject, ":  ") {
-		r.errors = append(r.errors, errorx.NewErrorWithContext(
-			r.Name(),
-			errorx.ErrInvalidFormat,
-			map[string]string{"subject": subject},
-			"spacing error",
-		))
+		r.addError(
+			appErrors.ErrSpacing,
+			"commit message has too many spaces after colon (should be exactly one)",
+			nil,
+		)
 
-		return false
+		return r.Errors()
 	}
 
-	// Validate basic format
-	if !subjectRegex.MatchString(subject) {
-		r.errors = append(r.errors, errorx.NewErrorWithContext(
-			r.Name(),
-			errorx.ErrInvalidFormat,
-			map[string]string{"subject": subject},
-			subject,
-		))
+	// Extract capture groups
+	typeIdx := regex.SubexpIndex("type")
+	scopeIdx := regex.SubexpIndex("scope")
+	breakingIdx := regex.SubexpIndex("breaking")
+	descIdx := regex.SubexpIndex("description")
 
-		return false
-	}
+	// Extract and validate type
+	if typeIdx >= 0 && typeIdx < len(matches) {
+		r.commitType = matches[typeIdx]
+		if !r.isValidType(r.commitType) {
+			allowedTypes := strings.Join(r.allowedTypes, ",")
+			r.addError(
+				appErrors.ErrInvalidType,
+				"invalid commit type: "+r.commitType,
+				map[string]string{
+					"type":          r.commitType,
+					"allowed_types": allowedTypes,
+				},
+			)
 
-	return true
-}
-
-// extractComponents extracts all components from the subject line.
-func (r *ConventionalCommitRule) extractComponents(subject string) (string, string, bool, string) {
-	var commitType, scope, description string
-
-	var hasBreaking bool
-
-	matches := subjectRegex.FindStringSubmatch(subject)
-	if len(matches) != 5 {
-		r.errors = append(r.errors, errorx.NewErrorWithContext(
-			r.Name(),
-			errorx.ErrInvalidFormat,
-			map[string]string{"subject": subject},
-			subject,
-		))
-
-		return "", "", false, ""
-	}
-
-	commitType = matches[1]
-	scope = matches[2]
-	hasBreaking = matches[3] == "!"
-	description = matches[4]
-
-	return commitType, scope, hasBreaking, description
-}
-
-// validateType checks if the commit type is allowed.
-func (r *ConventionalCommitRule) validateType(commitType string) bool {
-	if len(r.allowedTypes) > 0 && !slices.Contains(r.allowedTypes, commitType) {
-		r.errors = append(r.errors, errorx.NewErrorWithContext(
-			r.Name(),
-			errorx.ErrInvalidType,
-			map[string]string{
-				"type":          commitType,
-				"allowed_types": strings.Join(r.allowedTypes, ","),
-			},
-			commitType, strings.Join(r.allowedTypes, ", "),
-		))
-
-		return false
-	}
-
-	return true
-}
-
-// validateScope checks if the commit scope is allowed.
-func (r *ConventionalCommitRule) validateScope(scope string) bool {
-	if scope != "" && len(r.allowedScopes) > 0 {
-		scopesList := strings.Split(scope, ",")
-		for _, scopeItem := range scopesList {
-			if !slices.Contains(r.allowedScopes, scopeItem) {
-				r.errors = append(r.errors, errorx.NewErrorWithContext(
-					r.Name(),
-					errorx.ErrInvalidScope,
-					map[string]string{
-						"scope":          scopeItem,
-						"allowed_scopes": strings.Join(r.allowedScopes, ","),
-					},
-					scopeItem, strings.Join(r.allowedScopes, ", "),
-				))
-
-				return false
-			}
+			return r.Errors()
 		}
 	}
 
-	return true
-}
+	// Extract and validate scope
+	if scopeIdx >= 0 && scopeIdx < len(matches) {
+		r.scope = matches[scopeIdx]
+		if r.scope != "" && !r.isValidScope(r.scope) {
+			allowedScopes := strings.Join(r.allowedScopes, ",")
+			r.addError(
+				appErrors.ErrInvalidScope,
+				"invalid commit scope: "+r.scope,
+				map[string]string{
+					"scope":          r.scope,
+					"allowed_scopes": allowedScopes,
+				},
+			)
 
-// validateDescription checks if the commit description is valid.
-func (r *ConventionalCommitRule) validateDescription(description string) bool {
-	// Validate description content
-	if strings.TrimSpace(description) == "" {
-		r.errors = append(r.errors, errorx.NewValidationError(r.Name(), errorx.ErrEmptyDescription))
-
-		return false
+			return r.Errors()
+		}
 	}
 
-	// Validate description length
-	if len(description) > r.maxDescLength {
-		r.errors = append(r.errors, errorx.NewErrorWithContext(
-			r.Name(),
-			errorx.ErrSubjectTooLong,
-			map[string]string{
-				"actual_length": strconv.Itoa(len(description)),
-				"max_length":    strconv.Itoa(r.maxDescLength),
-			},
-			len(description), r.maxDescLength,
-		))
+	// Check if scope is required but missing
+	if r.requireScope && (scopeIdx < 0 || scopeIdx >= len(matches) || matches[scopeIdx] == "") {
+		r.addError(
+			appErrors.ErrInvalidScope,
+			"commit scope is required but not provided",
+			nil,
+		)
 
-		return false
+		return r.Errors()
 	}
 
-	return true
+	// Extract breaking change marker
+	if breakingIdx >= 0 && breakingIdx < len(matches) {
+		r.hasBreaking = matches[breakingIdx] != ""
+
+		// If we're validating breaking changes, we would add specific logic here
+		if r.validateBreaking {
+			// Add your breaking change validation logic here if needed
+		}
+	}
+
+	// Validate description
+	if descIdx >= 0 && descIdx < len(matches) {
+		description := matches[descIdx]
+		if strings.TrimSpace(description) == "" {
+			r.addError(
+				appErrors.ErrEmptyDescription,
+				"commit description cannot be empty",
+				nil,
+			)
+
+			return r.Errors()
+		}
+
+		// Check description length - store it for error reporting
+		descriptionLength := len(description)
+
+		// Check description length
+		if r.maxDescLength > 0 && descriptionLength > r.maxDescLength {
+			r.addError(
+				appErrors.ErrDescriptionTooLong,
+				fmt.Sprintf("commit description is too long (%d chars, max is %d)", descriptionLength, r.maxDescLength),
+				map[string]string{
+					"length":     strconv.Itoa(descriptionLength),
+					"max_length": strconv.Itoa(r.maxDescLength),
+				},
+			)
+
+			return r.Errors()
+		}
+	}
+
+	return r.Errors()
 }
 
-// Result returns a concise string representation of the validation result.
+// isValidType checks if the commit type is in the list of allowed types.
+func (r *ConventionalCommitRule) isValidType(commitType string) bool {
+	// If no allowed types are specified, all types are allowed
+	if len(r.allowedTypes) == 0 {
+		return true
+	}
+
+	for _, t := range r.allowedTypes {
+		if commitType == t {
+			return true
+		}
+	}
+
+	return false
+}
+
+// isValidScope checks if the commit scope is in the list of allowed scopes.
+func (r *ConventionalCommitRule) isValidScope(scope string) bool {
+	// If no allowed scopes are specified, all scopes are allowed
+	if len(r.allowedScopes) == 0 {
+		return true
+	}
+
+	for _, s := range r.allowedScopes {
+		if scope == s {
+			return true
+		}
+	}
+
+	return false
+}
+
+// Result returns a concise validation result.
 func (r *ConventionalCommitRule) Result() string {
-	if len(r.errors) > 0 {
+	if r.HasErrors() {
 		return "Invalid conventional commit format"
 	}
 
@@ -233,113 +291,191 @@ func (r *ConventionalCommitRule) Result() string {
 
 // VerboseResult returns a more detailed explanation for verbose mode.
 func (r *ConventionalCommitRule) VerboseResult() string {
-	if len(r.errors) > 0 {
+	if r.HasErrors() {
+		errors := r.Errors()
+		if len(errors) == 0 {
+			return "Unknown error"
+		}
+
+		// errors[0] is already a ValidationError, so no need for type assertion
+		validationErr := errors[0]
+
 		// Return a more detailed error message in verbose mode
-		switch r.errors[0].Code {
-		case "invalid_format":
+		switch validationErr.Code {
+		case string(appErrors.ErrInvalidFormat):
 			return "Invalid format: doesn't follow conventional format 'type(scope)!: description'"
-		case "invalid_type":
+		case string(appErrors.ErrInvalidType):
 			var allowedTypes string
-			if val, ok := r.errors[0].Context["allowed_types"]; ok {
+			if val, ok := validationErr.Context["allowed_types"]; ok {
 				allowedTypes = strings.ReplaceAll(val, ",", ", ")
 			}
 
-			return "Invalid type '" + r.commitType + "'. Must be one of: " + allowedTypes
-		case "invalid_scope":
+			return fmt.Sprintf("Invalid type '%s'. Must be one of: %s", r.commitType, allowedTypes)
+		case string(appErrors.ErrInvalidScope):
 			var allowedScopes string
-			if val, ok := r.errors[0].Context["allowed_scopes"]; ok {
+			if val, ok := validationErr.Context["allowed_scopes"]; ok {
 				allowedScopes = strings.ReplaceAll(val, ",", ", ")
 			}
 
-			return "Invalid scope '" + r.scope + "'. Must be one of: " + allowedScopes
-		case "empty_description":
-			return "Missing description after type/scope"
-		case "description_too_long":
-			var actualLength, maxLength string
-			if val, ok := r.errors[0].Context["actual_length"]; ok {
-				actualLength = val
+			return fmt.Sprintf("Invalid scope '%s'. Must be one of: %s", r.scope, allowedScopes)
+		case string(appErrors.ErrEmptyDescription):
+			return "Commit description is empty. A description following the colon is required."
+		case string(appErrors.ErrDescriptionTooLong):
+			maxLength := "100"
+			if ml, ok := validationErr.Context["max_length"]; ok {
+				maxLength = ml
 			}
 
-			if val, ok := r.errors[0].Context["max_length"]; ok {
-				maxLength = val
-			}
-
-			return "Description too long (" + actualLength + " chars). Maximum length is " + maxLength + " characters"
-		case "spacing_error":
-			return "Spacing error: Must have exactly one space after colon"
-		default:
-			return r.errors[0].Error()
+			return fmt.Sprintf("Commit description is too long. Maximum is %s characters but got %s characters.",
+				maxLength, validationErr.Context["length"])
+		case string(appErrors.ErrSpacing):
+			return "Spacing error: There should be exactly one space after the colon."
 		}
+
+		// Default to the error message
+		return validationErr.Message
 	}
 
-	// Success verbose message with more details
-	result := "Valid conventional commit with type '" + r.commitType + "'"
-	if r.scope != "" {
-		result += " and scope '" + r.scope + "'"
-	}
-
+	// Build a nice formatted success message
+	result := "Valid conventional commit format: "
 	if r.hasBreaking {
-		result += " (breaking change)"
+		result += "BREAKING CHANGE - "
+	}
+
+	result += r.commitType
+	if r.scope != "" {
+		result += fmt.Sprintf("(%s)", r.scope)
 	}
 
 	return result
 }
 
-// Help returns guidance for fixing rule violations.
+// Help returns guidance on how to fix the rule violation.
 func (r *ConventionalCommitRule) Help() string {
-	if len(r.errors) == 0 {
+	if !r.HasErrors() {
 		return "No errors to fix"
 	}
 
-	// Check for specific error codes if available
-	if len(r.errors) > 0 {
-		switch r.errors[0].Code {
-		case string(domain.ValidationErrorInvalidFormat):
-			return errorx.FormatHelp(errorx.ErrInvalidFormat, "commit message", "type(scope)!: description")
+	errors := r.Errors()
+	if len(errors) > 0 {
+		// Cast to ValidationError if possible
+		// errors[0] is already a ValidationError, so no need for type assertion
+		validationErr := errors[0]
 
-		case string(domain.ValidationErrorInvalidType):
-			// Get allowed types from context
+		switch validationErr.Code {
+		case string(appErrors.ErrInvalidFormat):
+			return `Follow the conventional commit format:
+    <type>[optional scope][optional !]: <description>
+
+Examples:
+- feat: add new feature
+- fix(auth): resolve login issue
+- feat(api)!: change user API endpoints
+
+The format is strict and requires the specific characters shown above.`
+
+		case string(appErrors.ErrInvalidType):
 			allowedTypes := ""
-			if val, ok := r.errors[0].Context["allowed_types"]; ok {
+			if val, ok := validationErr.Context["allowed_types"]; ok {
 				allowedTypes = strings.ReplaceAll(val, ",", ", ")
 			}
 
-			return errorx.FormatHelp(errorx.ErrInvalidType, allowedTypes)
+			return fmt.Sprintf(`Use only allowed commit types: %s
 
-		case string(domain.ValidationErrorInvalidScope):
-			// Get allowed scopes from context
+Examples:
+- feat: adds a new feature
+- fix: fixes a bug
+- docs: documentation only changes
+- style: formatting changes
+- refactor: code change that neither fixes a bug nor adds a feature
+- perf: improves performance
+- test: adds missing tests or corrects existing tests
+- build: affects build system or external dependencies
+- ci: changes CI configuration files and scripts
+- chore: other changes that don't modify src or test files
+- revert: reverts a previous commit`, allowedTypes)
+
+		case string(appErrors.ErrInvalidScope):
+			if r.requireScope {
+				allowedScopes := ""
+				if val, ok := validationErr.Context["allowed_scopes"]; ok {
+					allowedScopes = strings.ReplaceAll(val, ",", ", ")
+				}
+
+				if allowedScopes != "" {
+					return fmt.Sprintf(`A scope is required and must be one of: %s
+
+Example:
+- feat(%s): add new feature
+
+The scope must be in parentheses and directly after the type.`, allowedScopes, r.allowedScopes[0])
+				}
+
+				return `A scope is required but was not provided.
+
+Example:
+- feat(auth): add new feature
+
+The scope must be in parentheses and directly after the type.`
+			}
+
 			allowedScopes := ""
-			if val, ok := r.errors[0].Context["allowed_scopes"]; ok {
+			if val, ok := validationErr.Context["allowed_scopes"]; ok {
 				allowedScopes = strings.ReplaceAll(val, ",", ", ")
 			}
 
-			return errorx.FormatHelp(errorx.ErrInvalidScope, allowedScopes)
+			return fmt.Sprintf(`Use only allowed scopes: %s
 
-		case string(domain.ValidationErrorEmptyDescription):
-			return errorx.FormatHelp(errorx.ErrEmptyDescription)
+Example:
+- feat(%s): add new feature
 
-		case string(domain.ValidationErrorDescriptionTooLong):
-			// Get max length from context
-			maxLength := r.maxDescLength
+The scope must be in parentheses and directly after the type.`, allowedScopes, r.allowedScopes[0])
 
-			if val, ok := r.errors[0].Context["max_length"]; ok {
-				if parsedVal, err := strconv.Atoi(val); err == nil {
-					maxLength = parsedVal
-				}
+		case string(appErrors.ErrEmptyDescription):
+			return `Provide a description after the colon.
+
+Examples:
+- feat: add new user authentication feature
+- fix(auth): resolve login issue with special characters
+
+The description should be concise but descriptive.`
+
+		case string(appErrors.ErrDescriptionTooLong):
+			maxLength := "100"
+			if ml, ok := validationErr.Context["max_length"]; ok {
+				maxLength = ml
 			}
 
-			return errorx.FormatHelp(errorx.ErrSubjectTooLong, maxLength)
+			return fmt.Sprintf(`Keep the commit description under %s characters.
 
-		case string(domain.ValidationErrorSpacing):
-			return errorx.FormatHelp(errorx.ErrInvalidFormat, "spacing in commit message", "type(scope)!: description")
+Long descriptions should be moved to the commit body, which comes after a blank line following the subject.
+
+Example:
+feat: add new authentication method
+
+This commit introduces a new authentication method that allows users to log in with their social media accounts.`, maxLength)
+
+		case string(appErrors.ErrSpacing):
+			return `Use exactly one space after the colon in commit messages.
+
+Correct:
+feat: add new feature
+
+Incorrect:
+feat:  add new feature
+
+The conventional commit format requires exactly one space between the colon and the description.`
 		}
 	}
 
-	// Default help message
-	return errorx.FormatHelp(errorx.ErrInvalidFormat, "commit message", "type(scope)!: description")
-}
+	// Default help
+	return `Follow the conventional commit format:
+<type>[optional scope][optional !]: <description>
 
-// Errors returns all validation errors.
-func (r *ConventionalCommitRule) Errors() []*domain.ValidationError {
-	return r.errors
+Examples:
+- feat: add new feature
+- fix(auth): resolve login issue
+- feat(api)!: change user API endpoints
+
+For more information, see https://www.conventionalcommits.org/`
 }

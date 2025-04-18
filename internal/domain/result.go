@@ -4,6 +4,10 @@
 
 package domain
 
+import (
+	"github.com/itiquette/gommitlint/internal/errors"
+)
+
 // ValidationStatus represents the result status of a validation rule.
 type ValidationStatus string
 
@@ -39,7 +43,7 @@ type RuleResult struct {
 	HelpMessage string
 
 	// Errors contains any validation errors detected by the rule.
-	Errors []*ValidationError
+	Errors []errors.ValidationError
 }
 
 // CommitResult represents the results of validating all rules against a single commit.

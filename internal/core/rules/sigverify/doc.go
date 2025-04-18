@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 /*
-Package signedidentityrule provides cryptographic signature verification for Git
+Package sigverify provides cryptographic signature verification for Git
 commits to enhance security and establish authorship.
 
 This package implements a comprehensive validation system for both GPG and SSH
@@ -46,11 +46,11 @@ Example Usage:
 	signature := commit.PGPSignature
 
 	// Verify the signature against trusted keys
-	rule := signedidentityrule.VerifySignatureIdentity(commit, signature, "/path/to/trusted/keys")
+	rule := sigverify.VerifySignatureIdentity(commit, signature, "/path/to/trusted/keys")
 	if len(rule.Errors()) > 0 {
 	    fmt.Println(rule.Help())
 	} else {
 	    fmt.Printf("Commit verified: %s\n", rule.Result())
 	}
 */
-package signedidentityrule
+package sigverify

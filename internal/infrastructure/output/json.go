@@ -33,100 +33,102 @@ type RuleResultOutput struct {
 	Name           string                  `json:"name"`
 	Status         string                  `json:"status"`
 	Message        string                  `json:"message"`
-	VerboseMessage string                  `json:"verboseMessage,omitempty"`
+	VerboseMessage string                  `json:"verbose_message"`
 	Help           string                  `json:"help,omitempty"`
 	Errors         []ValidationErrorOutput `json:"errors,omitempty"`
 }
 
-// CommitResultOutput represents the result of a single commit validation in JSON format.
+// CommitResultOutput represents the result of a commit validation in JSON format.
 type CommitResultOutput struct {
-	Hash        string             `json:"hash"`
-	ShortHash   string             `json:"shortHash,omitempty"`
-	Subject     string             `json:"subject"`
-	Body        string             `json:"body,omitempty"`
-	Passed      bool               `json:"passed"`
-	RuleResults []RuleResultOutput `json:"ruleResults,omitempty"`
+	Hash         string             `json:"hash"`
+	Subject      string             `json:"subject"`
+	CommitDate   string             `json:"commit_date,omitempty"`
+	Author       string             `json:"author,omitempty"`
+	IsMerge      bool               `json:"is_merge,omitempty"`
+	Passed       bool               `json:"passed"`
+	RuleResults  []RuleResultOutput `json:"rule_results,omitempty"`
+	ErrorCount   int                `json:"error_count"`
+	WarningCount int                `json:"warning_count"`
 }
 
-// DetailedReport is a detailed JSON report structure.
-type DetailedReport struct {
-	Status        string               `json:"status"`
-	Total         int                  `json:"total"`
-	Passed        int                  `json:"passed"`
-	Failed        int                  `json:"failed"`
-	CommitResults []CommitResultOutput `json:"commitResults,omitempty"`
+// ValidationResultsOutput represents the overall validation results in JSON format.
+type ValidationResultsOutput struct {
 	Timestamp     string               `json:"timestamp"`
+	AllPassed     bool                 `json:"all_passed"`
+	TotalCommits  int                  `json:"total_commits"`
+	PassedCommits int                  `json:"passed_commits"`
+	RuleSummary   map[string]int       `json:"rule_summary,omitempty"`
+	CommitResults []CommitResultOutput `json:"commit_results,omitempty"`
 }
 
 // Format formats validation results as JSON.
 func (f *JSONFormatter) Format(results *domain.ValidationResults) string {
-	// Build detailed JSON report
-	report := DetailedReport{
-		Total:     results.TotalCommits,
-		Passed:    results.PassedCommits,
-		Failed:    results.TotalCommits - results.PassedCommits,
-		Timestamp: time.Now().UTC().Format(time.RFC3339),
+	report := ValidationResultsOutput{
+		Timestamp:     time.Now().Format(time.RFC3339),
+		AllPassed:     results.AllPassed(),
+		TotalCommits:  results.TotalCommits,
+		PassedCommits: results.PassedCommits,
+		RuleSummary:   results.RuleSummary,
+		CommitResults: make([]CommitResultOutput, 0, len(results.CommitResults)),
 	}
 
-	// Set overall status
-	if results.AllPassed() {
-		report.Status = "pass"
-	} else {
-		report.Status = "fail"
-	}
-
-	// Convert commit results
+	// Format each commit result
 	if len(results.CommitResults) > 0 {
-		report.CommitResults = make([]CommitResultOutput, 0, len(results.CommitResults))
-
 		for _, commitResult := range results.CommitResults {
-			// Create commit result
-			commit := CommitResultOutput{
-				Hash:    commitResult.CommitInfo.Hash,
-				Subject: commitResult.CommitInfo.Subject,
-				Body:    commitResult.CommitInfo.Body,
-				Passed:  commitResult.Passed,
-			}
-
-			// Add short hash if available
-			if len(commitResult.CommitInfo.Hash) >= 8 {
-				commit.ShortHash = commitResult.CommitInfo.Hash[:8]
-			}
-
-			// Convert rule results
-			if len(commitResult.RuleResults) > 0 {
-				commit.RuleResults = make([]RuleResultOutput, 0, len(commitResult.RuleResults))
-
-				for _, ruleResult := range commitResult.RuleResults {
-					// Create rule result
-					rule := RuleResultOutput{
-						ID:             ruleResult.RuleID,
-						Name:           ruleResult.RuleName,
-						Status:         string(ruleResult.Status),
-						Message:        ruleResult.Message,
-						VerboseMessage: ruleResult.VerboseMessage,
-						Help:           ruleResult.HelpMessage,
-					}
-
-					// Convert errors
-					if len(ruleResult.Errors) > 0 {
-						rule.Errors = make([]ValidationErrorOutput, 0, len(ruleResult.Errors))
-
-						for _, err := range ruleResult.Errors {
-							rule.Errors = append(rule.Errors, ValidationErrorOutput{
-								Rule:    err.Rule,
-								Code:    err.Code,
-								Message: err.Message,
-								Context: err.Context,
-							})
-						}
-					}
-
-					commit.RuleResults = append(commit.RuleResults, rule)
+			if commitResult.CommitInfo != nil {
+				commit := CommitResultOutput{
+					Hash:        commitResult.CommitInfo.Hash,
+					Subject:     commitResult.CommitInfo.Subject,
+					IsMerge:     commitResult.CommitInfo.IsMergeCommit,
+					Passed:      commitResult.Passed,
+					RuleResults: make([]RuleResultOutput, 0, len(commitResult.RuleResults)),
 				}
-			}
 
-			report.CommitResults = append(report.CommitResults, commit)
+				// In the new version, CommitInfo doesn't have CommitDate or Author fields
+				commit.CommitDate = time.Now().Format(time.RFC3339) // Use current time as placeholder
+				commit.Author = "Unknown"                           // Use placeholder
+
+				// Format rule results
+				errorCount := 0
+				warningCount := 0
+
+				if len(commitResult.RuleResults) > 0 {
+					for _, ruleResult := range commitResult.RuleResults {
+						// Create rule result
+						rule := RuleResultOutput{
+							ID:             ruleResult.RuleID,
+							Name:           ruleResult.RuleName,
+							Status:         string(ruleResult.Status),
+							Message:        ruleResult.Message,
+							VerboseMessage: ruleResult.VerboseMessage,
+							Help:           ruleResult.HelpMessage,
+						}
+
+						// Convert errors
+						if len(ruleResult.Errors) > 0 {
+							rule.Errors = make([]ValidationErrorOutput, 0, len(ruleResult.Errors))
+
+							for _, err := range ruleResult.Errors {
+								// ValidationError is already the correct type
+								validationErr := err
+								rule.Errors = append(rule.Errors, ValidationErrorOutput{
+									Rule:    validationErr.Rule,
+									Code:    validationErr.Code,
+									Message: validationErr.Message,
+									Context: validationErr.Context,
+								})
+							}
+						}
+
+						commit.RuleResults = append(commit.RuleResults, rule)
+					}
+				}
+
+				commit.ErrorCount = errorCount
+				commit.WarningCount = warningCount
+
+				report.CommitResults = append(report.CommitResults, commit)
+			}
 		}
 	}
 

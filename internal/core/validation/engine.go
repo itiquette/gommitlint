@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/errors"
 )
 
 // Engine is responsible for running validation rules against commits.
@@ -42,13 +43,13 @@ func (e *Engine) ValidateCommit(ctx context.Context, commit *domain.CommitInfo) 
 		}
 
 		// Check if the rule supports context
-		var errors []*domain.ValidationError
+		var ruleErrors []errors.ValidationError
 		if contextualRule, ok := rule.(domain.ContextualRule); ok {
 			// Use the context-aware validation method
-			errors = contextualRule.ValidateWithContext(ctx, commit)
+			ruleErrors = contextualRule.ValidateWithContext(ctx, commit)
 		} else {
 			// Fall back to the regular validation method
-			errors = rule.Validate(commit)
+			ruleErrors = rule.Validate(commit)
 		}
 
 		// Create rule result
@@ -58,11 +59,11 @@ func (e *Engine) ValidateCommit(ctx context.Context, commit *domain.CommitInfo) 
 			Message:        rule.Result(),
 			VerboseMessage: rule.VerboseResult(),
 			HelpMessage:    rule.Help(),
-			Errors:         errors,
+			Errors:         ruleErrors,
 		}
 
 		// Set status based on errors
-		if len(errors) > 0 {
+		if len(ruleErrors) > 0 {
 			ruleResult.Status = domain.StatusFailed
 			result.Passed = false
 		} else {

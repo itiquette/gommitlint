@@ -11,6 +11,7 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
+	appErrors "github.com/itiquette/gommitlint/internal/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -63,39 +64,45 @@ func setupSpellRule(testConfig testCase) (*rules.SpellRule, *domain.CommitInfo) 
 }
 
 // validateErrors checks that validation errors match expectations.
-func validateErrors(t *testing.T, testCase testCase, errors []*domain.ValidationError) {
+func validateErrors(t *testing.T, testCase testCase, errors []appErrors.ValidationError) {
 	t.Helper()
 	// Check for expected number of errors
 	assert.Len(t, errors, testCase.expectedErrors, "Incorrect number of errors")
 
+	// If no errors, nothing else to validate
+	if len(errors) == 0 {
+		return
+	}
+
+	// Access validation error directly
+	validationErr := errors[0]
+
 	// Check error code if specified
-	if testCase.expectedCode != "" && len(errors) > 0 {
-		assert.Equal(t, testCase.expectedCode, errors[0].Code,
+	if testCase.expectedCode != "" {
+		assert.Equal(t, testCase.expectedCode, validationErr.Code,
 			"Error code should match expected")
 	}
 
 	// Verify rule name is set in ValidationError
-	if len(errors) > 0 {
-		assert.Equal(t, "Spell", errors[0].Rule,
-			"Rule name should be set in ValidationError")
-	}
+	assert.Equal(t, "Spell", validationErr.Rule,
+		"Rule name should be set in ValidationError")
 
 	// Check context data
-	if testCase.expectedCode == string(domain.ValidationErrorSpelling) && len(errors) > 0 {
-		assert.Contains(t, errors[0].Context, "original",
+	if testCase.expectedCode == string(appErrors.ErrSpelling) {
+		assert.Contains(t, validationErr.Context, "original",
 			"Context should contain original misspelled word")
-		assert.Contains(t, errors[0].Context, "corrected",
+		assert.Contains(t, validationErr.Context, "corrected",
 			"Context should contain corrected spelling")
-	} else if testCase.expectedCode == string(domain.ValidationErrorUnknown) && len(errors) > 0 {
-		assert.Contains(t, errors[0].Context, "locale",
+	} else if testCase.expectedCode == string(appErrors.ErrUnknown) {
+		assert.Contains(t, validationErr.Context, "locale",
 			"Context should contain the invalid locale")
-		assert.Contains(t, errors[0].Context, "supported_locales",
+		assert.Contains(t, validationErr.Context, "supported_locales",
 			"Context should contain supported locales")
 	}
 }
 
 // validateExpectedWords checks for expected words in error messages.
-func validateExpectedWords(t *testing.T, testCase testCase, errors []*domain.ValidationError) {
+func validateExpectedWords(t *testing.T, testCase testCase, errors []appErrors.ValidationError) {
 	t.Helper()
 
 	if testCase.expectedWords == nil || len(errors) == 0 {
@@ -112,12 +119,16 @@ func validateExpectedWords(t *testing.T, testCase testCase, errors []*domain.Val
 				break
 			}
 
-			// Also check in context
-			for _, contextValue := range err.Context {
-				if strings.Contains(contextValue, word) {
-					found = true
+			// Access validation error directly
+			validationErr := err
+			{
+				// Check in context
+				for _, contextValue := range validationErr.Context {
+					if strings.Contains(contextValue, word) {
+						found = true
 
-					break
+						break
+					}
 				}
 			}
 		}
@@ -130,7 +141,7 @@ func validateExpectedWords(t *testing.T, testCase testCase, errors []*domain.Val
 }
 
 // validateRuleMethods checks rule helper methods (Result, Help, Name, VerboseResult).
-func validateRuleMethods(t *testing.T, testCase testCase, rule *rules.SpellRule, errors []*domain.ValidationError) {
+func validateRuleMethods(t *testing.T, testCase testCase, rule *rules.SpellRule, errors []appErrors.ValidationError) {
 	t.Helper()
 	// Verify Name() method
 	assert.Equal(t, "Spell", rule.Name(), "Rule name should be 'Spell'")
@@ -153,7 +164,7 @@ func validateRuleMethods(t *testing.T, testCase testCase, rule *rules.SpellRule,
 }
 
 // validateHelpMethod checks the rule's Help method output.
-func validateHelpMethod(t *testing.T, testCase testCase, rule *rules.SpellRule, errors []*domain.ValidationError) {
+func validateHelpMethod(t *testing.T, testCase testCase, rule *rules.SpellRule, errors []appErrors.ValidationError) {
 	t.Helper()
 
 	helpText := rule.Help()
@@ -162,15 +173,20 @@ func validateHelpMethod(t *testing.T, testCase testCase, rule *rules.SpellRule, 
 	if testCase.expectedErrors == 0 {
 		assert.Equal(t, "No errors to fix", helpText,
 			"Help should indicate no errors to fix")
-	} else if len(errors) > 0 && domain.ValidationErrorCode(errors[0].Code) == domain.ValidationErrorUnknown {
-		assert.Contains(t, helpText, "supported locale",
-			"Help should mention supported locales")
-	} else if len(errors) > 0 {
-		assert.Contains(t, helpText, "Fix the following misspellings",
-			"Help should provide guidance")
 
-		// Check if help text contains error details
-		if len(errors) > 0 {
+		return
+	}
+
+	if len(errors) > 0 {
+		validationErr := errors[0]
+		if validationErr.Code == "unknown_error" {
+			assert.Contains(t, helpText, "supported locale",
+				"Help should mention supported locales")
+		} else {
+			assert.Contains(t, helpText, "Fix the following misspellings",
+				"Help should provide guidance")
+
+			// Check if help text contains error details
 			assert.Contains(t, helpText, errors[0].Error(),
 				"Help should include error details")
 		}
@@ -196,7 +212,7 @@ func validateVerboseResult(t *testing.T, testCase testCase, rule *rules.SpellRul
 			assert.Contains(t, verboseText, "US (American English)",
 				"Verbose output should mention American English")
 		}
-	} else if testCase.expectedCode == string(domain.ValidationErrorUnknown) {
+	} else if testCase.expectedCode == string(appErrors.ErrUnknown) {
 		assert.Contains(t, verboseText, "Invalid locale",
 			"Verbose output should mention invalid locale")
 		assert.Contains(t, verboseText, testCase.locale,
@@ -231,7 +247,7 @@ func TestSpellRule(t *testing.T) {
 			subject:        "This is definately a misspelling.", //nolint
 			locale:         "US",
 			expectedErrors: 1,
-			expectedCode:   string(domain.ValidationErrorSpelling),
+			expectedCode:   string(appErrors.ErrSpelling),
 			expectedWords:  []string{"definately", "definitely"}, //nolint
 		},
 		{
@@ -239,7 +255,7 @@ func TestSpellRule(t *testing.T) {
 			subject:        "We occured a misspelling and we beleive it needs fixing.", //nolint
 			locale:         "US",
 			expectedErrors: 2,
-			expectedCode:   string(domain.ValidationErrorSpelling),
+			expectedCode:   string(appErrors.ErrSpelling),
 			expectedWords:  []string{"occured", "beleive"}, //nolint
 		},
 		{
@@ -268,7 +284,7 @@ func TestSpellRule(t *testing.T) {
 			subject:        "This is a test.",
 			locale:         "FR",
 			expectedErrors: 1,
-			expectedCode:   string(domain.ValidationErrorUnknown),
+			expectedCode:   string(appErrors.ErrUnknown),
 			expectedWords:  []string{"unknown locale"},
 		},
 		{
@@ -291,7 +307,7 @@ func TestSpellRule(t *testing.T) {
 			body:           "The documentaiton was incorrect and has been fixed.", //nolint
 			locale:         "US",
 			expectedErrors: 1,
-			expectedCode:   string(domain.ValidationErrorSpelling),
+			expectedCode:   string(appErrors.ErrSpelling),
 			expectedWords:  []string{"documentaiton", "documentation"}, //nolint
 		},
 		{
@@ -300,7 +316,7 @@ func TestSpellRule(t *testing.T) {
 			locale:         "US",
 			ignoreWords:    []string{"documentaiton"}, //nolint
 			expectedErrors: 1,                         // Only one error because we're ignoring "documentation"
-			expectedCode:   string(domain.ValidationErrorSpelling),
+			expectedCode:   string(appErrors.ErrSpelling),
 			expectedWords:  []string{"configuraiton"}, //nolint
 		},
 		{
@@ -309,7 +325,7 @@ func TestSpellRule(t *testing.T) {
 			locale:         "US",
 			customWords:    map[string]string{"golang": "Go"},
 			expectedErrors: 1,
-			expectedCode:   string(domain.ValidationErrorSpelling),
+			expectedCode:   string(appErrors.ErrSpelling),
 			expectedWords:  []string{"golang", "Go"},
 		},
 		{
@@ -318,7 +334,7 @@ func TestSpellRule(t *testing.T) {
 			locale:         "US",
 			maxErrors:      1, // Only report the first error
 			expectedErrors: 1,
-			expectedCode:   string(domain.ValidationErrorSpelling),
+			expectedCode:   string(appErrors.ErrSpelling),
 		},
 	}
 

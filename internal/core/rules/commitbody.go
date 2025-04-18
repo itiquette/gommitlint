@@ -5,49 +5,58 @@
 package rules
 
 import (
-	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/domain"
-	"github.com/itiquette/gommitlint/internal/errorx"
+	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
 
-// Signs off commit messages line.
-var commitBodySignOffRegex = regexp.MustCompile(`^Signed-off-by: (.+) <(.+)>$`)
-
-// CommitBodyRule validates the presence and format of a commit message body.
-// This rule helps teams maintain high-quality Git history by ensuring commit
-// messages have properly formatted bodies that explain the changes in detail.
+// - Ensuring the body contains meaningful content, not just sign-offs.
 type CommitBodyRule struct {
-	errors           []*domain.ValidationError
+	*BaseRule
 	requireBody      bool
+	minLines         int
 	allowSignOffOnly bool
 }
 
 // CommitBodyOption is a function that configures a CommitBodyRule.
 type CommitBodyOption func(*CommitBodyRule)
 
-// WithRequireBody configures whether the rule requires a commit body.
+// WithRequiredBody configures the rule to require a commit body.
+func WithRequiredBody() CommitBodyOption {
+	return func(r *CommitBodyRule) {
+		r.requireBody = true
+	}
+}
+
+// WithRequireBody configures whether a commit body is required based on a boolean.
 func WithRequireBody(require bool) CommitBodyOption {
 	return func(r *CommitBodyRule) {
 		r.requireBody = require
 	}
 }
 
-// WithAllowSignOffOnly configures whether the rule allows bodies with only sign-offs.
+// WithAllowSignOffOnly configures whether a body with only sign-off information is allowed.
 func WithAllowSignOffOnly(allow bool) CommitBodyOption {
 	return func(r *CommitBodyRule) {
 		r.allowSignOffOnly = allow
 	}
 }
 
-// NewCommitBodyRule creates a new CommitBodyRule with the given options.
+// WithMinimumLines sets the minimum number of lines required in the body.
+func WithMinimumLines(lines int) CommitBodyOption {
+	return func(r *CommitBodyRule) {
+		r.minLines = lines
+	}
+}
+
+// NewCommitBodyRule creates a new CommitBodyRule with the specified options.
 func NewCommitBodyRule(options ...CommitBodyOption) *CommitBodyRule {
 	rule := &CommitBodyRule{
-		errors:           []*domain.ValidationError{},
-		requireBody:      true,  // Default to requiring body
-		allowSignOffOnly: false, // Default to not allowing sign-off only
+		BaseRule:         NewBaseRule("CommitBody"),
+		requireBody:      false, // Default to not requiring body
+		minLines:         1,     // Default to requiring at least 1 line
+		allowSignOffOnly: false, // Default to not allowing only sign-off in body
 	}
 
 	// Apply options
@@ -58,19 +67,16 @@ func NewCommitBodyRule(options ...CommitBodyOption) *CommitBodyRule {
 	return rule
 }
 
-// Name returns the rule identifier.
-func (r *CommitBodyRule) Name() string {
-	return "CommitBodyRule"
-}
-
 // Validate validates the commit body.
-func (r *CommitBodyRule) Validate(commit *domain.CommitInfo) []*domain.ValidationError {
+func (r *CommitBodyRule) Validate(commit *domain.CommitInfo) []appErrors.ValidationError {
 	// Reset errors
-	r.errors = []*domain.ValidationError{}
+	r.ClearErrors()
+	// Mark the rule as having been run
+	r.MarkAsRun()
 
 	// Skip validation if body is not required
 	if !r.requireBody {
-		return r.errors
+		return r.Errors()
 	}
 
 	// Split message into lines
@@ -78,62 +84,66 @@ func (r *CommitBodyRule) Validate(commit *domain.CommitInfo) []*domain.Validatio
 
 	// Check minimum structure
 	if len(lines) < 3 {
-		r.addError(
-			domain.ValidationErrorInvalidBody,
-			"Commit message requires a body explaining the changes",
+		r.AddErrorWithContext(
+			appErrors.ErrInvalidBody,
+			"commit requires a body, but only subject was provided",
 			map[string]string{
-				"actual_lines": strconv.Itoa(len(lines)),
-				"min_lines":    "3",
+				"lines": "1",
 			},
 		)
 
-		return r.errors
+		return r.Errors()
 	}
 
-	// Check for blank line after subject
-	if lines[1] != "" {
-		r.addError(
-			domain.ValidationErrorInvalidBody,
-			"Commit message must have exactly one empty line between the subject and the body",
+	// Check that the second line is empty (proper separation)
+	if len(lines) >= 2 && strings.TrimSpace(lines[1]) != "" {
+		r.AddErrorWithContext(
+			appErrors.ErrInvalidBody,
+			"missing empty line between subject and body",
 			map[string]string{
-				"found": lines[1],
+				"second_line": lines[1],
 			},
 		)
 
-		return r.errors
+		return r.Errors()
 	}
 
-	// Check if first body line is a sign-off
-	firstBodyLine := strings.TrimSpace(lines[2])
-	if firstBodyLine == "" {
-		r.addError(
-			domain.ValidationErrorInvalidBody,
-			"Commit message must have a non-empty body text",
-			nil,
-		)
+	// Check that body is not empty
+	bodyLines := lines[2:]
 
-		return r.errors
-	}
-
-	if commitBodySignOffRegex.MatchString(firstBodyLine) && !r.allowSignOffOnly {
-		r.addError(
-			domain.ValidationErrorInvalidBody,
-			"Commit message body should not start with a sign-off line",
+	trimmedBody := strings.TrimSpace(strings.Join(bodyLines, "\n"))
+	if trimmedBody == "" {
+		r.AddErrorWithContext(
+			appErrors.ErrInvalidBody,
+			"commit has a blank line after subject but no non-empty body",
 			map[string]string{
-				"found": firstBodyLine,
+				"total_lines": "0",
 			},
 		)
 
-		return r.errors
+		return r.Errors()
 	}
 
-	// Check for meaningful content beyond sign-off lines
+	// If allowSignOffOnly is not enabled, check that body doesn't start with sign-off lines
+	firstBodyLine := strings.TrimSpace(bodyLines[0])
+	if !r.allowSignOffOnly && isSignOffLine(firstBodyLine) {
+		r.AddErrorWithContext(
+			appErrors.ErrInvalidBody,
+			"body starts with a sign-off line instead of meaningful content",
+			map[string]string{
+				"first_line": firstBodyLine,
+			},
+		)
+
+		return r.Errors()
+	}
+
+	// If allowSignOffOnly is not enabled, check that body contains meaningful content, not just sign-offs
 	if !r.allowSignOffOnly {
 		hasContent := false
 
-		for _, line := range lines[2:] {
-			trimmed := strings.TrimSpace(line)
-			if trimmed != "" && !commitBodySignOffRegex.MatchString(trimmed) {
+		for _, line := range bodyLines {
+			if strings.TrimSpace(line) != "" && !isSignOffLine(line) {
 				hasContent = true
 
 				break
@@ -141,35 +151,30 @@ func (r *CommitBodyRule) Validate(commit *domain.CommitInfo) []*domain.Validatio
 		}
 
 		if !hasContent {
-			r.addError(
-				domain.ValidationErrorInvalidBody,
-				"Commit message body is required with meaningful content beyond sign-off lines",
+			r.AddErrorWithContext(
+				appErrors.ErrInvalidBody,
+				"body contains only sign-off lines without meaningful content",
 				nil,
 			)
 
-			return r.errors
+			return r.Errors()
 		}
 	}
 
-	return r.errors
-}
-
-// Result returns a concise string representation of the validation result.
-func (r *CommitBodyRule) Result() string {
-	if len(r.errors) > 0 {
-		// Return a concise error message
-		return "Invalid commit message body"
-	}
-
-	return "Commit body is valid"
+	return r.Errors()
 }
 
 // VerboseResult returns a more detailed explanation for verbose mode.
 func (r *CommitBodyRule) VerboseResult() string {
-	if len(r.errors) > 0 {
-		// All errors use ValidationErrorInvalidBody code, so differentiate by message content
-		if domain.ValidationErrorCode(r.errors[0].Code) == domain.ValidationErrorInvalidBody {
-			msg := r.errors[0].Message
+	if r.HasErrors() {
+		// Get errors from the BaseRule
+		errors := r.Errors()
+
+		// All errors use ErrInvalidBody code, so differentiate by message content
+		if len(errors) > 0 {
+			// errors[0] is already a ValidationError, so no need for type assertion
+			msg := errors[0].Message
+
 			if strings.Contains(msg, "requires a body") {
 				return "Commit message lacks a body. A well-formed commit should have a subject, blank line, and descriptive body."
 			} else if strings.Contains(msg, "empty line") {
@@ -181,55 +186,116 @@ func (r *CommitBodyRule) VerboseResult() string {
 			} else if strings.Contains(msg, "meaningful content") {
 				return "Body contains only sign-off lines. Include actual content explaining the purpose and impact of changes."
 			}
-		}
 
-		// Default case
-		return r.errors[0].Error()
+			// Default case
+			return msg
+		}
 	}
 
 	return "Commit body follows proper format with subject, blank line separator, and meaningful content"
 }
 
-// Help returns guidance on how to fix rule violations.
+// Result returns a concise validation result.
+func (r *CommitBodyRule) Result() string {
+	if r.HasErrors() {
+		return "Invalid commit body"
+	}
+
+	return "Valid commit body"
+}
+
+// Help returns guidance on how to fix the rule violation.
 func (r *CommitBodyRule) Help() string {
-	if len(r.errors) == 0 {
+	if !r.HasErrors() {
 		return "No errors to fix"
 	}
 
-	// Use templated help messages based on the error type
-	var helpMessage string
+	errors := r.Errors()
+	if len(errors) > 0 {
+		// errors[0] is already a ValidationError, so no need for type assertion
+		msg := errors[0].Message
 
-	if domain.ValidationErrorCode(r.errors[0].Code) == domain.ValidationErrorInvalidBody {
-		// Extract helpful details from the error message
-		details := "format the body correctly"
-		if r.errors[0].Message != "" {
-			details = r.errors[0].Message
+		// Provide specific help based on the error message
+		if strings.Contains(msg, "requires a body") {
+			return `Commit messages should include a descriptive body after the subject line.
+
+A proper commit message format is:
+<subject line>
+<BLANK LINE>
+<body content>
+
+Example:
+Fix bug in user authentication
+
+This patch fixes an issue where login attempts with valid 
+credentials would fail when the username contained special 
+characters. The fix properly escapes special characters
+in the username before validation.`
+		} else if strings.Contains(msg, "empty line") {
+			return `Ensure there is a blank line between the subject and body of your commit message.
+
+A proper commit message format is:
+<subject line>
+<BLANK LINE>
+<body content>
+
+Example:
+Fix bug in user authentication
+
+This patch fixes an issue with the authentication module.`
+		} else if strings.Contains(msg, "non-empty body") || strings.Contains(msg, "meaningful content") {
+			return `Include meaningful content in your commit message body to explain:
+- What changes were made and why
+- Any important technical details
+- Related issues or references
+
+Avoid commits with empty bodies or bodies containing only sign-off information.`
+		} else if strings.Contains(msg, "sign-off line") {
+			return `Start your commit body with meaningful content that explains the changes.
+
+A proper commit message format is:
+<subject line>
+<BLANK LINE>
+<explanation of changes>
+<BLANK LINE>
+<Sign-off lines or other footers>
+
+Example:
+Fix bug in user authentication
+
+This patch fixes an issue where login attempts would fail.
+The root cause was improper validation of special characters.
+
+Signed-off-by: Developer Name <dev@example.com>`
 		}
-
-		// Use the error template helper
-		helpMessage = errorx.FormatHelp(errorx.ErrInvalidBody, details)
-	} else {
-		// Generic help for unknown errors
-		helpMessage = r.errors[0].Error()
 	}
 
-	// Return structured help message
-	return `Ensure your commit message follows this structure:
-1. Subject line (brief summary)
-2. One blank line
-3. Body with detailed explanation
-
-` + helpMessage
+	// Default help
+	return `Ensure your commit message has a proper structure with:
+1. A concise subject line
+2. A blank line
+3. A descriptive body explaining what changes were made and why
+4. Optional sign-off lines at the end of the message, not the beginning`
 }
 
-// Errors returns all validation errors found.
-func (r *CommitBodyRule) Errors() []*domain.ValidationError {
-	return r.errors
-}
+// isSignOffLine checks if a line is a sign-off line.
+func isSignOffLine(line string) bool {
+	line = strings.TrimSpace(line)
+	prefixes := []string{
+		"Signed-off-by:",
+		"Co-authored-by:",
+		"Reviewed-by:",
+		"Tested-by:",
+		"Acked-by:",
+		"Cc:",
+		"Reported-by:",
+	}
 
-// addError adds a structured validation error.
-func (r *CommitBodyRule) addError(_ domain.ValidationErrorCode, message string, context map[string]string) {
-	// Create a validation error with context in one step
-	err := domain.NewValidationErrorWithContext(r.Name(), string(domain.ValidationErrorInvalidBody), message, context)
-	r.errors = append(r.errors, err)
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(line, prefix) {
+			return true
+		}
+	}
+
+	return false
 }

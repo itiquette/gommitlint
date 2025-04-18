@@ -2,15 +2,20 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
+// Package rules provides validation rules for commit messages.
+// This file implements the SignedIdentity rule which verifies cryptographic
+// signatures on commits. It delegates the actual verification work to the
+// sigverify sub-package, which contains the specialized
+// implementation for different signature types (GPG, SSH).
 package rules
 
 import (
 	"fmt"
 	"strings"
 
-	"github.com/itiquette/gommitlint/internal/core/rules/signedidentityrule"
+	"github.com/itiquette/gommitlint/internal/core/rules/sigverify"
 	"github.com/itiquette/gommitlint/internal/domain"
-	"github.com/itiquette/gommitlint/internal/errorx"
+	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
 
 // Security constants for key strength requirements.
@@ -32,7 +37,7 @@ const (
 )
 
 type SignedIdentityRule struct {
-	errors        []*domain.ValidationError
+	*BaseRule
 	Identity      string // Email or name of the signer
 	SignatureType string // "GPG" or "SSH"
 	KeyDir        string // Directory used for key verification
@@ -51,7 +56,7 @@ func WithKeyDirectory(keyDir string) SignedIdentityOption {
 // NewSignedIdentityRule creates a new SignedIdentityRule with the specified options.
 func NewSignedIdentityRule(options ...SignedIdentityOption) *SignedIdentityRule {
 	rule := &SignedIdentityRule{
-		errors: []*domain.ValidationError{},
+		BaseRule: NewBaseRule("SignedIdentity"),
 	}
 
 	// Apply options
@@ -62,14 +67,9 @@ func NewSignedIdentityRule(options ...SignedIdentityOption) *SignedIdentityRule 
 	return rule
 }
 
-// Name returns the rule identifier.
-func (r *SignedIdentityRule) Name() string {
-	return "SignedIdentity"
-}
-
 // Result returns a concise string representation of the rule's status.
 func (r *SignedIdentityRule) Result() string {
-	if len(r.errors) > 0 {
+	if r.HasErrors() {
 		return "Invalid signature"
 	}
 
@@ -78,21 +78,27 @@ func (r *SignedIdentityRule) Result() string {
 
 // VerboseResult returns a more detailed explanation for verbose mode.
 func (r *SignedIdentityRule) VerboseResult() string {
-	if len(r.errors) > 0 {
+	if r.HasErrors() {
+		// Get the first error
+		firstErr := r.Errors()[0]
+
+		// firstErr is already a ValidationError, so no need for type assertion
+		validationErr := firstErr
+
 		// Get the error code
-		code := r.errors[0].Code
+		code := validationErr.Code
 
 		switch code {
-		case string(errorx.ErrCommitNil):
+		case string(appErrors.ErrCommitNil):
 			return "Cannot verify signature: commit object is nil"
 
-		case string(errorx.ErrNoKeyDir):
+		case string(appErrors.ErrNoKeyDir):
 			return "Cannot verify signature: no trusted key directory provided"
 
-		case string(errorx.ErrInvalidKeyDir):
+		case string(appErrors.ErrInvalidKeyDir):
 			var errorMsg string
 
-			if ctx := r.errors[0].Context; ctx != nil {
+			if ctx := validationErr.Context; ctx != nil {
 				if v, ok := ctx["error"]; ok {
 					errorMsg = v
 				}
@@ -100,13 +106,13 @@ func (r *SignedIdentityRule) VerboseResult() string {
 
 			return "Cannot verify signature: invalid key directory - " + errorMsg
 
-		case string(errorx.ErrMissingSignature):
+		case string(appErrors.ErrMissingSignature):
 			return "No cryptographic signature found on commit"
 
-		case string(errorx.ErrInvalidSignatureFormat):
+		case string(appErrors.ErrInvalidSignatureFormat):
 			var errorMsg string
 
-			if ctx := r.errors[0].Context; ctx != nil {
+			if ctx := validationErr.Context; ctx != nil {
 				if v, ok := ctx["error"]; ok {
 					errorMsg = v
 				}
@@ -114,13 +120,13 @@ func (r *SignedIdentityRule) VerboseResult() string {
 
 			return "Invalid " + r.SignatureType + " signature format: " + errorMsg
 
-		case string(errorx.ErrKeyNotTrusted):
+		case string(appErrors.ErrKeyNotTrusted):
 			return "Signature verified but the key is not in the trusted keys directory"
 
-		case string(errorx.ErrWeakKey):
+		case string(appErrors.ErrWeakKey):
 			var bits, required string
 
-			if ctx := r.errors[0].Context; ctx != nil {
+			if ctx := validationErr.Context; ctx != nil {
 				if v, ok := ctx["key_bits"]; ok {
 					bits = v
 				}
@@ -132,10 +138,10 @@ func (r *SignedIdentityRule) VerboseResult() string {
 
 			return "Weak " + r.SignatureType + " key detected: " + bits + " bits (minimum required: " + required + " bits)"
 
-		case string(errorx.ErrVerificationFailed):
+		case string(appErrors.ErrVerificationFailed):
 			var errorMsg string
 
-			if ctx := r.errors[0].Context; ctx != nil {
+			if ctx := validationErr.Context; ctx != nil {
 				if v, ok := ctx["error"]; ok {
 					errorMsg = v
 				}
@@ -143,11 +149,11 @@ func (r *SignedIdentityRule) VerboseResult() string {
 
 			return "Signature verification failed: " + errorMsg
 
-		case string(errorx.ErrUnknownSigFormat):
+		case string(appErrors.ErrUnknownSigFormat):
 			return "Unknown signature type, cannot verify identity"
 
 		default:
-			return r.errors[0].Error()
+			return validationErr.Error()
 		}
 	}
 
@@ -156,42 +162,61 @@ func (r *SignedIdentityRule) VerboseResult() string {
 
 // Help returns a description of how to fix the rule violation.
 func (r *SignedIdentityRule) Help() string {
-	if len(r.errors) == 0 {
+	if !r.HasErrors() {
 		return "No errors to fix"
 	}
 
 	// First check for specific error codes
-	if len(r.errors) > 0 {
-		code := r.errors[0].Code
+	if r.ErrorCount() > 0 {
+		// Get the first error
+		firstErr := r.Errors()[0]
+
+		// firstErr is already a ValidationError, so no need for type assertion
+		validationErr := firstErr
+
+		code := validationErr.Code
 
 		switch code {
-		case string(errorx.ErrCommitNil):
+		case string(appErrors.ErrCommitNil):
 			return "A valid commit object is required for signature verification"
 
-		case string(errorx.ErrNoKeyDir):
+		case string(appErrors.ErrNoKeyDir):
 			return "Please provide a valid directory containing trusted public keys for verification"
 
-		case string(errorx.ErrInvalidKeyDir):
+		case string(appErrors.ErrInvalidKeyDir):
 			return "The specified key directory is invalid or inaccessible. Please provide a valid path to a directory containing trusted public keys"
 
-		case string(errorx.ErrMissingSignature):
+		case string(appErrors.ErrMissingSignature):
 			return "This commit is not signed. Please configure Git to sign your commits with either GPG or SSH"
 
-		case string(errorx.ErrInvalidSignatureFormat):
+		case string(appErrors.ErrInvalidSignatureFormat):
 			return "The signature format is invalid or corrupted. Please ensure you're using a properly configured signing key"
 
-		case string(errorx.ErrKeyNotTrusted):
+		case string(appErrors.ErrKeyNotTrusted):
 			return "The signature was created with a key that is not in the trusted keys directory. Add the public key to your trusted keys directory"
 
-		case string(errorx.ErrWeakKey):
-			keyType := r.errors[0].Context["key_type"]
-			bits := r.errors[0].Context["key_bits"]
-			required := r.errors[0].Context["required_bits"]
+		case string(appErrors.ErrWeakKey):
+			// Access context fields safely with type assertion
+			var keyType, bits, required string
+
+			if validationErr.Context != nil {
+				if v, ok := validationErr.Context["key_type"]; ok {
+					keyType = v
+				}
+
+				if v, ok := validationErr.Context["key_bits"]; ok {
+					bits = v
+				}
+
+				if v, ok := validationErr.Context["required_bits"]; ok {
+					required = v
+				}
+			}
 
 			return fmt.Sprintf("The %s key used for signing (%s bits) does not meet the minimum strength requirement of %s bits. Please generate a stronger key",
 				keyType, bits, required)
 
-		case string(errorx.ErrVerificationFailed):
+		case string(appErrors.ErrVerificationFailed):
 			return "Signature verification failed. The signature may be invalid or the commit content may have been altered"
 		}
 	}
@@ -207,22 +232,21 @@ func (r *SignedIdentityRule) Help() string {
 		MinimumRSABits, MinimumECBits)
 }
 
-// Errors returns validation errors.
-func (r *SignedIdentityRule) Errors() []*domain.ValidationError {
-	return r.errors
-}
-
 // Validate performs the validation check for the rule.
-func (r *SignedIdentityRule) Validate(commit *domain.CommitInfo) []*domain.ValidationError {
+func (r *SignedIdentityRule) Validate(commit *domain.CommitInfo) []appErrors.ValidationError {
 	// Reset errors
-	r.errors = []*domain.ValidationError{}
+	r.ClearErrors()
 
 	// Validate commit
 	if commit == nil {
-		err := errorx.NewSignatureValidationError(r.Name(), errorx.ErrCommitNil, "commit cannot be nil")
-		r.errors = append(r.errors, err)
+		r.AddAppError(
+			appErrors.ErrCommitNil,
+			"commit cannot be nil",
+		)
 
-		return r.errors
+		r.MarkAsRun()
+
+		return r.Errors()
 	}
 
 	// Get signature from commit
@@ -230,30 +254,37 @@ func (r *SignedIdentityRule) Validate(commit *domain.CommitInfo) []*domain.Valid
 
 	// Check for empty signature
 	if signature == "" || len(strings.TrimSpace(signature)) == 0 {
-		err := errorx.NewSignatureValidationError(r.Name(), errorx.ErrMissingSignature, "no signature provided")
-		r.errors = append(r.errors, err)
+		r.AddAppError(
+			appErrors.ErrMissingSignature,
+			"no signature provided",
+		)
 
-		return r.errors
+		r.MarkAsRun()
+
+		return r.Errors()
 	}
 
 	// Validate key directory if specified
 	if r.KeyDir != "" {
 		// Sanitize keyDir to prevent path traversal
-		_, err := signedidentityrule.SanitizePath(r.KeyDir)
+		_, err := sigverify.SanitizePath(r.KeyDir)
 		if err != nil {
-			errorMsg := fmt.Sprintf("invalid key directory: %s", err)
-			contextMap := map[string]string{
-				"key_dir": r.KeyDir,
-				"error":   err.Error(),
-			}
-			validationErr := errorx.NewSignatureErrorWithContext(r.Name(), errorx.ErrInvalidKeyDir, errorMsg, contextMap)
-			r.errors = append(r.errors, validationErr)
+			r.AddErrorWithContext(
+				appErrors.ErrInvalidKeyDir,
+				fmt.Sprintf("invalid key directory: %s", err),
+				map[string]string{
+					"key_dir": r.KeyDir,
+					"error":   err.Error(),
+				},
+			)
 
-			return r.errors
+			r.MarkAsRun()
+
+			return r.Errors()
 		}
 
 		// Auto-detect signature type
-		sigType := signedidentityrule.DetectSignatureType(signature)
+		sigType := sigverify.DetectSignatureType(signature)
 		r.SignatureType = sigType
 
 		// For the simplified version, we'll just do format validation
@@ -265,17 +296,17 @@ func (r *SignedIdentityRule) Validate(commit *domain.CommitInfo) []*domain.Valid
 			// For now, we'll just simulate a verification
 			if !strings.Contains(signature, "-----BEGIN PGP SIGNATURE-----") ||
 				!strings.Contains(signature, "-----END PGP SIGNATURE-----") {
-				contextMap := map[string]string{
-					"signature_type": GPG,
-				}
-				validationErr := errorx.NewSignatureErrorWithContext(
-					r.Name(),
-					errorx.ErrInvalidSignatureFormat,
+				r.AddErrorWithContext(
+					appErrors.ErrInvalidSignatureFormat,
 					"incomplete GPG signature (missing begin/end markers)",
-					contextMap)
-				r.errors = append(r.errors, validationErr)
+					map[string]string{
+						"signature_type": GPG,
+					},
+				)
 
-				return r.errors
+				r.MarkAsRun()
+
+				return r.Errors()
 			}
 
 			r.Identity = "GPG Signature Format Verified"
@@ -284,47 +315,49 @@ func (r *SignedIdentityRule) Validate(commit *domain.CommitInfo) []*domain.Valid
 			// For now, we'll just simulate a verification
 			if strings.Contains(signature, "-----BEGIN SSH SIGNATURE-----") &&
 				!strings.Contains(signature, "-----END SSH SIGNATURE-----") {
-				contextMap := map[string]string{
-					"signature_type": SSH,
-				}
-				validationErr := errorx.NewSignatureErrorWithContext(
-					r.Name(),
-					errorx.ErrInvalidSignatureFormat,
+				r.AddErrorWithContext(
+					appErrors.ErrInvalidSignatureFormat,
 					"incomplete SSH signature (missing end marker)",
-					contextMap)
-				r.errors = append(r.errors, validationErr)
+					map[string]string{
+						"signature_type": SSH,
+					},
+				)
 
-				return r.errors
+				r.MarkAsRun()
+
+				return r.Errors()
 			}
 
 			r.Identity = "SSH Signature Format Verified"
 
 		default:
-			contextMap := map[string]string{
-				"signature": signature[:safeMin(len(signature), 20)],
-			}
-			err := errorx.NewSignatureErrorWithContext(
-				r.Name(),
-				errorx.ErrUnknownSigFormat,
+			r.AddErrorWithContext(
+				appErrors.ErrUnknownSigFormat,
 				"unknown signature type",
-				contextMap)
-			r.errors = append(r.errors, err)
+				map[string]string{
+					"signature": signature[:safeMin(len(signature), 20)],
+				},
+			)
 
-			return r.errors
+			r.MarkAsRun()
+
+			return r.Errors()
 		}
 	} else {
 		// If no key directory is specified, we can only verify signature format
-		sigType := signedidentityrule.DetectSignatureType(signature)
+		sigType := sigverify.DetectSignatureType(signature)
 		r.SignatureType = sigType
 		r.Identity = "Signature format verified (no key directory provided for verification)"
 	}
 
-	return r.errors
+	r.MarkAsRun()
+
+	return r.Errors()
 }
 
 // Removed unused extractErrorContext function
 
-// Removed unused detectSignatureType function in favor of direct calls to signedidentityrule.DetectSignatureType
+// Removed unused detectSignatureType function in favor of direct calls to sigverify.DetectSignatureType
 
 // safeMin returns the minimum of two integers (utility function for safety).
 func safeMin(a, b int) int {

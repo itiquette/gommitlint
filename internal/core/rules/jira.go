@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/domain"
+	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
 
 // Common regex patterns compiled once at package level.
@@ -29,7 +30,7 @@ var (
 //  1. Subject-based validation - Checks for Jira keys in the commit subject line
 //  2. Body-based validation - Checks for Jira keys in dedicated "Refs:" lines in the commit body
 type JiraReferenceRule struct {
-	errors []*domain.ValidationError
+	*BaseRule
 
 	// Store information for verbose output
 	foundKeys       []string
@@ -65,7 +66,7 @@ func WithConventionalCommit() JiraReferenceOption {
 // NewJiraReferenceRule creates a new JiraReferenceRule with the specified options.
 func NewJiraReferenceRule(options ...JiraReferenceOption) *JiraReferenceRule {
 	rule := &JiraReferenceRule{
-		errors:          make([]*domain.ValidationError, 0),
+		BaseRule:        NewBaseRule("JiraReference"),
 		foundKeys:       []string{},
 		validateBodyRef: false,
 		validProjects:   []string{},
@@ -80,14 +81,11 @@ func NewJiraReferenceRule(options ...JiraReferenceOption) *JiraReferenceRule {
 	return rule
 }
 
-// Name returns the name of the rule.
-func (j *JiraReferenceRule) Name() string {
-	return "JiraReference"
-}
+// The Name method is provided by BaseRule.
 
 // Result returns a concise rule message.
 func (j *JiraReferenceRule) Result() string {
-	if len(j.errors) > 0 {
+	if j.HasErrors() {
 		return "Missing or invalid Jira reference"
 	}
 
@@ -96,9 +94,17 @@ func (j *JiraReferenceRule) Result() string {
 
 // VerboseResult returns a more detailed explanation for verbose mode.
 func (j *JiraReferenceRule) VerboseResult() string {
-	if len(j.errors) > 0 {
+	if j.HasErrors() {
+		errors := j.Errors()
+		if len(errors) == 0 {
+			return "Unknown error"
+		}
+
+		// errors[0] is already a ValidationError, so no need for type assertion
+		validationErr := errors[0]
+
 		// Return a more detailed error message in verbose mode
-		switch j.errors[0].Code {
+		switch validationErr.Code {
 		case "empty_subject":
 			return "Commit subject is empty. Cannot validate Jira references."
 		case "missing_jira_key_body":
@@ -108,7 +114,7 @@ func (j *JiraReferenceRule) VerboseResult() string {
 		case "key_not_at_end":
 			var key string
 
-			for k, v := range j.errors[0].Context {
+			for k, v := range validationErr.Context {
 				if k == "key" {
 					key = v
 
@@ -120,7 +126,7 @@ func (j *JiraReferenceRule) VerboseResult() string {
 		case "invalid_project":
 			var project string
 
-			for k, v := range j.errors[0].Context {
+			for k, v := range validationErr.Context {
 				if k == "project" {
 					project = v
 
@@ -137,7 +143,7 @@ func (j *JiraReferenceRule) VerboseResult() string {
 		case "invalid_refs_format":
 			var line string
 
-			for k, v := range j.errors[0].Context {
+			for k, v := range validationErr.Context {
 				if k == "line" {
 					line = v
 
@@ -151,7 +157,7 @@ func (j *JiraReferenceRule) VerboseResult() string {
 		case "invalid_key_format":
 			var key string
 
-			for k, v := range j.errors[0].Context {
+			for k, v := range validationErr.Context {
 				if k == "key" {
 					key = v
 
@@ -161,7 +167,7 @@ func (j *JiraReferenceRule) VerboseResult() string {
 
 			return "Invalid Jira key format: '" + key + "'. Must follow the pattern PROJECT-123."
 		default:
-			return j.errors[0].Error()
+			return validationErr.Error()
 		}
 	}
 
@@ -173,15 +179,16 @@ func (j *JiraReferenceRule) VerboseResult() string {
 	return "Valid Jira reference(s) found in commit subject: " + strings.Join(j.foundKeys, ", ")
 }
 
-// Errors returns any violations of the rule.
-func (j *JiraReferenceRule) Errors() []*domain.ValidationError {
-	return j.errors
-}
+// The Errors method is provided by BaseRule.
+
+// Removed addError function as part of Phase 3 error handling refactoring
+// Direct use of error codes from appErrors is now required
 
 // Validate performs validation against a commit and returns any errors.
-func (j *JiraReferenceRule) Validate(commit *domain.CommitInfo) []*domain.ValidationError {
+func (j *JiraReferenceRule) Validate(commit *domain.CommitInfo) []appErrors.ValidationError {
 	// Reset errors and found keys
-	j.errors = make([]*domain.ValidationError, 0)
+	j.ClearErrors()
+	j.MarkAsRun()
 	j.foundKeys = []string{}
 
 	subject := commit.Subject
@@ -190,13 +197,12 @@ func (j *JiraReferenceRule) Validate(commit *domain.CommitInfo) []*domain.Valida
 	// Normalize and trim the subject
 	subject = strings.TrimSpace(subject)
 	if subject == "" {
-		j.addError(
-			domain.ValidationErrorInvalidFormat,
-			"commit subject is empty",
-			nil,
+		j.AddAppError(
+			appErrors.ErrEmptyMessage,
+			"Commit subject is empty",
 		)
 
-		return j.errors
+		return j.Errors()
 	}
 
 	// Validate based on the configured strategy
@@ -206,19 +212,24 @@ func (j *JiraReferenceRule) Validate(commit *domain.CommitInfo) []*domain.Valida
 		j.validateSubjectReferences(subject)
 	}
 
-	return j.errors
+	return j.Errors()
 }
 
 // Help returns a description of how to fix the rule violation.
 func (j *JiraReferenceRule) Help() string {
-	if len(j.errors) == 0 {
+	if !j.HasErrors() {
 		return "No errors to fix"
 	}
 
 	// Check error code
-	if len(j.errors) > 0 {
-		switch j.errors[0].Code {
-		case string(domain.ValidationErrorMissingJira):
+	errors := j.Errors()
+	if len(errors) > 0 {
+		// Cast the error to appErrors.ValidationError to access its fields
+		// errors[0] is already a ValidationError, so no need for type assertion
+		validationErr := errors[0]
+
+		switch validationErr.Code {
+		case string(appErrors.ErrMissingJira):
 			// For missing Jira references, use template help
 			if j.validateBodyRef {
 				return `Include a valid Jira issue key (e.g., PROJECT-123) in your commit body with the "Refs:" prefix.
@@ -240,7 +251,7 @@ For conventional commits, place the Jira key at the end of the first line:
 
 For other commit formats, include the Jira key anywhere in the subject.`
 
-		case string(domain.ValidationErrorInvalidType):
+		case string(appErrors.ErrInvalidType):
 			// For invalid project types
 			projectKeys := j.validProjects
 			if len(projectKeys) > 0 {
@@ -254,11 +265,11 @@ Please use one of these project keys in your Jira reference.`
 			return `The Jira project reference is not valid.
 Jira project keys should be uppercase letters followed by a hyphen and numbers (e.g., PROJECT-123).`
 
-		case string(domain.ValidationErrorInvalidFormat):
+		case string(appErrors.ErrInvalidFormat):
 			// This handles multiple format errors with specific messages
 			if j.validateBodyRef {
 				// For body validation errors
-				if strings.Contains(j.errors[0].Message, "must appear before") {
+				if strings.Contains(validationErr.Message, "must appear before") {
 					return `The "Refs:" line must appear before any "Signed-off-by" lines in your commit message.
 
 The correct order is:
@@ -269,7 +280,7 @@ The correct order is:
 5. Signed-off-by line(s)`
 				}
 
-				if strings.Contains(j.errors[0].Message, "invalid Refs format") {
+				if strings.Contains(validationErr.Message, "invalid Refs format") {
 					return `The "Refs:" line in your commit body has an invalid format.
 
 The correct format is:
@@ -283,7 +294,7 @@ Make sure:
 - Multiple references are separated by commas
 - The Refs line appears before any Signed-off-by lines`
 				}
-			} else if strings.Contains(j.errors[0].Message, "must be at the end") {
+			} else if strings.Contains(validationErr.Message, "must be at the end") {
 				return `In conventional commit format, place the Jira issue key at the end of the first line.
 
 Examples:
@@ -294,9 +305,9 @@ Examples:
 Avoid putting the Jira key in the middle of the line:
 - INCORRECT: feat(PROJ-123): add login feature
 - INCORRECT: fix: PROJ-123 resolve timeout issue`
-			} else if strings.Contains(j.errors[0].Message, "empty") {
+			} else if strings.Contains(validationErr.Message, "empty") {
 				return "Provide a non-empty commit message with a Jira issue reference"
-			} else if strings.Contains(j.errors[0].Message, "invalid Jira issue key format") {
+			} else if strings.Contains(validationErr.Message, "invalid Jira issue key format") {
 				// Use the general format template
 				return `Invalid Jira issue key format. Make sure it follows the pattern PROJECT-123.
 
@@ -321,21 +332,7 @@ For body references:
 The Jira issue key should follow the format PROJECT-123.`
 }
 
-// addError adds a structured validation error.
-func (j *JiraReferenceRule) addError(code domain.ValidationErrorCode, message string, context map[string]string) {
-	// Create error using standard error creation with context in one step
-	var err *domain.ValidationError
-
-	if context != nil {
-		// Use withContext version when context is provided
-		err = domain.NewValidationErrorWithContext(j.Name(), string(code), message, context)
-	} else {
-		// Use simpler version when no context is needed
-		err = domain.NewValidationError(j.Name(), string(code), message)
-	}
-
-	j.errors = append(j.errors, err)
-}
+// This is now handled by the new addError method above
 
 // validateSubjectReferences validates Jira references in the commit subject.
 func (j *JiraReferenceRule) validateSubjectReferences(subject string) {
@@ -353,8 +350,8 @@ func (j *JiraReferenceRule) validateSubjectReferences(subject string) {
 func (j *JiraReferenceRule) validateConventionalCommitSubject(firstLine string) {
 	matches := jiraKeyRegex.FindAllString(firstLine, -1)
 	if len(matches) == 0 {
-		j.addError(
-			domain.ValidationErrorMissingJira,
+		j.AddErrorWithContext(
+			appErrors.ErrMissingJira,
 			"no Jira issue key found in the commit subject",
 			map[string]string{
 				"subject": firstLine,
@@ -402,8 +399,8 @@ func (j *JiraReferenceRule) validateKeyPositionInConventional(firstLine string, 
 	}
 
 	if !found {
-		j.addError(
-			domain.ValidationErrorInvalidFormat,
+		j.AddErrorWithContext(
+			appErrors.ErrInvalidFormat,
 			"in conventional commit format, Jira issue key must be at the end of the first line",
 			map[string]string{
 				"subject": firstLine,
@@ -421,8 +418,8 @@ func (j *JiraReferenceRule) validateKeyPositionInConventional(firstLine string, 
 func (j *JiraReferenceRule) validateNonConventionalCommitSubject(subject string) {
 	matches := jiraKeyRegex.FindAllString(subject, -1)
 	if len(matches) == 0 {
-		j.addError(
-			domain.ValidationErrorMissingJira,
+		j.AddErrorWithContext(
+			appErrors.ErrMissingJira,
 			"no Jira issue key found in the commit subject",
 			map[string]string{
 				"subject": subject,
@@ -452,8 +449,8 @@ func (j *JiraReferenceRule) validateAllFoundProjects(matches []string) {
 func (j *JiraReferenceRule) validateBodyReferences(body string) {
 	body = strings.TrimSpace(body)
 	if body == "" {
-		j.addError(
-			domain.ValidationErrorMissingJira,
+		j.AddErrorWithContext(
+			appErrors.ErrMissingJira,
 			"no Jira issue key found in the commit body",
 			nil,
 		)
@@ -515,8 +512,8 @@ func (j *JiraReferenceRule) findRefsAndSignoffLines(bodyLines []string) RefsLine
 			info.refsLine = ind
 		} else if strings.HasPrefix(line, "Refs:") {
 			// Line starts with Refs: but doesn't match the expected format
-			j.addError(
-				domain.ValidationErrorInvalidFormat,
+			j.AddErrorWithContext(
+				appErrors.ErrInvalidFormat,
 				"invalid Refs format in commit body, should be 'Refs: PROJ-123' or 'Refs: PROJ-123, PROJ-456'",
 				map[string]string{
 					"line": line,
@@ -531,8 +528,8 @@ func (j *JiraReferenceRule) findRefsAndSignoffLines(bodyLines []string) RefsLine
 
 	// Validate that Refs: exists
 	if !info.foundRefs {
-		j.addError(
-			domain.ValidationErrorMissingJira,
+		j.AddErrorWithContext(
+			appErrors.ErrMissingJira,
 			"no Jira issue key found in the commit body with Refs: prefix",
 			nil,
 		)
@@ -549,8 +546,8 @@ func (j *JiraReferenceRule) findRefsAndSignoffLines(bodyLines []string) RefsLine
 func (j *JiraReferenceRule) validateReferenceLineOrdering(info RefsLineInfo) bool {
 	// Validate that Refs: appears before any Signed-off-by lines
 	if info.signOffFound && info.refsLineNum > info.signOffLineNum {
-		j.addError(
-			domain.ValidationErrorInvalidFormat,
+		j.AddErrorWithContext(
+			appErrors.ErrInvalidFormat,
 			"Refs: line must appear before any Signed-off-by lines",
 			map[string]string{
 				"refs_line":    strconv.Itoa(info.refsLineNum),
@@ -588,8 +585,8 @@ func (j *JiraReferenceRule) validateJiraKeysInRefLine(bodyLines []string, _ int)
 func (j *JiraReferenceRule) validateJiraProject(jiraKey string) bool {
 	// First, verify the key has the correct format
 	if !jiraKeyRegex.MatchString(jiraKey) {
-		j.addError(
-			domain.ValidationErrorInvalidFormat,
+		j.AddErrorWithContext(
+			appErrors.ErrInvalidFormat,
 			"invalid Jira issue key format: "+jiraKey+" (should be PROJECT-123)",
 			map[string]string{
 				"key": jiraKey,
@@ -607,8 +604,8 @@ func (j *JiraReferenceRule) validateJiraProject(jiraKey string) bool {
 	// When project list is provided, validate against it
 	projectKey := strings.Split(jiraKey, "-")[0]
 	if !containsString(j.validProjects, projectKey) {
-		j.addError(
-			domain.ValidationErrorInvalidType,
+		j.AddErrorWithContext(
+			appErrors.ErrInvalidType,
 			"Jira project "+projectKey+" is not a valid project",
 			map[string]string{
 				"project":        projectKey,
