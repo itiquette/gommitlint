@@ -76,6 +76,7 @@ func (c *ConfigManager) GetRuleConfiguration() (*validation.RuleConfiguration, e
 	if err != nil {
 		// Log the error but continue with defaults
 		log.Printf("Error loading configuration: %v, using defaults", err)
+
 		return validation.DefaultConfiguration(), nil
 	}
 

@@ -203,7 +203,7 @@ func (r *SubjectCaseRule) Result() string {
 		// Check for case-specific error
 		errors := r.Errors()
 		if len(errors) > 0 {
-			// nolint:exhaustive // Only handling relevant error codes
+			//nolint:exhaustive // Only handling relevant error codes
 			switch appErrors.ValidationErrorCode(errors[0].Code) {
 			case appErrors.ErrSubjectCase:
 				return "Subject should start with " + r.caseChoice

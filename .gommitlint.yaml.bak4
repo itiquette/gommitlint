@@ -1,4 +1,0 @@
-gommitlint:
-  subject:
-    jira:
-      required: true

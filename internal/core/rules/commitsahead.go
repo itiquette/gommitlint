@@ -227,7 +227,7 @@ func (r *CommitsAheadRule) VerboseResult() string {
 		// errors[0] is already a ValidationError, so no need for type assertion
 		validationErr := errors[0]
 
-		// nolint:exhaustive // Only handle errors relevant to this rule
+		//nolint:exhaustive // Only handle errors relevant to this rule
 		switch appErrors.ValidationErrorCode(validationErr.Code) {
 		case appErrors.ErrInvalidRepo:
 			return "Repository object is nil. Cannot validate commits ahead."
@@ -274,7 +274,7 @@ func (r *CommitsAheadRule) Help() string {
 		// errors[0] is already a ValidationError, so no need for type assertion
 		validationErr := errors[0]
 
-		// nolint:exhaustive // Only handle errors relevant to this rule
+		//nolint:exhaustive // Only handle errors relevant to this rule
 		switch appErrors.ValidationErrorCode(validationErr.Code) {
 		case appErrors.ErrTooManyCommits:
 			return fmt.Sprintf(`Your branch is too far ahead of %s. To fix this, either:
