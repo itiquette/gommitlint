@@ -25,6 +25,7 @@ type RuleConfiguration struct {
 	JiraValidProjects []string
 	JiraBodyRef       bool
 	JiraRequired      bool
+	JiraPattern       string
 
 	// Signature configuration
 	RequireSignature      bool

@@ -12,7 +12,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/itiquette/gommitlint/internal/configuration"
+	"github.com/itiquette/gommitlint/internal/config" // Import the updated config package
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/core/validation"
 	"github.com/itiquette/gommitlint/internal/domain"
@@ -196,7 +196,8 @@ func (s *ValidationService) ValidateWithOptions(ctx context.Context, opts Valida
 	return results, nil
 }
 
-// CreateDefaultValidationService creates a validation service with default configuration.
+// CreateDefaultValidationService creates a validation service with configuration
+// loaded using the default config manager (`config.New()`).
 func CreateDefaultValidationService(repoPath string) (*ValidationService, error) {
 	// Create repository factory
 	factory, err := git.NewRepositoryFactory(repoPath)
@@ -207,26 +208,25 @@ func CreateDefaultValidationService(repoPath string) (*ValidationService, error)
 	// Get specialized repository interfaces
 	commitService := factory.CreateGitCommitService()
 	infoProvider := factory.CreateInfoProvider()
+	analyzer := factory.CreateCommitAnalyzer() // Create analyzer here for potential injection
 
-	// Create config manager
-	configManager := configuration.CreateDefaultConfigManager()
-
-	// Get validation rule configuration
-	ruleConfig, err := configManager.GetRuleConfiguration()
+	// Create config manager - uses the new config.New() which loads defaults
+	// and standard paths, logging warnings internally if loading fails.
+	configManager, err := config.New()
 	if err != nil {
-		// Fall back to default configuration if there's an error
-		fmt.Fprintf(os.Stderr, "Warning: Using default configuration due to error: %v\n", err)
-
-		ruleConfig = validation.DefaultConfiguration()
+		// config.New() only returns an error if manager creation fails, not just config not found.
+		return nil, fmt.Errorf("failed to create configuration manager: %w", err)
 	}
+
+	// Get validation rule configuration from the manager
+	// This uses the loaded config or defaults, no error handling needed here.
+	ruleConfig := configManager.GetRuleConfig()
 
 	// Create rule provider with configuration
 	ruleProvider := validation.NewDefaultRuleProvider(ruleConfig)
 
 	// Set repository getter for CommitsAhead rule if it exists
 	if commitsAheadRule, ok := ruleProvider.GetRuleByName("CommitsAhead").(*rules.CommitsAheadRule); ok && commitsAheadRule != nil {
-		analyzer := factory.CreateCommitAnalyzer()
-
 		commitsAheadRule.SetRepositoryGetter(func() domain.CommitAnalyzer {
 			return analyzer
 		})

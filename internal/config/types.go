@@ -1,21 +1,9 @@
-// SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
-//
-// SPDX-License-Identifier: EUPL-1.2
-
-package configuration
+// Package config provides configuration management for gommitlint.
+package config
 
 // AppConf is the root configuration structure for the application.
 type AppConf struct {
 	GommitConf *GommitLintConfig `koanf:"gommitlint"`
-}
-
-// New loads the gommitlint configuration and returns an AppConf instance.
-// Returns an error if configuration loading fails.
-// This is a convenience function that uses the default configuration manager.
-func New() (*AppConf, error) {
-	manager := CreateDefaultConfigManager()
-
-	return manager.GetConfiguration()
 }
 
 // GommitLintConfig defines the complete configuration for commit linting rules.
