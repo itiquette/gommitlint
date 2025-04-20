@@ -7,13 +7,13 @@ package sigverify
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSignedIdentity_Name(t *testing.T) {
 	// Simple test for rule name
 	rule := SignedIdentity{}
-	assert.Equal(t, "SignedIdentity", rule.Name())
+	require.Equal(t, "SignedIdentity", rule.Name())
 }
 
 // TestDetectSignatureType tests the signature type detection function.
@@ -53,7 +53,7 @@ func TestDetectSignatureType(t *testing.T) {
 	for _, atest := range tests {
 		t.Run(atest.name, func(t *testing.T) {
 			result := DetectSignatureType(atest.signature)
-			assert.Equal(t, atest.expected, result)
+			require.Equal(t, atest.expected, result)
 		})
 	}
 }
@@ -64,5 +64,5 @@ func TestValidateSignature(t *testing.T) {
 	rule := NewSignedIdentity("", "")
 
 	// Check rule name
-	assert.Equal(t, "SignedIdentity", rule.Name())
+	require.Equal(t, "SignedIdentity", rule.Name())
 }

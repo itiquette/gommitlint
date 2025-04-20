@@ -11,7 +11,6 @@ import (
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
 
-// - Ensuring the body contains meaningful content, not just sign-offs.
 type CommitBodyRule struct {
 	*BaseRule
 	requireBody      bool

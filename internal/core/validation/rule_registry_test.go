@@ -9,7 +9,6 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/errors"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,8 +27,8 @@ func TestNewRuleRegistry(t *testing.T) {
 	require.NotNil(t, registry.configuration)
 
 	// Check that rules were registered
-	assert.NotEmpty(t, registry.rules)
-	assert.NotEmpty(t, registry.activeRules)
+	require.NotEmpty(t, registry.rules)
+	require.NotEmpty(t, registry.activeRules)
 }
 
 // TestRuleRegistry_GetRules tests getting all rules from the registry.
@@ -38,7 +37,7 @@ func TestRuleRegistry_GetRules(t *testing.T) {
 	rules := registry.GetRules()
 
 	// Check that we got rules
-	assert.NotEmpty(t, rules)
+	require.NotEmpty(t, rules)
 
 	// Verify that all important rules are present
 	ruleNames := make(map[string]bool)
@@ -69,7 +68,7 @@ func TestRuleRegistry_GetRules(t *testing.T) {
 	}
 
 	for _, name := range requiredRules {
-		assert.True(t, ruleNames[name], "Missing required rule: %s", name)
+		require.True(t, ruleNames[name], "Missing required rule: %s", name)
 	}
 }
 
@@ -79,7 +78,7 @@ func TestRuleRegistry_GetActiveRules(t *testing.T) {
 
 	// By default, all rules should be active
 	activeRules := registry.GetActiveRules()
-	assert.Equal(t, len(registry.rules), len(activeRules))
+	require.Equal(t, len(registry.rules), len(activeRules))
 
 	// Disable a rule
 	testRuleName := "SubjectLength"
@@ -87,11 +86,11 @@ func TestRuleRegistry_GetActiveRules(t *testing.T) {
 
 	// Check that the rule is disabled
 	activeRules = registry.GetActiveRules()
-	assert.Len(t, activeRules, len(registry.rules)-1)
+	require.Len(t, activeRules, len(registry.rules)-1)
 
 	// Check that the disabled rule is not in the active rules
 	for _, rule := range activeRules {
-		assert.NotEqual(t, testRuleName, rule.Name())
+		require.NotEqual(t, testRuleName, rule.Name())
 	}
 }
 
@@ -105,11 +104,11 @@ func TestRuleRegistry_DisableRules(t *testing.T) {
 
 	// Check that the rules are disabled
 	for _, name := range disabledRules {
-		assert.False(t, registry.activeRules[name])
+		require.False(t, registry.activeRules[name])
 	}
 
 	// Verify rule count
-	assert.Len(t, registry.GetActiveRules(), len(registry.rules)-len(disabledRules))
+	require.Len(t, registry.GetActiveRules(), len(registry.rules)-len(disabledRules))
 }
 
 // TestRuleRegistry_SetActiveRules tests setting active rules.
@@ -121,16 +120,16 @@ func TestRuleRegistry_SetActiveRules(t *testing.T) {
 	registry.SetActiveRules(activeRules)
 
 	// Check that only the specified rules are active
-	assert.Equal(t, len(activeRules), len(registry.GetActiveRules()))
+	require.Equal(t, len(activeRules), len(registry.GetActiveRules()))
 
 	// Verify each active rule
 	for _, rule := range registry.GetActiveRules() {
-		assert.Contains(t, activeRules, rule.Name())
+		require.Contains(t, activeRules, rule.Name())
 	}
 
 	// Test with empty list (should enable all rules)
 	registry.SetActiveRules([]string{})
-	assert.Equal(t, len(registry.rules), len(registry.GetActiveRules()))
+	require.Equal(t, len(registry.rules), len(registry.GetActiveRules()))
 }
 
 // TestRuleRegistry_GetRuleByName tests getting a rule by name.
@@ -139,12 +138,12 @@ func TestRuleRegistry_GetRuleByName(t *testing.T) {
 
 	// Get a known rule
 	rule := registry.GetRuleByName("SubjectLength")
-	assert.NotNil(t, rule)
-	assert.Equal(t, "SubjectLength", rule.Name())
+	require.NotNil(t, rule)
+	require.Equal(t, "SubjectLength", rule.Name())
 
 	// Try to get a nonexistent rule
 	rule = registry.GetRuleByName("NonexistentRule")
-	assert.Nil(t, rule)
+	require.Nil(t, rule)
 }
 
 // TestRuleRegistry_ApplyConfiguration tests applying configuration.
@@ -155,7 +154,7 @@ func TestRuleRegistry_ApplyConfiguration(t *testing.T) {
 	registry := NewRuleRegistry(config)
 
 	// Check that only specified rules are active
-	assert.Equal(t, len(config.EnabledRules), len(registry.GetActiveRules()))
+	require.Equal(t, len(config.EnabledRules), len(registry.GetActiveRules()))
 
 	// Test with disabled rules
 	config = DefaultConfiguration()
@@ -163,11 +162,11 @@ func TestRuleRegistry_ApplyConfiguration(t *testing.T) {
 	registry = NewRuleRegistry(config)
 
 	// Check that all rules except the disabled one are active
-	assert.Len(t, registry.GetActiveRules(), len(registry.rules)-1)
+	require.Len(t, registry.GetActiveRules(), len(registry.rules)-1)
 
 	// Check specifically that the disabled rule is not active
 	for _, rule := range registry.GetActiveRules() {
-		assert.NotEqual(t, "SubjectLength", rule.Name())
+		require.NotEqual(t, "SubjectLength", rule.Name())
 	}
 }
 
@@ -200,7 +199,7 @@ func TestRuleRegistry_RuleConfigurationOptions(t *testing.T) {
 	// Should get validation error since subject > 50
 	commit := &domain.CommitInfo{Subject: longSubject}
 	errors := validateCommit(t, subjectRule, commit)
-	assert.NotEmpty(t, errors)
+	require.NotEmpty(t, errors)
 
 	// Test SignOff rule configuration
 	signOffRule := registry.GetRuleByName("SignOff")
@@ -214,5 +213,5 @@ func TestRuleRegistry_RuleConfigurationOptions(t *testing.T) {
 
 	// Should not get validation error since require signoff is false
 	errors = validateCommit(t, signOffRule, commit)
-	assert.Empty(t, errors)
+	require.Empty(t, errors)
 }

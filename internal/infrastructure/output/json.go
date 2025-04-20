@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
-
 package output
 
 import (
@@ -33,7 +32,7 @@ type RuleResultOutput struct {
 	Name           string                  `json:"name"`
 	Status         string                  `json:"status"`
 	Message        string                  `json:"message"`
-	VerboseMessage string                  `json:"verbose_message"`
+	VerboseMessage string                  `json:"verboseMessage"`
 	Help           string                  `json:"help,omitempty"`
 	Errors         []ValidationErrorOutput `json:"errors,omitempty"`
 }
@@ -42,23 +41,23 @@ type RuleResultOutput struct {
 type CommitResultOutput struct {
 	Hash         string             `json:"hash"`
 	Subject      string             `json:"subject"`
-	CommitDate   string             `json:"commit_date,omitempty"`
+	CommitDate   string             `json:"commitDate,omitempty"`
 	Author       string             `json:"author,omitempty"`
-	IsMerge      bool               `json:"is_merge,omitempty"`
+	IsMerge      bool               `json:"isMerge,omitempty"`
 	Passed       bool               `json:"passed"`
-	RuleResults  []RuleResultOutput `json:"rule_results,omitempty"`
-	ErrorCount   int                `json:"error_count"`
-	WarningCount int                `json:"warning_count"`
+	RuleResults  []RuleResultOutput `json:"ruleResults,omitempty"`
+	ErrorCount   int                `json:"errorCount"`
+	WarningCount int                `json:"warningCount"`
 }
 
 // ValidationResultsOutput represents the overall validation results in JSON format.
 type ValidationResultsOutput struct {
 	Timestamp     string               `json:"timestamp"`
-	AllPassed     bool                 `json:"all_passed"`
-	TotalCommits  int                  `json:"total_commits"`
-	PassedCommits int                  `json:"passed_commits"`
-	RuleSummary   map[string]int       `json:"rule_summary,omitempty"`
-	CommitResults []CommitResultOutput `json:"commit_results,omitempty"`
+	AllPassed     bool                 `json:"allPassed"`
+	TotalCommits  int                  `json:"totalCommits"`
+	PassedCommits int                  `json:"passedCommits"`
+	RuleSummary   map[string]int       `json:"ruleSummary,omitempty"`
+	CommitResults []CommitResultOutput `json:"commitResults,omitempty"`
 }
 
 // Format formats validation results as JSON.
@@ -126,7 +125,6 @@ func (f *JSONFormatter) Format(results *domain.ValidationResults) string {
 
 				commit.ErrorCount = errorCount
 				commit.WarningCount = warningCount
-
 				report.CommitResults = append(report.CommitResults, commit)
 			}
 		}

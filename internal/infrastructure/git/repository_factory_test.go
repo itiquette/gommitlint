@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/itiquette/gommitlint/internal/domain"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,30 +32,30 @@ func TestRepositoryFactory(t *testing.T) {
 	// Test creating different interface implementations
 	t.Run("Create GitCommitService", func(t *testing.T) {
 		service := factory.CreateGitCommitService()
-		assert.NotNil(t, service, "GitCommitService should not be nil")
-		assert.Implements(t, (*domain.GitCommitService)(nil), service)
+		require.NotNil(t, service, "GitCommitService should not be nil")
+		require.Implements(t, (*domain.GitCommitService)(nil), service)
 	})
 
 	t.Run("Create RepositoryInfoProvider", func(t *testing.T) {
 		provider := factory.CreateInfoProvider()
-		assert.NotNil(t, provider, "RepositoryInfoProvider should not be nil")
-		assert.Implements(t, (*domain.RepositoryInfoProvider)(nil), provider)
+		require.NotNil(t, provider, "RepositoryInfoProvider should not be nil")
+		require.Implements(t, (*domain.RepositoryInfoProvider)(nil), provider)
 	})
 
 	t.Run("Create CommitAnalyzer", func(t *testing.T) {
 		analyzer := factory.CreateCommitAnalyzer()
-		assert.NotNil(t, analyzer, "CommitAnalyzer should not be nil")
-		assert.Implements(t, (*domain.CommitAnalyzer)(nil), analyzer)
+		require.NotNil(t, analyzer, "CommitAnalyzer should not be nil")
+		require.Implements(t, (*domain.CommitAnalyzer)(nil), analyzer)
 	})
 
 	t.Run("Create Full Service", func(t *testing.T) {
 		service := factory.CreateFullService()
-		assert.NotNil(t, service, "GitRepositoryService should not be nil")
-		assert.Implements(t, (*domain.GitRepositoryService)(nil), service)
+		require.NotNil(t, service, "GitRepositoryService should not be nil")
+		require.Implements(t, (*domain.GitRepositoryService)(nil), service)
 
 		// Verify it implements all the specialized interfaces
-		assert.Implements(t, (*domain.GitCommitService)(nil), service)
-		assert.Implements(t, (*domain.RepositoryInfoProvider)(nil), service)
-		assert.Implements(t, (*domain.CommitAnalyzer)(nil), service)
+		require.Implements(t, (*domain.GitCommitService)(nil), service)
+		require.Implements(t, (*domain.RepositoryInfoProvider)(nil), service)
+		require.Implements(t, (*domain.CommitAnalyzer)(nil), service)
 	})
 }

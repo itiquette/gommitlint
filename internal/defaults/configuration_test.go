@@ -7,44 +7,44 @@ package defaults
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDefaultValues(t *testing.T) {
 	// Ensure default values are as expected
-	assert.Equal(t, "lower", SubjectCaseDefault)
-	assert.True(t, SubjectImperativeDefault)
-	assert.Equal(t, ".", SubjectInvalidSuffixesDefault)
-	assert.Equal(t, 100, SubjectMaxLengthDefault)
+	require.Equal(t, "lower", SubjectCaseDefault)
+	require.True(t, SubjectImperativeDefault)
+	require.Equal(t, ".", SubjectInvalidSuffixesDefault)
+	require.Equal(t, 100, SubjectMaxLengthDefault)
 
-	assert.False(t, BodyRequiredDefault)
+	require.False(t, BodyRequiredDefault)
 
 	// Array defaults
 	expectedTypes := []string{
 		"feat", "fix", "docs", "style", "refactor",
 		"perf", "test", "build", "ci", "chore", "revert",
 	}
-	assert.Equal(t, expectedTypes, ConventionalCommitTypesDefault)
-	assert.Equal(t, 72, ConventionalCommitMaxDescLengthDefault)
-	assert.True(t, ConventionalCommitRequiredDefault)
+	require.Equal(t, expectedTypes, ConventionalCommitTypesDefault)
+	require.Equal(t, 72, ConventionalCommitMaxDescLengthDefault)
+	require.True(t, ConventionalCommitRequiredDefault)
 
 	// Signature defaults
-	assert.True(t, SignatureRequiredDefault)
-	assert.True(t, SignOffRequiredDefault)
+	require.True(t, SignatureRequiredDefault)
+	require.True(t, SignOffRequiredDefault)
 
 	// Git branch defaults
-	assert.Equal(t, "main", DefaultMainBranch)
-	assert.Equal(t, "master", DefaultMasterBranch)
+	require.Equal(t, "main", DefaultMainBranch)
+	require.Equal(t, "master", DefaultMasterBranch)
 
 	// Spell checking defaults
-	assert.Equal(t, "UK", SpellcheckLocaleDefault)
+	require.Equal(t, "UK", SpellcheckLocaleDefault)
 
 	// JIRA defaults
-	assert.Equal(t, `[A-Z]+-\d+`, JIRAPatternDefault)
-	assert.False(t, JIRARequiredDefault)
+	require.Equal(t, `[A-Z]+-\d+`, JIRAPatternDefault)
+	require.False(t, JIRARequiredDefault)
 
 	// Miscellaneous defaults
-	assert.True(t, NCommitsAheadDefault)
-	assert.Equal(t, 5, NCommitsAheadLimitDefault)
-	assert.True(t, IgnoreMergeCommitsDefault)
+	require.True(t, NCommitsAheadDefault)
+	require.Equal(t, 5, NCommitsAheadLimitDefault)
+	require.True(t, IgnoreMergeCommitsDefault)
 }

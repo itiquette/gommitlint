@@ -12,7 +12,6 @@ import (
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -203,24 +202,24 @@ This is a detailed description.`,
 
 			// Check validity
 			if testCase.expectedValid {
-				assert.Empty(t, errors, "Expected no validation errors")
-				assert.Equal(t, "Sign-off is present", rule.Result(), "Expected success message")
+				require.Empty(t, errors, "Expected no validation errors")
+				require.Equal(t, "Sign-off is present", rule.Result(), "Expected success message")
 
 				// Different checks for sign-off not required vs found sign-off
 				if !testCase.requireSignOff {
-					assert.Contains(t, rule.VerboseResult(), "not required by configuration", "Verbose result should indicate sign-off not required")
+					require.Contains(t, rule.VerboseResult(), "not required by configuration", "Verbose result should indicate sign-off not required")
 				} else {
-					assert.Contains(t, rule.VerboseResult(), "Valid Developer Certificate of Origin sign-off found", "Verbose result should indicate valid sign-off")
+					require.Contains(t, rule.VerboseResult(), "Valid Developer Certificate of Origin sign-off found", "Verbose result should indicate valid sign-off")
 				}
 
-				assert.Contains(t, rule.Help(), "No errors to fix", "Help for valid message should indicate nothing to fix")
+				require.Contains(t, rule.Help(), "No errors to fix", "Help for valid message should indicate nothing to fix")
 			} else {
-				assert.NotEmpty(t, errors, "Expected errors but found none")
+				require.NotEmpty(t, errors, "Expected errors but found none")
 
 				// Check error code if specified
 				if testCase.expectedCode != "" {
 					// Check if the original_code in context matches the expected code
-					assert.Equal(t, testCase.expectedCode, errors[0].Context["original_code"],
+					require.Equal(t, testCase.expectedCode, errors[0].Context["original_code"],
 						"Original error code in context should match expected")
 				}
 
@@ -238,7 +237,7 @@ This is a detailed description.`,
 
 					if !found && testCase.expectedCode == "missing_signoff" {
 						// Special case for missing_signoff since we've changed the error message
-						assert.Contains(t, errors[0].Error(), "Missing Signed-off-by line",
+						require.Contains(t, errors[0].Error(), "Missing Signed-off-by line",
 							"Error should mention missing sign-off")
 					} else {
 						require.True(t, found, "Expected error containing %q", testCase.errorContains)
@@ -246,31 +245,31 @@ This is a detailed description.`,
 				}
 
 				// Verify rule name is set in ValidationError
-				assert.Equal(t, "SignOff", errors[0].Rule,
+				require.Equal(t, "SignOff", errors[0].Rule,
 					"Rule name should be set in ValidationError")
 
 				// Verify Help() method provides guidance
 				helpText := rule.Help()
-				assert.NotEmpty(t, helpText, "Help text should not be empty")
+				require.NotEmpty(t, helpText, "Help text should not be empty")
 
 				// Test specific help messages based on error code
 				if errors[0].Context["original_code"] == "empty_message" {
-					assert.Contains(t, helpText, "currently empty", "Help should mention empty message")
+					require.Contains(t, helpText, "currently empty", "Help should mention empty message")
 				} else if errors[0].Context["original_code"] == "missing_signoff" {
-					assert.Contains(t, helpText, "git commit -s", "Help should mention git commit -s")
+					require.Contains(t, helpText, "git commit -s", "Help should mention git commit -s")
 				} else if errors[0].Context["original_code"] == "invalid_format" {
-					assert.Contains(t, helpText, "correctly formatted", "Help should mention correct format")
+					require.Contains(t, helpText, "correctly formatted", "Help should mention correct format")
 				} else if errors[0].Context["original_code"] == "multiple_signoffs" {
-					assert.Contains(t, helpText, "multiple", "Help should mention multiple sign-offs issue")
+					require.Contains(t, helpText, "multiple", "Help should mention multiple sign-offs issue")
 				}
 
 				// Verify Result() method returns expected message
-				assert.Equal(t, "Missing sign-off", rule.Result(), "Expected error result message")
-				assert.NotEqual(t, rule.Result(), rule.VerboseResult(), "Verbose result should be different from regular result")
+				require.Equal(t, "Missing sign-off", rule.Result(), "Expected error result message")
+				require.NotEqual(t, rule.Result(), rule.VerboseResult(), "Verbose result should be different from regular result")
 			}
 
 			// Verify Name() method
-			assert.Equal(t, "SignOff", rule.Name(), "Name should be 'SignOff'")
+			require.Equal(t, "SignOff", rule.Name(), "Name should be 'SignOff'")
 		})
 	}
 
@@ -291,10 +290,10 @@ Signed-off-by: Dev Two <dev2@example.com>`
 
 		errors := rule.Validate(commit)
 		require.NotEmpty(t, errors, "Should have errors for multiple signoffs")
-		assert.Equal(t, string(appErrors.ErrMissingSignoff), errors[0].Code)
-		assert.Equal(t, "multiple_signoffs", errors[0].Context["original_code"])
-		assert.Contains(t, errors[0].Context, "signoff_count")
-		assert.Equal(t, "2", errors[0].Context["signoff_count"])
+		require.Equal(t, string(appErrors.ErrMissingSignoff), errors[0].Code)
+		require.Equal(t, "multiple_signoffs", errors[0].Context["original_code"])
+		require.Contains(t, errors[0].Context, "signoff_count")
+		require.Equal(t, "2", errors[0].Context["signoff_count"])
 
 		// Test missing signoff context
 		missingSignoffMessage := "Add feature without signoff"
@@ -305,8 +304,8 @@ Signed-off-by: Dev Two <dev2@example.com>`
 
 		errors = rule.Validate(commit)
 		require.NotEmpty(t, errors, "Should have errors for missing signoff")
-		assert.Equal(t, string(appErrors.ErrMissingSignoff), errors[0].Code)
-		assert.Equal(t, "missing_signoff", errors[0].Context["original_code"])
-		assert.Contains(t, errors[0].Context, "message")
+		require.Equal(t, string(appErrors.ErrMissingSignoff), errors[0].Code)
+		require.Equal(t, "missing_signoff", errors[0].Context["original_code"])
+		require.Contains(t, errors[0].Context, "message")
 	})
 }

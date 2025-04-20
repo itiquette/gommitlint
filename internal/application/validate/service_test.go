@@ -11,7 +11,6 @@ import (
 	"github.com/itiquette/gommitlint/internal/application/validate"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -124,13 +123,13 @@ func TestValidationService_ValidateCommit(t *testing.T) {
 	t.Run("Validate existing commit", func(t *testing.T) {
 		result, err := service.ValidateCommit(context.Background(), "abc123")
 		require.NoError(t, err)
-		assert.Equal(t, "abc123", result.CommitInfo.Hash)
+		require.Equal(t, "abc123", result.CommitInfo.Hash)
 	})
 
 	t.Run("Validate non-existent commit", func(t *testing.T) {
 		_, err := service.ValidateCommit(context.Background(), "nonexistent")
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "commit not found")
+		require.Contains(t, err.Error(), "commit not found")
 	})
 }
 
@@ -174,13 +173,13 @@ func TestValidationService_ValidateHeadCommits(t *testing.T) {
 	t.Run("Validate head commits without filtering", func(t *testing.T) {
 		results, err := service.ValidateHeadCommits(context.Background(), 3, false)
 		require.NoError(t, err)
-		assert.Equal(t, 3, results.Count())
+		require.Equal(t, 3, results.Count())
 	})
 
 	t.Run("Validate head commits with merge filtering", func(t *testing.T) {
 		results, err := service.ValidateHeadCommits(context.Background(), 3, true)
 		require.NoError(t, err)
-		assert.Equal(t, 2, results.Count())
+		require.Equal(t, 2, results.Count())
 	})
 }
 
@@ -228,19 +227,19 @@ func TestValidationService_ValidateCommitRange(t *testing.T) {
 	t.Run("Validate commit range without filtering", func(t *testing.T) {
 		results, err := service.ValidateCommitRange(context.Background(), "feature", "master", false)
 		require.NoError(t, err)
-		assert.Equal(t, 3, results.Count())
+		require.Equal(t, 3, results.Count())
 	})
 
 	t.Run("Validate commit range with merge filtering", func(t *testing.T) {
 		results, err := service.ValidateCommitRange(context.Background(), "feature", "master", true)
 		require.NoError(t, err)
-		assert.Equal(t, 2, results.Count())
+		require.Equal(t, 2, results.Count())
 	})
 
 	t.Run("Validate non-existent range", func(t *testing.T) {
 		_, err := service.ValidateCommitRange(context.Background(), "nonexistent", "master", false)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "range not found")
+		require.Contains(t, err.Error(), "range not found")
 	})
 }
 
@@ -286,7 +285,7 @@ func TestValidationService_ValidateWithOptions(t *testing.T) {
 		}
 		results, err := service.ValidateWithOptions(context.Background(), opts)
 		require.NoError(t, err)
-		assert.Equal(t, 1, results.Count())
+		require.Equal(t, 1, results.Count())
 	})
 
 	t.Run("Validate head commits", func(t *testing.T) {
@@ -296,7 +295,7 @@ func TestValidationService_ValidateWithOptions(t *testing.T) {
 		}
 		results, err := service.ValidateWithOptions(context.Background(), opts)
 		require.NoError(t, err)
-		assert.Equal(t, 1, results.Count())
+		require.Equal(t, 1, results.Count())
 	})
 
 	t.Run("Validate commit range", func(t *testing.T) {
@@ -307,13 +306,13 @@ func TestValidationService_ValidateWithOptions(t *testing.T) {
 		}
 		results, err := service.ValidateWithOptions(context.Background(), opts)
 		require.NoError(t, err)
-		assert.Equal(t, 1, results.Count())
+		require.Equal(t, 1, results.Count())
 	})
 
 	t.Run("Default to HEAD", func(t *testing.T) {
 		opts := validate.ValidationOptions{}
 		results, err := service.ValidateWithOptions(context.Background(), opts)
 		require.NoError(t, err)
-		assert.Equal(t, 1, results.Count())
+		require.Equal(t, 1, results.Count())
 	})
 }

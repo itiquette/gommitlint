@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 package config_test
 
 import (
@@ -7,7 +11,6 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/defaults"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -112,84 +115,83 @@ func TestDefaultConfiguration(t *testing.T) {
 	require.NotNil(t, defaultConfig.GommitConf.Signature, "Signature should not be nil")
 
 	// Check each field against expected default value
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			switch tc.field {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			switch testCase.field {
 			case "subject.maxLength":
-				assert.Equal(t, tc.expected, defaultConfig.GommitConf.Subject.MaxLength,
+				require.Equal(t, testCase.expected, defaultConfig.GommitConf.Subject.MaxLength,
 					"Default subject.maxLength should match expected value")
 			case "subject.case":
-				assert.Equal(t, tc.expected, defaultConfig.GommitConf.Subject.Case,
+				require.Equal(t, testCase.expected, defaultConfig.GommitConf.Subject.Case,
 					"Default subject.case should match expected value")
 			case "subject.invalidSuffixes":
-				assert.Equal(t, tc.expected, defaultConfig.GommitConf.Subject.InvalidSuffixes,
+				require.Equal(t, testCase.expected, defaultConfig.GommitConf.Subject.InvalidSuffixes,
 					"Default subject.invalidSuffixes should match expected value")
 			case "subject.imperative":
 				require.NotNil(t, defaultConfig.GommitConf.Subject.Imperative,
 					"Subject.Imperative should not be nil")
-				assert.Equal(t, tc.expected, *defaultConfig.GommitConf.Subject.Imperative,
+				require.Equal(t, testCase.expected, *defaultConfig.GommitConf.Subject.Imperative,
 					"Default subject.imperative should match expected value")
 			case "jira.required":
 				require.NotNil(t, defaultConfig.GommitConf.Subject.Jira,
 					"Subject.Jira should not be nil")
-				assert.Equal(t, tc.expected, defaultConfig.GommitConf.Subject.Jira.Required,
+				require.Equal(t, testCase.expected, defaultConfig.GommitConf.Subject.Jira.Required,
 					"Default jira.required should match expected value")
 			case "jira.pattern":
 				require.NotNil(t, defaultConfig.GommitConf.Subject.Jira,
 					"Subject.Jira should not be nil")
-				assert.Equal(t, tc.expected, defaultConfig.GommitConf.Subject.Jira.Pattern,
+				require.Equal(t, testCase.expected, defaultConfig.GommitConf.Subject.Jira.Pattern,
 					"Default jira.pattern should match expected value")
 			case "body.required":
-				assert.Equal(t, tc.expected, defaultConfig.GommitConf.Body.Required,
+				require.Equal(t, testCase.expected, defaultConfig.GommitConf.Body.Required,
 					"Default body.required should match expected value")
 			case "conventional.required":
-				assert.Equal(t, tc.expected, defaultConfig.GommitConf.ConventionalCommit.Required,
+				require.Equal(t, testCase.expected, defaultConfig.GommitConf.ConventionalCommit.Required,
 					"Default conventional.required should match expected value")
 			case "conventional.maxDescLength":
-				assert.Equal(t, tc.expected, defaultConfig.GommitConf.ConventionalCommit.MaxDescriptionLength,
+				require.Equal(t, testCase.expected, defaultConfig.GommitConf.ConventionalCommit.MaxDescriptionLength,
 					"Default conventional.maxDescLength should match expected value")
 			case "conventional.types":
-				assert.ElementsMatch(t, tc.expected, defaultConfig.GommitConf.ConventionalCommit.Types,
+				require.ElementsMatch(t, testCase.expected, defaultConfig.GommitConf.ConventionalCommit.Types,
 					"Default conventional.types should match expected value")
 			case "spellcheck.enabled":
-				assert.Equal(t, tc.expected, defaultConfig.GommitConf.SpellCheck.Enabled,
+				require.Equal(t, testCase.expected, defaultConfig.GommitConf.SpellCheck.Enabled,
 					"Default spellcheck.enabled should match expected value")
 			case "spellcheck.locale":
-				assert.Equal(t, tc.expected, defaultConfig.GommitConf.SpellCheck.Locale,
+				require.Equal(t, testCase.expected, defaultConfig.GommitConf.SpellCheck.Locale,
 					"Default spellcheck.locale should match expected value")
 			case "signature.required":
-				assert.Equal(t, tc.expected, defaultConfig.GommitConf.Signature.Required,
+				require.Equal(t, testCase.expected, defaultConfig.GommitConf.Signature.Required,
 					"Default signature.required should match expected value")
 			case "signoff":
 				require.NotNil(t, defaultConfig.GommitConf.SignOffRequired,
 					"SignOffRequired should not be nil")
-				assert.Equal(t, tc.expected, *defaultConfig.GommitConf.SignOffRequired,
+				require.Equal(t, testCase.expected, *defaultConfig.GommitConf.SignOffRequired,
 					"Default signOffRequired should match expected value")
 			case "nCommitsAhead":
 				require.NotNil(t, defaultConfig.GommitConf.NCommitsAhead,
 					"NCommitsAhead should not be nil")
-				assert.Equal(t, tc.expected, *defaultConfig.GommitConf.NCommitsAhead,
+				require.Equal(t, testCase.expected, *defaultConfig.GommitConf.NCommitsAhead,
 					"Default nCommitsAhead should match expected value")
 			case "ignoreMergeCommits":
 				require.NotNil(t, defaultConfig.GommitConf.IgnoreMergeCommits,
 					"IgnoreMergeCommits should not be nil")
-				assert.Equal(t, tc.expected, *defaultConfig.GommitConf.IgnoreMergeCommits,
+				require.Equal(t, testCase.expected, *defaultConfig.GommitConf.IgnoreMergeCommits,
 					"Default ignoreMergeCommits should match expected value")
 			default:
-				t.Fatalf("Test case for field %s is not implemented", tc.field)
+				t.Fatalf("Test case for field %s is not implemented", testCase.field)
 			}
 		})
 	}
 
 	// Additional check for reference field which has a hardcoded default
-	assert.Equal(t, "main", defaultConfig.GommitConf.Reference,
+	require.Equal(t, "main", defaultConfig.GommitConf.Reference,
 		"Default Reference should be 'main'")
 }
 
 func TestDefaultConfigPaths(t *testing.T) {
 	// We can't test the unexported getDefaultConfigPaths function directly,
 	// but we can test the path loading behavior through the manager
-
 	tests := []struct {
 		name           string
 		setupXDG       bool
@@ -226,8 +228,8 @@ func TestDefaultConfigPaths(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			// Create temporary directory structure
 			tmpDir := t.TempDir()
 			projectDir := filepath.Join(tmpDir, "project")
@@ -243,7 +245,7 @@ func TestDefaultConfigPaths(t *testing.T) {
 			// Get original working directory to restore later
 			originalDir, err := os.Getwd()
 			require.NoError(t, err, "Failed to get current directory")
-			defer os.Chdir(originalDir)
+			defer os.Chdir(originalDir) //nolint
 
 			// Save original XDG_CONFIG_HOME to restore later
 			originalXDG := os.Getenv("XDG_CONFIG_HOME")
@@ -253,21 +255,21 @@ func TestDefaultConfigPaths(t *testing.T) {
 			os.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpDir, ".config"))
 
 			// Create config files based on test case
-			if tc.setupXDG {
+			if testCase.setupXDG {
 				xdgConfig := `gommitlint:
   subject:
     max-length: 60
 `
-				err := os.WriteFile(filepath.Join(xdgDir, "gommitlint.yaml"), []byte(xdgConfig), 0644)
+				err := os.WriteFile(filepath.Join(xdgDir, "gommitlint.yaml"), []byte(xdgConfig), 0600)
 				require.NoError(t, err, "Failed to write XDG config file")
 			}
 
-			if tc.setupProject {
+			if testCase.setupProject {
 				projectConfig := `gommitlint:
   subject:
     max-length: 70
 `
-				err := os.WriteFile(filepath.Join(projectDir, ".gommitlint.yaml"), []byte(projectConfig), 0644)
+				err := os.WriteFile(filepath.Join(projectDir, ".gommitlint.yaml"), []byte(projectConfig), 0600)
 				require.NoError(t, err, "Failed to write project config file")
 			}
 
@@ -280,13 +282,13 @@ func TestDefaultConfigPaths(t *testing.T) {
 			require.NoError(t, err, "Manager creation should not fail")
 
 			// Check if a config file was loaded
-			assert.Equal(t, tc.expectLoaded, manager.WasLoadedFromFile(),
+			require.Equal(t, testCase.expectLoaded, manager.WasLoadedFromFile(),
 				"WasLoadedFromFile() should match expectLoaded")
 
 			// If a config was loaded, check if it's the correct one
-			if tc.expectLoaded {
+			if testCase.expectLoaded {
 				sourcePath := manager.GetSourcePath()
-				assert.Contains(t, sourcePath, tc.expectedSource,
+				require.Contains(t, sourcePath, testCase.expectedSource,
 					"Source path should contain expected filename")
 
 				// Also check the actual loaded values
@@ -295,11 +297,11 @@ func TestDefaultConfigPaths(t *testing.T) {
 				require.NotNil(t, cfg.GommitConf, "GommitConf should not be nil")
 				require.NotNil(t, cfg.GommitConf.Subject, "Subject should not be nil")
 
-				if tc.setupProject {
-					assert.Equal(t, 70, cfg.GommitConf.Subject.MaxLength,
+				if testCase.setupProject {
+					require.Equal(t, 70, cfg.GommitConf.Subject.MaxLength,
 						"Subject.MaxLength should match project config value")
-				} else if tc.setupXDG {
-					assert.Equal(t, 60, cfg.GommitConf.Subject.MaxLength,
+				} else if testCase.setupXDG {
+					require.Equal(t, 60, cfg.GommitConf.Subject.MaxLength,
 						"Subject.MaxLength should match XDG config value")
 				}
 			}

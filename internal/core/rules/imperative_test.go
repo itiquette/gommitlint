@@ -11,7 +11,6 @@ import (
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -172,35 +171,35 @@ func TestImperativeVerbRule(t *testing.T) {
 			// Check errors
 			if testCase.expectedValid {
 				require.Empty(t, errors, "Did not expect errors")
-				assert.Equal(t, "Commit begins with imperative verb", rule.Result(), "Result should indicate success")
+				require.Equal(t, "Commit begins with imperative verb", rule.Result(), "Result should indicate success")
 
 				// Check verbose result for valid case
 				if strings.Contains(testCase.message, "Add") {
-					assert.Contains(t, rule.VerboseResult(), "Add", "VerboseResult should contain the verb")
+					require.Contains(t, rule.VerboseResult(), "Add", "VerboseResult should contain the verb")
 				}
 			} else {
 				require.NotEmpty(t, errors, "Expected errors")
 
 				// Check error code
 				if testCase.expectedCode != "" {
-					assert.Equal(t, testCase.expectedCode, errors[0].Code, "Error code should match expected")
+					require.Equal(t, testCase.expectedCode, errors[0].Code, "Error code should match expected")
 				}
 
 				// Check result message
-				assert.Equal(t, "Non-imperative verb detected", rule.Result(), "Result should indicate error")
+				require.Equal(t, "Non-imperative verb detected", rule.Result(), "Result should indicate error")
 
 				// Verify rule name is set in the error
-				assert.Equal(t, "ImperativeVerb", errors[0].Rule, "Rule name should be set in ValidationError")
+				require.Equal(t, "ImperativeVerb", errors[0].Rule, "Rule name should be set in ValidationError")
 
 				// Test VerboseResult for error cases includes helpful info
-				assert.NotEmpty(t, rule.VerboseResult(), "VerboseResult should not be empty")
+				require.NotEmpty(t, rule.VerboseResult(), "VerboseResult should not be empty")
 			}
 
 			// Check name method
-			assert.Equal(t, "ImperativeVerb", rule.Name(), "Name should be 'ImperativeVerb'")
+			require.Equal(t, "ImperativeVerb", rule.Name(), "Name should be 'ImperativeVerb'")
 
 			// Check help method is not empty
-			assert.NotEmpty(t, rule.Help(), "Help text should not be empty")
+			require.NotEmpty(t, rule.Help(), "Help text should not be empty")
 		})
 	}
 }
@@ -218,7 +217,7 @@ func TestImperativeVerbRuleOptions(t *testing.T) {
 
 		// Should be marked as non-verb due to our custom setting
 		require.NotEmpty(t, errors, "Should reject custom non-verb")
-		assert.Equal(t, string(appErrors.ErrNonVerb), errors[0].Code, "Error code should be ValidationErrorNonVerb")
+		require.Equal(t, string(appErrors.ErrNonVerb), errors[0].Code, "Error code should be ValidationErrorNonVerb")
 	})
 
 	t.Run("Custom base forms with ED", func(t *testing.T) {
@@ -232,7 +231,7 @@ func TestImperativeVerbRuleOptions(t *testing.T) {
 		errors := rule.Validate(commit)
 
 		// Should accept our custom word
-		assert.Empty(t, errors, "Should accept custom ED form")
+		require.Empty(t, errors, "Should accept custom ED form")
 
 		// Test default behavior for comparison
 		defaultRule := rules.NewImperativeVerbRule(false)
@@ -249,13 +248,13 @@ func TestImperativeVerbRuleOptions(t *testing.T) {
 		// Test with valid conventional commit using a word that's custom allowed
 		commit := &domain.CommitInfo{Subject: "feat(ui): Canvas button"}
 		errors := rule.Validate(commit)
-		assert.Empty(t, errors, "Should pass with multiple options")
+		require.Empty(t, errors, "Should pass with multiple options")
 
 		// Test with a word we've marked as non-verb
 		badCommit := &domain.CommitInfo{Subject: "feat(api): Execute function"}
 		badErrors := rule.Validate(badCommit)
 		require.NotEmpty(t, badErrors, "Should fail with custom non-verb")
-		assert.Equal(t, string(appErrors.ErrNonVerb), badErrors[0].Code, "Should have correct error code")
+		require.Equal(t, string(appErrors.ErrNonVerb), badErrors[0].Code, "Should have correct error code")
 	})
 }
 
@@ -278,7 +277,7 @@ func TestDifficultVerbCases(t *testing.T) {
 			rule := rules.NewImperativeVerbRule(false)
 			commit := &domain.CommitInfo{Subject: message}
 			errors := rule.Validate(commit)
-			assert.Empty(t, errors, "Should accept valid imperative verb: "+message)
+			require.Empty(t, errors, "Should accept valid imperative verb: "+message)
 		})
 	}
 
@@ -294,7 +293,7 @@ func TestDifficultVerbCases(t *testing.T) {
 			rule := rules.NewImperativeVerbRule(false)
 			commit := &domain.CommitInfo{Subject: message}
 			errors := rule.Validate(commit)
-			assert.NotEmpty(t, errors, "Should reject non-imperative form: "+message)
+			require.NotEmpty(t, errors, "Should reject non-imperative form: "+message)
 		})
 	}
 }

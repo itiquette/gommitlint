@@ -10,7 +10,6 @@ import (
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -135,36 +134,36 @@ Fixed the typo in API documentation.`,
 			errors := commitBodyRule.Validate(commit)
 
 			// Verify name is correct
-			assert.Equal(t, "CommitBody", commitBodyRule.Name())
+			require.Equal(t, "CommitBody", commitBodyRule.Name())
 
 			// Test result output
-			assert.Equal(t, tabletest.expectedResult, commitBodyRule.Result(), "Result() should return expected output")
+			require.Equal(t, tabletest.expectedResult, commitBodyRule.Result(), "Result() should return expected output")
 
 			if tabletest.expectError {
 				require.NotEmpty(t, errors, "expected errors but got none")
 
 				// Access ValidationError directly (no type assertion needed)
 				valErr := errors[0]
-				assert.Equal(t, tabletest.errorCode, valErr.Code, "unexpected error code")
-				assert.Equal(t, "CommitBody", valErr.Rule, "rule name should be set")
+				require.Equal(t, tabletest.errorCode, valErr.Code, "unexpected error code")
+				require.Equal(t, "CommitBody", valErr.Rule, "rule name should be set")
 
 				// Check VerboseResult contains more detailed information
 				verboseResult := commitBodyRule.VerboseResult()
-				assert.NotEqual(t, commitBodyRule.Result(), verboseResult, "VerboseResult should differ from Result for errors")
+				require.NotEqual(t, commitBodyRule.Result(), verboseResult, "VerboseResult should differ from Result for errors")
 
 				// Help should be provided for invalid commits
-				assert.NotEmpty(t, commitBodyRule.Help(), "help should be provided for invalid commits")
+				require.NotEmpty(t, commitBodyRule.Help(), "help should be provided for invalid commits")
 			} else {
-				assert.Empty(t, errors, "unexpected errors: %v", errors)
+				require.Empty(t, errors, "unexpected errors: %v", errors)
 
 				// For valid commits, verify verbose output
 				verboseResult := commitBodyRule.VerboseResult()
-				assert.NotEqual(t, commitBodyRule.Result(), verboseResult, "VerboseResult should differ from Result for valid commits")
-				assert.Contains(t, verboseResult, "proper format", "VerboseResult should be descriptive for valid commits")
+				require.NotEqual(t, commitBodyRule.Result(), verboseResult, "VerboseResult should differ from Result for valid commits")
+				require.Contains(t, verboseResult, "proper format", "VerboseResult should be descriptive for valid commits")
 			}
 
 			// Errors should match what was returned by Validate
-			assert.Equal(t, errors, commitBodyRule.Errors())
+			require.Equal(t, errors, commitBodyRule.Errors())
 		})
 	}
 }
@@ -225,7 +224,7 @@ func TestCommitBodyVerboseResult(t *testing.T) {
 
 			// Check verbose result
 			verboseResult := rule.VerboseResult()
-			assert.Contains(t, verboseResult, tabletest.expectedPhrase, "verbose output should contain expected phrase")
+			require.Contains(t, verboseResult, tabletest.expectedPhrase, "verbose output should contain expected phrase")
 		})
 	}
 }
@@ -242,7 +241,7 @@ func TestCommitBodyHelpMethod(t *testing.T) {
 		_ = r.Validate(commit)
 
 		helpText := r.Help()
-		assert.Contains(t, helpText, "Commit messages should include a descriptive body",
+		require.Contains(t, helpText, "Commit messages should include a descriptive body",
 			"help text should have standard structure intro")
 	})
 
@@ -258,7 +257,7 @@ func TestCommitBodyHelpMethod(t *testing.T) {
 
 		helpText := r.Help()
 		// This will trigger a standard error message for invalid body
-		assert.Contains(t, helpText, "commit message format is",
+		require.Contains(t, helpText, "commit message format is",
 			"help text should include guidance about formatting")
 	})
 
@@ -273,7 +272,7 @@ func TestCommitBodyHelpMethod(t *testing.T) {
 		_ = r.Validate(commit)
 
 		helpText := r.Help()
-		assert.Contains(t, helpText, "Include meaningful content",
+		require.Contains(t, helpText, "Include meaningful content",
 			"help text should include standard guidance for formatting")
 	})
 
@@ -288,7 +287,7 @@ func TestCommitBodyHelpMethod(t *testing.T) {
 		_ = r.Validate(commit)
 
 		helpText := r.Help()
-		assert.Equal(t, "No errors to fix", helpText,
+		require.Equal(t, "No errors to fix", helpText,
 			"help text for valid commit should indicate no errors")
 	})
 }

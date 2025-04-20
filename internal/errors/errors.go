@@ -420,7 +420,7 @@ func NewApplicationError(message string, cause error) *ApplicationError {
 	return NewAppError(AppErrApplication, message, 1, cause)
 }
 
-// NewValidationError creates a validation error.
+// NewValidationAppError creates a validation error.
 func NewValidationAppError(message string, cause error) *ApplicationError {
 	return NewAppError(AppErrValidation, message, 2, cause)
 }

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
+//
+// SPDX-License-Identifier: EUPL-1.2
 package config_test
 
 import (
@@ -6,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/itiquette/gommitlint/internal/config"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -65,11 +67,11 @@ func TestLoadFromFile(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			// Create the test config file
-			configPath := filepath.Join(tmpDir, tc.name+".yaml")
-			err := os.WriteFile(configPath, []byte(tc.configContent), 0644)
+			configPath := filepath.Join(tmpDir, testCase.name+".yaml")
+			err := os.WriteFile(configPath, []byte(testCase.configContent), 0600)
 			require.NoError(t, err, "Failed to write test config file")
 
 			// Create a new manager
@@ -79,26 +81,26 @@ func TestLoadFromFile(t *testing.T) {
 			// Load the file
 			err = manager.LoadFromFile(configPath)
 
-			if tc.expectError {
-				assert.Error(t, err, "LoadFromFile should return an error for invalid config")
+			if testCase.expectError {
+				require.Error(t, err, "LoadFromFile should return an error for invalid config")
 			} else {
-				assert.NoError(t, err, "LoadFromFile should not return an error for valid config")
-				assert.True(t, manager.WasLoadedFromFile(), "WasLoadedFromFile should return true")
-				assert.Equal(t, configPath, manager.GetSourcePath(), "GetSourcePath should return the config path")
+				require.NoError(t, err, "LoadFromFile should not return an error for valid config")
+				require.True(t, manager.WasLoadedFromFile(), "WasLoadedFromFile should return true")
+				require.Equal(t, configPath, manager.GetSourcePath(), "GetSourcePath should return the config path")
 
 				// Verify config values
 				cfg := manager.GetConfig()
 				require.NotNil(t, cfg, "GetConfig should return non-nil config")
 				require.NotNil(t, cfg.GommitConf, "GommitConf should not be nil")
 
-				for key, expectedValue := range tc.expectedValues {
+				for key, expectedValue := range testCase.expectedValues {
 					switch key {
 					case "subject.maxLength":
-						assert.Equal(t, expectedValue, cfg.GommitConf.Subject.MaxLength, "Subject.MaxLength should match expected value")
+						require.Equal(t, expectedValue, cfg.GommitConf.Subject.MaxLength, "Subject.MaxLength should match expected value")
 					case "subject.case":
-						assert.Equal(t, expectedValue, cfg.GommitConf.Subject.Case, "Subject.Case should match expected value")
+						require.Equal(t, expectedValue, cfg.GommitConf.Subject.Case, "Subject.Case should match expected value")
 					case "body.required":
-						assert.Equal(t, expectedValue, cfg.GommitConf.Body.Required, "Body.Required should match expected value")
+						require.Equal(t, expectedValue, cfg.GommitConf.Body.Required, "Body.Required should match expected value")
 					}
 				}
 			}
@@ -113,12 +115,12 @@ func TestLoadNonExistentFile(t *testing.T) {
 
 	// Try to load a non-existent file
 	err = manager.LoadFromFile("/path/to/nonexistent/file.yaml")
-	assert.Error(t, err, "LoadFromFile should return an error for non-existent file")
-	assert.Contains(t, err.Error(), "does not exist", "Error message should mention file doesn't exist")
+	require.Error(t, err, "LoadFromFile should return an error for non-existent file")
+	require.Contains(t, err.Error(), "does not exist", "Error message should mention file doesn't exist")
 
 	// Verify that we're still using default config
-	assert.False(t, manager.WasLoadedFromFile(), "WasLoadedFromFile should return false")
-	assert.Empty(t, manager.GetSourcePath(), "GetSourcePath should return empty string")
+	require.False(t, manager.WasLoadedFromFile(), "WasLoadedFromFile should return false")
+	require.Empty(t, manager.GetSourcePath(), "GetSourcePath should return empty string")
 }
 
 func TestGetRuleConfig(t *testing.T) {
@@ -182,11 +184,11 @@ func TestGetRuleConfig(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			// Create the test config file
-			configPath := filepath.Join(tmpDir, tc.name+".yaml")
-			err := os.WriteFile(configPath, []byte(tc.configContent), 0644)
+			configPath := filepath.Join(tmpDir, testCase.name+".yaml")
+			err := os.WriteFile(configPath, []byte(testCase.configContent), 0600)
 			require.NoError(t, err, "Failed to write test config file")
 
 			// Create a new manager and load the file
@@ -201,28 +203,28 @@ func TestGetRuleConfig(t *testing.T) {
 			require.NotNil(t, ruleConfig, "GetRuleConfig should return non-nil config")
 
 			// Verify rule config values
-			for key, expectedValue := range tc.expectedRules {
+			for key, expectedValue := range testCase.expectedRules {
 				switch key {
 				case "MaxSubjectLength":
-					assert.Equal(t, expectedValue, ruleConfig.MaxSubjectLength, "MaxSubjectLength should match expected value")
+					require.Equal(t, expectedValue, ruleConfig.MaxSubjectLength, "MaxSubjectLength should match expected value")
 				case "SubjectCaseChoice":
-					assert.Equal(t, expectedValue, ruleConfig.SubjectCaseChoice, "SubjectCaseChoice should match expected value")
+					require.Equal(t, expectedValue, ruleConfig.SubjectCaseChoice, "SubjectCaseChoice should match expected value")
 				case "RequireBody":
-					assert.Equal(t, expectedValue, ruleConfig.RequireBody, "RequireBody should match expected value")
+					require.Equal(t, expectedValue, ruleConfig.RequireBody, "RequireBody should match expected value")
 				case "IsConventionalCommit":
-					assert.Equal(t, expectedValue, ruleConfig.IsConventionalCommit, "IsConventionalCommit should match expected value")
+					require.Equal(t, expectedValue, ruleConfig.IsConventionalCommit, "IsConventionalCommit should match expected value")
 				case "ConventionalTypes":
-					assert.ElementsMatch(t, expectedValue, ruleConfig.ConventionalTypes, "ConventionalTypes should match expected value")
+					require.ElementsMatch(t, expectedValue, ruleConfig.ConventionalTypes, "ConventionalTypes should match expected value")
 				case "RequireSignOff":
-					assert.Equal(t, expectedValue, ruleConfig.RequireSignOff, "RequireSignOff should match expected value")
+					require.Equal(t, expectedValue, ruleConfig.RequireSignOff, "RequireSignOff should match expected value")
 				case "JiraRequired":
-					assert.Equal(t, expectedValue, ruleConfig.JiraRequired, "JiraRequired should match expected value")
+					require.Equal(t, expectedValue, ruleConfig.JiraRequired, "JiraRequired should match expected value")
 				case "JiraPattern":
-					assert.Equal(t, expectedValue, ruleConfig.JiraPattern, "JiraPattern should match expected value")
+					require.Equal(t, expectedValue, ruleConfig.JiraPattern, "JiraPattern should match expected value")
 				case "DisabledRules":
 					if expectedRulesList, ok := expectedValue.([]string); ok {
 						for _, rule := range expectedRulesList {
-							assert.Contains(t, ruleConfig.DisabledRules, rule, "DisabledRules should contain %s", rule)
+							require.Contains(t, ruleConfig.DisabledRules, rule, "DisabledRules should contain %s", rule)
 						}
 					}
 				}
@@ -301,43 +303,43 @@ func TestConfigMerging(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			// Create a test directory structure
-			xdgDir := filepath.Join(tmpDir, tc.name, ".config", "gommitlint")
+			xdgDir := filepath.Join(tmpDir, testCase.name, ".config", "gommitlint")
 			err := os.MkdirAll(xdgDir, 0755)
 			require.NoError(t, err, "Failed to create XDG config directory")
 
 			// Get current working directory to restore it after the test
 			originalWd, err := os.Getwd()
 			require.NoError(t, err)
-			defer os.Chdir(originalWd)
+			defer os.Chdir(originalWd) //nolint
 
 			// Create a project directory
-			projectDir := filepath.Join(tmpDir, tc.name, "project")
+			projectDir := filepath.Join(tmpDir, testCase.name, "project")
 			err = os.MkdirAll(projectDir, 0755)
 			require.NoError(t, err, "Failed to create project directory")
 
 			// Create XDG config file if content provided
 			var xdgConfigPath string
-			if tc.xdgConfig != "" {
+			if testCase.xdgConfig != "" {
 				xdgConfigPath = filepath.Join(xdgDir, "gommitlint.yaml")
-				err = os.WriteFile(xdgConfigPath, []byte(tc.xdgConfig), 0644)
+				err = os.WriteFile(xdgConfigPath, []byte(testCase.xdgConfig), 0600)
 				require.NoError(t, err, "Failed to write XDG config file")
 			}
 
 			// Create project config file if content provided
 			var projectConfigPath string
-			if tc.projectConfig != "" {
+			if testCase.projectConfig != "" {
 				projectConfigPath = filepath.Join(projectDir, ".gommitlint.yaml")
-				err = os.WriteFile(projectConfigPath, []byte(tc.projectConfig), 0644)
+				err = os.WriteFile(projectConfigPath, []byte(testCase.projectConfig), 0600)
 				require.NoError(t, err, "Failed to write project config file")
 			}
 
 			// Mock XDG_CONFIG_HOME
 			originalXDG := os.Getenv("XDG_CONFIG_HOME")
 			defer os.Setenv("XDG_CONFIG_HOME", originalXDG)
-			os.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpDir, tc.name, ".config"))
+			os.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpDir, testCase.name, ".config"))
 
 			// Change to the project directory
 			err = os.Chdir(projectDir)
@@ -345,9 +347,10 @@ func TestConfigMerging(t *testing.T) {
 
 			// For XDG-only test, we need to check both approaches - either looking at New() or direct loading
 			var manager *config.Manager
+
 			var cfg *config.AppConf
 
-			if tc.name == "only xdg config" {
+			if testCase.name == "only xdg config" {
 				// Try the normal New() approach first
 				manager, err = config.New()
 				require.NoError(t, err)
@@ -356,6 +359,7 @@ func TestConfigMerging(t *testing.T) {
 				if !manager.WasLoadedFromFile() {
 					// If it didn't, try direct loading
 					t.Log("New() didn't load XDG config, trying direct loading")
+
 					manager, err = config.New()
 					require.NoError(t, err)
 
@@ -370,25 +374,24 @@ func TestConfigMerging(t *testing.T) {
 				require.NotNil(t, cfg.GommitConf, "GommitConf should not be nil")
 
 				// Verify values - this is the critical part
-				assert.Equal(t, 50, cfg.GommitConf.Subject.MaxLength,
+				require.Equal(t, 50, cfg.GommitConf.Subject.MaxLength,
 					"Subject.MaxLength should match XDG config value")
-				assert.Equal(t, "ignore", cfg.GommitConf.Subject.Case,
+				require.Equal(t, "ignore", cfg.GommitConf.Subject.Case,
 					"Subject.Case should match XDG config value")
 
 				// We've verified the values, so we can return here
 				return
-			} else {
-				// Normal case for other tests
-				manager, err = config.New()
-				require.NoError(t, err)
 			}
+			// Normal case for other tests
+			manager, err = config.New()
+			require.NoError(t, err)
 
 			// Verify configs were loaded correctly for non-XDG-only tests
-			if tc.projectConfig != "" {
-				assert.True(t, manager.WasLoadedFromFile(), "Manager should have loaded a config file")
+			if testCase.projectConfig != "" {
+				require.True(t, manager.WasLoadedFromFile(), "Manager should have loaded a config file")
 
 				// Check that source path contains expected filename
-				assert.Contains(t, manager.GetSourcePath(), ".gommitlint.yaml",
+				require.Contains(t, manager.GetSourcePath(), ".gommitlint.yaml",
 					"Source path should contain project config filename")
 			}
 
@@ -398,25 +401,25 @@ func TestConfigMerging(t *testing.T) {
 			require.NotNil(t, cfg.GommitConf, "GommitConf should not be nil")
 
 			// Verify merged values
-			for key, expectedValue := range tc.expected {
+			for key, expectedValue := range testCase.expected {
 				switch key {
 				case "subject.maxLength":
-					assert.Equal(t, expectedValue, cfg.GommitConf.Subject.MaxLength,
+					require.Equal(t, expectedValue, cfg.GommitConf.Subject.MaxLength,
 						"Subject.MaxLength should match expected value")
 				case "subject.case":
-					assert.Equal(t, expectedValue, cfg.GommitConf.Subject.Case,
+					require.Equal(t, expectedValue, cfg.GommitConf.Subject.Case,
 						"Subject.Case should match expected value")
 				case "subject.invalidSuffixes":
-					assert.Equal(t, expectedValue, cfg.GommitConf.Subject.InvalidSuffixes,
+					require.Equal(t, expectedValue, cfg.GommitConf.Subject.InvalidSuffixes,
 						"Subject.InvalidSuffixes should match expected value")
 				case "body.required":
-					assert.Equal(t, expectedValue, cfg.GommitConf.Body.Required,
+					require.Equal(t, expectedValue, cfg.GommitConf.Body.Required,
 						"Body.Required should match expected value")
 				case "conventional.required":
-					assert.Equal(t, expectedValue, cfg.GommitConf.ConventionalCommit.Required,
+					require.Equal(t, expectedValue, cfg.GommitConf.ConventionalCommit.Required,
 						"ConventionalCommit.Required should match expected value")
 				case "conventional.types":
-					assert.ElementsMatch(t, expectedValue, cfg.GommitConf.ConventionalCommit.Types,
+					require.ElementsMatch(t, expectedValue, cfg.GommitConf.ConventionalCommit.Types,
 						"ConventionalCommit.Types should match expected value")
 				}
 			}

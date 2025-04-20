@@ -12,7 +12,6 @@ import (
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -182,20 +181,20 @@ FxlS+hzWnbOPMrRKuSfJ+H8mF6t1V3qUYtxHNQvHtcCvG0gx4auPSoxp7qVCVQ==
 
 			// Check for expected validation result
 			if testCase.expectedValid {
-				assert.Empty(t, errors, "Expected no validation errors")
+				require.Empty(t, errors, "Expected no validation errors")
 
 				// Verify Result() and VerboseResult() methods return expected messages
-				assert.Equal(t, "SSH/GPG signature found", rule.Result(), "Expected default valid message")
-				assert.Contains(t, rule.VerboseResult(), "SSH/GPG signature found", "Verbose result should indicate valid signature")
+				require.Equal(t, "SSH/GPG signature found", rule.Result(), "Expected default valid message")
+				require.Contains(t, rule.VerboseResult(), "SSH/GPG signature found", "Verbose result should indicate valid signature")
 
 				// Test Help on valid case
-				assert.Contains(t, rule.Help(), "No errors to fix", "Help for valid message should indicate nothing to fix")
+				require.Contains(t, rule.Help(), "No errors to fix", "Help for valid message should indicate nothing to fix")
 			} else {
-				assert.NotEmpty(t, errors, "Expected errors but found none")
+				require.NotEmpty(t, errors, "Expected errors but found none")
 
 				// Check error code if specified
 				if testCase.expectedCode != "" && len(errors) > 0 {
-					assert.Equal(t, testCase.expectedCode, errors[0].Code,
+					require.Equal(t, testCase.expectedCode, errors[0].Code,
 						"Error code should match expected")
 				}
 
@@ -220,26 +219,26 @@ FxlS+hzWnbOPMrRKuSfJ+H8mF6t1V3qUYtxHNQvHtcCvG0gx4auPSoxp7qVCVQ==
 						}
 					}
 
-					assert.True(t, found, "Expected error containing %q", testCase.errorContains)
+					require.True(t, found, "Expected error containing %q", testCase.errorContains)
 				}
 
 				// Verify rule name is set in ValidationError
 				if len(errors) > 0 {
-					assert.Equal(t, "Signature", errors[0].Rule,
+					require.Equal(t, "Signature", errors[0].Rule,
 						"Rule name should be set in ValidationError")
 				}
 
 				// Verify Help() method provides guidance
 				helpText := rule.Help()
-				assert.NotEmpty(t, helpText, "Help text should not be empty")
+				require.NotEmpty(t, helpText, "Help text should not be empty")
 
 				// Verify Result() method returns expected message
-				assert.Equal(t, "Missing or invalid signature", rule.Result(), "Expected error result message")
-				assert.NotEqual(t, rule.Result(), rule.VerboseResult(), "Verbose result should be different from regular result")
+				require.Equal(t, "Missing or invalid signature", rule.Result(), "Expected error result message")
+				require.NotEqual(t, rule.Result(), rule.VerboseResult(), "Verbose result should be different from regular result")
 			}
 
 			// Verify Name() method
-			assert.Equal(t, "Signature", rule.Name(), "Name should be 'Signature'")
+			require.Equal(t, "Signature", rule.Name(), "Name should be 'Signature'")
 		})
 	}
 
@@ -253,9 +252,9 @@ FxlS+hzWnbOPMrRKuSfJ+H8mF6t1V3qUYtxHNQvHtcCvG0gx4auPSoxp7qVCVQ==
 		errors := rule.Validate(commit)
 
 		require.NotEmpty(t, errors)
-		assert.Equal(t, string(appErrors.ErrInvalidSSHFormat), errors[0].Code)
-		assert.Equal(t, "ssh", errors[0].Context["signature_type"])
-		assert.Contains(t, errors[0].Context["error_details"], "invalid SSH signature encoding")
+		require.Equal(t, string(appErrors.ErrInvalidSSHFormat), errors[0].Code)
+		require.Equal(t, "ssh", errors[0].Context["signature_type"])
+		require.Contains(t, errors[0].Context["error_details"], "invalid SSH signature encoding")
 
 		// Test context for GPG format error
 		commit = &domain.CommitInfo{
@@ -264,7 +263,7 @@ FxlS+hzWnbOPMrRKuSfJ+H8mF6t1V3qUYtxHNQvHtcCvG0gx4auPSoxp7qVCVQ==
 		errors = rule.Validate(commit)
 
 		require.NotEmpty(t, errors)
-		assert.Equal(t, string(appErrors.ErrInvalidGPGFormat), errors[0].Code)
-		assert.Equal(t, "gpg", errors[0].Context["signature_type"])
+		require.Equal(t, string(appErrors.ErrInvalidGPGFormat), errors[0].Code)
+		require.Equal(t, "gpg", errors[0].Context["signature_type"])
 	})
 }

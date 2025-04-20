@@ -13,6 +13,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/errors"
 )
 
 // TextFormatter formats validation results as text.
@@ -20,19 +21,10 @@ type TextFormatter struct {
 	verbose   bool
 	showHelp  bool
 	lightMode bool
-}
-
-// NewTextFormatter creates a new text formatter.
-func NewTextFormatter(verbose, showHelp bool, options ...bool) *TextFormatter {
-	lightMode := false
-	if len(options) > 0 {
-		lightMode = options[0]
-	}
-
-	return &TextFormatter{
-		verbose:   verbose,
-		showHelp:  showHelp,
-		lightMode: lightMode,
+	colors    ColorScheme
+	symbols   struct {
+		pass string
+		fail string
 	}
 }
 
@@ -50,291 +42,369 @@ type ColorScheme struct {
 	Header      func(format string, a ...interface{}) string
 }
 
+// NewTextFormatter creates a new text formatter.
+func NewTextFormatter(verbose, showHelp bool, options ...bool) *TextFormatter {
+	lightMode := false
+	if len(options) > 0 {
+		lightMode = options[0]
+	}
+
+	formatter := &TextFormatter{
+		verbose:   verbose,
+		showHelp:  showHelp,
+		lightMode: lightMode,
+	}
+
+	formatter.initColorScheme()
+	formatter.initSymbols()
+
+	return formatter
+}
+
+// initColorScheme initializes the color scheme based on settings.
+func (f *TextFormatter) initColorScheme() {
+	// Check for NO_COLOR environment variable
+	noColor := os.Getenv("NO_COLOR") != ""
+	if noColor {
+		color.NoColor = true
+	}
+
+	f.colors = getColorScheme(f.lightMode, noColor)
+}
+
+// initSymbols initializes the symbols used for pass/fail status.
+func (f *TextFormatter) initSymbols() {
+	f.symbols.pass = f.colors.Success("PASS")
+	f.symbols.fail = f.colors.Error("FAIL")
+
+	if canHandleUnicode() {
+		f.symbols.pass = f.colors.Success("✓")
+		f.symbols.fail = f.colors.Error("✗")
+	}
+}
+
 // Format formats validation results as text.
 func (f *TextFormatter) Format(results *domain.ValidationResults) string {
 	var builder strings.Builder
 
-	// Check for NO_COLOR environment variable
-	noColor := false
-	if val, exists := os.LookupEnv("NO_COLOR"); exists && val != "" {
-		noColor = true
-		color.NoColor = true
-	}
-
-	// Set up color scheme based on mode preference and accessibility
-	colorScheme := getColorScheme(f.lightMode, noColor)
-
-	// Use Unicode symbols based on terminal capabilities
-	passSymbol := colorScheme.Success("PASS")
-	failSymbol := colorScheme.Error("FAIL")
-
-	if canHandleUnicode() {
-		passSymbol = colorScheme.Success("✓")
-		failSymbol = colorScheme.Error("✗")
-	}
-
 	// For multiple commits, show a summary header first
 	if len(results.CommitResults) > 1 {
-		// Print overall summary
-		if results.AllPassed() {
-			builder.WriteString(colorScheme.Success("SUCCESS: "))
-			builder.WriteString(fmt.Sprintf("All %d commits passed validation\n\n", results.TotalCommits))
-		} else {
-			builder.WriteString(colorScheme.Warning("SUMMARY: "))
-			builder.WriteString(fmt.Sprintf("%d of %d commits passed validation\n",
-				results.PassedCommits, results.TotalCommits))
-
-			// Add rule summary if there are failures
-			if len(results.RuleSummary) > 0 {
-				builder.WriteString(colorScheme.Bold("Rule failures summary:\n"))
-
-				// Sort rules by name for consistent output
-				var ruleNames []string
-				for ruleName := range results.RuleSummary {
-					ruleNames = append(ruleNames, ruleName)
-				}
-
-				sort.Strings(ruleNames)
-
-				for _, ruleName := range ruleNames {
-					count := results.RuleSummary[ruleName]
-					builder.WriteString(fmt.Sprintf("  - %s: %d failure(s)\n",
-						colorScheme.Bold(ruleName), count))
-				}
-			}
-
-			builder.WriteString("\n")
-		}
+		f.formatOverallSummary(&builder, results)
 	}
 
 	// Process each commit result
 	for i, commitResult := range results.CommitResults {
-		// Print commit header with details
-		if commitResult.CommitInfo != nil {
-			// When we have multiple commits, show numbering
-			if len(results.CommitResults) > 1 {
-				builder.WriteString(colorScheme.Header(fmt.Sprintf("COMMIT #%d:\n", i+1)))
-			}
-
-			// Print commit divider
-			divider := strings.Repeat("=", 80)
-			builder.WriteString(colorScheme.Header(divider) + "\n")
-
-			// Get the short SHA (first 7 characters)
-			shortSHA := commitResult.CommitInfo.Hash
-			if len(shortSHA) > 7 {
-				shortSHA = shortSHA[:7]
-			}
-
-			// Print commit info header
-			builder.WriteString(fmt.Sprintf("%s %s\n",
-				colorScheme.Header("COMMIT-SHA:"),
-				colorScheme.Bold(shortSHA)))
-
-			// Print subject line
-			builder.WriteString(fmt.Sprintf("%s %s\n",
-				colorScheme.Header("SUBJECT:"),
-				commitResult.CommitInfo.Subject))
-
-			// Print full message if body exists and is not empty
-			if commitResult.CommitInfo.Message != "" {
-				// Extract body (everything after the first line)
-				parts := strings.SplitN(commitResult.CommitInfo.Message, "\n", 2)
-				if len(parts) > 1 && parts[1] != "" {
-					builder.WriteString(fmt.Sprintf("%s\n%s\n",
-						colorScheme.Header("MESSAGE:"),
-						parts[1]))
-				}
-			}
-
-			builder.WriteString(colorScheme.Header(divider) + "\n\n")
-		}
-
-		// Sort rule results alphabetically by name
-		sortedRules := make([]domain.RuleResult, len(commitResult.RuleResults))
-		copy(sortedRules, commitResult.RuleResults)
-		sort.Slice(sortedRules, func(i, j int) bool {
-			return strings.ToLower(sortedRules[i].RuleName) < strings.ToLower(sortedRules[j].RuleName)
-		})
-
-		// Print validation results for each rule
-		passedRules := 0
-		totalRules := 0
-
-		for _, ruleResult := range sortedRules {
-			// Skip rules with StatusSkipped status - these are disabled rules
-			if ruleResult.Status == domain.StatusSkipped {
-				continue
-			}
-
-			totalRules++
-			ruleName := colorScheme.Bold(ruleResult.RuleName)
-
-			if ruleResult.Status == domain.StatusPassed {
-				// Success
-				passedRules++
-
-				builder.WriteString(fmt.Sprintf("%s %s: ", passSymbol, ruleName))
-
-				// Print basic result message
-				builder.WriteString(ruleResult.Message + "\n")
-
-				// In verbose mode, add detailed information
-				if f.verbose {
-					builder.WriteString(fmt.Sprintf("    %s\n",
-						colorScheme.VerboseInfo(ruleResult.VerboseMessage)))
-				}
-			} else if ruleResult.Status == domain.StatusFailed {
-				// Error
-				builder.WriteString(fmt.Sprintf("%s %s: ", failSymbol, ruleName))
-
-				// Print basic error message in red
-				builder.WriteString(colorScheme.Error(ruleResult.Message) + "\n")
-
-				// In verbose mode or show help mode, add detailed error information
-				if f.verbose {
-					builder.WriteString(fmt.Sprintf("  %s\n",
-						colorScheme.ErrorDetail(ruleResult.VerboseMessage)))
-				}
-
-				// Display validation errors
-				if len(ruleResult.Errors) > 0 {
-					for _, err := range ruleResult.Errors {
-						builder.WriteString(fmt.Sprintf("    - %s\n",
-							colorScheme.Error(err.Message)))
-
-						// Show context if verbose
-						if f.verbose && len(err.Context) > 0 {
-							for key, value := range err.Context {
-								builder.WriteString(fmt.Sprintf("      %s: %s\n",
-									key, value))
-							}
-						}
-					}
-				}
-
-				// If help mode, show full help text
-				if f.showHelp && ruleResult.HelpMessage != "" {
-					builder.WriteString("\n")
-
-					// Properly indent and style all help text lines
-					helpLines := strings.Split(ruleResult.HelpMessage, "\n")
-					for _, line := range helpLines {
-						builder.WriteString(fmt.Sprintf("  %s\n",
-							colorScheme.HelpText(line)))
-					}
-
-					builder.WriteString("\n")
-				} else if f.verbose {
-					// In verbose mode, show a compact tip if we have a rule ID
-					if ruleResult.RuleID != "" {
-						builder.WriteString(fmt.Sprintf("    %s Run with '--rulehelp=%s' for detailed instructions\n\n",
-							colorScheme.Warning("TIP:"), strings.ToLower(ruleResult.RuleID)))
-					}
-				}
-			}
-		}
-
-		// Print summary line for this commit
-		if totalRules > 0 {
-			if passedRules == totalRules {
-				builder.WriteString(fmt.Sprintf("\n%s All rules passed (%d/%d)\n",
-					colorScheme.Success("SUCCESS:"), passedRules, totalRules))
-			} else {
-				builder.WriteString(fmt.Sprintf("\n%s %d of %d rules passed\n",
-					colorScheme.Warning("FAIL:"), passedRules, totalRules))
-
-				// Add a help hint if we're not in verbose mode
-				if !f.verbose {
-					builder.WriteString(colorScheme.Warning("TIP:") + " Run with '--verbose' for more details or '--rulehelp=<rule>' for specific rule help\n")
-				}
-			}
-		} else {
-			builder.WriteString(fmt.Sprintf("\n%s No active rules to evaluate\n",
-				colorScheme.Warning("INFO:")))
-		}
-
-		builder.WriteString("\n")
+		f.formatCommitHeader(&builder, commitResult, i, len(results.CommitResults))
+		f.formatRuleResults(&builder, commitResult)
 	}
 
 	return builder.String()
+}
+
+// formatOverallSummary formats the summary for multiple commits.
+func (f *TextFormatter) formatOverallSummary(builder *strings.Builder, results *domain.ValidationResults) {
+	if results.AllPassed() {
+		builder.WriteString(f.colors.Success("SUCCESS: "))
+		builder.WriteString(fmt.Sprintf("All %d commits passed validation\n\n", results.TotalCommits))
+
+		return
+	}
+
+	builder.WriteString(f.colors.Warning("SUMMARY: "))
+	builder.WriteString(fmt.Sprintf("%d of %d commits passed validation\n",
+		results.PassedCommits, results.TotalCommits))
+
+	f.formatRuleSummary(builder, results)
+	builder.WriteString("\n")
+}
+
+// formatRuleSummary formats the summary of rule failures.
+func (f *TextFormatter) formatRuleSummary(builder *strings.Builder, results *domain.ValidationResults) {
+	if len(results.RuleSummary) == 0 {
+		return
+	}
+
+	builder.WriteString(f.colors.Bold("Rule failures summary:\n"))
+
+	// Sort rules by name for consistent output
+	ruleNames := getSortedRuleNames(results.RuleSummary)
+
+	for _, ruleName := range ruleNames {
+		count := results.RuleSummary[ruleName]
+		builder.WriteString(fmt.Sprintf("  - %s: %d failure(s)\n",
+			f.colors.Bold(ruleName), count))
+	}
+}
+
+// formatCommitHeader formats the commit header information.
+func (f *TextFormatter) formatCommitHeader(builder *strings.Builder,
+	commitResult domain.CommitResult, index, totalCommits int) {
+	if commitResult.CommitInfo == nil {
+		return
+	}
+
+	// When we have multiple commits, show numbering
+	if totalCommits > 1 {
+		builder.WriteString(f.colors.Header(fmt.Sprintf("COMMIT #%d:\n", index+1)))
+	}
+
+	// Print commit divider
+	divider := strings.Repeat("=", 80)
+	builder.WriteString(f.colors.Header(divider) + "\n")
+
+	// Get the short SHA (first 7 characters)
+	shortSHA := commitResult.CommitInfo.Hash
+	if len(shortSHA) > 7 {
+		shortSHA = shortSHA[:7]
+	}
+
+	// Print commit info
+	builder.WriteString(fmt.Sprintf("%s %s\n",
+		f.colors.Header("COMMIT-SHA:"),
+		f.colors.Bold(shortSHA)))
+	builder.WriteString(fmt.Sprintf("%s %s\n",
+		f.colors.Header("SUBJECT:"),
+		commitResult.CommitInfo.Subject))
+
+	f.formatCommitMessage(builder, commitResult.CommitInfo.Message)
+	builder.WriteString(f.colors.Header(divider) + "\n\n")
+}
+
+// formatCommitMessage formats the commit message body if it exists.
+func (f *TextFormatter) formatCommitMessage(builder *strings.Builder, message string) {
+	if message == "" {
+		return
+	}
+
+	// Extract body (everything after the first line)
+	parts := strings.SplitN(message, "\n", 2)
+	if len(parts) > 1 && parts[1] != "" {
+		builder.WriteString(fmt.Sprintf("%s\n%s\n",
+			f.colors.Header("MESSAGE:"),
+			parts[1]))
+	}
+}
+
+// formatRuleResults formats the rule validation results.
+func (f *TextFormatter) formatRuleResults(builder *strings.Builder, commitResult domain.CommitResult) {
+	// Sort rule results alphabetically by name
+	sortedRules := getSortedRuleResults(commitResult.RuleResults)
+
+	// Print validation results for each rule
+	passedRules := 0
+	totalRules := 0
+
+	for _, ruleResult := range sortedRules {
+		// Skip rules with StatusSkipped status - these are disabled rules
+		if ruleResult.Status == domain.StatusSkipped {
+			continue
+		}
+
+		totalRules++
+		ruleName := f.colors.Bold(ruleResult.RuleName)
+
+		if ruleResult.Status == domain.StatusPassed {
+			passedRules++
+
+			f.formatPassedRule(builder, ruleName, ruleResult)
+		} else if ruleResult.Status == domain.StatusFailed {
+			f.formatFailedRule(builder, ruleName, ruleResult)
+		}
+	}
+
+	f.formatRuleSummaryLine(builder, passedRules, totalRules)
+}
+
+// formatPassedRule formats a passed rule result.
+func (f *TextFormatter) formatPassedRule(builder *strings.Builder, ruleName string, ruleResult domain.RuleResult) {
+	builder.WriteString(fmt.Sprintf("%s %s: ", f.symbols.pass, ruleName))
+	builder.WriteString(ruleResult.Message + "\n")
+
+	// In verbose mode, add detailed information
+	if f.verbose {
+		builder.WriteString(fmt.Sprintf("    %s\n",
+			f.colors.VerboseInfo(ruleResult.VerboseMessage)))
+	}
+}
+
+// formatFailedRule formats a failed rule result.
+func (f *TextFormatter) formatFailedRule(builder *strings.Builder, ruleName string, ruleResult domain.RuleResult) {
+	builder.WriteString(fmt.Sprintf("%s %s: ", f.symbols.fail, ruleName))
+	builder.WriteString(f.colors.Error(ruleResult.Message) + "\n")
+
+	// In verbose mode, add detailed error information
+	if f.verbose {
+		builder.WriteString(fmt.Sprintf("  %s\n",
+			f.colors.ErrorDetail(ruleResult.VerboseMessage)))
+	}
+
+	f.formatRuleErrors(builder, ruleResult.Errors)
+	f.formatHelpText(builder, ruleResult)
+}
+
+// formatRuleErrors formats the validation errors for a rule.
+func (f *TextFormatter) formatRuleErrors(builder *strings.Builder, errors []errors.ValidationError) {
+	if len(errors) == 0 {
+		return
+	}
+
+	for _, err := range errors {
+		builder.WriteString(fmt.Sprintf("    - %s\n",
+			f.colors.Error(err.Message)))
+
+		// Show context if verbose
+		if f.verbose && len(err.Context) > 0 {
+			for key, value := range err.Context {
+				builder.WriteString(fmt.Sprintf("      %s: %s\n", key, value))
+			}
+		}
+	}
+}
+
+// formatHelpText formats the help text for a failed rule.
+func (f *TextFormatter) formatHelpText(builder *strings.Builder, ruleResult domain.RuleResult) {
+	if f.showHelp && ruleResult.HelpMessage != "" {
+		builder.WriteString("\n")
+
+		// Properly indent and style all help text lines
+		helpLines := strings.Split(ruleResult.HelpMessage, "\n")
+		for _, line := range helpLines {
+			builder.WriteString(fmt.Sprintf("  %s\n",
+				f.colors.HelpText(line)))
+		}
+
+		builder.WriteString("\n")
+	} else if f.verbose && ruleResult.RuleID != "" {
+		// In verbose mode, show a compact tip if we have a rule ID
+		builder.WriteString(fmt.Sprintf("    %s Run with '--rulehelp=%s' for detailed instructions\n\n",
+			f.colors.Warning("TIP:"), strings.ToLower(ruleResult.RuleID)))
+	}
+}
+
+// formatRuleSummaryLine formats the summary line for a commit.
+func (f *TextFormatter) formatRuleSummaryLine(builder *strings.Builder, passedRules, totalRules int) {
+	if totalRules == 0 {
+		builder.WriteString(fmt.Sprintf("\n%s No active rules to evaluate\n\n",
+			f.colors.Warning("INFO:")))
+
+		return
+	}
+
+	if passedRules == totalRules {
+		builder.WriteString(fmt.Sprintf("\n%s All rules passed (%d/%d)\n\n",
+			f.colors.Success("SUCCESS:"), passedRules, totalRules))
+
+		return
+	}
+
+	builder.WriteString(fmt.Sprintf("\n%s %d of %d rules passed\n",
+		f.colors.Warning("FAIL:"), passedRules, totalRules))
+
+	// Add a help hint if we're not in verbose mode
+	if !f.verbose {
+		builder.WriteString(f.colors.Warning("TIP:") +
+			" Run with '--verbose' for more details or '--rulehelp=<rule>' for specific rule help\n\n")
+	} else {
+		builder.WriteString("\n")
+	}
 }
 
 // FormatRuleHelp formats help for a specific rule.
 func (f *TextFormatter) FormatRuleHelp(ruleName string, results *domain.ValidationResults) string {
 	var builder strings.Builder
 
-	// Check for NO_COLOR environment variable
-	noColor := false
-	if val, exists := os.LookupEnv("NO_COLOR"); exists && val != "" {
-		noColor = true
-		color.NoColor = true
+	f.initColorScheme() // Ensure colors are initialized
+
+	builder.WriteString(fmt.Sprintf("\n%s Rule Help:\n", f.colors.Bold(ruleName)))
+
+	if f.formatSpecificRuleHelp(&builder, ruleName, results) {
+		return builder.String()
 	}
 
-	// Set up color scheme
-	colorScheme := getColorScheme(f.lightMode, noColor)
+	// If no help was found, show available rules
+	builder.WriteString(fmt.Sprintf("No help available for rule '%s'\n", ruleName))
+	f.formatAvailableRules(&builder, results)
 
-	builder.WriteString(fmt.Sprintf("\n%s Rule Help:\n", colorScheme.Bold(ruleName)))
+	return builder.String()
+}
 
-	foundHelp := false
-
+// formatSpecificRuleHelp formats help for a specific rule if available.
+func (f *TextFormatter) formatSpecificRuleHelp(builder *strings.Builder, ruleName string, results *domain.ValidationResults) bool {
 	// Look through all rule results to find matching rule
 	for _, commitResult := range results.CommitResults {
 		for _, ruleResult := range commitResult.RuleResults {
-			if strings.EqualFold(ruleResult.RuleID, ruleName) ||
-				strings.EqualFold(ruleResult.RuleName, ruleName) {
-				if ruleResult.HelpMessage != "" {
-					// Properly indent and style all help text lines
-					helpLines := strings.Split(ruleResult.HelpMessage, "\n")
-					for _, line := range helpLines {
-						builder.WriteString(fmt.Sprintf("  %s\n",
-							colorScheme.HelpText(line)))
-					}
-
-					builder.WriteString("\n")
-
-					foundHelp = true
-
-					break
-				}
+			if !strings.EqualFold(ruleResult.RuleID, ruleName) &&
+				!strings.EqualFold(ruleResult.RuleName, ruleName) {
+				continue
 			}
-		}
 
-		if foundHelp {
-			break
+			if ruleResult.HelpMessage == "" {
+				continue
+			}
+
+			// Properly indent and style all help text lines
+			helpLines := strings.Split(ruleResult.HelpMessage, "\n")
+			for _, line := range helpLines {
+				builder.WriteString(fmt.Sprintf("  %s\n",
+					f.colors.HelpText(line)))
+			}
+
+			builder.WriteString("\n")
+
+			return true
 		}
 	}
 
-	if !foundHelp {
-		builder.WriteString(fmt.Sprintf("No help available for rule '%s'\n", ruleName))
+	return false
+}
 
-		// Show available rules
-		builder.WriteString("Available rules:\n")
+// formatAvailableRules formats the list of available rules.
+func (f *TextFormatter) formatAvailableRules(builder *strings.Builder, results *domain.ValidationResults) {
+	builder.WriteString("Available rules:\n")
 
-		// Collect unique rule names
-		ruleNames := make(map[string]bool)
+	// Collect unique rule names
+	ruleNames := make(map[string]bool)
 
-		for _, commitResult := range results.CommitResults {
-			for _, ruleResult := range commitResult.RuleResults {
-				ruleNames[ruleResult.RuleName] = true
-			}
-		}
-
-		// Sort rule names alphabetically
-		var sortedNames []string
-		for name := range ruleNames {
-			sortedNames = append(sortedNames, name)
-		}
-
-		sort.Strings(sortedNames)
-
-		// List available rules
-		for _, name := range sortedNames {
-			builder.WriteString(fmt.Sprintf("  - %s\n", colorScheme.Bold(name)))
+	for _, commitResult := range results.CommitResults {
+		for _, ruleResult := range commitResult.RuleResults {
+			ruleNames[ruleResult.RuleName] = true
 		}
 	}
 
-	return builder.String()
+	// Sort and list available rules
+	sortedNames := make([]string, 0)
+	for name := range ruleNames {
+		sortedNames = append(sortedNames, name)
+	}
+
+	sort.Strings(sortedNames)
+
+	for _, name := range sortedNames {
+		builder.WriteString(fmt.Sprintf("  - %s\n", f.colors.Bold(name)))
+	}
+}
+
+// getSortedRuleNames returns a sorted slice of rule names from a map.
+func getSortedRuleNames(ruleMap map[string]int) []string {
+	ruleNames := make([]string, 0)
+	for ruleName := range ruleMap {
+		ruleNames = append(ruleNames, ruleName)
+	}
+
+	sort.Strings(ruleNames)
+
+	return ruleNames
+}
+
+// getSortedRuleResults returns a sorted slice of rule results.
+func getSortedRuleResults(ruleResults []domain.RuleResult) []domain.RuleResult {
+	sortedRules := make([]domain.RuleResult, len(ruleResults))
+	copy(sortedRules, ruleResults)
+	sort.Slice(sortedRules, func(i, j int) bool {
+		return strings.ToLower(sortedRules[i].RuleName) < strings.ToLower(sortedRules[j].RuleName)
+	})
+
+	return sortedRules
 }
 
 // getColorScheme returns appropriate color functions based on mode and accessibility.

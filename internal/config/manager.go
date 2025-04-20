@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package config provides configuration management for gommitlint.
 package config
 
@@ -59,6 +63,7 @@ func (m *Manager) LoadFromStandardPaths() error {
 
 	// Load from lowest precedence to highest (reverse the paths)
 	configFound := false
+
 	var lastError error
 
 	// Iterate through paths in reverse (from lowest to highest precedence)
@@ -71,27 +76,30 @@ func (m *Manager) LoadFromStandardPaths() error {
 		}
 
 		// Try to load this config file
-		k := koanf.New(".")
+		knf := koanf.New(".")
 
 		// Load based on file extension
 		var err error
+
 		switch {
 		case strings.HasSuffix(path, ".yaml"), strings.HasSuffix(path, ".yml"):
-			err = k.Load(file.Provider(path), yaml.Parser())
+			err = knf.Load(file.Provider(path), yaml.Parser())
 		case strings.HasSuffix(path, ".json"):
-			err = k.Load(file.Provider(path), nil)
+			err = knf.Load(file.Provider(path), nil)
 		default:
 			continue // Skip unsupported format
 		}
 
 		if err != nil {
 			lastError = fmt.Errorf("failed to parse %s: %w", path, err)
+
 			continue
 		}
 
 		// Unmarshal into our config
-		if err := k.Unmarshal("", m.config); err != nil {
+		if err := knf.Unmarshal("", m.config); err != nil {
 			lastError = fmt.Errorf("failed to unmarshal %s: %w", path, err)
+
 			continue
 		}
 
@@ -109,14 +117,14 @@ func (m *Manager) LoadFromStandardPaths() error {
 		if lastError != nil {
 			return lastError
 		}
-		return fmt.Errorf("no configuration files found in standard paths")
+
+		return errors.New("no configuration files found in standard paths")
 	}
 
 	return nil
 }
 
-// loadFileWithoutUpdatingSourcePath loads a configuration file but does not update the sourcePath
-// This is used internally by LoadFromStandardPaths
+// This is used internally by LoadFromStandardPaths.
 func (m *Manager) loadFileWithoutUpdatingSourcePath(path string) error {
 	// Check if file exists
 	if _, err := os.Stat(path); os.IsNotExist(err) {
@@ -124,20 +132,21 @@ func (m *Manager) loadFileWithoutUpdatingSourcePath(path string) error {
 	}
 
 	// Create a new Koanf instance for this file
-	k := koanf.New(".")
+	knf := koanf.New(".")
 
 	// Load configuration based on file extension
 	var err error
+
 	switch {
 	case strings.HasSuffix(path, ".yaml"), strings.HasSuffix(path, ".yml"):
-		err = k.Load(file.Provider(path), yaml.Parser())
+		err = knf.Load(file.Provider(path), yaml.Parser())
 	case strings.HasSuffix(path, ".json"):
-		err = k.Load(file.Provider(path), nil)
+		err = knf.Load(file.Provider(path), nil)
 	default:
 		return fmt.Errorf("unsupported configuration file format: %s", path)
 	}
 	// Check if the main 'gommitlint' key exists in the loaded file's content
-	if !k.Exists("gommitlint") {
+	if !knf.Exists("gommitlint") {
 		// If the file was successfully parsed but is effectively empty regarding gommitlint config
 		// (e.g., contains only comments or unrelated keys), return the specific error.
 		// Check if the raw loaded data is empty, perhaps k.Raw() map is empty or nil check?
@@ -156,7 +165,7 @@ func (m *Manager) loadFileWithoutUpdatingSourcePath(path string) error {
 	}
 
 	// Unmarshal into existing configuration (merging values)
-	if err := k.Unmarshal("", m.config); err != nil {
+	if err := knf.Unmarshal("", m.config); err != nil {
 		return fmt.Errorf("failed to unmarshal configuration: %w", err)
 	}
 
@@ -166,6 +175,7 @@ func (m *Manager) loadFileWithoutUpdatingSourcePath(path string) error {
 		for i, err := range errs {
 			errMsgs[i] = err.Error()
 		}
+
 		return fmt.Errorf("invalid configuration: %s", strings.Join(errMsgs, "; "))
 	}
 
@@ -185,8 +195,10 @@ func (m *Manager) LoadFromFile(path string) error {
 
 	// Convert to absolute path for consistency
 	absPath := path
+
 	if !filepath.IsAbs(path) {
 		var err error
+
 		absPath, err = filepath.Abs(path)
 		if err != nil {
 			// If we can't get absolute path, use the original

@@ -11,7 +11,6 @@ import (
 	"github.com/itiquette/gommitlint/internal/core/validation"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/errors"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,16 +37,16 @@ func NewMockRule(name string, shouldPass bool) *MockRule {
 	return rule
 }
 
-// mockError implements the error interface with additional fields for testing.
-type mockError struct {
-	name    string
-	code    string
-	message string
-}
+// // mockError implements the error interface with additional fields for testing.
+// type mockError struct {
+// 	name    string
+// 	code    string
+// 	message string
+// }
 
-func (e mockError) Error() string {
-	return e.message
-}
+// func (e mockError) Error() string {
+// 	return e.message
+// }
 
 func (r *MockRule) Name() string {
 	return r.name
@@ -127,20 +126,20 @@ func TestValidationEngine_ValidateCommit(t *testing.T) {
 	result := engine.ValidateCommit(context.Background(), commit)
 
 	// Assert result
-	assert.Equal(t, commit, result.CommitInfo, "CommitInfo should be the same")
-	assert.False(t, result.Passed, "Commit should not pass validation")
-	assert.Len(t, result.RuleResults, 2, "Should have results for all rules")
+	require.Equal(t, commit, result.CommitInfo, "CommitInfo should be the same")
+	require.False(t, result.Passed, "Commit should not pass validation")
+	require.Len(t, result.RuleResults, 2, "Should have results for all rules")
 
 	// Check rule results
 	for _, ruleResult := range result.RuleResults {
 		if ruleResult.RuleName == "PassingRule" {
-			assert.Equal(t, domain.StatusPassed, ruleResult.Status, "PassingRule should pass")
-			assert.Empty(t, ruleResult.Errors, "PassingRule should have no errors")
+			require.Equal(t, domain.StatusPassed, ruleResult.Status, "PassingRule should pass")
+			require.Empty(t, ruleResult.Errors, "PassingRule should have no errors")
 		} else if ruleResult.RuleName == "FailingRule" {
-			assert.Equal(t, domain.StatusFailed, ruleResult.Status, "FailingRule should fail")
-			assert.NotEmpty(t, ruleResult.Errors, "FailingRule should have errors")
-			assert.Len(t, ruleResult.Errors, 1, "FailingRule should have one error")
-			assert.Equal(t, "Mock error message", ruleResult.Errors[0].Error(), "Error message should match")
+			require.Equal(t, domain.StatusFailed, ruleResult.Status, "FailingRule should fail")
+			require.NotEmpty(t, ruleResult.Errors, "FailingRule should have errors")
+			require.Len(t, ruleResult.Errors, 1, "FailingRule should have one error")
+			require.Equal(t, "Mock error message", ruleResult.Errors[0].Error(), "Error message should match")
 		}
 	}
 }
@@ -200,7 +199,7 @@ func TestValidationEngine_ValidateCommits(t *testing.T) {
 	// Verify commit results
 	for _, commitResult := range results.CommitResults {
 		if commitResult.CommitInfo.Hash == "failing" {
-			assert.False(t, commitResult.Passed, "Failing commit should not pass")
+			require.False(t, commitResult.Passed, "Failing commit should not pass")
 
 			// Find the conditional rule result
 			var conditionalRuleResult domain.RuleResult
@@ -217,10 +216,10 @@ func TestValidationEngine_ValidateCommits(t *testing.T) {
 			}
 
 			require.True(t, found, "Should have result for conditional rule")
-			assert.Equal(t, domain.StatusFailed, conditionalRuleResult.Status, "Conditional rule should fail for this commit")
-			assert.NotEmpty(t, conditionalRuleResult.Errors, "Conditional rule should have errors")
+			require.Equal(t, domain.StatusFailed, conditionalRuleResult.Status, "Conditional rule should fail for this commit")
+			require.NotEmpty(t, conditionalRuleResult.Errors, "Conditional rule should have errors")
 		} else {
-			assert.True(t, commitResult.Passed, "Passing commit should pass")
+			require.True(t, commitResult.Passed, "Passing commit should pass")
 		}
 	}
 }
@@ -230,7 +229,7 @@ func TestValidationEngine_Timeout(t *testing.T) {
 	// Create a slow rule that sleeps
 	slowRule := &MockRule{
 		name: "SlowRule",
-		validationFn: func(commit *domain.CommitInfo) []errors.ValidationError {
+		validationFn: func(_ *domain.CommitInfo) []errors.ValidationError {
 			// In a real test we would use time.Sleep,
 			// but for a unit test we'll avoid actual waiting
 			return []errors.ValidationError{
@@ -261,6 +260,6 @@ func TestValidationEngine_Timeout(t *testing.T) {
 	result := engine.ValidateCommit(ctx, commit)
 
 	// Assert result
-	assert.False(t, result.Passed, "Commit should not pass validation")
-	assert.Len(t, result.RuleResults, 1, "Should have results for all rules")
+	require.False(t, result.Passed, "Commit should not pass validation")
+	require.Len(t, result.RuleResults, 1, "Should have results for all rules")
 }

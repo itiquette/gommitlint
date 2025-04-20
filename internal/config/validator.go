@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package config provides configuration management for gommitlint.
 package config
 
@@ -68,8 +72,9 @@ func validateConfig(config *AppConf) []error {
 // mapKeys extracts keys from a map.
 func mapKeys(m map[string]bool) []string {
 	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
+	for key := range m {
+		keys = append(keys, key)
 	}
+
 	return keys
 }

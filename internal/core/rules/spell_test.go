@@ -12,7 +12,6 @@ import (
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -67,7 +66,7 @@ func setupSpellRule(testConfig testCase) (*rules.SpellRule, *domain.CommitInfo) 
 func validateErrors(t *testing.T, testCase testCase, errors []appErrors.ValidationError) {
 	t.Helper()
 	// Check for expected number of errors
-	assert.Len(t, errors, testCase.expectedErrors, "Incorrect number of errors")
+	require.Len(t, errors, testCase.expectedErrors, "Incorrect number of errors")
 
 	// If no errors, nothing else to validate
 	if len(errors) == 0 {
@@ -79,24 +78,24 @@ func validateErrors(t *testing.T, testCase testCase, errors []appErrors.Validati
 
 	// Check error code if specified
 	if testCase.expectedCode != "" {
-		assert.Equal(t, testCase.expectedCode, validationErr.Code,
+		require.Equal(t, testCase.expectedCode, validationErr.Code,
 			"Error code should match expected")
 	}
 
 	// Verify rule name is set in ValidationError
-	assert.Equal(t, "Spell", validationErr.Rule,
+	require.Equal(t, "Spell", validationErr.Rule,
 		"Rule name should be set in ValidationError")
 
 	// Check context data
 	if testCase.expectedCode == string(appErrors.ErrSpelling) {
-		assert.Contains(t, validationErr.Context, "original",
+		require.Contains(t, validationErr.Context, "original",
 			"Context should contain original misspelled word")
-		assert.Contains(t, validationErr.Context, "corrected",
+		require.Contains(t, validationErr.Context, "corrected",
 			"Context should contain corrected spelling")
 	} else if testCase.expectedCode == string(appErrors.ErrUnknown) {
-		assert.Contains(t, validationErr.Context, "locale",
+		require.Contains(t, validationErr.Context, "locale",
 			"Context should contain the invalid locale")
-		assert.Contains(t, validationErr.Context, "supported_locales",
+		require.Contains(t, validationErr.Context, "supported_locales",
 			"Context should contain supported locales")
 	}
 }
@@ -144,15 +143,15 @@ func validateExpectedWords(t *testing.T, testCase testCase, errors []appErrors.V
 func validateRuleMethods(t *testing.T, testCase testCase, rule *rules.SpellRule, errors []appErrors.ValidationError) {
 	t.Helper()
 	// Verify Name() method
-	assert.Equal(t, "Spell", rule.Name(), "Rule name should be 'Spell'")
+	require.Equal(t, "Spell", rule.Name(), "Rule name should be 'Spell'")
 
 	// Verify Result() method
 	if testCase.expectedErrors > 0 {
 		expectedResult := fmt.Sprintf("%d misspelling(s)", testCase.expectedErrors)
-		assert.Equal(t, expectedResult, rule.Result(),
+		require.Equal(t, expectedResult, rule.Result(),
 			"Result should report the number of misspellings")
 	} else {
-		assert.Equal(t, "No spelling errors", rule.Result(),
+		require.Equal(t, "No spelling errors", rule.Result(),
 			"Result should indicate no misspellings")
 	}
 
@@ -171,7 +170,7 @@ func validateHelpMethod(t *testing.T, testCase testCase, rule *rules.SpellRule, 
 	require.NotEmpty(t, helpText, "Help text should not be empty")
 
 	if testCase.expectedErrors == 0 {
-		assert.Equal(t, "No errors to fix", helpText,
+		require.Equal(t, "No errors to fix", helpText,
 			"Help should indicate no errors to fix")
 
 		return
@@ -180,14 +179,14 @@ func validateHelpMethod(t *testing.T, testCase testCase, rule *rules.SpellRule, 
 	if len(errors) > 0 {
 		validationErr := errors[0]
 		if validationErr.Code == "unknown_error" {
-			assert.Contains(t, helpText, "supported locale",
+			require.Contains(t, helpText, "supported locale",
 				"Help should mention supported locales")
 		} else {
-			assert.Contains(t, helpText, "Fix the following misspellings",
+			require.Contains(t, helpText, "Fix the following misspellings",
 				"Help should provide guidance")
 
 			// Check if help text contains error details
-			assert.Contains(t, helpText, errors[0].Error(),
+			require.Contains(t, helpText, errors[0].Error(),
 				"Help should include error details")
 		}
 	}
@@ -200,25 +199,25 @@ func validateVerboseResult(t *testing.T, testCase testCase, rule *rules.SpellRul
 	verboseText := rule.VerboseResult()
 
 	if testCase.expectedErrors == 0 {
-		assert.Contains(t, verboseText, "No common misspellings found",
+		require.Contains(t, verboseText, "No common misspellings found",
 			"Verbose output should indicate no errors")
 
 		// Check for locale mention
 		if testCase.locale == "GB" || testCase.locale == "UK" ||
 			strings.ToLower(testCase.locale) == "gb" || strings.ToLower(testCase.locale) == "uk" {
-			assert.Contains(t, verboseText, "UK/GB (British English)",
+			require.Contains(t, verboseText, "UK/GB (British English)",
 				"Verbose output should mention British English")
 		} else {
-			assert.Contains(t, verboseText, "US (American English)",
+			require.Contains(t, verboseText, "US (American English)",
 				"Verbose output should mention American English")
 		}
 	} else if testCase.expectedCode == string(appErrors.ErrUnknown) {
-		assert.Contains(t, verboseText, "Invalid locale",
+		require.Contains(t, verboseText, "Invalid locale",
 			"Verbose output should mention invalid locale")
-		assert.Contains(t, verboseText, testCase.locale,
+		require.Contains(t, verboseText, testCase.locale,
 			"Verbose output should mention the specific invalid locale")
 	} else {
-		assert.Contains(t, verboseText, fmt.Sprintf("Found %d misspelling", testCase.expectedErrors),
+		require.Contains(t, verboseText, fmt.Sprintf("Found %d misspelling", testCase.expectedErrors),
 			"Verbose output should mention the number of misspellings")
 
 		// For tests with specific misspellings, check that they're mentioned

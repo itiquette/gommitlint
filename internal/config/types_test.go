@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 package config_test
 
 import (
@@ -9,7 +13,6 @@ import (
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -102,128 +105,128 @@ gommitlint:
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			// Use koanf to parse the YAML
-			k := koanf.New(".")
+			knf := koanf.New(".")
 
 			// Write the yaml config to a temporary file
 			tmpFile, err := os.CreateTemp("", "config-*.yaml")
 			require.NoError(t, err, "Failed to create temp file")
 			defer os.Remove(tmpFile.Name())
 
-			_, err = tmpFile.WriteString(tc.yamlConfig)
+			_, err = tmpFile.WriteString(testCase.yamlConfig)
 			require.NoError(t, err, "Failed to write to temp file")
 			tmpFile.Close()
 
 			// Load from the temporary file
-			err = k.Load(file.Provider(tmpFile.Name()), yaml.Parser())
+			err = knf.Load(file.Provider(tmpFile.Name()), yaml.Parser())
 			require.NoError(t, err, "Failed to load YAML with koanf")
 
 			// Unmarshal into the AppConf struct
 			var conf config.AppConf
-			err = k.Unmarshal("", &conf)
+			err = knf.Unmarshal("", &conf)
 			require.NoError(t, err, "Failed to unmarshal into AppConf")
 
 			// Verify fields were correctly unmarshaled
 			require.NotNil(t, conf.GommitConf, "GommitConf should not be nil")
 
 			// Check each expected field
-			for field, expectedValue := range tc.fieldChecks {
+			for field, expectedValue := range testCase.fieldChecks {
 				switch field {
 				case "subject.maxLength":
 					require.NotNil(t, conf.GommitConf.Subject, "Subject should not be nil")
-					assert.Equal(t, expectedValue, conf.GommitConf.Subject.MaxLength,
+					require.Equal(t, expectedValue, conf.GommitConf.Subject.MaxLength,
 						"Subject.MaxLength should match expected value")
 				case "subject.case":
 					require.NotNil(t, conf.GommitConf.Subject, "Subject should not be nil")
-					assert.Equal(t, expectedValue, conf.GommitConf.Subject.Case,
+					require.Equal(t, expectedValue, conf.GommitConf.Subject.Case,
 						"Subject.Case should match expected value")
 				case "subject.imperative":
 					require.NotNil(t, conf.GommitConf.Subject, "Subject should not be nil")
 					require.NotNil(t, conf.GommitConf.Subject.Imperative, "Subject.Imperative should not be nil")
-					assert.Equal(t, expectedValue, *conf.GommitConf.Subject.Imperative,
+					require.Equal(t, expectedValue, *conf.GommitConf.Subject.Imperative,
 						"Subject.Imperative should match expected value")
 				case "subject.invalidSuffixes":
 					require.NotNil(t, conf.GommitConf.Subject, "Subject should not be nil")
-					assert.Equal(t, expectedValue, conf.GommitConf.Subject.InvalidSuffixes,
+					require.Equal(t, expectedValue, conf.GommitConf.Subject.InvalidSuffixes,
 						"Subject.InvalidSuffixes should match expected value")
 				case "jira.required":
 					require.NotNil(t, conf.GommitConf.Subject, "Subject should not be nil")
 					require.NotNil(t, conf.GommitConf.Subject.Jira, "Subject.Jira should not be nil")
-					assert.Equal(t, expectedValue, conf.GommitConf.Subject.Jira.Required,
+					require.Equal(t, expectedValue, conf.GommitConf.Subject.Jira.Required,
 						"Jira.Required should match expected value")
 				case "jira.pattern":
 					require.NotNil(t, conf.GommitConf.Subject, "Subject should not be nil")
 					require.NotNil(t, conf.GommitConf.Subject.Jira, "Subject.Jira should not be nil")
-					assert.Equal(t, expectedValue, conf.GommitConf.Subject.Jira.Pattern,
+					require.Equal(t, expectedValue, conf.GommitConf.Subject.Jira.Pattern,
 						"Jira.Pattern should match expected value")
 				case "jira.bodyRef":
 					require.NotNil(t, conf.GommitConf.Subject, "Subject should not be nil")
 					require.NotNil(t, conf.GommitConf.Subject.Jira, "Subject.Jira should not be nil")
-					assert.Equal(t, expectedValue, conf.GommitConf.Subject.Jira.BodyRef,
+					require.Equal(t, expectedValue, conf.GommitConf.Subject.Jira.BodyRef,
 						"Jira.BodyRef should match expected value")
 				case "jira.projects":
 					require.NotNil(t, conf.GommitConf.Subject, "Subject should not be nil")
 					require.NotNil(t, conf.GommitConf.Subject.Jira, "Subject.Jira should not be nil")
-					assert.ElementsMatch(t, expectedValue, conf.GommitConf.Subject.Jira.Projects,
+					require.ElementsMatch(t, expectedValue, conf.GommitConf.Subject.Jira.Projects,
 						"Jira.Projects should match expected value")
 				case "jira.strict":
 					require.NotNil(t, conf.GommitConf.Subject, "Subject should not be nil")
 					require.NotNil(t, conf.GommitConf.Subject.Jira, "Subject.Jira should not be nil")
-					assert.Equal(t, expectedValue, conf.GommitConf.Subject.Jira.Strict,
+					require.Equal(t, expectedValue, conf.GommitConf.Subject.Jira.Strict,
 						"Jira.Strict should match expected value")
 				case "body.required":
 					require.NotNil(t, conf.GommitConf.Body, "Body should not be nil")
-					assert.Equal(t, expectedValue, conf.GommitConf.Body.Required,
+					require.Equal(t, expectedValue, conf.GommitConf.Body.Required,
 						"Body.Required should match expected value")
 				case "conventional.required":
 					require.NotNil(t, conf.GommitConf.ConventionalCommit, "ConventionalCommit should not be nil")
-					assert.Equal(t, expectedValue, conf.GommitConf.ConventionalCommit.Required,
+					require.Equal(t, expectedValue, conf.GommitConf.ConventionalCommit.Required,
 						"ConventionalCommit.Required should match expected value")
 				case "conventional.types":
 					require.NotNil(t, conf.GommitConf.ConventionalCommit, "ConventionalCommit should not be nil")
-					assert.ElementsMatch(t, expectedValue, conf.GommitConf.ConventionalCommit.Types,
+					require.ElementsMatch(t, expectedValue, conf.GommitConf.ConventionalCommit.Types,
 						"ConventionalCommit.Types should match expected value")
 				case "conventional.scopes":
 					require.NotNil(t, conf.GommitConf.ConventionalCommit, "ConventionalCommit should not be nil")
-					assert.ElementsMatch(t, expectedValue, conf.GommitConf.ConventionalCommit.Scopes,
+					require.ElementsMatch(t, expectedValue, conf.GommitConf.ConventionalCommit.Scopes,
 						"ConventionalCommit.Scopes should match expected value")
 				case "conventional.maxDescLength":
 					require.NotNil(t, conf.GommitConf.ConventionalCommit, "ConventionalCommit should not be nil")
-					assert.Equal(t, expectedValue, conf.GommitConf.ConventionalCommit.MaxDescriptionLength,
+					require.Equal(t, expectedValue, conf.GommitConf.ConventionalCommit.MaxDescriptionLength,
 						"ConventionalCommit.MaxDescriptionLength should match expected value")
 				case "spellcheck.locale":
 					require.NotNil(t, conf.GommitConf.SpellCheck, "SpellCheck should not be nil")
-					assert.Equal(t, expectedValue, conf.GommitConf.SpellCheck.Locale,
+					require.Equal(t, expectedValue, conf.GommitConf.SpellCheck.Locale,
 						"SpellCheck.Locale should match expected value")
 				case "spellcheck.enabled":
 					require.NotNil(t, conf.GommitConf.SpellCheck, "SpellCheck should not be nil")
-					assert.Equal(t, expectedValue, conf.GommitConf.SpellCheck.Enabled,
+					require.Equal(t, expectedValue, conf.GommitConf.SpellCheck.Enabled,
 						"SpellCheck.Enabled should match expected value")
 				case "signature.required":
 					require.NotNil(t, conf.GommitConf.Signature, "Signature should not be nil")
-					assert.Equal(t, expectedValue, conf.GommitConf.Signature.Required,
+					require.Equal(t, expectedValue, conf.GommitConf.Signature.Required,
 						"Signature.Required should match expected value")
 				case "signature.identity.uri":
 					require.NotNil(t, conf.GommitConf.Signature, "Signature should not be nil")
 					require.NotNil(t, conf.GommitConf.Signature.Identity, "Signature.Identity should not be nil")
-					assert.Equal(t, expectedValue, conf.GommitConf.Signature.Identity.PublicKeyURI,
+					require.Equal(t, expectedValue, conf.GommitConf.Signature.Identity.PublicKeyURI,
 						"Signature.Identity.PublicKeyURI should match expected value")
 				case "signoff":
 					require.NotNil(t, conf.GommitConf.SignOffRequired, "SignOffRequired should not be nil")
-					assert.Equal(t, expectedValue, *conf.GommitConf.SignOffRequired,
+					require.Equal(t, expectedValue, *conf.GommitConf.SignOffRequired,
 						"SignOffRequired should match expected value")
 				case "nCommitsAhead":
 					require.NotNil(t, conf.GommitConf.NCommitsAhead, "NCommitsAhead should not be nil")
-					assert.Equal(t, expectedValue, *conf.GommitConf.NCommitsAhead,
+					require.Equal(t, expectedValue, *conf.GommitConf.NCommitsAhead,
 						"NCommitsAhead should match expected value")
 				case "ignoreMergeCommits":
 					require.NotNil(t, conf.GommitConf.IgnoreMergeCommits, "IgnoreMergeCommits should not be nil")
-					assert.Equal(t, expectedValue, *conf.GommitConf.IgnoreMergeCommits,
+					require.Equal(t, expectedValue, *conf.GommitConf.IgnoreMergeCommits,
 						"IgnoreMergeCommits should match expected value")
 				case "reference":
-					assert.Equal(t, expectedValue, conf.GommitConf.Reference,
+					require.Equal(t, expectedValue, conf.GommitConf.Reference,
 						"Reference should match expected value")
 				default:
 					t.Fatalf("Test case for field %s is not implemented", field)
@@ -304,10 +307,10 @@ func TestConfigStructsMarshalUnmarshal(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			// Marshal to JSON
-			jsonBytes, err := json.Marshal(tc.config)
+			jsonBytes, err := json.Marshal(testCase.config)
 			require.NoError(t, err, "Marshal to JSON should not fail")
 
 			// Unmarshal back from JSON
@@ -319,53 +322,53 @@ func TestConfigStructsMarshalUnmarshal(t *testing.T) {
 			require.NotNil(t, newConfig.GommitConf, "GommitConf should not be nil after unmarshal")
 
 			// Check specific fields in both configs
-			if tc.config.GommitConf.Subject != nil {
+			if testCase.config.GommitConf.Subject != nil {
 				require.NotNil(t, newConfig.GommitConf.Subject, "Subject should not be nil after unmarshal")
-				assert.Equal(t, tc.config.GommitConf.Subject.MaxLength, newConfig.GommitConf.Subject.MaxLength,
+				require.Equal(t, testCase.config.GommitConf.Subject.MaxLength, newConfig.GommitConf.Subject.MaxLength,
 					"Subject.MaxLength should be preserved")
-				assert.Equal(t, tc.config.GommitConf.Subject.Case, newConfig.GommitConf.Subject.Case,
+				require.Equal(t, testCase.config.GommitConf.Subject.Case, newConfig.GommitConf.Subject.Case,
 					"Subject.Case should be preserved")
 
-				if tc.config.GommitConf.Subject.Imperative != nil {
+				if testCase.config.GommitConf.Subject.Imperative != nil {
 					require.NotNil(t, newConfig.GommitConf.Subject.Imperative,
 						"Subject.Imperative should not be nil after unmarshal")
-					assert.Equal(t, *tc.config.GommitConf.Subject.Imperative, *newConfig.GommitConf.Subject.Imperative,
+					require.Equal(t, *testCase.config.GommitConf.Subject.Imperative, *newConfig.GommitConf.Subject.Imperative,
 						"Subject.Imperative should be preserved")
 				}
 
-				if tc.config.GommitConf.Subject.Jira != nil {
+				if testCase.config.GommitConf.Subject.Jira != nil {
 					require.NotNil(t, newConfig.GommitConf.Subject.Jira,
 						"Subject.Jira should not be nil after unmarshal")
-					assert.Equal(t, tc.config.GommitConf.Subject.Jira.Required, newConfig.GommitConf.Subject.Jira.Required,
+					require.Equal(t, testCase.config.GommitConf.Subject.Jira.Required, newConfig.GommitConf.Subject.Jira.Required,
 						"Jira.Required should be preserved")
-					assert.Equal(t, tc.config.GommitConf.Subject.Jira.Pattern, newConfig.GommitConf.Subject.Jira.Pattern,
+					require.Equal(t, testCase.config.GommitConf.Subject.Jira.Pattern, newConfig.GommitConf.Subject.Jira.Pattern,
 						"Jira.Pattern should be preserved")
 				}
 			}
 
-			if tc.config.GommitConf.Body != nil {
+			if testCase.config.GommitConf.Body != nil {
 				require.NotNil(t, newConfig.GommitConf.Body, "Body should not be nil after unmarshal")
-				assert.Equal(t, tc.config.GommitConf.Body.Required, newConfig.GommitConf.Body.Required,
+				require.Equal(t, testCase.config.GommitConf.Body.Required, newConfig.GommitConf.Body.Required,
 					"Body.Required should be preserved")
 			}
 
-			if tc.config.GommitConf.ConventionalCommit != nil {
+			if testCase.config.GommitConf.ConventionalCommit != nil {
 				require.NotNil(t, newConfig.GommitConf.ConventionalCommit,
 					"ConventionalCommit should not be nil after unmarshal")
-				assert.Equal(t, tc.config.GommitConf.ConventionalCommit.Required,
+				require.Equal(t, testCase.config.GommitConf.ConventionalCommit.Required,
 					newConfig.GommitConf.ConventionalCommit.Required,
 					"ConventionalCommit.Required should be preserved")
 
-				if len(tc.config.GommitConf.ConventionalCommit.Types) > 0 {
-					assert.ElementsMatch(t, tc.config.GommitConf.ConventionalCommit.Types,
+				if len(testCase.config.GommitConf.ConventionalCommit.Types) > 0 {
+					require.ElementsMatch(t, testCase.config.GommitConf.ConventionalCommit.Types,
 						newConfig.GommitConf.ConventionalCommit.Types,
 						"ConventionalCommit.Types should be preserved")
 				}
 			}
 
 			// Check reference field which is a simple string
-			if tc.config.GommitConf.Reference != "" {
-				assert.Equal(t, tc.config.GommitConf.Reference, newConfig.GommitConf.Reference,
+			if testCase.config.GommitConf.Reference != "" {
+				require.Equal(t, testCase.config.GommitConf.Reference, newConfig.GommitConf.Reference,
 					"Reference should be preserved")
 			}
 		})
@@ -406,51 +409,51 @@ gommitlint:
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			// Get default configuration
 			defaults := config.DefaultConfiguration()
 			require.NotNil(t, defaults, "DefaultConfiguration should not return nil")
 
 			// Parse YAML into a new config
-			k := koanf.New(".")
+			knf := koanf.New(".")
 
 			// Write the yaml config to a temporary file
 			tmpFile, err := os.CreateTemp("", "config-*.yaml")
 			require.NoError(t, err, "Failed to create temp file")
 			defer os.Remove(tmpFile.Name())
 
-			_, err = tmpFile.WriteString(tc.yamlConfig)
+			_, err = tmpFile.WriteString(testCase.yamlConfig)
 			require.NoError(t, err, "Failed to write to temp file")
 			tmpFile.Close()
 
 			// Load from the temporary file
-			err = k.Load(file.Provider(tmpFile.Name()), yaml.Parser())
+			err = knf.Load(file.Provider(tmpFile.Name()), yaml.Parser())
 			require.NoError(t, err, "Load should not fail")
 
 			// Unmarshal into the default configuration (merging values)
-			err = k.Unmarshal("", defaults)
+			err = knf.Unmarshal("", defaults)
 			require.NoError(t, err, "Unmarshal should not fail")
 
 			// Check expected overridden values
-			for field, expectedValue := range tc.expected {
+			for field, expectedValue := range testCase.expected {
 				switch field {
 				case "subject.maxLength":
-					assert.Equal(t, expectedValue, defaults.GommitConf.Subject.MaxLength,
+					require.Equal(t, expectedValue, defaults.GommitConf.Subject.MaxLength,
 						"Subject.MaxLength should match expected override")
 				case "signoff":
 					require.NotNil(t, defaults.GommitConf.SignOffRequired,
 						"SignOffRequired should not be nil")
-					assert.Equal(t, expectedValue, *defaults.GommitConf.SignOffRequired,
+					require.Equal(t, expectedValue, *defaults.GommitConf.SignOffRequired,
 						"SignOffRequired should match expected override")
 				}
 			}
 
 			// Check that default values not mentioned in YAML were preserved
-			for field, expectedDefault := range tc.defaults {
+			for field, expectedDefault := range testCase.defaults {
 				switch field {
 				case "subject.case":
-					assert.Equal(t, expectedDefault, defaults.GommitConf.Subject.Case,
+					require.Equal(t, expectedDefault, defaults.GommitConf.Subject.Case,
 						"Subject.Case default value should be preserved")
 				}
 			}

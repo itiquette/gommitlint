@@ -12,7 +12,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/itiquette/gommitlint/internal/config" // Import the updated config package
+	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/core/validation"
 	"github.com/itiquette/gommitlint/internal/domain"

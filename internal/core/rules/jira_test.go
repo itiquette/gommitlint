@@ -11,7 +11,6 @@ import (
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -142,7 +141,7 @@ func TestJiraReferenceRule(t *testing.T) {
 			result := rule.Validate(commit)
 
 			// Check number of errors
-			assert.Len(t, result, testCase.expectedErrors, "Expected %d errors, got %d", testCase.expectedErrors, len(result))
+			require.Len(t, result, testCase.expectedErrors, "Expected %d errors, got %d", testCase.expectedErrors, len(result))
 
 			// If expecting errors, check the error code
 			if testCase.expectedErrors > 0 && len(result) > 0 {
@@ -153,24 +152,21 @@ func TestJiraReferenceRule(t *testing.T) {
 					mappedCode = testCase.expectedErrorCode
 				}
 
-				assert.Equal(t, mappedCode, result[0].Code, "Error code should match expected mapped code")
+				require.Equal(t, mappedCode, result[0].Code, "Error code should match expected mapped code")
 
 				// Check rule name
-				assert.Equal(t, "JiraReference", result[0].Rule, "Rule name should be set in ValidationError")
+				require.Equal(t, "JiraReference", result[0].Rule, "Rule name should be set in ValidationError")
 
-				// Test error message content
-				if testCase.expectedErrorCode == "empty_subject" {
-					// The actual message is different but verifying the result is sufficient
-				} else if testCase.expectedErrorCode == "missing_jira_key_subject" {
-					assert.Contains(t, result[0].Message, "no Jira issue key found", "Expected error containing \"no Jira issue key found\"")
+				if testCase.expectedErrorCode == "missing_jira_key_subject" {
+					require.Contains(t, result[0].Message, "no Jira issue key found", "Expected error containing \"no Jira issue key found\"")
 				}
 			}
 
 			// Check rule result message
-			assert.Contains(t, rule.Result(), testCase.expectedResult, "Result should match expected")
+			require.Contains(t, rule.Result(), testCase.expectedResult, "Result should match expected")
 
 			// Name should be consistent
-			assert.Equal(t, "JiraReference", rule.Name(), "Rule name should be 'JiraReference'")
+			require.Equal(t, "JiraReference", rule.Name(), "Rule name should be 'JiraReference'")
 		})
 	}
 
@@ -244,7 +240,7 @@ func TestJiraReferenceRule(t *testing.T) {
 			result := rule.Validate(commit)
 
 			// Check number of errors
-			assert.Len(t, result, testCase.expectedErrors, "Expected %d errors, got %d", testCase.expectedErrors, len(result))
+			require.Len(t, result, testCase.expectedErrors, "Expected %d errors, got %d", testCase.expectedErrors, len(result))
 
 			// If expecting errors, check error code
 			if testCase.expectedErrors > 0 && len(result) > 0 {
@@ -254,7 +250,7 @@ func TestJiraReferenceRule(t *testing.T) {
 					mappedCode = testCase.expectedErrorCode
 				}
 
-				assert.Equal(t, mappedCode, result[0].Code, "Error code should match expected")
+				require.Equal(t, mappedCode, result[0].Code, "Error code should match expected")
 			}
 		})
 	}
@@ -273,15 +269,15 @@ func TestJiraReferenceRule(t *testing.T) {
 
 		// Validate to generate errors
 		errors := rule.Validate(commit)
-		assert.NotEmpty(t, errors, "Should have errors for missing Jira key")
+		require.NotEmpty(t, errors, "Should have errors for missing Jira key")
 
 		// Check verbose result
 		verboseResult := rule.VerboseResult()
-		assert.Contains(t, strings.ToLower(verboseResult), "no jira issue key found", "VerboseResult should explain the missing key")
+		require.Contains(t, strings.ToLower(verboseResult), "no jira issue key found", "VerboseResult should explain the missing key")
 
 		// Check help text
 		helpText := rule.Help()
-		assert.Contains(t, helpText, "Include a valid Jira", "Help should suggest adding a Jira reference")
+		require.Contains(t, helpText, "Include a valid Jira", "Help should suggest adding a Jira reference")
 	})
 
 	// Test context data in errors
@@ -299,11 +295,11 @@ func TestJiraReferenceRule(t *testing.T) {
 		require.NotEmpty(t, errors, "Should have errors")
 
 		// Now checking for Context values existing in any error
-		assert.Equal(t, string(appErrors.ErrInvalidType), errors[0].Code, "Error code should be ValidationErrorInvalidType")
+		require.Equal(t, string(appErrors.ErrInvalidType), errors[0].Code, "Error code should be ValidationErrorInvalidType")
 
 		// Check that key exists in project context
 		project, exists := errors[0].Context["project"]
-		assert.True(t, exists, "Context should contain the project key")
-		assert.Equal(t, "INVALID", project, "Context should contain the invalid project")
+		require.True(t, exists, "Context should contain the project key")
+		require.Equal(t, "INVALID", project, "Context should contain the invalid project")
 	})
 }

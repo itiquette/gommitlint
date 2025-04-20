@@ -21,28 +21,26 @@ type Format string
 const (
 	// FormatText is the plain text output format.
 	FormatText Format = "text"
-
 	// FormatJSON is the JSON output format.
 	FormatJSON Format = "json"
+	// FormatGitHubActions is the GitHub Actions output format.
+	FormatGitHubActions Format = "github"
+	// FormatGitLabCI is the GitLab CI output format.
+	FormatGitLabCI Format = "gitlab"
 )
 
 // Options contains options for generating reports.
 type Options struct {
 	// Format is the output format.
 	Format Format
-
 	// Verbose indicates whether to include verbose details.
 	Verbose bool
-
 	// ShowHelp indicates whether to include help messages.
 	ShowHelp bool
-
 	// RuleToShowHelp specifies a specific rule to show help for.
 	RuleToShowHelp string
-
 	// LightMode indicates whether to use light mode colors.
 	LightMode bool
-
 	// Writer is the output writer.
 	Writer io.Writer
 }
@@ -66,6 +64,10 @@ func (g *Generator) Generate(results *domain.ValidationResults) error {
 		return g.generateJSONReport(results)
 	case FormatText:
 		return g.generateTextReport(results)
+	case FormatGitHubActions:
+		return g.generateGitHubActionsReport(results)
+	case FormatGitLabCI:
+		return g.generateGitLabCIReport(results)
 	default:
 		return g.generateTextReport(results)
 	}
@@ -119,10 +121,55 @@ func (g *Generator) generateTextReport(results *domain.ValidationResults) error 
 	return nil
 }
 
+// generateGitHubActionsReport generates a GitHub Actions compatible report.
+func (g *Generator) generateGitHubActionsReport(results *domain.ValidationResults) error {
+	// Create a GitHub Actions formatter
+	formatter := output.NewGitHubActionsFormatter(g.options.Verbose, g.options.ShowHelp)
+
+	// Format the results
+	report := formatter.Format(results)
+
+	// Write the report
+	_, err := g.options.Writer.Write([]byte(report))
+	if err != nil {
+		return err
+	}
+
+	// If the validation failed and this is the final output, write an error code
+	if !results.AllPassed() && g.options.Writer == os.Stdout {
+		// This is a convention to indicate failure to the shell
+		return fmt.Errorf("validation failed: %d of %d commits failed", results.TotalCommits-results.PassedCommits, results.TotalCommits)
+	}
+
+	return nil
+}
+
+// generateGitLabCIReport generates a GitLab CI compatible report.
+func (g *Generator) generateGitLabCIReport(results *domain.ValidationResults) error {
+	// Create a GitLab CI formatter
+	formatter := output.NewGitLabCIFormatter(g.options.Verbose, g.options.ShowHelp)
+
+	// Format the results
+	report := formatter.Format(results)
+
+	// Write the report
+	_, err := g.options.Writer.Write([]byte(report))
+	if err != nil {
+		return err
+	}
+
+	// If the validation failed and this is the final output, write an error code
+	if !results.AllPassed() && g.options.Writer == os.Stdout {
+		// This is a convention to indicate failure to the shell
+		return fmt.Errorf("validation failed: %d of %d commits failed", results.TotalCommits-results.PassedCommits, results.TotalCommits)
+	}
+
+	return nil
+}
+
 // GenerateSummary generates a brief summary report.
 func (g *Generator) GenerateSummary(results *domain.ValidationResults) error {
 	var builder strings.Builder
-
 	if results.AllPassed() {
 		builder.WriteString("✅ All commits passed validation\n")
 	} else {

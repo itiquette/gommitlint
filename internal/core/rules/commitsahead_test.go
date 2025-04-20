@@ -11,7 +11,6 @@ import (
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,11 +39,11 @@ func TestCommitsAheadRuleNilRepo(t *testing.T) {
 	// Verify the error
 	require.NotEmpty(t, errors)
 	validationErr := errors[0]
-	assert.Equal(t, string(appErrors.ErrInvalidRepo), validationErr.Code)
-	assert.Equal(t, "CommitsAhead", rule.Name())
-	assert.Contains(t, rule.Result(), "Repository object is nil - Git repository not accessible")
-	assert.Contains(t, rule.VerboseResult(), "Repository object is nil")
-	assert.Contains(t, rule.Help(), "Git repository is not accessible")
+	require.Equal(t, string(appErrors.ErrInvalidRepo), validationErr.Code)
+	require.Equal(t, "CommitsAhead", rule.Name())
+	require.Contains(t, rule.Result(), "Repository object is nil - Git repository not accessible")
+	require.Contains(t, rule.VerboseResult(), "Repository object is nil")
+	require.Contains(t, rule.Help(), "Git repository is not accessible")
 }
 
 func TestCommitsAheadRuleNilRepoInsideGetter(t *testing.T) {
@@ -65,10 +64,10 @@ func TestCommitsAheadRuleNilRepoInsideGetter(t *testing.T) {
 	// Verify the error
 	require.NotEmpty(t, errors)
 	validationErr := errors[0]
-	assert.Equal(t, string(appErrors.ErrInvalidRepo), validationErr.Code)
-	assert.Contains(t, rule.Result(), "Repository object is nil - Git repository not accessible")
-	assert.Contains(t, rule.VerboseResult(), "Repository object is nil")
-	assert.Contains(t, rule.Help(), "Git repository is not accessible")
+	require.Equal(t, string(appErrors.ErrInvalidRepo), validationErr.Code)
+	require.Contains(t, rule.Result(), "Repository object is nil - Git repository not accessible")
+	require.Contains(t, rule.VerboseResult(), "Repository object is nil")
+	require.Contains(t, rule.Help(), "Git repository is not accessible")
 }
 
 func TestCommitsAheadRuleEmptyReference(t *testing.T) {
@@ -89,10 +88,10 @@ func TestCommitsAheadRuleEmptyReference(t *testing.T) {
 	// Verify the error
 	require.NotEmpty(t, errors)
 	validationErr := errors[0]
-	assert.Equal(t, string(appErrors.ErrInvalidConfig), validationErr.Code)
-	assert.Contains(t, rule.Result(), "Too many commits ahead of reference branch")
-	assert.Contains(t, rule.VerboseResult(), "Reference branch name is empty")
-	assert.Contains(t, rule.Help(), "reference branch name")
+	require.Equal(t, string(appErrors.ErrInvalidConfig), validationErr.Code)
+	require.Contains(t, rule.Result(), "Too many commits ahead of reference branch")
+	require.Contains(t, rule.VerboseResult(), "Reference branch name is empty")
+	require.Contains(t, rule.Help(), "reference branch name")
 }
 
 func TestCommitsAheadRuleOptions(t *testing.T) {
@@ -112,8 +111,8 @@ func TestCommitsAheadRuleOptions(t *testing.T) {
 
 	// Just ensure the rule was created successfully
 	errors := rule.Validate(commit)
-	assert.Empty(t, errors)
-	assert.Equal(t, "CommitsAhead", rule.Name())
+	require.Empty(t, errors)
+	require.Equal(t, "CommitsAhead", rule.Name())
 }
 
 func TestCommitsAheadRuleTooManyCommits(t *testing.T) {
@@ -137,8 +136,8 @@ func TestCommitsAheadRuleTooManyCommits(t *testing.T) {
 	// Should have an error
 	require.NotEmpty(t, errors)
 	validationErr := errors[0]
-	assert.Equal(t, string(appErrors.ErrTooManyCommits), validationErr.Code)
-	assert.Contains(t, rule.Result(), "Too many commits ahead of main (10 > 5)")
-	assert.Contains(t, rule.VerboseResult(), "HEAD is 10 commit(s) ahead of main (maximum allowed: 5)")
-	assert.Contains(t, rule.Help(), "Your branch is too far ahead of main")
+	require.Equal(t, string(appErrors.ErrTooManyCommits), validationErr.Code)
+	require.Contains(t, rule.Result(), "Too many commits ahead of main (10 > 5)")
+	require.Contains(t, rule.VerboseResult(), "HEAD is 10 commit(s) ahead of main (maximum allowed: 5)")
+	require.Contains(t, rule.Help(), "Your branch is too far ahead of main")
 }

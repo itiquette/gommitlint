@@ -7,7 +7,7 @@ package main
 import (
 	"os"
 
-	"github.com/itiquette/gommitlint/cmd"
+	"github.com/itiquette/gommitlint/internal/ports/cli"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -24,5 +24,5 @@ func main() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 
 	// Execute root command
-	cmd.Execute(version, commit, date)
+	cli.Execute(version, commit, date)
 }

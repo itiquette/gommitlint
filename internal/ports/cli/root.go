@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
-package cmd
+package cli
 
 import (
 	"context"
@@ -19,8 +19,9 @@ func newRootCommand(_ context.Context, versionString string) *cobra.Command {
 		Long:    `A tool to validate git commit messages against configurable rules.`,
 	}
 
-	// Add commands - using the new hexagonal architecture
 	rootCmd.AddCommand(newValidateCmd())
+	rootCmd.AddCommand(newInstallHookCmd())
+	rootCmd.AddCommand(newRemoveHookCmd())
 
 	return rootCmd
 }

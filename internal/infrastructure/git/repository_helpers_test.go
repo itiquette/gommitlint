@@ -13,7 +13,6 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,7 +43,7 @@ func TestFindGitDir(t *testing.T) {
 	// Test finding git directory from the repo root
 	gitDir, err := findGitDir(tempDir)
 	require.NoError(t, err)
-	assert.Equal(t, tempDir, gitDir)
+	require.Equal(t, tempDir, gitDir)
 
 	// Test finding git directory from a subdirectory
 	subDir := filepath.Join(tempDir, "subdir")
@@ -53,11 +52,11 @@ func TestFindGitDir(t *testing.T) {
 
 	gitDir, err = findGitDir(subDir)
 	require.NoError(t, err)
-	assert.Equal(t, tempDir, gitDir)
+	require.Equal(t, tempDir, gitDir)
 
 	// Test finding git directory from a non-existent path
 	_, err = findGitDir("/path/that/does/not/exist")
-	assert.Error(t, err)
+	require.Error(t, err)
 }
 
 func TestResolveRevision(t *testing.T) {
@@ -85,7 +84,7 @@ func TestCollectCommits(t *testing.T) {
 
 		// Verify results
 		require.NoError(t, err)
-		assert.Len(t, commits, 2, "Should limit to 2 commits")
+		require.Len(t, commits, 2, "Should limit to 2 commits")
 	})
 
 	t.Run("Should stop at condition", func(t *testing.T) {
@@ -132,8 +131,8 @@ func TestCollectCommits(t *testing.T) {
 		if len(commits) > 0 {
 			// The test might be flaky, so just check if first commit is included and hash2 isn't
 			for _, commit := range commits {
-				assert.NotEqual(t, hash2, commit.Hash, "Should not include the stop commit (hash2)")
-				assert.NotEqual(t, hash3, commit.Hash, "Should not include commits after the stop commit")
+				require.NotEqual(t, hash2, commit.Hash, "Should not include the stop commit (hash2)")
+				require.NotEqual(t, hash3, commit.Hash, "Should not include commits after the stop commit")
 			}
 		} else {
 			// If no commits were returned, that's also acceptable since we're stopping at the first one
@@ -161,7 +160,7 @@ func TestCollectCommits(t *testing.T) {
 
 		// Verify results
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "nil commit")
+		require.Contains(t, err.Error(), "nil commit")
 	})
 }
 

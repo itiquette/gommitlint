@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package config provides configuration management for gommitlint.
 package config
 
@@ -53,10 +57,7 @@ func DefaultConfiguration() *AppConf {
 	}
 }
 
-// getDefaultConfigPaths returns the default configuration search paths.
-// Paths are ordered by precedence (highest precedence first):
-// 1. Project-level .gommitlint.yaml in the current directory
-// 2. XDG config home
+// 2. XDG config home.
 func getDefaultConfigPaths() []string {
 	paths := []string{}
 

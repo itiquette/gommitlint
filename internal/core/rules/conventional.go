@@ -207,11 +207,6 @@ func (r *ConventionalCommitRule) Validate(commit *domain.CommitInfo) []appErrors
 	// Extract breaking change marker
 	if breakingIdx >= 0 && breakingIdx < len(matches) {
 		r.hasBreaking = matches[breakingIdx] != ""
-
-		// If we're validating breaking changes, we would add specific logic here
-		if r.validateBreaking {
-			// Add your breaking change validation logic here if needed
-		}
 	}
 
 	// Validate description
