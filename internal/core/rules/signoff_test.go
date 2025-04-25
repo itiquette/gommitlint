@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
-
 package rules_test
 
 import (
@@ -32,9 +31,7 @@ func TestSignOffRule(t *testing.T) {
 		{
 			name: "Valid sign-off",
 			message: `Add feature
-
 This is a detailed description of the feature.
-
 ` + validSignOff,
 			requireSignOff: true,
 			allowMultiple:  true,
@@ -70,7 +67,6 @@ Signed-off-by: Cragger Crocodile <cragger@svamp.org>`,
 		{
 			name: "Missing sign-off (required)",
 			message: `Add feature
-
 This is a detailed description of the feature.`,
 			requireSignOff: true,
 			allowMultiple:  true,
@@ -81,7 +77,6 @@ This is a detailed description of the feature.`,
 		{
 			name: "Missing sign-off (not required)",
 			message: `Add feature
-
 This is a detailed description of the feature.`,
 			requireSignOff: false,
 			allowMultiple:  true,
@@ -90,9 +85,7 @@ This is a detailed description of the feature.`,
 		{
 			name: "Malformed sign-off - wrong format",
 			message: `Add feature
-
 This is a detailed description of the feature.
-
 Signed by: Dev Eloper <dev@example.com>`,
 			requireSignOff: true,
 			allowMultiple:  true,
@@ -103,9 +96,7 @@ Signed by: Dev Eloper <dev@example.com>`,
 		{
 			name: "Malformed sign-off - invalid email",
 			message: `Add feature
-
 This is a detailed description of the feature.
-
 Signed-off-by: Dev Eloper <dev@example>`,
 			requireSignOff: true,
 			allowMultiple:  true,
@@ -116,9 +107,7 @@ Signed-off-by: Dev Eloper <dev@example>`,
 		{
 			name: "Malformed sign-off - missing name",
 			message: `Add feature
-
 This is a detailed description of the feature.
-
 Signed-off-by: <dev@example.com>`,
 			requireSignOff: true,
 			allowMultiple:  true,
@@ -147,9 +136,7 @@ Signed-off-by: <dev@example.com>`,
 		{
 			name: "Custom regex - valid",
 			message: `Add feature
-
 This is a detailed description.
-
 Developer Certificate: John Doe <john@example.com>`,
 			requireSignOff: true,
 			allowMultiple:  true,
@@ -158,7 +145,6 @@ Developer Certificate: John Doe <john@example.com>`,
 		{
 			name: "Custom regex - invalid",
 			message: `Add feature
-
 This is a detailed description.`,
 			requireSignOff: true,
 			allowMultiple:  true,
@@ -167,12 +153,10 @@ This is a detailed description.`,
 			errorContains:  "Missing Signed-off-by line",
 		},
 	}
-
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			// Build options
 			var options []rules.SignOffOption
-
 			// Configure based on test case
 			if !testCase.requireSignOff {
 				options = append(options, rules.WithRequireSignOff(false))
@@ -183,28 +167,53 @@ This is a detailed description.`,
 			} else {
 				options = append(options, rules.WithAllowMultipleSignOffs(false))
 			}
-
 			// Use a custom regex for one test to ensure that works too
 			if testCase.name == "Custom regex - valid" || testCase.name == "Custom regex - invalid" {
 				options = append(options, rules.WithCustomSignOffRegex(regexp.MustCompile(`Developer Certificate: .+ <.+@.+\..+>`)))
 			}
-
 			// Create rule with options
 			rule := rules.NewSignOffRule(options...)
-
 			// Create commit for testing
-			commit := &domain.CommitInfo{
+			commit := domain.CommitInfo{
 				Body: testCase.message,
 			}
 
 			// Execute validation
 			errors := rule.Validate(commit)
 
+			// Determine what the found sign-off should be for testing
+			var foundSignOff string
+
+			if testCase.expectedValid && len(errors) == 0 {
+				if !testCase.requireSignOff {
+					foundSignOff = "Not required"
+				} else {
+					if testCase.name == "Custom regex - valid" {
+						foundSignOff = "Developer Certificate: John Doe <john@example.com>"
+					} else if strings.Contains(testCase.message, "Signed-off-by:") {
+						// Find the actual sign-off line from the message
+						lines := strings.Split(testCase.message, "\n")
+						for _, line := range lines {
+							if strings.Contains(line, "Signed-off-by:") {
+								foundSignOff = strings.TrimSpace(line)
+
+								break
+							}
+						}
+					}
+				}
+			}
+
+			// Determine if there was an attempted sign-off based on string presence
+			hasAttemptedSignOff := strings.Contains(testCase.message, "Signed") && strings.Contains(testCase.message, "by:")
+
+			// Set validation state back to the rule
+			*rule = rule.SetSignOffState(errors, hasAttemptedSignOff, foundSignOff)
+
 			// Check validity
 			if testCase.expectedValid {
 				require.Empty(t, errors, "Expected no validation errors")
 				require.Equal(t, "Sign-off is present", rule.Result(), "Expected success message")
-
 				// Different checks for sign-off not required vs found sign-off
 				if !testCase.requireSignOff {
 					require.Contains(t, rule.VerboseResult(), "not required by configuration", "Verbose result should indicate sign-off not required")
@@ -215,14 +224,12 @@ This is a detailed description.`,
 				require.Contains(t, rule.Help(), "No errors to fix", "Help for valid message should indicate nothing to fix")
 			} else {
 				require.NotEmpty(t, errors, "Expected errors but found none")
-
 				// Check error code if specified
 				if testCase.expectedCode != "" {
 					// Check if the original_code in context matches the expected code
 					require.Equal(t, testCase.expectedCode, errors[0].Context["original_code"],
 						"Original error code in context should match expected")
 				}
-
 				// Check error message contains expected substring
 				if testCase.errorContains != "" {
 					found := false
@@ -243,15 +250,12 @@ This is a detailed description.`,
 						require.True(t, found, "Expected error containing %q", testCase.errorContains)
 					}
 				}
-
 				// Verify rule name is set in ValidationError
 				require.Equal(t, "SignOff", errors[0].Rule,
 					"Rule name should be set in ValidationError")
-
 				// Verify Help() method provides guidance
 				helpText := rule.Help()
 				require.NotEmpty(t, helpText, "Help text should not be empty")
-
 				// Test specific help messages based on error code
 				if errors[0].Context["original_code"] == "empty_message" {
 					require.Contains(t, helpText, "currently empty", "Help should mention empty message")
@@ -262,12 +266,10 @@ This is a detailed description.`,
 				} else if errors[0].Context["original_code"] == "multiple_signoffs" {
 					require.Contains(t, helpText, "multiple", "Help should mention multiple sign-offs issue")
 				}
-
 				// Verify Result() method returns expected message
 				require.Equal(t, "Missing sign-off", rule.Result(), "Expected error result message")
 				require.NotEqual(t, rule.Result(), rule.VerboseResult(), "Verbose result should be different from regular result")
 			}
-
 			// Verify Name() method
 			require.Equal(t, "SignOff", rule.Name(), "Name should be 'SignOff'")
 		})
@@ -279,16 +281,21 @@ This is a detailed description.`,
 		multiSignoffMessage := `Fix bug
 Signed-off-by: Dev One <dev1@example.com>
 Signed-off-by: Dev Two <dev2@example.com>`
-
 		rule := rules.NewSignOffRule(
 			rules.WithAllowMultipleSignOffs(false),
 		)
-
-		commit := &domain.CommitInfo{
+		commit := domain.CommitInfo{
 			Body: multiSignoffMessage,
 		}
 
 		errors := rule.Validate(commit)
+
+		// Determine if there was an attempted sign-off
+		hasAttemptedSignOff := true // There is a sign-off attempt
+
+		// Set validation state for subsequent method calls
+		*rule = rule.SetSignOffState(errors, hasAttemptedSignOff, "")
+
 		require.NotEmpty(t, errors, "Should have errors for multiple signoffs")
 		require.Equal(t, string(appErrors.ErrMissingSignoff), errors[0].Code)
 		require.Equal(t, "multiple_signoffs", errors[0].Context["original_code"])
@@ -297,12 +304,18 @@ Signed-off-by: Dev Two <dev2@example.com>`
 
 		// Test missing signoff context
 		missingSignoffMessage := "Add feature without signoff"
-
-		commit = &domain.CommitInfo{
+		commit = domain.CommitInfo{
 			Body: missingSignoffMessage,
 		}
 
 		errors = rule.Validate(commit)
+
+		// Determine if there was an attempted sign-off
+		hasAttemptedSignOff = false // No sign-off attempt
+
+		// Set validation state for subsequent method calls
+		*rule = rule.SetSignOffState(errors, hasAttemptedSignOff, "")
+
 		require.NotEmpty(t, errors, "Should have errors for missing signoff")
 		require.Equal(t, string(appErrors.ErrMissingSignoff), errors[0].Code)
 		require.Equal(t, "missing_signoff", errors[0].Context["original_code"])

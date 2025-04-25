@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
-
 package rules
 
 import (
@@ -66,7 +65,6 @@ func NewSignOffRule(options ...SignOffOption) *SignOffRule {
 		allowMultiple:  true, // By default, allow multiple sign-offs
 		customRegex:    nil,  // By default, use the standard regex
 	}
-
 	// Apply provided options
 	for _, option := range options {
 		option(rule)
@@ -75,33 +73,45 @@ func NewSignOffRule(options ...SignOffOption) *SignOffRule {
 	return rule
 }
 
+// SetSignOffState sets the sign-off state flags after validation.
+// This allows using value receivers in other methods.
+func (r SignOffRule) SetSignOffState(errList []appErrors.ValidationError, attempted bool, found string) SignOffRule {
+	// Since we're using a value receiver, we return a new copy with the updated values
+	r.hasAttemptedSignOff = attempted
+	r.foundSignOff = found
+
+	// Create a fresh BaseRule with our errors
+	baseRule := NewBaseRule(r.Name())
+	for _, err := range errList {
+		baseRule.AddError(err)
+	}
+
+	baseRule.MarkAsRun()
+	r.BaseRule = baseRule
+
+	return r
+}
+
 // Validate validates a commit message against the rule.
-func (r *SignOffRule) Validate(commit *domain.CommitInfo) []appErrors.ValidationError {
-	// Reset errors
-	r.ClearErrors()
-	r.MarkAsRun()
-	r.hasAttemptedSignOff = false
-	r.foundSignOff = ""
+func (r SignOffRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
+	// Create local variables for tracking state - don't modify r directly
+	errors := make([]appErrors.ValidationError, 0)
 
 	// If sign-off is not required, pass immediately
 	if !r.requireSignOff {
-		// Set a dummy sign-off for the verbose output
-		r.foundSignOff = "Not required"
-
-		return r.Errors()
+		return errors
 	}
 
 	body := commit.Body
-
 	// Handle empty body
 	if strings.TrimSpace(body) == "" {
-		r.addError(
+		errors = append(errors, r.createError(
 			"empty_message",
 			"commit message body is empty; no sign-off found",
 			nil,
-		)
+		))
 
-		return r.Errors()
+		return errors
 	}
 
 	// Determine which regex to use
@@ -125,60 +135,55 @@ func (r *SignOffRule) Validate(commit *domain.CommitInfo) []appErrors.Validation
 	if len(validSignOffs) > 0 {
 		// Found at least one valid sign-off
 		if !r.allowMultiple && len(validSignOffs) > 1 {
-			r.addError(
+			errors = append(errors, r.createError(
 				"multiple_signoffs",
 				"commit has multiple sign-offs but only one is allowed",
 				map[string]string{
 					"message":       body,
 					"signoff_count": strconv.Itoa(len(validSignOffs)),
 				},
-			)
-
-			return r.Errors()
+			))
 		}
 
-		// Store the first valid sign-off for verbose output
-		r.foundSignOff = validSignOffs[0]
-
-		return r.Errors()
+		return errors
 	}
 
 	// Check if there are any lines that attempt to be a sign-off but are formatted incorrectly
-	r.hasAttemptedSignOff = false
+	hasAttemptedSignOff := false
 
 	for _, line := range allLines {
 		trimmedLine := strings.TrimSpace(line)
 		if strings.Contains(trimmedLine, "Signed") && strings.Contains(trimmedLine, "by:") {
-			r.hasAttemptedSignOff = true
+			hasAttemptedSignOff = true
 
 			break
 		}
 	}
 
 	// No valid sign-off found - distinguish between format issues and completely missing signoff
-	if r.hasAttemptedSignOff {
-		r.addError(
+	if hasAttemptedSignOff {
+		errors = append(errors, r.createError(
 			"invalid_format",
 			"Invalid sign-off format. Must use 'Signed-off-by: Name <email@example.com>' format",
 			map[string]string{
 				"message": body,
 			},
-		)
+		))
 	} else {
-		r.addError(
+		errors = append(errors, r.createError(
 			"missing_signoff",
 			"Missing Signed-off-by line. Commit must be signed-off using 'Signed-off-by: Name <email@example.com>' format",
 			map[string]string{
 				"message": body,
 			},
-		)
+		))
 	}
 
-	return r.Errors()
+	return errors
 }
 
 // Result returns a concise rule message.
-func (r *SignOffRule) Result() string {
+func (r SignOffRule) Result() string {
 	if r.HasErrors() {
 		return "Missing sign-off"
 	}
@@ -187,16 +192,14 @@ func (r *SignOffRule) Result() string {
 }
 
 // VerboseResult returns a more detailed explanation for verbose mode.
-func (r *SignOffRule) VerboseResult() string {
+func (r SignOffRule) VerboseResult() string {
 	if r.HasErrors() {
 		errors := r.Errors()
 		if len(errors) == 0 {
 			return "Unknown error"
 		}
-
 		// errors[0] is already a ValidationError, so no need for type assertion
 		validationErr := errors[0]
-
 		// Check original code in context for more specific message
 		if originalCode, ok := validationErr.Context["original_code"]; ok {
 			switch originalCode {
@@ -210,7 +213,6 @@ func (r *SignOffRule) VerboseResult() string {
 				return "Multiple Developer Certificate of Origin sign-offs found, but configuration only allows one."
 			}
 		}
-
 		// If no original_code in context or not recognized, fall back to error message
 		return validationErr.Error()
 	}
@@ -225,18 +227,14 @@ func (r *SignOffRule) VerboseResult() string {
 }
 
 // Help returns a description of how to fix the rule violation.
-func (r *SignOffRule) Help() string {
+func (r SignOffRule) Help() string {
 	if !r.HasErrors() {
 		return "No errors to fix"
 	}
-
 	// Check error code for more targeted help
 	errors := r.Errors()
 	if len(errors) > 0 {
-		// Try to cast to ValidationError
-		// errors[0] is already a ValidationError, so no need for type assertion
 		validationErr := errors[0]
-
 		// First check context for original error code
 		if originalCode, ok := validationErr.Context["original_code"]; ok {
 			switch originalCode {
@@ -244,145 +242,139 @@ func (r *SignOffRule) Help() string {
 				return `Add a Developer Certificate of Origin sign-off to your commit message.
 Your commit message is currently empty. First, provide a meaningful commit message,
 then add a sign-off line at the end.
-
 You can add a sign-off automatically using 'git commit -s' or manually add:
 Signed-off-by: Your Name <your.email@example.com>
-
 The Developer Certificate of Origin is a statement that you have the right to 
 submit this contribution under the project's license.`
-
 			case "missing_signoff":
 				return `Add a Developer Certificate of Origin sign-off to your commit message.
 You can do this by:
 1. Using 'git commit -s' which will automatically add the sign-off
 2. Manually adding a line at the end of your commit message:
    Signed-off-by: Your Name <your.email@example.com>
-
 The sign-off certifies you have the right to submit your contribution 
 under the project's license and follows the Developer Certificate of Origin.
-
 Example of a complete commit message with sign-off:
 feat: introduce rate limiting for API endpoints
-
 Adds rate limiting to prevent API abuse:
 - Implements token bucket algorithm
 - Configurable limits per endpoint
-
 Signed-off-by: Jane Doe <jane.doe@example.org>`
-
 			case "invalid_format":
 				return `Add a correctly formatted Developer Certificate of Origin sign-off to your commit message.
 The sign-off line must follow this exact format:
 Signed-off-by: Your Name <your.email@example.com>
-
 Common issues include:
 - Misspelling "Signed-off-by"
 - Using parentheses instead of angle brackets for email
 - Using incorrect email format
-
 You can add a correct sign-off automatically using 'git commit -s'`
-
 			case "multiple_signoffs":
 				return `Your commit has multiple Developer Certificate of Origin sign-offs, but the configuration only allows one.
 Remove all but one sign-off line to comply with the project's requirements.
-
 Example of a correctly formatted sign-off:
 Signed-off-by: Your Name <your.email@example.com>
-
 If you need to keep multiple sign-offs, contact the project maintainers to update the configuration.`
 			}
 		}
-
 		// Fall back to checking the error code if no original_code in context
 		switch validationErr.Code {
 		case string(appErrors.ErrEmptyMessage):
 			return `Add a Developer Certificate of Origin sign-off to your commit message.
 Your commit message is currently empty. First, provide a meaningful commit message,
 then add a sign-off line at the end.
-
 You can add a sign-off automatically using 'git commit -s' or manually add:
 Signed-off-by: Your Name <your.email@example.com>
-
 The Developer Certificate of Origin is a statement that you have the right to 
 submit this contribution under the project's license.`
-
 		case string(appErrors.ErrMissingSignoff):
 			return `Add a Developer Certificate of Origin sign-off to your commit message.
 You can do this by:
 1. Using 'git commit -s' which will automatically add the sign-off
 2. Manually adding a line at the end of your commit message:
    Signed-off-by: Your Name <your.email@example.com>
-
 The sign-off certifies you have the right to submit your contribution 
 under the project's license and follows the Developer Certificate of Origin.
-
 Example of a complete commit message with sign-off:
 feat: introduce rate limiting for API endpoints
-
 Adds rate limiting to prevent API abuse:
 - Implements token bucket algorithm
 - Configurable limits per endpoint
-
 Signed-off-by: Jane Doe <jane.doe@example.org>`
-
 		case string(appErrors.ErrInvalidFormat):
 			return `Add a correctly formatted Developer Certificate of Origin sign-off to your commit message.
 The sign-off line must follow this exact format:
 Signed-off-by: Your Name <your.email@example.com>
-
 Common issues include:
 - Misspelling "Signed-off-by"
 - Using parentheses instead of angle brackets for email
 - Using incorrect email format
-
 You can add a correct sign-off automatically using 'git commit -s'`
 		}
 	}
-
 	// Default help text
 	return `Add a Developer Certificate of Origin sign-off to your commit message.
 You can do this by:
 1. Using 'git commit -s' which will automatically add the sign-off
 2. Manually adding a line at the end of your commit message:
    Signed-off-by: Your Name <your.email@example.com>
-
 The sign-off certifies you have the right to submit your contribution 
 under the project's license and follows the Developer Certificate of Origin.
-
 Example of a complete commit message with sign-off:
 feat: introduce rate limiting for API endpoints
-
 Adds rate limiting to prevent API abuse:
 - Implements token bucket algorithm
 - Configurable limits per endpoint
-
 Signed-off-by: Jane Doe <jane.doe@example.org>`
 }
 
-// addError adds a structured validation error.
-func (r *SignOffRule) addError(code, message string, context map[string]string) {
+// createError creates a structured validation error without modifying the rule's state.
+func (r SignOffRule) createError(code, message string, context map[string]string) appErrors.ValidationError {
 	if context == nil {
 		context = make(map[string]string)
 	}
-
 	// Store original code in context for test validation
 	context["original_code"] = code
 
+	var validationErr appErrors.ValidationError
+
 	if code == "missing_signoff" {
 		// Use the error template for missing signoff with context in one step
-		r.AddErrorWithContext(appErrors.ErrMissingSignoff, message, context)
+		validationErr = appErrors.New(
+			r.Name(),
+			appErrors.ErrMissingSignoff,
+			message,
+			appErrors.WithContextMap(context))
 	} else if code == "invalid_format" {
 		// Use a more consistent error message for invalid format
 		standardMessage := "Invalid sign-off format. Must use 'Signed-off-by: Name <email@example.com>' format"
-		r.AddErrorWithContext(appErrors.ErrInvalidFormat, standardMessage, context)
+		validationErr = appErrors.New(
+			r.Name(),
+			appErrors.ErrInvalidFormat,
+			standardMessage,
+			appErrors.WithContextMap(context))
 	} else if code == "multiple_signoffs" {
 		// Use appropriate error code for multiple signoffs
-		r.AddErrorWithContext(appErrors.ErrMissingSignoff, message, context)
+		validationErr = appErrors.New(
+			r.Name(),
+			appErrors.ErrMissingSignoff,
+			message,
+			appErrors.WithContextMap(context))
 	} else if code == "empty_message" {
 		// Use appropriate error code for empty message
-		r.AddErrorWithContext(appErrors.ErrEmptyMessage, message, context)
+		validationErr = appErrors.New(
+			r.Name(),
+			appErrors.ErrEmptyMessage,
+			message,
+			appErrors.WithContextMap(context))
 	} else {
 		// For other codes, use context if available
-		r.AddErrorWithContext(appErrors.ErrUnknown, message, context)
+		validationErr = appErrors.New(
+			r.Name(),
+			appErrors.ErrUnknown,
+			message,
+			appErrors.WithContextMap(context))
 	}
+
+	return validationErr
 }

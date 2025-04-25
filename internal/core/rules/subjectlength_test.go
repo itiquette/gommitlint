@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
-
 package rules_test
 
 import (
@@ -55,7 +54,7 @@ func TestSubjectLengthRule(t *testing.T) {
 			actualLength := utf8.RuneCountInString(test.subject)
 
 			// Create commit info
-			commit := &domain.CommitInfo{
+			commit := domain.CommitInfo{
 				Subject: test.subject,
 			}
 
@@ -64,6 +63,9 @@ func TestSubjectLengthRule(t *testing.T) {
 
 			// Validate
 			errors := rule.Validate(commit)
+
+			// Set errors back to the rule
+			rule = rule.SetErrors(errors)
 
 			// Check result
 			if test.expectError {

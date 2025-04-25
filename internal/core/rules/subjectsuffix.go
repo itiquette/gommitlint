@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
-
 package rules
 
 import (
@@ -26,7 +25,6 @@ const DefaultInvalidSuffixes = ".,;:!?"
 // automated processing of commit messages.
 type SubjectSuffixRule struct {
 	errors          []appErrors.ValidationError
-	lastChar        rune
 	invalidSuffixes string
 }
 
@@ -61,48 +59,49 @@ func NewSubjectSuffixRule(options ...SubjectSuffixOption) *SubjectSuffixRule {
 }
 
 // Name returns the rule identifier.
-func (r *SubjectSuffixRule) Name() string {
+func (r SubjectSuffixRule) Name() string {
 	return "SubjectSuffix"
 }
 
 // Validate validates that the subject doesn't end with invalid characters.
-func (r *SubjectSuffixRule) Validate(commit *domain.CommitInfo) []appErrors.ValidationError {
-	// Reset errors
-	r.errors = make([]appErrors.ValidationError, 0)
+func (r SubjectSuffixRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
+	// Create a new slice for errors
+	errors := make([]appErrors.ValidationError, 0)
+
+	// Local lastChar for this validation
+	var lastChar rune
 
 	subject := commit.Subject
-
 	if subject == "" {
-		r.addError(
-			"subject_empty",
+		errors = append(errors, r.createError(
+			"missing_subject",
 			"subject is empty",
 			map[string]string{
 				"subject": subject,
 			},
-		)
+		))
 
-		return r.errors
+		return errors
 	}
 
 	lastChar, size := utf8.DecodeLastRuneInString(subject)
-	r.lastChar = lastChar
 
 	// Check for invalid UTF-8
 	if lastChar == utf8.RuneError && size == 0 {
-		r.addError(
+		errors = append(errors, r.createError(
 			"invalid_utf8",
 			"subject does not end with valid UTF-8 text",
 			map[string]string{
 				"subject": subject,
 			},
-		)
+		))
 
-		return r.errors
+		return errors
 	}
 
 	// Check if the last character is in the invalid suffix set
 	if strings.ContainsRune(r.invalidSuffixes, lastChar) {
-		r.addError(
+		errors = append(errors, r.createError(
 			"invalid_suffix",
 			fmt.Sprintf("subject has invalid suffix %q (invalid suffixes: %q)", string(lastChar), r.invalidSuffixes),
 			map[string]string{
@@ -110,14 +109,15 @@ func (r *SubjectSuffixRule) Validate(commit *domain.CommitInfo) []appErrors.Vali
 				"last_char":        string(lastChar),
 				"invalid_suffixes": r.invalidSuffixes,
 			},
-		)
+		))
 	}
 
-	return r.errors
+	return errors
 }
 
 // Result returns a concise validation result.
-func (r *SubjectSuffixRule) Result() string {
+// It should be called after Validate() and using the errors from it.
+func (r SubjectSuffixRule) Result() string {
 	if len(r.errors) == 0 {
 		return "Valid subject suffix"
 	}
@@ -126,7 +126,8 @@ func (r *SubjectSuffixRule) Result() string {
 }
 
 // VerboseResult returns a more detailed result message.
-func (r *SubjectSuffixRule) VerboseResult() string {
+// It should be called after Validate() and using the errors from it.
+func (r SubjectSuffixRule) VerboseResult() string {
 	if len(r.errors) == 0 {
 		return "Subject ends with valid character"
 	}
@@ -134,14 +135,13 @@ func (r *SubjectSuffixRule) VerboseResult() string {
 	// If we have an error, provide details based on the error type
 	if len(r.errors) > 0 {
 		code := r.errors[0].Code
-		if code == "subject_empty" || code == string(appErrors.ErrMissingSubject) {
+		if code == "missing_subject" || code == string(appErrors.ErrMissingSubject) {
 			return "Subject is empty"
 		}
 
 		if code == "invalid_utf8" || code == string(appErrors.ErrInvalidFormat) {
 			return "Subject contains invalid UTF-8 characters"
 		}
-
 		// If we have a more specific error message from the validation, use it
 		message := r.errors[0].Message
 		if message != "" {
@@ -154,7 +154,8 @@ func (r *SubjectSuffixRule) VerboseResult() string {
 }
 
 // Help returns guidance on how to fix rule violations.
-func (r *SubjectSuffixRule) Help() string {
+// It should be called after Validate() and using the errors from it.
+func (r SubjectSuffixRule) Help() string {
 	if len(r.errors) == 0 {
 		return "No errors to fix"
 	}
@@ -162,17 +163,14 @@ func (r *SubjectSuffixRule) Help() string {
 	// Check for specific error codes and provide appropriate help messages
 	if len(r.errors) > 0 {
 		code := r.errors[0].Code
-
 		// Check for missing subject errors
-		if code == string(appErrors.ErrMissingSubject) || code == "subject_empty" {
+		if code == string(appErrors.ErrMissingSubject) || code == "missing_subject" {
 			return "Provide a non-empty subject line for your commit message"
 		}
-
 		// Check for invalid UTF-8 errors
 		if code == string(appErrors.ErrInvalidFormat) || code == "invalid_utf8" {
 			return "Ensure your commit message contains only valid UTF-8 characters"
 		}
-
 		// Check for invalid suffix errors
 		if code == string(appErrors.ErrSubjectSuffix) || code == "invalid_suffix" {
 			var invalidSuffixes string
@@ -191,12 +189,13 @@ func (r *SubjectSuffixRule) Help() string {
 }
 
 // Errors returns all validation errors.
-func (r *SubjectSuffixRule) Errors() []appErrors.ValidationError {
+// It should be called after Validate() and using the errors from it.
+func (r SubjectSuffixRule) Errors() []appErrors.ValidationError {
 	return r.errors
 }
 
-// addError adds a structured validation error.
-func (r *SubjectSuffixRule) addError(code, message string, context map[string]string) {
+// createError creates a structured validation error without modifying the rule's state.
+func (r SubjectSuffixRule) createError(code, message string, context map[string]string) appErrors.ValidationError {
 	// Create the validation error directly with the app errors package
 	var err appErrors.ValidationError
 
@@ -209,7 +208,7 @@ func (r *SubjectSuffixRule) addError(code, message string, context map[string]st
 			message,
 			appErrors.WithContextMap(context),
 		)
-	case "subject_empty":
+	case "missing_subject":
 		// Map to missing subject code
 		err = appErrors.New(
 			r.Name(),
@@ -237,5 +236,13 @@ func (r *SubjectSuffixRule) addError(code, message string, context map[string]st
 		)
 	}
 
-	r.errors = append(r.errors, err)
+	return err
+}
+
+// SetErrors sets the validation errors after validation.
+// This is needed to support value receivers while maintaining state.
+func (r SubjectSuffixRule) SetErrors(errors []appErrors.ValidationError) SubjectSuffixRule {
+	r.errors = errors
+
+	return r
 }

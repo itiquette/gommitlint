@@ -49,7 +49,7 @@ type RuleResult struct {
 // CommitResult represents the results of validating all rules against a single commit.
 type CommitResult struct {
 	// CommitInfo contains information about the validated commit.
-	CommitInfo *CommitInfo
+	CommitInfo CommitInfo
 
 	// RuleResults contains the results of each rule applied to the commit.
 	RuleResults []RuleResult
@@ -101,8 +101,8 @@ func (r *ValidationResults) Count() int {
 }
 
 // NewValidationResults creates a new ValidationResults instance.
-func NewValidationResults() *ValidationResults {
-	return &ValidationResults{
+func NewValidationResults() ValidationResults {
+	return ValidationResults{
 		CommitResults: make([]CommitResult, 0),
 		RuleSummary:   make(map[string]int),
 	}

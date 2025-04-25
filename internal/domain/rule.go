@@ -48,7 +48,7 @@ type Rule interface {
 	Name() string
 
 	// Validate performs validation against a commit.
-	Validate(commit *CommitInfo) []errors.ValidationError
+	Validate(commit CommitInfo) []errors.ValidationError
 
 	// Result returns a concise result message.
 	Result() string
@@ -68,7 +68,7 @@ type ContextualRule interface {
 	Rule
 
 	// ValidateWithContext performs validation with context.
-	ValidateWithContext(ctx context.Context, commit *CommitInfo) []errors.ValidationError
+	ValidateWithContext(ctx context.Context, commit CommitInfo) []errors.ValidationError
 }
 
 // RuleProvider defines an interface for retrieving validation rules.

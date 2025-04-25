@@ -10,13 +10,13 @@ import "context"
 // It combines the functionality of reading individual commits and commit history.
 type GitCommitService interface {
 	// GetCommit returns a commit by its hash.
-	GetCommit(ctx context.Context, hash string) (*CommitInfo, error)
+	GetCommit(ctx context.Context, hash string) (CommitInfo, error)
 
 	// GetCommitRange returns all commits in the given range.
-	GetCommitRange(ctx context.Context, fromHash, toHash string) ([]*CommitInfo, error)
+	GetCommitRange(ctx context.Context, fromHash, toHash string) ([]CommitInfo, error)
 
 	// GetHeadCommits returns the specified number of commits from HEAD.
-	GetHeadCommits(ctx context.Context, count int) ([]*CommitInfo, error)
+	GetHeadCommits(ctx context.Context, count int) ([]CommitInfo, error)
 }
 
 // RepositoryInfoProvider provides general information about the repository.

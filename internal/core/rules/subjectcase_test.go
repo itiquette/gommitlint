@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
+
+//nolint:exhaustive
 package rules_test
 
 import (
@@ -136,7 +138,7 @@ func TestSubjectCaseRule(t *testing.T) {
 			// Create the rule
 			rule := rules.NewSubjectCaseRule(options...)
 			// Create a commit for validation
-			commit := &domain.CommitInfo{
+			commit := domain.CommitInfo{
 				Subject: testCase.message,
 			}
 			// Validate
@@ -173,7 +175,7 @@ func TestSubjectCaseRule(t *testing.T) {
 					require.Equal(t, "SubjectCase", result[0].Rule, "Rule name should be set in ValidationError")
 					// Check verbose result for expected content
 					verboseResult := rule.VerboseResult()
-					//nolint:exhaustive
+
 					switch appErrors.ValidationErrorCode(result[0].Code) {
 					case appErrors.ErrEmptyDescription, appErrors.ErrEmptyMessage:
 						require.Contains(t, verboseResult, "empty", "VerboseResult should explain empty subject")
@@ -205,7 +207,7 @@ func TestSubjectCaseHelpMessages(t *testing.T) {
 	tests := []struct {
 		name          string
 		setupRule     func() *rules.SubjectCaseRule
-		commit        *domain.CommitInfo
+		commit        domain.CommitInfo
 		expectedHelp  string
 		errorContains string
 	}{
@@ -214,7 +216,7 @@ func TestSubjectCaseHelpMessages(t *testing.T) {
 			setupRule: func() *rules.SubjectCaseRule {
 				return rules.NewSubjectCaseRule(rules.WithCaseChoice("lower"))
 			},
-			commit: &domain.CommitInfo{
+			commit: domain.CommitInfo{
 				Subject: "",
 			},
 			errorContains: "empty",
@@ -228,7 +230,7 @@ func TestSubjectCaseHelpMessages(t *testing.T) {
 					rules.WithSubjectCaseCommitFormat(true),
 				)
 			},
-			commit: &domain.CommitInfo{
+			commit: domain.CommitInfo{
 				Subject: "invalid conventional format",
 			},
 			errorContains: "conventional commit format",
@@ -239,7 +241,7 @@ func TestSubjectCaseHelpMessages(t *testing.T) {
 			setupRule: func() *rules.SubjectCaseRule {
 				return rules.NewSubjectCaseRule(rules.WithCaseChoice("upper"))
 			},
-			commit: &domain.CommitInfo{
+			commit: domain.CommitInfo{
 				Subject: "lowercase start is wrong for uppercase rule",
 			},
 			errorContains: "upper",
@@ -250,7 +252,7 @@ func TestSubjectCaseHelpMessages(t *testing.T) {
 			setupRule: func() *rules.SubjectCaseRule {
 				return rules.NewSubjectCaseRule(rules.WithCaseChoice("lower"))
 			},
-			commit: &domain.CommitInfo{
+			commit: domain.CommitInfo{
 				Subject: "Uppercase start is wrong for lowercase rule",
 			},
 			errorContains: "lower",
@@ -261,7 +263,7 @@ func TestSubjectCaseHelpMessages(t *testing.T) {
 			setupRule: func() *rules.SubjectCaseRule {
 				return rules.NewSubjectCaseRule(rules.WithCaseChoice("lower"))
 			},
-			commit: &domain.CommitInfo{
+			commit: domain.CommitInfo{
 				Subject: "lowercase start is correct for lowercase rule",
 			},
 			expectedHelp: "No errors to fix",
@@ -303,7 +305,7 @@ func TestSubjectCaseHelpMessages(t *testing.T) {
 func TestSubjectCaseErrors(t *testing.T) {
 	// Test with a commit that violates uppercase rule
 	rule := rules.NewSubjectCaseRule(rules.WithCaseChoice("upper"))
-	commit := &domain.CommitInfo{
+	commit := domain.CommitInfo{
 		Subject: "lowercase start in subject",
 	}
 	// Validate

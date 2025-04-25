@@ -15,6 +15,10 @@ import (
 // ValidationErrorCode represents standardized error codes for validation errors.
 type ValidationErrorCode string
 
+func (v ValidationErrorCode) String() string {
+	return string(v)
+}
+
 // Define all error codes here in a grouped structure for better organization.
 const (
 	// Format errors.

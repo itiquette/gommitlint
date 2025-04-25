@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
-
 package rules_test
 
 import (
@@ -114,7 +113,6 @@ func TestSubjectSuffixRule(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			// Create the rule
 			var rule *rules.SubjectSuffixRule
-
 			if testCase.invalidSuffixes != "" {
 				rule = rules.NewSubjectSuffixRule(rules.WithInvalidSuffixes(testCase.invalidSuffixes))
 			} else {
@@ -122,12 +120,16 @@ func TestSubjectSuffixRule(t *testing.T) {
 			}
 
 			// Create commit with the test subject
-			commit := &domain.CommitInfo{
+			commit := domain.CommitInfo{
 				Subject: testCase.subject,
 			}
 
-			// Validate
+			// Validate and store errors
 			result := rule.Validate(commit)
+
+			// Manually set errors in rule for Result(), Help(), etc. methods
+			// This needs to be done if we want to keep using value receivers
+			*rule = rule.SetErrors(result) // Save the returned rule
 
 			// Check results
 			if testCase.expectedValid {
@@ -138,16 +140,13 @@ func TestSubjectSuffixRule(t *testing.T) {
 			} else {
 				require.NotEmpty(t, result, "Expected validation errors")
 				require.Equal(t, testCase.expectedMessage, rule.Result(), "Expected error message doesn't match")
-
 				// Access validation error directly
 				validationErr := result[0]
 				require.Equal(t, testCase.expectedCode, validationErr.Code, "Error code should match expected")
-
 				// Check that context contains required fields
 				if testCase.expectedCode == "invalid_suffix" {
 					require.Contains(t, validationErr.Context, "last_char", "Context should contain last_char")
 					require.Contains(t, validationErr.Context, "invalid_suffixes", "Context should contain invalid_suffixes")
-
 					// For special characters like Unicode emoji or tab, don't check the exact character
 					if testCase.subject != "" &&
 						!strings.Contains(testCase.subject, "😊") &&
@@ -157,18 +156,14 @@ func TestSubjectSuffixRule(t *testing.T) {
 							"VerboseResult should contain the last character")
 					}
 				}
-
 				// Check context contains subject
 				require.Contains(t, validationErr.Context, "subject", "Context should contain subject")
 			}
-
 			// Check name
 			require.Equal(t, "SubjectSuffix", rule.Name(), "Name should be 'SubjectSuffix'")
-
 			// Check help text
 			helpText := rule.Help()
 			require.NotEmpty(t, helpText, "Help text should not be empty")
-
 			// Verify help text is appropriate for the error
 			if !testCase.expectedValid {
 				switch testCase.expectedCode {
@@ -192,19 +187,24 @@ func TestSubjectSuffixOptions(t *testing.T) {
 		rule := rules.NewSubjectSuffixRule()
 
 		// Create commit with valid subject
-		commit := &domain.CommitInfo{
+		commit := domain.CommitInfo{
 			Subject: "This is valid",
 		}
+
 		errors := rule.Validate(commit)
+		*rule = rule.SetErrors(errors) // Save the returned rule
+
 		require.Empty(t, errors, "Default config should accept valid subject")
 
 		// Create commit with invalid subject (period at end)
-		invalidCommit := &domain.CommitInfo{
+		invalidCommit := domain.CommitInfo{
 			Subject: "This ends with period.",
 		}
-		errors = rule.Validate(invalidCommit)
-		require.NotEmpty(t, errors, "Default config should reject subject ending with period")
 
+		errors = rule.Validate(invalidCommit)
+		*rule = rule.SetErrors(errors) // Save the returned rule
+
+		require.NotEmpty(t, errors, "Default config should reject subject ending with period")
 		validationErr := errors[0]
 		require.Equal(t, "invalid_suffix", validationErr.Code, "Error code should be 'invalid_suffix'")
 	})
@@ -214,12 +214,14 @@ func TestSubjectSuffixOptions(t *testing.T) {
 		rule := rules.NewSubjectSuffixRule(rules.WithInvalidSuffixes("!@#"))
 
 		// Create commit with invalid suffix (ends with !)
-		commit := &domain.CommitInfo{
+		commit := domain.CommitInfo{
 			Subject: "This ends with exclamation!",
 		}
-		errors := rule.Validate(commit)
-		require.NotEmpty(t, errors, "Should reject subject with configured invalid suffix")
 
+		errors := rule.Validate(commit)
+		*rule = rule.SetErrors(errors) // Save the returned rule
+
+		require.NotEmpty(t, errors, "Should reject subject with configured invalid suffix")
 		validationErr := errors[0]
 		require.Equal(t, "invalid_suffix", validationErr.Code, "Error code should be 'invalid_suffix'")
 
@@ -228,10 +230,13 @@ func TestSubjectSuffixOptions(t *testing.T) {
 			"Context should contain the custom invalid suffixes")
 
 		// Create commit with period (should be allowed with custom config)
-		validCommit := &domain.CommitInfo{
+		validCommit := domain.CommitInfo{
 			Subject: "This ends with period.",
 		}
+
 		errors = rule.Validate(validCommit)
+		*rule = rule.SetErrors(errors) // Save the returned rule
+
 		require.Empty(t, errors, "Should accept subject ending with period when not in invalid set")
 	})
 
@@ -240,12 +245,14 @@ func TestSubjectSuffixOptions(t *testing.T) {
 		rule := rules.NewSubjectSuffixRule(rules.WithInvalidSuffixes(""))
 
 		// Create commit with question mark (in default invalid suffixes)
-		commit := &domain.CommitInfo{
+		commit := domain.CommitInfo{
 			Subject: "This ends with question mark?",
 		}
-		errors := rule.Validate(commit)
-		require.NotEmpty(t, errors, "Should reject subject with default invalid suffix")
 
+		errors := rule.Validate(commit)
+		*rule = rule.SetErrors(errors) // Save the returned rule
+
+		require.NotEmpty(t, errors, "Should reject subject with default invalid suffix")
 		validationErr := errors[0]
 		require.Equal(t, rules.DefaultInvalidSuffixes, validationErr.Context["invalid_suffixes"],
 			"Should fall back to default invalid suffixes")

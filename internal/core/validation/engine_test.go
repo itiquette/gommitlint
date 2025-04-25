@@ -19,11 +19,11 @@ type MockRule struct {
 	name         string
 	shouldPass   bool
 	errors       []errors.ValidationError
-	validationFn func(*domain.CommitInfo) []errors.ValidationError
+	validationFn func(domain.CommitInfo) []errors.ValidationError
 }
 
-func NewMockRule(name string, shouldPass bool) *MockRule {
-	rule := &MockRule{
+func NewMockRule(name string, shouldPass bool) MockRule {
+	rule := MockRule{
 		name:       name,
 		shouldPass: shouldPass,
 		errors:     make([]errors.ValidationError, 0),
@@ -48,11 +48,11 @@ func NewMockRule(name string, shouldPass bool) *MockRule {
 // 	return e.message
 // }
 
-func (r *MockRule) Name() string {
+func (r MockRule) Name() string {
 	return r.name
 }
 
-func (r *MockRule) Validate(commit *domain.CommitInfo) []errors.ValidationError {
+func (r MockRule) Validate(commit domain.CommitInfo) []errors.ValidationError {
 	if r.validationFn != nil {
 		return r.validationFn(commit)
 	}
@@ -60,7 +60,7 @@ func (r *MockRule) Validate(commit *domain.CommitInfo) []errors.ValidationError 
 	return r.errors
 }
 
-func (r *MockRule) Result() string {
+func (r MockRule) Result() string {
 	if r.shouldPass {
 		return "Passed"
 	}
@@ -68,7 +68,7 @@ func (r *MockRule) Result() string {
 	return "Failed"
 }
 
-func (r *MockRule) VerboseResult() string {
+func (r MockRule) VerboseResult() string {
 	if r.shouldPass {
 		return "Mock rule passed"
 	}
@@ -76,11 +76,11 @@ func (r *MockRule) VerboseResult() string {
 	return "Mock rule failed"
 }
 
-func (r *MockRule) Help() string {
+func (r MockRule) Help() string {
 	return "This is a mock rule for testing"
 }
 
-func (r *MockRule) Errors() []errors.ValidationError {
+func (r MockRule) Errors() []errors.ValidationError {
 	return r.errors
 }
 
@@ -116,7 +116,7 @@ func TestValidationEngine_ValidateCommit(t *testing.T) {
 	engine := validation.NewEngine(provider)
 
 	// Create test commit
-	commit := &domain.CommitInfo{
+	commit := domain.CommitInfo{
 		Hash:    "testcommit",
 		Subject: "Test commit",
 		Message: "This is a test commit",
@@ -152,7 +152,7 @@ func TestValidationEngine_ValidateCommits(t *testing.T) {
 	// Create a conditional rule that fails only for specific commits
 	conditionalRule := &MockRule{
 		name: "ConditionalRule",
-		validationFn: func(commit *domain.CommitInfo) []errors.ValidationError {
+		validationFn: func(commit domain.CommitInfo) []errors.ValidationError {
 			if commit.Hash == "failing" {
 				return []errors.ValidationError{
 					errors.New("ConditionalRule", errors.ErrUnknown, "Failed for specific commit"),
@@ -170,7 +170,7 @@ func TestValidationEngine_ValidateCommits(t *testing.T) {
 	engine := validation.NewEngine(provider)
 
 	// Create test commits
-	commits := []*domain.CommitInfo{
+	commits := []domain.CommitInfo{
 		{
 			Hash:    "passing1",
 			Subject: "Passing commit 1",
@@ -229,7 +229,7 @@ func TestValidationEngine_Timeout(t *testing.T) {
 	// Create a slow rule that sleeps
 	slowRule := &MockRule{
 		name: "SlowRule",
-		validationFn: func(_ *domain.CommitInfo) []errors.ValidationError {
+		validationFn: func(_ domain.CommitInfo) []errors.ValidationError {
 			// In a real test we would use time.Sleep,
 			// but for a unit test we'll avoid actual waiting
 			return []errors.ValidationError{
@@ -245,7 +245,7 @@ func TestValidationEngine_Timeout(t *testing.T) {
 	engine := validation.NewEngine(provider)
 
 	// Create test commit
-	commit := &domain.CommitInfo{
+	commit := domain.CommitInfo{
 		Hash:    "testcommit",
 		Subject: "Test commit",
 		Message: "This is a test commit",

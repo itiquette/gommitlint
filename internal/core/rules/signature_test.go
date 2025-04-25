@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
-
 package rules_test
 
 import (
@@ -16,6 +15,7 @@ import (
 )
 
 func TestSignatureRule(t *testing.T) {
+	// Example of a valid GPG signature
 	// Example of a valid GPG signature
 	validGPGSignature := `-----BEGIN PGP SIGNATURE-----
 Version: GnuPG v2
@@ -156,14 +156,12 @@ FxlS+hzWnbOPMrRKuSfJ+H8mF6t1V3qUYtxHNQvHtcCvG0gx4auPSoxp7qVCVQ==
 			errorContains: "malformed",
 		},
 	}
-
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			// Build options based on test case
 			var options []rules.SignatureOption
 
 			options = append(options, rules.WithRequireSignature(testCase.requireSig))
-
 			if len(testCase.allowedTypes) > 0 {
 				options = append(options, rules.WithAllowedSignatureTypes(testCase.allowedTypes))
 			}
@@ -172,40 +170,39 @@ FxlS+hzWnbOPMrRKuSfJ+H8mF6t1V3qUYtxHNQvHtcCvG0gx4auPSoxp7qVCVQ==
 			rule := rules.NewSignatureRule(options...)
 
 			// Create a commit for testing
-			commit := &domain.CommitInfo{
+			commit := domain.CommitInfo{
 				Signature: testCase.signature,
 			}
 
 			// Execute validation
 			errors := rule.Validate(commit)
 
+			// Update rule state with validation results
+			rule = rule.SetRuleState(errors)
+
 			// Check for expected validation result
 			if testCase.expectedValid {
 				require.Empty(t, errors, "Expected no validation errors")
-
 				// Verify Result() and VerboseResult() methods return expected messages
 				require.Equal(t, "SSH/GPG signature found", rule.Result(), "Expected default valid message")
 				require.Contains(t, rule.VerboseResult(), "SSH/GPG signature found", "Verbose result should indicate valid signature")
-
 				// Test Help on valid case
 				require.Contains(t, rule.Help(), "No errors to fix", "Help for valid message should indicate nothing to fix")
 			} else {
 				require.NotEmpty(t, errors, "Expected errors but found none")
-
 				// Check error code if specified
 				if testCase.expectedCode != "" && len(errors) > 0 {
 					require.Equal(t, testCase.expectedCode, errors[0].Code,
 						"Error code should match expected")
 				}
-
 				// Log actual error message for debugging
-				if len(errors) > 0 {
+				if len(errors) >
+					0 {
 					for i, err := range errors {
 						t.Logf("Error %d message: %s", i+1, err.Error())
 						t.Logf("Error %d context: %v", i+1, err.Context)
 					}
 				}
-
 				// Check error message contains expected substring
 				if testCase.errorContains != "" && len(errors) > 0 {
 					found := false
@@ -221,22 +218,18 @@ FxlS+hzWnbOPMrRKuSfJ+H8mF6t1V3qUYtxHNQvHtcCvG0gx4auPSoxp7qVCVQ==
 
 					require.True(t, found, "Expected error containing %q", testCase.errorContains)
 				}
-
 				// Verify rule name is set in ValidationError
 				if len(errors) > 0 {
 					require.Equal(t, "Signature", errors[0].Rule,
 						"Rule name should be set in ValidationError")
 				}
-
 				// Verify Help() method provides guidance
 				helpText := rule.Help()
 				require.NotEmpty(t, helpText, "Help text should not be empty")
-
 				// Verify Result() method returns expected message
 				require.Equal(t, "Missing or invalid signature", rule.Result(), "Expected error result message")
 				require.NotEqual(t, rule.Result(), rule.VerboseResult(), "Verbose result should be different from regular result")
 			}
-
 			// Verify Name() method
 			require.Equal(t, "Signature", rule.Name(), "Name should be 'Signature'")
 		})
@@ -246,10 +239,13 @@ FxlS+hzWnbOPMrRKuSfJ+H8mF6t1V3qUYtxHNQvHtcCvG0gx4auPSoxp7qVCVQ==
 	t.Run("Context information in errors", func(t *testing.T) {
 		// Test context for SSH format error
 		rule := rules.NewSignatureRule()
-		commit := &domain.CommitInfo{
+		commit := domain.CommitInfo{
 			Signature: "-----BEGIN SSH SIGNATURE-----\nInvalid\n-----END SSH SIGNATURE-----",
 		}
 		errors := rule.Validate(commit)
+
+		// Update rule state with validation results
+		rule = rule.SetRuleState(errors)
 
 		require.NotEmpty(t, errors)
 		require.Equal(t, string(appErrors.ErrInvalidSSHFormat), errors[0].Code)
@@ -257,10 +253,13 @@ FxlS+hzWnbOPMrRKuSfJ+H8mF6t1V3qUYtxHNQvHtcCvG0gx4auPSoxp7qVCVQ==
 		require.Contains(t, errors[0].Context["error_details"], "invalid SSH signature encoding")
 
 		// Test context for GPG format error
-		commit = &domain.CommitInfo{
+		commit = domain.CommitInfo{
 			Signature: "-----BEGIN PGP SIGNATURE-----\nInvalid\n-----END PGP SIGNATURE-----",
 		}
 		errors = rule.Validate(commit)
+
+		// Update rule state with validation results
+		rule.SetRuleState(errors)
 
 		require.NotEmpty(t, errors)
 		require.Equal(t, string(appErrors.ErrInvalidGPGFormat), errors[0].Code)

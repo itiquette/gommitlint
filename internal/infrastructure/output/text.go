@@ -84,7 +84,7 @@ func (f *TextFormatter) initSymbols() {
 }
 
 // Format formats validation results as text.
-func (f *TextFormatter) Format(results *domain.ValidationResults) string {
+func (f *TextFormatter) Format(results domain.ValidationResults) string {
 	var builder strings.Builder
 
 	// For multiple commits, show a summary header first
@@ -102,7 +102,7 @@ func (f *TextFormatter) Format(results *domain.ValidationResults) string {
 }
 
 // formatOverallSummary formats the summary for multiple commits.
-func (f *TextFormatter) formatOverallSummary(builder *strings.Builder, results *domain.ValidationResults) {
+func (f *TextFormatter) formatOverallSummary(builder *strings.Builder, results domain.ValidationResults) {
 	if results.AllPassed() {
 		builder.WriteString(f.colors.Success("SUCCESS: "))
 		builder.WriteString(fmt.Sprintf("All %d commits passed validation\n\n", results.TotalCommits))
@@ -119,7 +119,7 @@ func (f *TextFormatter) formatOverallSummary(builder *strings.Builder, results *
 }
 
 // formatRuleSummary formats the summary of rule failures.
-func (f *TextFormatter) formatRuleSummary(builder *strings.Builder, results *domain.ValidationResults) {
+func (f *TextFormatter) formatRuleSummary(builder *strings.Builder, results domain.ValidationResults) {
 	if len(results.RuleSummary) == 0 {
 		return
 	}
@@ -139,7 +139,7 @@ func (f *TextFormatter) formatRuleSummary(builder *strings.Builder, results *dom
 // formatCommitHeader formats the commit header information.
 func (f *TextFormatter) formatCommitHeader(builder *strings.Builder,
 	commitResult domain.CommitResult, index, totalCommits int) {
-	if commitResult.CommitInfo == nil {
+	if commitResult.CommitInfo.Hash == "" {
 		return
 	}
 
@@ -310,7 +310,7 @@ func (f *TextFormatter) formatRuleSummaryLine(builder *strings.Builder, passedRu
 }
 
 // FormatRuleHelp formats help for a specific rule.
-func (f *TextFormatter) FormatRuleHelp(ruleName string, results *domain.ValidationResults) string {
+func (f *TextFormatter) FormatRuleHelp(ruleName string, results domain.ValidationResults) string {
 	var builder strings.Builder
 
 	f.initColorScheme() // Ensure colors are initialized
@@ -329,7 +329,7 @@ func (f *TextFormatter) FormatRuleHelp(ruleName string, results *domain.Validati
 }
 
 // formatSpecificRuleHelp formats help for a specific rule if available.
-func (f *TextFormatter) formatSpecificRuleHelp(builder *strings.Builder, ruleName string, results *domain.ValidationResults) bool {
+func (f *TextFormatter) formatSpecificRuleHelp(builder *strings.Builder, ruleName string, results domain.ValidationResults) bool {
 	// Look through all rule results to find matching rule
 	for _, commitResult := range results.CommitResults {
 		for _, ruleResult := range commitResult.RuleResults {
@@ -359,7 +359,7 @@ func (f *TextFormatter) formatSpecificRuleHelp(builder *strings.Builder, ruleNam
 }
 
 // formatAvailableRules formats the list of available rules.
-func (f *TextFormatter) formatAvailableRules(builder *strings.Builder, results *domain.ValidationResults) {
+func (f *TextFormatter) formatAvailableRules(builder *strings.Builder, results domain.ValidationResults) {
 	builder.WriteString("Available rules:\n")
 
 	// Collect unique rule names

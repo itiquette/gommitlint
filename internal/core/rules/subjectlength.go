@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
-
 // Package rules provides validation rules for Git commits.
 package rules
 
@@ -21,27 +20,35 @@ type SubjectLengthRule struct {
 }
 
 // NewSubjectLengthRule creates a new SubjectLengthRule.
-func NewSubjectLengthRule(maxLength int) *SubjectLengthRule {
+func NewSubjectLengthRule(maxLength int) SubjectLengthRule {
 	// Use default if not specified
 	if maxLength <= 0 {
 		maxLength = 100 // Default max length
 	}
 
-	return &SubjectLengthRule{
+	return SubjectLengthRule{
 		maxLength: maxLength,
 		errors:    make([]appErrors.ValidationError, 0),
 	}
 }
 
 // Name returns the rule name.
-func (r *SubjectLengthRule) Name() string {
+func (r SubjectLengthRule) Name() string {
 	return "SubjectLength"
 }
 
+// SetErrors sets the validation errors after validation.
+// This is needed to support value receivers while maintaining state.
+func (r SubjectLengthRule) SetErrors(errors []appErrors.ValidationError) SubjectLengthRule {
+	r.errors = errors
+
+	return r
+}
+
 // Validate validates the commit subject length.
-func (r *SubjectLengthRule) Validate(commit *domain.CommitInfo) []appErrors.ValidationError {
-	// Reset errors
-	r.errors = make([]appErrors.ValidationError, 0)
+func (r SubjectLengthRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
+	// Create a new error slice instead of modifying r.errors
+	errors := make([]appErrors.ValidationError, 0)
 
 	// Calculate subject length
 	subjectLength := utf8.RuneCountInString(commit.Subject)
@@ -63,14 +70,14 @@ func (r *SubjectLengthRule) Validate(commit *domain.CommitInfo) []appErrors.Vali
 		)
 
 		// Add to errors
-		r.errors = append(r.errors, err)
+		errors = append(errors, err)
 	}
 
-	return r.errors
+	return errors
 }
 
 // Result returns a concise result message.
-func (r *SubjectLengthRule) Result() string {
+func (r SubjectLengthRule) Result() string {
 	if len(r.errors) > 0 {
 		return "Subject too long"
 	}
@@ -79,7 +86,7 @@ func (r *SubjectLengthRule) Result() string {
 }
 
 // VerboseResult returns a detailed result message.
-func (r *SubjectLengthRule) VerboseResult() string {
+func (r SubjectLengthRule) VerboseResult() string {
 	if len(r.errors) > 0 {
 		// Get context values
 		actualLength := "unknown"
@@ -102,7 +109,7 @@ func (r *SubjectLengthRule) VerboseResult() string {
 }
 
 // Help returns guidance on how to fix rule violations.
-func (r *SubjectLengthRule) Help() string {
+func (r SubjectLengthRule) Help() string {
 	if len(r.errors) == 0 {
 		return "No help needed"
 	}
@@ -123,6 +130,6 @@ func (r *SubjectLengthRule) Help() string {
 }
 
 // Errors returns all validation errors.
-func (r *SubjectLengthRule) Errors() []appErrors.ValidationError {
+func (r SubjectLengthRule) Errors() []appErrors.ValidationError {
 	return r.errors
 }

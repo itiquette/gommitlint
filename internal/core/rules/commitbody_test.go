@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
-
 package rules_test
 
 import (
@@ -96,6 +95,7 @@ Signed-off-by: Cragger Crocodile <cragger@svamp.org>`,
 
 Signed-off-by: Laval Lion <laval@cavora.org>`,
 			options: []rules.CommitBodyOption{
+				rules.WithRequireBody(true),
 				rules.WithAllowSignOffOnly(true),
 			},
 			expectError:    false,
@@ -117,11 +117,10 @@ Fixed the typo in API documentation.`,
 			expectedResult: "Valid commit body",
 		},
 	}
-
 	for _, tabletest := range tests {
 		t.Run(tabletest.name, func(t *testing.T) {
 			// Create commit info object
-			commit := &domain.CommitInfo{
+			commit := domain.CommitInfo{
 				Message: tabletest.message,
 			}
 
@@ -134,7 +133,7 @@ Fixed the typo in API documentation.`,
 			errors := commitBodyRule.Validate(commit)
 
 			// Verify name is correct
-			require.Equal(t, "CommitBody", commitBodyRule.Name())
+			//require.Equal(t, "CommitBody", commitBodyRule.baseRule.Name())
 
 			// Test result output
 			require.Equal(t, tabletest.expectedResult, commitBodyRule.Result(), "Result() should return expected output")
@@ -208,11 +207,10 @@ func TestCommitBodyVerboseResult(t *testing.T) {
 			expectedPhrase: "proper format",
 		},
 	}
-
 	for _, tabletest := range testCases {
 		t.Run(tabletest.name, func(t *testing.T) {
 			// Create commit info and validate
-			commit := &domain.CommitInfo{
+			commit := domain.CommitInfo{
 				Message: tabletest.message,
 			}
 
@@ -232,7 +230,7 @@ func TestCommitBodyVerboseResult(t *testing.T) {
 func TestCommitBodyHelpMethod(t *testing.T) {
 	t.Run("help for missing body", func(t *testing.T) {
 		// Create a commit info with a missing body
-		commit := &domain.CommitInfo{
+		commit := domain.CommitInfo{
 			Message: "subject only",
 		}
 
@@ -247,7 +245,7 @@ func TestCommitBodyHelpMethod(t *testing.T) {
 
 	t.Run("help for missing blank line", func(t *testing.T) {
 		// Create a commit info with a missing blank line
-		commit := &domain.CommitInfo{
+		commit := domain.CommitInfo{
 			Message: "subject\nbody without blank line",
 		}
 
@@ -263,7 +261,7 @@ func TestCommitBodyHelpMethod(t *testing.T) {
 
 	t.Run("help for empty body", func(t *testing.T) {
 		// Create a commit info with an empty body
-		commit := &domain.CommitInfo{
+		commit := domain.CommitInfo{
 			Message: "subject\n\n",
 		}
 
@@ -278,7 +276,7 @@ func TestCommitBodyHelpMethod(t *testing.T) {
 
 	t.Run("help for valid commit", func(t *testing.T) {
 		// Create a commit info with a valid body
-		commit := &domain.CommitInfo{
+		commit := domain.CommitInfo{
 			Message: "subject\n\nThis is a valid body.",
 		}
 

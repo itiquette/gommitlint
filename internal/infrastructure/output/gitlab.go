@@ -25,7 +25,7 @@ func NewGitLabCIFormatter(verbose, showHelp bool) *GitLabCIFormatter {
 }
 
 // Format formats validation results for GitLab CI output.
-func (f *GitLabCIFormatter) Format(results *domain.ValidationResults) string {
+func (f *GitLabCIFormatter) Format(results domain.ValidationResults) string {
 	var builder strings.Builder
 
 	// Print summary

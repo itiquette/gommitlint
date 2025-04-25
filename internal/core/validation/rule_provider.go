@@ -66,16 +66,31 @@ type RuleRegistry struct {
 	rules         map[string]domain.Rule
 	activeRules   map[string]bool
 	configuration *RuleConfiguration
+	analyzer      domain.CommitAnalyzer
 }
 
-// NewRuleRegistry creates a new RuleRegistry with the given configuration.
-func NewRuleRegistry(config *RuleConfiguration) *RuleRegistry {
+func (r *RuleRegistry) ReplaceRule(name string, rule domain.Rule) {
+	// Check if the rule exists and has the expected name
+	if _, exists := r.rules[name]; exists {
+		// Store the current active state
+		wasActive := r.activeRules[name]
+
+		// Replace the rule
+		r.rules[name] = rule
+
+		// Maintain the active state
+		r.activeRules[name] = wasActive
+	}
+}
+
+// NewRuleRegistry creates a new RuleRegistry with the given configuration and analyzer.
+func NewRuleRegistry(config *RuleConfiguration, analyzer domain.CommitAnalyzer) *RuleRegistry {
 	registry := &RuleRegistry{
 		rules:         make(map[string]domain.Rule),
 		activeRules:   make(map[string]bool),
 		configuration: config,
+		analyzer:      analyzer,
 	}
-
 	// Initialize the registry with rules
 	registry.registerRules()
 
@@ -124,7 +139,7 @@ func (r *RuleRegistry) registerRules() {
 	r.registerRule(createCommitBodyRule(r.configuration))
 
 	// Register Commits Ahead rule
-	r.registerRule(createCommitsAheadRule(r.configuration))
+	r.registerRule(createCommitsAheadRule(r.configuration, r.analyzer))
 
 	// Apply enabled/disabled rules configuration
 	r.applyRuleConfiguration()
@@ -228,10 +243,8 @@ func createCommitBodyRule(config *RuleConfiguration) domain.Rule {
 
 	return rules.NewCommitBodyRule(opts...)
 }
-
-func createCommitsAheadRule(config *RuleConfiguration) domain.Rule {
+func createCommitsAheadRule(config *RuleConfiguration, analyzer domain.CommitAnalyzer) domain.Rule {
 	var opts []rules.CommitsAheadOption
-
 	if config.Reference != "" {
 		opts = append(opts, rules.WithReference(config.Reference))
 	}
@@ -240,11 +253,12 @@ func createCommitsAheadRule(config *RuleConfiguration) domain.Rule {
 		opts = append(opts, rules.WithMaxCommitsAhead(config.MaxCommitsAhead))
 	}
 
-	// Add repository getter
-	opts = append(opts, rules.WithRepositoryGetter(func() domain.CommitAnalyzer {
-		// This will be injected at runtime by the validation service
-		return nil
-	}))
+	// Use the analyzer passed to the function
+	if analyzer != nil {
+		opts = append(opts, rules.WithRepositoryGetter(func() domain.CommitAnalyzer {
+			return analyzer
+		}))
+	}
 
 	return rules.NewCommitsAheadRule(opts...)
 }
@@ -350,10 +364,10 @@ type DefaultRuleProvider struct {
 	registry *RuleRegistry
 }
 
-// NewDefaultRuleProvider creates a new DefaultRuleProvider with the given configuration.
-func NewDefaultRuleProvider(config *RuleConfiguration) *DefaultRuleProvider {
+// NewDefaultRuleProvider creates a new DefaultRuleProvider with the given configuration and analyzer.
+func NewDefaultRuleProvider(config *RuleConfiguration, analyzer domain.CommitAnalyzer) *DefaultRuleProvider {
 	return &DefaultRuleProvider{
-		registry: NewRuleRegistry(config),
+		registry: NewRuleRegistry(config, analyzer),
 	}
 }
 
@@ -367,6 +381,10 @@ func (p *DefaultRuleProvider) GetActiveRules() []domain.Rule {
 	return p.registry.GetActiveRules()
 }
 
+func (p *DefaultRuleProvider) ReplaceRule(name string, rule domain.Rule) {
+	p.registry.ReplaceRule(name, rule)
+}
+
 // SetActiveRules sets which rules are active based on a list of rule names.
 func (p *DefaultRuleProvider) SetActiveRules(ruleNames []string) {
 	p.registry.SetActiveRules(ruleNames)
@@ -378,7 +396,7 @@ func (p *DefaultRuleProvider) DisableRules(ruleNames []string) {
 }
 
 // GetRuleByName returns a rule by its name.
-func (p *DefaultRuleProvider) GetRuleByName(name string) domain.Rule {
+func (p DefaultRuleProvider) GetRuleByName(name string) domain.Rule {
 	return p.registry.GetRuleByName(name)
 }
 

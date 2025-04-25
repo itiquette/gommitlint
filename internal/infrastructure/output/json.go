@@ -61,7 +61,7 @@ type ValidationResultsOutput struct {
 }
 
 // Format formats validation results as JSON.
-func (f *JSONFormatter) Format(results *domain.ValidationResults) string {
+func (f *JSONFormatter) Format(results domain.ValidationResults) string {
 	report := ValidationResultsOutput{
 		Timestamp:     time.Now().Format(time.RFC3339),
 		AllPassed:     results.AllPassed(),
@@ -74,7 +74,7 @@ func (f *JSONFormatter) Format(results *domain.ValidationResults) string {
 	// Format each commit result
 	if len(results.CommitResults) > 0 {
 		for _, commitResult := range results.CommitResults {
-			if commitResult.CommitInfo != nil {
+			if commitResult.CommitInfo.Hash != "" {
 				commit := CommitResultOutput{
 					Hash:        commitResult.CommitInfo.Hash,
 					Subject:     commitResult.CommitInfo.Subject,

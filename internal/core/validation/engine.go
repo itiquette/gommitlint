@@ -18,14 +18,14 @@ type Engine struct {
 }
 
 // NewEngine creates a new validation engine.
-func NewEngine(provider domain.RuleProvider) *Engine {
-	return &Engine{
+func NewEngine(provider domain.RuleProvider) Engine {
+	return Engine{
 		ruleProvider: provider,
 	}
 }
 
 // ValidateCommit validates a single commit against all active rules.
-func (e *Engine) ValidateCommit(ctx context.Context, commit *domain.CommitInfo) domain.CommitResult {
+func (e Engine) ValidateCommit(ctx context.Context, commit domain.CommitInfo) domain.CommitResult {
 	activeRules := e.ruleProvider.GetActiveRules()
 
 	// Initialize result
@@ -78,7 +78,7 @@ func (e *Engine) ValidateCommit(ctx context.Context, commit *domain.CommitInfo) 
 }
 
 // ValidateCommits validates multiple commits against all active rules.
-func (e *Engine) ValidateCommits(ctx context.Context, commits []*domain.CommitInfo) *domain.ValidationResults {
+func (e Engine) ValidateCommits(ctx context.Context, commits []domain.CommitInfo) domain.ValidationResults {
 	results := domain.NewValidationResults()
 
 	for _, commit := range commits {

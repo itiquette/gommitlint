@@ -83,19 +83,25 @@ func NewSpellRule(options ...SpellRuleOption) *SpellRule {
 }
 
 // Name returns the rule identifier.
-func (r *SpellRule) Name() string {
+func (r SpellRule) Name() string {
 	return "Spell"
 }
 
-// Validate checks for spelling errors in the commit message.
-func (r *SpellRule) Validate(commit *domain.CommitInfo) []appErrors.ValidationError {
-	// Reset errors
-	r.errors = []appErrors.ValidationError{}
-	r.diffs = []misspell.Diff{}
+// SetErrors sets the validation errors and diffs.
+// This is needed to support value receivers while maintaining state.
+func (r SpellRule) SetErrors(errors []appErrors.ValidationError, diffs []misspell.Diff) SpellRule {
+	r.errors = errors
+	r.diffs = diffs
+
+	return r
+}
+func (r SpellRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
+	// Create a new errors slice instead of modifying r.errors
+	errors := []appErrors.ValidationError{}
 
 	// Skip empty messages
 	if commit.Subject == "" && commit.Body == "" {
-		return r.errors
+		return errors
 	}
 
 	// Determine if we need to check for spelling errors
@@ -106,7 +112,7 @@ func (r *SpellRule) Validate(commit *domain.CommitInfo) []appErrors.ValidationEr
 
 	// If message is empty or whitespace, skip validation
 	if strings.TrimSpace(fullMessage) == "" {
-		return r.errors
+		return errors
 	}
 
 	// Initialize the spell checker
@@ -115,14 +121,12 @@ func (r *SpellRule) Validate(commit *domain.CommitInfo) []appErrors.ValidationEr
 	// Configure locale
 	switch strings.ToUpper(r.locale) {
 	case "", "US":
-		r.locale = "US" // Ensure locale is set for verbose output
+		// Use default US English
 	case "UK", "GB":
 		replacer.AddRuleList(misspell.DictBritish)
-
-		// Store normalized locale
-		r.locale = strings.ToUpper(r.locale)
 	default:
-		r.addError(
+		err := createError(
+			r.Name(),
 			appErrors.ErrUnknown,
 			fmt.Sprintf("unknown locale: %q", r.locale),
 			map[string]string{
@@ -130,8 +134,9 @@ func (r *SpellRule) Validate(commit *domain.CommitInfo) []appErrors.ValidationEr
 				"supported_locales": "US,UK,GB",
 			},
 		)
+		errors = append(errors, err)
 
-		return r.errors
+		return errors
 	}
 
 	// Handling custom words - temporarily using a workaround
@@ -140,7 +145,8 @@ func (r *SpellRule) Validate(commit *domain.CommitInfo) []appErrors.ValidationEr
 		// For test purposes only - simulate a custom word detection
 		for original, corrected := range r.customWords {
 			if strings.Contains(fullMessage, original) {
-				r.addError(
+				err := createError(
+					r.Name(),
 					appErrors.ErrSpelling,
 					fmt.Sprintf("%q is a misspelling of %q", original, corrected),
 					map[string]string{
@@ -148,12 +154,7 @@ func (r *SpellRule) Validate(commit *domain.CommitInfo) []appErrors.ValidationEr
 						"corrected": corrected,
 					},
 				)
-
-				// Create a fake diff for VerboseResult
-				r.diffs = append(r.diffs, misspell.Diff{
-					Original:  original,
-					Corrected: corrected,
-				})
+				errors = append(errors, err)
 
 				// We've found at least one, that's good enough for tests
 				break
@@ -161,8 +162,8 @@ func (r *SpellRule) Validate(commit *domain.CommitInfo) []appErrors.ValidationEr
 		}
 
 		// If we've found errors already, just return
-		if len(r.errors) > 0 {
-			return r.errors
+		if len(errors) > 0 {
+			return errors
 		}
 	}
 
@@ -175,12 +176,10 @@ func (r *SpellRule) Validate(commit *domain.CommitInfo) []appErrors.ValidationEr
 	replacer.Compile()
 
 	// Check for misspellings
-	corrected, diffs := replacer.Replace(fullMessage)
+	corrected, foundDiffs := replacer.Replace(fullMessage)
 	if corrected != fullMessage {
-		// Store diffs for verbose output
-		r.diffs = diffs
-
-		for _, diff := range diffs {
+		// Capture diffs for potential verbose output
+		for _, diff := range foundDiffs {
 			// Check if this word should be ignored
 			shouldIgnore := false
 
@@ -196,11 +195,12 @@ func (r *SpellRule) Validate(commit *domain.CommitInfo) []appErrors.ValidationEr
 				continue
 			}
 
-			if r.maxErrors > 0 && len(r.errors) >= r.maxErrors {
+			if r.maxErrors > 0 && len(errors) >= r.maxErrors {
 				break
 			}
 
-			r.addError(
+			err := createError(
+				r.Name(),
 				appErrors.ErrSpelling,
 				fmt.Sprintf("%q is a misspelling of %q", diff.Original, diff.Corrected),
 				map[string]string{
@@ -208,14 +208,15 @@ func (r *SpellRule) Validate(commit *domain.CommitInfo) []appErrors.ValidationEr
 					"corrected": diff.Corrected,
 				},
 			)
+			errors = append(errors, err)
 		}
 	}
 
-	return r.errors
+	return errors
 }
 
 // Result returns a concise string representation of the rule's status.
-func (r *SpellRule) Result() string {
+func (r SpellRule) Result() string {
 	if len(r.errors) == 0 {
 		return "No spelling errors"
 	}
@@ -224,10 +225,12 @@ func (r *SpellRule) Result() string {
 }
 
 // VerboseResult returns a more detailed explanation for verbose mode.
-func (r *SpellRule) VerboseResult() string {
+func (r SpellRule) VerboseResult() string {
 	if len(r.errors) == 0 {
 		localeDesc := "US (American English)"
-		if r.locale == "UK" || r.locale == "GB" {
+		upperLocale := strings.ToUpper(r.locale)
+
+		if upperLocale == "UK" || upperLocale == "GB" {
 			localeDesc = "UK/GB (British English)"
 		}
 
@@ -264,7 +267,7 @@ func (r *SpellRule) VerboseResult() string {
 }
 
 // Help returns help information for fixing rule violations.
-func (r *SpellRule) Help() string {
+func (r SpellRule) Help() string {
 	if len(r.errors) == 0 {
 		return "No errors to fix"
 	}
@@ -301,20 +304,20 @@ func (r *SpellRule) Help() string {
 }
 
 // Errors returns all validation errors found by this rule.
-func (r *SpellRule) Errors() []appErrors.ValidationError {
+func (r SpellRule) Errors() []appErrors.ValidationError {
 	return r.errors
 }
 
-// addError adds a structured validation error.
-func (r *SpellRule) addError(code appErrors.ValidationErrorCode, message string, context map[string]string) {
+// createError creates a structured validation error without modifying the rule's state.
+func createError(ruleName string, code appErrors.ValidationErrorCode, message string, context map[string]string) appErrors.ValidationError {
 	// Create a validation error
 	var err appErrors.ValidationError
 
 	if context != nil {
-		err = appErrors.New(r.Name(), code, message, appErrors.WithContextMap(context))
+		err = appErrors.New(ruleName, code, message, appErrors.WithContextMap(context))
 	} else {
-		err = appErrors.New(r.Name(), code, message)
+		err = appErrors.New(ruleName, code, message)
 	}
 
-	r.errors = append(r.errors, err)
+	return err
 }

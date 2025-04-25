@@ -16,28 +16,32 @@ import (
 
 // mockGitCommitService implements the domain.GitCommitService interface for testing.
 type mockGitCommitService struct {
-	commits     map[string]*domain.CommitInfo
-	headCommits []*domain.CommitInfo
-	ranges      map[string]map[string][]*domain.CommitInfo
+	commits     map[string]domain.CommitInfo
+	headCommits []domain.CommitInfo
+	ranges      map[string]map[string][]domain.CommitInfo
 }
 
-func (m *mockGitCommitService) GetCommit(_ context.Context, hash string) (*domain.CommitInfo, error) {
+func (m mockGitCommitService) GetCommit(_ context.Context, hash string) (domain.CommitInfo, error) {
 	if commit, ok := m.commits[hash]; ok {
 		return commit, nil
 	}
 
-	return nil, appErrors.New("MockService", appErrors.ErrCommitNotFound, "commit not found")
+	return domain.CommitInfo{}, appErrors.New("MockService", appErrors.ErrCommitNotFound, "commit not found")
 }
+func (m mockGitCommitService) GetHeadCommits(_ context.Context, count int) ([]domain.CommitInfo, error) {
+	if count <= 0 {
+		return []domain.CommitInfo{}, nil
+	}
 
-func (m *mockGitCommitService) GetHeadCommits(_ context.Context, count int) ([]*domain.CommitInfo, error) {
-	if count >= len(m.headCommits) {
-		return m.headCommits, nil
+	// Take the minimum of count or the available number of commits
+	if count > len(m.headCommits) {
+		count = len(m.headCommits)
 	}
 
 	return m.headCommits[:count], nil
 }
 
-func (m *mockGitCommitService) GetCommitRange(_ context.Context, fromHash, toHash string) ([]*domain.CommitInfo, error) {
+func (m mockGitCommitService) GetCommitRange(_ context.Context, fromHash, toHash string) ([]domain.CommitInfo, error) {
 	if toRanges, ok := m.ranges[toHash]; ok {
 		if commits, ok := toRanges[fromHash]; ok {
 			return commits, nil
@@ -54,29 +58,29 @@ type mockInfoProvider struct {
 	isValid       bool
 }
 
-func (m *mockInfoProvider) GetCurrentBranch(_ context.Context) (string, error) {
+func (m mockInfoProvider) GetCurrentBranch(_ context.Context) (string, error) {
 	return m.currentBranch, nil
 }
 
-func (m *mockInfoProvider) GetRepositoryName(_ context.Context) string {
+func (m mockInfoProvider) GetRepositoryName(_ context.Context) string {
 	return m.repoName
 }
 
-func (m *mockInfoProvider) IsValid(_ context.Context) bool {
+func (m mockInfoProvider) IsValid(_ context.Context) bool {
 	return m.isValid
 }
 
 // mockValidationEngine is a simple implementation of a validation engine for testing.
 type mockValidationEngine struct{}
 
-func (m *mockValidationEngine) ValidateCommit(_ context.Context, commit *domain.CommitInfo) domain.CommitResult {
+func (m mockValidationEngine) ValidateCommit(_ context.Context, commit domain.CommitInfo) domain.CommitResult {
 	return domain.CommitResult{
 		CommitInfo: commit,
 		Passed:     true,
 	}
 }
 
-func (m *mockValidationEngine) ValidateCommits(ctx context.Context, commits []*domain.CommitInfo) *domain.ValidationResults {
+func (m mockValidationEngine) ValidateCommits(ctx context.Context, commits []domain.CommitInfo) domain.ValidationResults {
 	results := domain.NewValidationResults()
 
 	for _, commit := range commits {
@@ -90,7 +94,7 @@ func (m *mockValidationEngine) ValidateCommits(ctx context.Context, commits []*d
 func TestValidationService_ValidateCommit(t *testing.T) {
 	// Create mocks
 	mockCommit := &mockGitCommitService{
-		commits: map[string]*domain.CommitInfo{
+		commits: map[string]domain.CommitInfo{
 			"abc123": {
 				Hash:    "abc123",
 				Subject: "Test commit",
@@ -135,7 +139,7 @@ func TestValidationService_ValidateCommit(t *testing.T) {
 
 func TestValidationService_ValidateHeadCommits(t *testing.T) {
 	// Create test commits
-	commits := []*domain.CommitInfo{
+	commits := []domain.CommitInfo{
 		{
 			Hash:          "abc123",
 			Subject:       "Test commit 1",
@@ -160,7 +164,7 @@ func TestValidationService_ValidateHeadCommits(t *testing.T) {
 	mockInfo := &mockInfoProvider{}
 
 	// Create mock engine
-	mockEngine := &mockValidationEngine{}
+	mockEngine := mockValidationEngine{}
 
 	// Create service with mock engine
 	service := validate.NewValidationService(
@@ -185,7 +189,7 @@ func TestValidationService_ValidateHeadCommits(t *testing.T) {
 
 func TestValidationService_ValidateCommitRange(t *testing.T) {
 	// Create test commits
-	commits := []*domain.CommitInfo{
+	commits := []domain.CommitInfo{
 		{
 			Hash:          "abc123",
 			Subject:       "Test commit 1",
@@ -205,7 +209,7 @@ func TestValidationService_ValidateCommitRange(t *testing.T) {
 
 	// Create mocks
 	mockCommit := &mockGitCommitService{
-		ranges: map[string]map[string][]*domain.CommitInfo{
+		ranges: map[string]map[string][]domain.CommitInfo{
 			"master": {
 				"feature": commits,
 			},
@@ -245,7 +249,7 @@ func TestValidationService_ValidateCommitRange(t *testing.T) {
 
 func TestValidationService_ValidateWithOptions(t *testing.T) {
 	// Create mocks with test data
-	testCommit := &domain.CommitInfo{
+	testCommit := domain.CommitInfo{
 		Hash:          "abc123",
 		Subject:       "Test commit",
 		Body:          "Test body",
@@ -254,22 +258,22 @@ func TestValidationService_ValidateWithOptions(t *testing.T) {
 
 	// Create mocks
 	mockCommit := &mockGitCommitService{
-		commits: map[string]*domain.CommitInfo{
+		commits: map[string]domain.CommitInfo{
 			"abc123": testCommit,
 			"HEAD":   testCommit,
 		},
-		headCommits: []*domain.CommitInfo{testCommit},
-		ranges: map[string]map[string][]*domain.CommitInfo{
+		headCommits: []domain.CommitInfo{testCommit},
+		ranges: map[string]map[string][]domain.CommitInfo{
 			"to": {
-				"from": []*domain.CommitInfo{testCommit},
+				"from": []domain.CommitInfo{testCommit},
 			},
 		},
 	}
 
-	mockInfo := &mockInfoProvider{}
+	mockInfo := mockInfoProvider{}
 
 	// Create mock engine
-	mockEngine := &mockValidationEngine{}
+	mockEngine := mockValidationEngine{}
 
 	// Create service with mock engine
 	service := validate.NewValidationService(

@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/config"
-	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/core/validation"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/infrastructure/git"
@@ -44,8 +43,8 @@ type ValidationOptions struct {
 
 // ValidationEngine defines the interface for the validation engine.
 type ValidationEngine interface {
-	ValidateCommit(ctx context.Context, commit *domain.CommitInfo) domain.CommitResult
-	ValidateCommits(ctx context.Context, commits []*domain.CommitInfo) *domain.ValidationResults
+	ValidateCommit(ctx context.Context, commit domain.CommitInfo) domain.CommitResult
+	ValidateCommits(ctx context.Context, commits []domain.CommitInfo) domain.ValidationResults
 }
 
 // ValidationService orchestrates commit validation operations.
@@ -60,8 +59,8 @@ func NewValidationService(
 	engine ValidationEngine,
 	commitService domain.GitCommitService,
 	infoProvider domain.RepositoryInfoProvider,
-) *ValidationService {
-	return &ValidationService{
+) ValidationService {
+	return ValidationService{
 		engine:        engine,
 		commitService: commitService,
 		infoProvider:  infoProvider,
@@ -69,7 +68,7 @@ func NewValidationService(
 }
 
 // ValidateCommit validates a single commit.
-func (s *ValidationService) ValidateCommit(ctx context.Context, hash string) (domain.CommitResult, error) {
+func (s ValidationService) ValidateCommit(ctx context.Context, hash string) (domain.CommitResult, error) {
 	// Get the commit from the git repository
 	commit, err := s.commitService.GetCommit(ctx, hash)
 	if err != nil {
@@ -81,11 +80,11 @@ func (s *ValidationService) ValidateCommit(ctx context.Context, hash string) (do
 }
 
 // ValidateHeadCommits validates the specified number of commits from HEAD.
-func (s *ValidationService) ValidateHeadCommits(ctx context.Context, count int, skipMerge bool) (*domain.ValidationResults, error) {
+func (s ValidationService) ValidateHeadCommits(ctx context.Context, count int, skipMerge bool) (domain.ValidationResults, error) {
 	// Get the commits from the git repository
 	commits, err := s.commitService.GetHeadCommits(ctx, count)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get head commits: %w", err)
+		return domain.ValidationResults{}, fmt.Errorf("failed to get head commits: %w", err)
 	}
 
 	// Use CommitCollection to filter merge commits if requested
@@ -99,11 +98,11 @@ func (s *ValidationService) ValidateHeadCommits(ctx context.Context, count int, 
 }
 
 // ValidateCommitRange validates all commits in the given range.
-func (s *ValidationService) ValidateCommitRange(ctx context.Context, fromHash, toHash string, skipMerge bool) (*domain.ValidationResults, error) {
+func (s ValidationService) ValidateCommitRange(ctx context.Context, fromHash, toHash string, skipMerge bool) (domain.ValidationResults, error) {
 	// Get the commits from the git repository
 	commits, err := s.commitService.GetCommitRange(ctx, fromHash, toHash)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get commit range: %w", err)
+		return domain.ValidationResults{}, fmt.Errorf("failed to get commit range: %w", err)
 	}
 
 	// Use CommitCollection to filter merge commits if requested
@@ -117,24 +116,24 @@ func (s *ValidationService) ValidateCommitRange(ctx context.Context, fromHash, t
 }
 
 // ValidateMessageFile validates a commit message from a file.
-func (s *ValidationService) ValidateMessageFile(ctx context.Context, filePath string) (*domain.ValidationResults, error) {
+func (s ValidationService) ValidateMessageFile(ctx context.Context, filePath string) (domain.ValidationResults, error) {
 	// Read the message file
 	messageBytes, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read message file: %w", err)
+		return domain.ValidationResults{}, fmt.Errorf("failed to read message file: %w", err)
 	}
 
 	// Convert to string and trim whitespace
 	message := strings.TrimSpace(string(messageBytes))
 	if message == "" {
-		return nil, errors.New("empty commit message")
+		return domain.NewValidationResults(), errors.New("empty commit message")
 	}
 
 	// Split into subject and body
 	subject, body := domain.SplitCommitMessage(message)
 
 	// Create a dummy commit
-	commit := &domain.CommitInfo{
+	commit := domain.CommitInfo{
 		Hash:          "0000000000000000000000000000000000000000",
 		Subject:       subject,
 		Body:          body,
@@ -153,7 +152,10 @@ func (s *ValidationService) ValidateMessageFile(ctx context.Context, filePath st
 }
 
 // ValidateWithOptions validates commits according to the provided options.
-func (s *ValidationService) ValidateWithOptions(ctx context.Context, opts ValidationOptions) (*domain.ValidationResults, error) {
+func (s ValidationService) ValidateWithOptions(ctx context.Context, opts ValidationOptions) (domain.ValidationResults, error) {
+	// Create validation results
+	results := domain.NewValidationResults()
+
 	// Validate commit message file
 	if opts.MessageFile != "" {
 		return s.ValidateMessageFile(ctx, opts.MessageFile)
@@ -163,7 +165,7 @@ func (s *ValidationService) ValidateWithOptions(ctx context.Context, opts Valida
 	if opts.CommitHash != "" {
 		result, err := s.ValidateCommit(ctx, opts.CommitHash)
 		if err != nil {
-			return nil, err
+			return results, err
 		}
 
 		// Create validation results
@@ -186,51 +188,40 @@ func (s *ValidationService) ValidateWithOptions(ctx context.Context, opts Valida
 	// Default to validating the HEAD commit
 	result, err := s.ValidateCommit(ctx, "HEAD")
 	if err != nil {
-		return nil, err
+		return results, err
 	}
 
-	// Create validation results
-	results := domain.NewValidationResults()
 	results.AddCommitResult(result)
 
 	return results, nil
 }
 
-// CreateDefaultValidationService creates a validation service with configuration
-// loaded using the default config manager (`config.New()`).
-func CreateDefaultValidationService(repoPath string) (*ValidationService, error) {
+// CreateDefaultValidationService creates a validation service with configuration.
+func CreateDefaultValidationService(repoPath string) (ValidationService, error) {
 	// Create repository factory
 	factory, err := git.NewRepositoryFactory(repoPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create repository factory: %w", err)
+		return ValidationService{}, fmt.Errorf("failed to create repository factory: %w", err)
 	}
 
 	// Get specialized repository interfaces
 	commitService := factory.CreateGitCommitService()
 	infoProvider := factory.CreateInfoProvider()
-	analyzer := factory.CreateCommitAnalyzer() // Create analyzer here for potential injection
 
-	// Create config manager - uses the new config.New() which loads defaults
-	// and standard paths, logging warnings internally if loading fails.
+	// Create analyzer for commit analysis - BEFORE creating rule provider
+	analyzer := factory.CreateCommitAnalyzer()
+
+	// Create config manager
 	configManager, err := config.New()
 	if err != nil {
-		// config.New() only returns an error if manager creation fails, not just config not found.
-		return nil, fmt.Errorf("failed to create configuration manager: %w", err)
+		return ValidationService{}, fmt.Errorf("failed to create configuration manager: %w", err)
 	}
 
 	// Get validation rule configuration from the manager
-	// This uses the loaded config or defaults, no error handling needed here.
 	ruleConfig := configManager.GetRuleConfig()
 
-	// Create rule provider with configuration
-	ruleProvider := validation.NewDefaultRuleProvider(ruleConfig)
-
-	// Set repository getter for CommitsAhead rule if it exists
-	if commitsAheadRule, ok := ruleProvider.GetRuleByName("CommitsAhead").(*rules.CommitsAheadRule); ok && commitsAheadRule != nil {
-		commitsAheadRule.SetRepositoryGetter(func() domain.CommitAnalyzer {
-			return analyzer
-		})
-	}
+	// Create rule provider with configuration AND analyzer
+	ruleProvider := validation.NewDefaultRuleProvider(ruleConfig, analyzer)
 
 	// Create validation engine
 	engine := validation.NewEngine(ruleProvider)

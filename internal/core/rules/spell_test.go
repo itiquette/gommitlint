@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
-
 package rules_test
 
 import (
@@ -9,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/golangci/misspell"
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
@@ -30,10 +30,9 @@ type testCase struct {
 }
 
 // setupSpellRule creates a spell rule with the specified options from the test case.
-func setupSpellRule(testConfig testCase) (*rules.SpellRule, *domain.CommitInfo) {
+func setupSpellRule(testConfig testCase) (*rules.SpellRule, domain.CommitInfo) {
 	// Build options based on test case
 	var options []rules.SpellRuleOption
-
 	if testConfig.locale != "" {
 		options = append(options, rules.WithLocale(testConfig.locale))
 	}
@@ -49,12 +48,10 @@ func setupSpellRule(testConfig testCase) (*rules.SpellRule, *domain.CommitInfo) 
 	if testConfig.maxErrors > 0 {
 		options = append(options, rules.WithMaxErrors(testConfig.maxErrors))
 	}
-
 	// Create the rule instance
 	rule := rules.NewSpellRule(options...)
-
 	// Create a commit for testing
-	commit := &domain.CommitInfo{
+	commit := domain.CommitInfo{
 		Subject: testConfig.subject,
 		Body:    testConfig.body,
 	}
@@ -67,25 +64,20 @@ func validateErrors(t *testing.T, testCase testCase, errors []appErrors.Validati
 	t.Helper()
 	// Check for expected number of errors
 	require.Len(t, errors, testCase.expectedErrors, "Incorrect number of errors")
-
 	// If no errors, nothing else to validate
 	if len(errors) == 0 {
 		return
 	}
-
 	// Access validation error directly
 	validationErr := errors[0]
-
 	// Check error code if specified
 	if testCase.expectedCode != "" {
 		require.Equal(t, testCase.expectedCode, validationErr.Code,
 			"Error code should match expected")
 	}
-
 	// Verify rule name is set in ValidationError
 	require.Equal(t, "Spell", validationErr.Rule,
 		"Rule name should be set in ValidationError")
-
 	// Check context data
 	if testCase.expectedCode == string(appErrors.ErrSpelling) {
 		require.Contains(t, validationErr.Context, "original",
@@ -117,7 +109,6 @@ func validateExpectedWords(t *testing.T, testCase testCase, errors []appErrors.V
 
 				break
 			}
-
 			// Access validation error directly
 			validationErr := err
 			{
@@ -144,7 +135,6 @@ func validateRuleMethods(t *testing.T, testCase testCase, rule *rules.SpellRule,
 	t.Helper()
 	// Verify Name() method
 	require.Equal(t, "Spell", rule.Name(), "Rule name should be 'Spell'")
-
 	// Verify Result() method
 	if testCase.expectedErrors > 0 {
 		expectedResult := fmt.Sprintf("%d misspelling(s)", testCase.expectedErrors)
@@ -154,10 +144,8 @@ func validateRuleMethods(t *testing.T, testCase testCase, rule *rules.SpellRule,
 		require.Equal(t, "No spelling errors", rule.Result(),
 			"Result should indicate no misspellings")
 	}
-
 	// Verify Help() method
 	validateHelpMethod(t, testCase, rule, errors)
-
 	// Check VerboseResult output
 	validateVerboseResult(t, testCase, rule)
 }
@@ -184,7 +172,6 @@ func validateHelpMethod(t *testing.T, testCase testCase, rule *rules.SpellRule, 
 		} else {
 			require.Contains(t, helpText, "Fix the following misspellings",
 				"Help should provide guidance")
-
 			// Check if help text contains error details
 			require.Contains(t, helpText, errors[0].Error(),
 				"Help should include error details")
@@ -197,11 +184,9 @@ func validateVerboseResult(t *testing.T, testCase testCase, rule *rules.SpellRul
 	t.Helper()
 
 	verboseText := rule.VerboseResult()
-
 	if testCase.expectedErrors == 0 {
 		require.Contains(t, verboseText, "No common misspellings found",
 			"Verbose output should indicate no errors")
-
 		// Check for locale mention
 		if testCase.locale == "GB" || testCase.locale == "UK" ||
 			strings.ToLower(testCase.locale) == "gb" || strings.ToLower(testCase.locale) == "uk" {
@@ -219,7 +204,6 @@ func validateVerboseResult(t *testing.T, testCase testCase, rule *rules.SpellRul
 	} else {
 		require.Contains(t, verboseText, fmt.Sprintf("Found %d misspelling", testCase.expectedErrors),
 			"Verbose output should mention the number of misspellings")
-
 		// For tests with specific misspellings, check that they're mentioned
 		if testCase.expectedWords != nil {
 			for _, word := range testCase.expectedWords {
@@ -344,6 +328,26 @@ func TestSpellRule(t *testing.T) {
 
 			// Execute validation
 			errors := rule.Validate(commit)
+
+			// Set errors back to the rule for subsequent method calls
+			diffs := []misspell.Diff{}
+
+			if len(errors) > 0 {
+				// Create some diffs based on the errors found
+				for _, err := range errors {
+					if original, ok := err.Context["original"]; ok {
+						if corrected, ok := err.Context["corrected"]; ok {
+							diffs = append(diffs, misspell.Diff{
+								Original:  original,
+								Corrected: corrected,
+							})
+						}
+					}
+				}
+			}
+
+			// Update the rule with errors and diffs using SetErrors
+			*rule = rule.SetErrors(errors, diffs)
 
 			// Validate the errors
 			validateErrors(t, testCase, errors)

@@ -47,18 +47,18 @@ type Options struct {
 
 // Generator generates reports from validation results.
 type Generator struct {
-	options *Options
+	options Options
 }
 
 // NewGenerator creates a new report generator.
-func NewGenerator(options *Options) *Generator {
-	return &Generator{
+func NewGenerator(options Options) Generator {
+	return Generator{
 		options: options,
 	}
 }
 
 // Generate generates a report from validation results.
-func (g *Generator) Generate(results *domain.ValidationResults) error {
+func (g Generator) Generate(results domain.ValidationResults) error {
 	switch g.options.Format {
 	case FormatJSON:
 		return g.generateJSONReport(results)
@@ -74,7 +74,7 @@ func (g *Generator) Generate(results *domain.ValidationResults) error {
 }
 
 // generateJSONReport generates a JSON report.
-func (g *Generator) generateJSONReport(results *domain.ValidationResults) error {
+func (g Generator) generateJSONReport(results domain.ValidationResults) error {
 	formatter := output.NewJSONFormatter()
 	report := formatter.Format(results)
 
@@ -93,7 +93,7 @@ func (g *Generator) generateJSONReport(results *domain.ValidationResults) error 
 }
 
 // generateTextReport generates a text report.
-func (g *Generator) generateTextReport(results *domain.ValidationResults) error {
+func (g Generator) generateTextReport(results domain.ValidationResults) error {
 	formatter := output.NewTextFormatter(g.options.Verbose, g.options.ShowHelp, g.options.LightMode)
 
 	// If a specific rule is requested for help, show only that
@@ -122,7 +122,7 @@ func (g *Generator) generateTextReport(results *domain.ValidationResults) error 
 }
 
 // generateGitHubActionsReport generates a GitHub Actions compatible report.
-func (g *Generator) generateGitHubActionsReport(results *domain.ValidationResults) error {
+func (g Generator) generateGitHubActionsReport(results domain.ValidationResults) error {
 	// Create a GitHub Actions formatter
 	formatter := output.NewGitHubActionsFormatter(g.options.Verbose, g.options.ShowHelp)
 
@@ -145,7 +145,7 @@ func (g *Generator) generateGitHubActionsReport(results *domain.ValidationResult
 }
 
 // generateGitLabCIReport generates a GitLab CI compatible report.
-func (g *Generator) generateGitLabCIReport(results *domain.ValidationResults) error {
+func (g Generator) generateGitLabCIReport(results domain.ValidationResults) error {
 	// Create a GitLab CI formatter
 	formatter := output.NewGitLabCIFormatter(g.options.Verbose, g.options.ShowHelp)
 
@@ -168,7 +168,7 @@ func (g *Generator) generateGitLabCIReport(results *domain.ValidationResults) er
 }
 
 // GenerateSummary generates a brief summary report.
-func (g *Generator) GenerateSummary(results *domain.ValidationResults) error {
+func (g Generator) GenerateSummary(results domain.ValidationResults) error {
 	var builder strings.Builder
 	if results.AllPassed() {
 		builder.WriteString("✅ All commits passed validation\n")

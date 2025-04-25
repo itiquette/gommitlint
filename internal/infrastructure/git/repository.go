@@ -55,22 +55,22 @@ func NewRepositoryAdapter(path string) (*RepositoryAdapter, error) {
 }
 
 // GetCommit returns a commit by its hash.
-func (g *RepositoryAdapter) GetCommit(ctx context.Context, hash string) (*domain.CommitInfo, error) {
+func (g RepositoryAdapter) GetCommit(ctx context.Context, hash string) (domain.CommitInfo, error) {
 	// Check for context cancellation
 	if ctx.Err() != nil {
-		return nil, ctx.Err()
+		return domain.CommitInfo{}, ctx.Err()
 	}
 
 	// Resolve the hash (handles empty hash for HEAD)
 	resolvedHash, err := g.resolveRevision(hash)
 	if err != nil {
-		return nil, err
+		return domain.CommitInfo{}, err
 	}
 
 	// Get the commit
 	commit, err := g.getCommitByHash(resolvedHash)
 	if err != nil {
-		return nil, err
+		return domain.CommitInfo{}, err
 	}
 
 	// Convert to domain commit
@@ -78,7 +78,7 @@ func (g *RepositoryAdapter) GetCommit(ctx context.Context, hash string) (*domain
 }
 
 // GetCommitRange returns all commits in the given range.
-func (g *RepositoryAdapter) GetCommitRange(ctx context.Context, fromHash, toHash string) ([]*domain.CommitInfo, error) {
+func (g RepositoryAdapter) GetCommitRange(ctx context.Context, fromHash, toHash string) ([]domain.CommitInfo, error) {
 	// Check for context cancellation
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
@@ -144,7 +144,7 @@ func (g *RepositoryAdapter) GetCommitRange(ctx context.Context, fromHash, toHash
 }
 
 // GetHeadCommits returns the specified number of commits from HEAD.
-func (g *RepositoryAdapter) GetHeadCommits(ctx context.Context, count int) ([]*domain.CommitInfo, error) {
+func (g *RepositoryAdapter) GetHeadCommits(ctx context.Context, count int) ([]domain.CommitInfo, error) {
 	// Check for context cancellation
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
@@ -172,7 +172,7 @@ func (g *RepositoryAdapter) GetHeadCommits(ctx context.Context, count int) ([]*d
 }
 
 // GetCurrentBranch returns the name of the current branch.
-func (g *RepositoryAdapter) GetCurrentBranch(ctx context.Context) (string, error) {
+func (g RepositoryAdapter) GetCurrentBranch(ctx context.Context) (string, error) {
 	// Check for context cancellation
 	if ctx.Err() != nil {
 		return "", ctx.Err()
@@ -237,7 +237,7 @@ func (g *RepositoryAdapter) GetCurrentBranch(ctx context.Context) (string, error
 }
 
 // GetRepositoryName returns the name of the repository.
-func (g *RepositoryAdapter) GetRepositoryName(_ context.Context) string {
+func (g RepositoryAdapter) GetRepositoryName(_ context.Context) string {
 	// No need to check for context cancellation for this simple operation
 	// Extract the repository name from the path
 	return filepath.Base(g.path)
@@ -246,7 +246,7 @@ func (g *RepositoryAdapter) GetRepositoryName(_ context.Context) string {
 // findGitDir is moved to repository_helpers.go
 
 // convertCommit converts a go-git commit to a domain commit.
-func (g *RepositoryAdapter) convertCommit(commit *object.Commit) (*domain.CommitInfo, error) {
+func (g RepositoryAdapter) convertCommit(commit *object.Commit) (domain.CommitInfo, error) {
 	// Split the commit message into subject and body
 	message := commit.Message
 	subject, body := domain.SplitCommitMessage(message)
@@ -255,7 +255,7 @@ func (g *RepositoryAdapter) convertCommit(commit *object.Commit) (*domain.Commit
 	isMergeCommit := len(commit.ParentHashes) > 1
 
 	// Create domain commit
-	domainCommit := &domain.CommitInfo{
+	domainCommit := domain.CommitInfo{
 		Hash:          commit.Hash.String(),
 		Subject:       subject,
 		Body:          body,
@@ -378,7 +378,7 @@ func (g *RepositoryAdapter) collectAndConvertCommits(
 	iter object.CommitIter,
 	limit int,
 	stopFn func(*object.Commit) bool,
-) ([]*domain.CommitInfo, error) {
+) ([]domain.CommitInfo, error) {
 	// Collect git commits
 	commits, err := g.collectCommits(iter, limit, stopFn)
 	if err != nil {
@@ -386,7 +386,7 @@ func (g *RepositoryAdapter) collectAndConvertCommits(
 	}
 
 	// Convert to domain commits
-	domainCommits := make([]*domain.CommitInfo, 0, len(commits))
+	domainCommits := make([]domain.CommitInfo, 0, len(commits))
 
 	for _, commit := range commits {
 		domainCommit, err := g.convertCommit(commit)

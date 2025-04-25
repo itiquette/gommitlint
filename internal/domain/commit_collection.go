@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
-
 package domain
 
 import (
@@ -10,19 +9,19 @@ import (
 
 // CommitCollection represents a collection of commits with common operations.
 type CommitCollection struct {
-	commits []*CommitInfo
+	commits []CommitInfo
 }
 
 // NewCommitCollection creates a new CommitCollection from a slice of commits.
-func NewCommitCollection(commits []*CommitInfo) *CommitCollection {
-	return &CommitCollection{
+func NewCommitCollection(commits []CommitInfo) CommitCollection {
+	return CommitCollection{
 		commits: commits,
 	}
 }
 
 // FilterMergeCommits returns a new collection with merge commits filtered out.
-func (c *CommitCollection) FilterMergeCommits() *CommitCollection {
-	filtered := make([]*CommitInfo, 0, len(c.commits))
+func (c CommitCollection) FilterMergeCommits() CommitCollection {
+	filtered := make([]CommitInfo, 0, len(c.commits))
 
 	for _, commit := range c.commits {
 		if !commit.IsMergeCommit {
@@ -34,8 +33,8 @@ func (c *CommitCollection) FilterMergeCommits() *CommitCollection {
 }
 
 // FilterByAuthor returns a new collection with commits by the specified author.
-func (c *CommitCollection) FilterByAuthor(author string) *CommitCollection {
-	filtered := make([]*CommitInfo, 0, len(c.commits))
+func (c CommitCollection) FilterByAuthor(author string) CommitCollection {
+	filtered := make([]CommitInfo, 0, len(c.commits))
 
 	for _, commit := range c.commits {
 		if commit.RawCommit != nil {
@@ -51,41 +50,41 @@ func (c *CommitCollection) FilterByAuthor(author string) *CommitCollection {
 	return NewCommitCollection(filtered)
 }
 
-// First returns the first commit in the collection or nil if empty.
-func (c *CommitCollection) First() *CommitInfo {
+// First returns the first commit in the collection or an empty CommitInfo if empty.
+func (c CommitCollection) First() CommitInfo {
 	if len(c.commits) == 0 {
-		return nil
+		return CommitInfo{}
 	}
 
 	return c.commits[0]
 }
 
-// Last returns the last commit in the collection or nil if empty.
-func (c *CommitCollection) Last() *CommitInfo {
+// Last returns the last commit in the collection or an empty CommitInfo if empty.
+func (c CommitCollection) Last() CommitInfo {
 	if len(c.commits) == 0 {
-		return nil
+		return CommitInfo{}
 	}
 
 	return c.commits[len(c.commits)-1]
 }
 
 // All returns all commits in the collection.
-func (c *CommitCollection) All() []*CommitInfo {
+func (c CommitCollection) All() []CommitInfo {
 	return c.commits
 }
 
 // Count returns the number of commits in the collection.
-func (c *CommitCollection) Count() int {
+func (c CommitCollection) Count() int {
 	return len(c.commits)
 }
 
 // IsEmpty returns true if the collection is empty.
-func (c *CommitCollection) IsEmpty() bool {
+func (c CommitCollection) IsEmpty() bool {
 	return len(c.commits) == 0
 }
 
 // Contains returns true if the collection contains a commit with the specified hash.
-func (c *CommitCollection) Contains(hash string) bool {
+func (c CommitCollection) Contains(hash string) bool {
 	for _, commit := range c.commits {
 		if commit.Hash == hash {
 			return true
@@ -96,14 +95,14 @@ func (c *CommitCollection) Contains(hash string) bool {
 }
 
 // Add adds a commit to the collection and returns the updated collection.
-func (c *CommitCollection) Add(commit *CommitInfo) *CommitCollection {
+func (c CommitCollection) Add(commit CommitInfo) CommitCollection {
 	c.commits = append(c.commits, commit)
 
 	return c
 }
 
 // AddAll adds all commits from another collection to this collection.
-func (c *CommitCollection) AddAll(other *CommitCollection) *CommitCollection {
+func (c CommitCollection) AddAll(other CommitCollection) CommitCollection {
 	c.commits = append(c.commits, other.commits...)
 
 	return c

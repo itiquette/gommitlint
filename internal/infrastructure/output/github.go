@@ -25,7 +25,7 @@ func NewGitHubActionsFormatter(verbose, showHelp bool) *GitHubActionsFormatter {
 }
 
 // Format formats validation results for GitHub Actions output.
-func (f *GitHubActionsFormatter) Format(results *domain.ValidationResults) string {
+func (f *GitHubActionsFormatter) Format(results domain.ValidationResults) string {
 	var builder strings.Builder
 
 	// Print summary

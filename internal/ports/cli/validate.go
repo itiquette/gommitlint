@@ -136,7 +136,7 @@ func runNewValidation(cmd *cobra.Command) (int, error) {
 	}
 
 	// Create report generator
-	reportOptions := &report.Options{
+	reportOptions := report.Options{
 		Format:         getReportFormat(format),
 		Verbose:        verbose,
 		ShowHelp:       extraVerbose || ruleHelp != "",
