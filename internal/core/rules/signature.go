@@ -75,6 +75,22 @@ func NewSignatureRule(options ...SignatureOption) SignatureRule {
 	return rule
 }
 
+// NewSignatureRuleWithConfig creates a SignatureRule using configuration.
+func NewSignatureRuleWithConfig(config domain.SecurityConfigProvider) SignatureRule {
+	// Build options based on the configuration
+	var options []SignatureOption
+
+	// Set whether signatures are required
+	options = append(options, WithRequireSignature(config.SignatureRequired()))
+
+	// Set allowed signature types if provided
+	if types := config.AllowedSignatureTypes(); len(types) > 0 {
+		options = append(options, WithAllowedSignatureTypes(types))
+	}
+
+	return NewSignatureRule(options...)
+}
+
 // SetRuleState returns a new rule with the updated validation errors.
 func (r SignatureRule) SetRuleState(errors []appErrors.ValidationError) SignatureRule {
 	// Create a fresh base rule with our errors

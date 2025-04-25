@@ -67,6 +67,37 @@ func NewCommitsAheadRule(options ...CommitsAheadOption) CommitsAheadRule {
 	return rule
 }
 
+// NewCommitsAheadRuleWithConfig creates a new CommitsAheadRule using domain configuration interfaces.
+func NewCommitsAheadRuleWithConfig(config domain.RepositoryConfigProvider, analyzer domain.CommitAnalyzer) CommitsAheadRule {
+	rule := CommitsAheadRule{
+		baseRule:        NewBaseRule("CommitsAhead"),
+		Ref:             "main", // Default reference branch
+		MaxCommitsAhead: 5,      // Default maximum commits ahead
+	}
+
+	// Apply configuration if provided
+	if config != nil {
+		// Set reference branch if configured
+		if ref := config.ReferenceBranch(); ref != "" {
+			rule.Ref = ref
+		}
+
+		// Set max commits ahead if configured
+		if maxCommits := config.MaxCommitsAhead(); maxCommits > 0 {
+			rule.MaxCommitsAhead = maxCommits
+		}
+	}
+
+	// Set repository getter if analyzer is provided
+	if analyzer != nil {
+		rule.repositoryGetter = func() domain.CommitAnalyzer {
+			return analyzer
+		}
+	}
+
+	return rule
+}
+
 // Validate checks if the current HEAD exceeds the maximum allowed commits ahead of the reference branch.
 func (r CommitsAheadRule) Validate(commitInfo domain.CommitInfo) []appErrors.ValidationError {
 	ctx := context.Background()

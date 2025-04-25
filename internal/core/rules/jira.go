@@ -74,6 +74,29 @@ func NewJiraReferenceRule(options ...JiraReferenceOption) *JiraReferenceRule {
 	return rule
 }
 
+// NewJiraReferenceRuleWithConfig creates a JiraReferenceRule using a configuration provider.
+func NewJiraReferenceRuleWithConfig(jiraConfig domain.JiraConfigProvider, conventionalConfig domain.ConventionalConfigProvider) *JiraReferenceRule {
+	// Build options based on the configuration
+	var options []JiraReferenceOption
+
+	// Check if conventional commit format is required
+	if conventionalConfig.ConventionalRequired() {
+		options = append(options, WithConventionalCommit())
+	}
+
+	// Check if body reference checking is enabled
+	if jiraConfig.JiraBodyRef() {
+		options = append(options, WithBodyRefChecking())
+	}
+
+	// Add valid projects if provided
+	if projects := jiraConfig.JiraProjects(); len(projects) > 0 {
+		options = append(options, WithValidProjects(projects))
+	}
+
+	return NewJiraReferenceRule(options...)
+}
+
 // Result returns a concise rule message.
 func (j JiraReferenceRule) Result() string {
 	if j.HasErrors() {

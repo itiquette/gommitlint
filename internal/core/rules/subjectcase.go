@@ -82,6 +82,29 @@ func NewSubjectCaseRule(options ...SubjectCaseOption) *SubjectCaseRule {
 	return rule
 }
 
+// NewSubjectCaseRuleWithConfig creates a SubjectCaseRule using configuration.
+func NewSubjectCaseRuleWithConfig(config domain.SubjectConfigProvider, conventionalConfig domain.ConventionalConfigProvider) *SubjectCaseRule {
+	// Build options based on the configuration
+	var options []SubjectCaseOption
+
+	// Set the case choice if provided
+	if caseChoice := config.SubjectCase(); caseChoice != "" {
+		options = append(options, WithCaseChoice(caseChoice))
+	}
+
+	// Check if we need to use conventional commit format
+	if conventionalConfig.ConventionalRequired() {
+		options = append(options, WithSubjectCaseCommitFormat(true))
+	}
+
+	// If imperative mood is enforced, allow non-alphabetic characters
+	if config.SubjectRequireImperative() {
+		options = append(options, WithAllowNonAlpha(true))
+	}
+
+	return NewSubjectCaseRule(options...)
+}
+
 // Name method is inherited from BaseRule.
 
 // addError adds a structured validation error.

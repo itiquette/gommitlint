@@ -194,7 +194,12 @@ func TestGetValidationConfig(t *testing.T) {
 	validationConfig := manager.GetValidationConfig()
 
 	// Check that validation config reflects the manager's config
+	// Test subject config methods
 	require.Equal(t, 60, validationConfig.SubjectMaxLength())
+
+	// Test body config methods
 	require.True(t, validationConfig.BodyRequired())
+
+	// Test conventional config methods
 	require.False(t, validationConfig.ConventionalRequired())
 }

@@ -295,37 +295,96 @@ The hexagonal architecture provides several benefits:
 
 ## Areas for Improvement
 
+### 1. Hexagonal Architecture Refinements
 
-A  few done...
+The codebase follows a well-structured hexagonal architecture, but there are opportunities to strengthen the separation of concerns while maintaining simplicity:
 
-  3. Streamline Configuration System
+1. **Interface Segregation**: The `RuleValidationConfig` interface in `internal/domain/rule.go` has almost 90 methods, which violates the Interface Segregation Principle. Consider breaking it into smaller, purpose-specific interfaces like:
+   ```go
+   // Example of how interfaces could be segregated
+   type SubjectConfigProvider interface {
+       SubjectMaxLength() int
+       SubjectCase() string
+       // ...other subject-specific methods
+   }
+   
+   type BodyConfigProvider interface {
+       BodyRequired() bool
+       BodyAllowSignOffOnly() bool
+       // ...other body-specific methods
+   }
+   ```
 
-  The configuration loading and management has multiple layers:
+2. **Domain Logic Isolation**: Some domain logic exists in the application layer (e.g., in `internal/application/validate/service.go`). For example, the commit message parsing and dummy commit creation in `ValidateMessageFile()` would be more appropriate in the domain layer:
+   ```go
+   // Move this domain logic to the domain layer
+   subject, body := domain.SplitCommitMessage(message)
+   commit := domain.CommitInfo{
+       Hash:          "0000000000000000000000000000000000000000",
+       Subject:       subject,
+       Body:          body,
+       Message:       message,
+       IsMergeCommit: false,
+   }
+   ```
+
+3. **Dependency Direction**: Ensure dependencies always point inward toward the domain layer. For instance, the configuration system should implement domain interfaces rather than the domain depending on configuration types.
+
+4. **Simplified Port Adapters**: The repository factory in `internal/infrastructure/git/repository_factory.go` adds a layer of indirection when the adapter already implements all required interfaces. Consider simplifying this pattern while maintaining the clean boundaries.
+
+5. **Explicit Dependencies**: Some services construct their dependencies internally rather than receiving them through constructors. For example, the validation service in `CreateValidationService()` constructs its own components. Consider making dependencies explicit:
+   ```go
+   // Prefer explicit dependencies
+   func NewValidationService(
+       engine ValidationEngine,
+       commitService domain.GitCommitService,
+       infoProvider domain.RepositoryInfoProvider,
+   ) ValidationService {
+       // ...
+   }
+   ```
+
+### 2. Context Handling
+
+The application has a solid foundation for context handling with the `contextx` package, but there are some areas for improvement:
+
+1. **Consistent Context Value Usage**: The `contextx` package defines several custom context keys (`UserIDKey`, `TraceIDKey`, `RepositoryPathKey`, `RevisionKey`, `RuleNameKey`), but there's limited evidence of these keys being actively used throughout the codebase. Consider using these keys more consistently to propagate important metadata.
+
+2. **Context Timeouts**: Currently, there's no explicit timeout configuration for potentially long-running operations. Consider adding timeout patterns, especially for Git operations that might be resource-intensive:
+
+   ```go
+   // Example of how timeouts could be added
+   ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+   defer cancel()
+   ```
+
+3. **Context Cancellation**: While the codebase has thorough cancellation checks, especially in the git repository adapter, consider standardizing the pattern for all long-running operations.
+
+4. **Dual-Interface Approach**: The codebase uses a smart dual-interface approach (with `Rule` and `ContextualRule`), but not all rules implement the contextual version. Consider gradually migrating all rules to support context.
+
+### 3. Configuration System Simplification
+
+The configuration loading and management has multiple layers:
 - Config loader
 - Config provider
 - Config manager
 - Config validator
 
-  Suggestion: Consider a simpler approach to configuration with fewer abstractions. A single configuration manager that handles loading and
-  validation might be sufficient.
+Suggestion: Consider a simpler approach to configuration with fewer abstractions. A single configuration manager that handles loading and validation might be sufficient, while still adhering to the hexagonal architecture by implementing domain interfaces.
 
-  4. Simplify Rule Registration
+### 4. Rule Registration Simplification
 
-  The rule registration system is somewhat complex:
+The rule registration system is somewhat complex:
 
-  Suggestion: Consider a more straightforward registration mechanism, possibly using Go's init pattern or a simpler factory function.
-
-  5. Reduce Factory Proliferation
-
-  There are multiple factory patterns which add indirection:
-
-  Suggestion: Consolidate factories where possible and consider more direct instantiation patterns where appropriate.
+Suggestion: Consider a more straightforward registration mechanism, possibly using Go's init pattern or a simpler factory function, while ensuring the domain layer remains free of infrastructure concerns.
 
 ### General Assessment
 
-- Idiomatic Go: Overall, yes. The code follows Go idioms well, with proper use of interfaces, error handling, and package structure.
-- Maintainability: Strong, due to clear separation of concerns and consistent patterns.
-- Testability: Excellent, with dependency injection and interface-based design enabling thorough testing.
-- Simplicity: Good but with room for improvement in some areas.
-- Coherence: Strong architectural boundaries make the system coherent.
-- Conciseness: Generally good, with the BaseRule pattern helping reduce dupl
+- **Hexagonal Architecture**: Well-implemented with clear boundaries, but could benefit from more consistent application of principles.
+- **Idiomatic Go**: Overall, yes. The code follows Go idioms well, with proper use of interfaces, error handling, and package structure.
+- **Maintainability**: Strong, due to clear separation of concerns and consistent patterns.
+- **Testability**: Excellent, with dependency injection and interface-based design enabling thorough testing.
+- **Simplicity**: Good but with room for improvement in some areas, particularly interface design and dependency management.
+- **Coherence**: Strong architectural boundaries make the system coherent.
+- **Conciseness**: Generally good, with the BaseRule pattern helping reduce duplication.
+- **Context Handling**: Well-designed with consistent propagation, but could benefit from more consistent usage of custom context values and timeout patterns.

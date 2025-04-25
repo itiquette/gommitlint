@@ -225,7 +225,9 @@ func (m *Manager) GetConfig() Config {
 
 // GetValidationConfig returns a new validation configuration adapter.
 // This is the preferred way to access configuration for validation.
-func (m *Manager) GetValidationConfig() domain.RuleValidationConfig {
+// It returns a validation.ValidationConfigProvider which combines all
+// the specific configuration provider interfaces.
+func (m *Manager) GetValidationConfig() domain.ValidationConfigProvider {
 	return NewValidationConfigAdapter(m.config)
 }
 

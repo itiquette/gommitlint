@@ -74,6 +74,14 @@ func NewCommitBodyRule(options ...CommitBodyOption) CommitBodyRule {
 	return rule
 }
 
+// NewCommitBodyRuleWithConfig creates a CommitBodyRule using a configuration provider.
+func NewCommitBodyRuleWithConfig(config domain.BodyConfigProvider) CommitBodyRule {
+	return NewCommitBodyRule(
+		WithRequireBody(config.BodyRequired()),
+		WithAllowSignOffOnly(config.BodyAllowSignOffOnly()),
+	)
+}
+
 // Validate validates the commit body.
 func (r CommitBodyRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
 	// Reset errors

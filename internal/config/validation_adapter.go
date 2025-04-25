@@ -153,5 +153,15 @@ func (a *ValidationConfigAdapter) DisabledRules() []string {
 	return a.config.Rules.DisabledRules
 }
 
-// Make sure the adapter implements the interface.
-var _ domain.RuleValidationConfig = (*ValidationConfigAdapter)(nil)
+// Make sure the adapter implements all the necessary interfaces.
+var (
+	_ domain.ValidationConfigProvider   = (*ValidationConfigAdapter)(nil)
+	_ domain.SubjectConfigProvider      = (*ValidationConfigAdapter)(nil)
+	_ domain.JiraConfigProvider         = (*ValidationConfigAdapter)(nil)
+	_ domain.BodyConfigProvider         = (*ValidationConfigAdapter)(nil)
+	_ domain.ConventionalConfigProvider = (*ValidationConfigAdapter)(nil)
+	_ domain.SecurityConfigProvider     = (*ValidationConfigAdapter)(nil)
+	_ domain.SpellCheckConfigProvider   = (*ValidationConfigAdapter)(nil)
+	_ domain.RepositoryConfigProvider   = (*ValidationConfigAdapter)(nil)
+	_ domain.RulesConfigProvider        = (*ValidationConfigAdapter)(nil)
+)

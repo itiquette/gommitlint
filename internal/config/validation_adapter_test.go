@@ -68,8 +68,24 @@ func TestValidationConfigAdapter(t *testing.T) {
 	// Create the adapter
 	adapter := NewValidationConfigAdapter(config)
 
-	// Verify adapter implements the interface
-	var _ domain.RuleValidationConfig = adapter
+	// Verify adapter implements all the required interfaces
+	var _ domain.ValidationConfigProvider = adapter
+
+	var _ domain.SubjectConfigProvider = adapter
+
+	var _ domain.JiraConfigProvider = adapter
+
+	var _ domain.BodyConfigProvider = adapter
+
+	var _ domain.ConventionalConfigProvider = adapter
+
+	var _ domain.SecurityConfigProvider = adapter
+
+	var _ domain.SpellCheckConfigProvider = adapter
+
+	var _ domain.RepositoryConfigProvider = adapter
+
+	var _ domain.RulesConfigProvider = adapter
 
 	// Test subject methods
 	t.Run("Subject methods", func(t *testing.T) {

@@ -36,170 +36,61 @@ func NewRuleRegistry(config Config, analyzer domain.CommitAnalyzer) *RuleRegistr
 // registerRules registers all available validation rules.
 func (r *RuleRegistry) registerRules() {
 	// Register Subject Length rule
-	r.registerRule(rules.NewSubjectLengthRule(r.configuration.Subject.MaxLength))
+	r.registerRule(rules.NewSubjectLengthRuleWithConfig(r.configuration))
 
 	// Register Conventional Commit rule
-	r.registerRule(rules.NewConventionalCommitRule(
-		rules.WithAllowedTypes(r.configuration.Conventional.Types),
-		rules.WithAllowedScopes(r.configuration.Conventional.Scopes),
-		rules.WithMaxDescLength(r.configuration.Conventional.MaxDescriptionLength),
-	))
+	r.registerRule(rules.NewConventionalCommitRuleWithConfig(r.configuration))
 
 	// Register Imperative Verb rule
-	r.registerRule(rules.NewImperativeVerbRule(
-		r.configuration.Conventional.Required,
-		rules.WithImperativeConventionalCommit(r.configuration.Conventional.Required),
-	))
+	r.registerRule(rules.NewImperativeVerbRuleWithConfig(r.configuration, r.configuration))
 
 	// Register Jira Reference rule only if explicitly enabled
 	if r.configuration.Subject.Jira.Required {
-		// Create and register the Jira rule
-		r.registerRule(createJiraRule(r.configuration))
+		// Create and register the Jira rule using domain-based interface
+		r.registerRule(rules.NewJiraReferenceRuleWithConfig(r.configuration, r.configuration))
 	}
 
 	// Register Signature rule
-	r.registerRule(createSignatureRule(r.configuration))
+	r.registerRule(rules.NewSignatureRuleWithConfig(r.configuration))
 
 	// Register SignOff rule
-	r.registerRule(createSignOffRule(r.configuration))
+	r.registerRule(rules.NewSignOffRuleWithConfig(r.configuration))
 
 	// Register Spell rule
-	r.registerRule(createSpellRule(r.configuration))
+	r.registerRule(rules.NewSpellRuleWithConfig(r.configuration))
 
 	// Register Subject Case rule
-	r.registerRule(createSubjectCaseRule(r.configuration))
+	r.registerRule(rules.NewSubjectCaseRuleWithConfig(r.configuration, r.configuration))
 
 	// Register Subject Suffix rule
-	r.registerRule(createSubjectSuffixRule(r.configuration))
+	r.registerRule(rules.NewSubjectSuffixRuleWithConfig(r.configuration))
 
 	// Register Commit Body rule
-	r.registerRule(createCommitBodyRule(r.configuration))
+	r.registerRule(rules.NewCommitBodyRuleWithConfig(r.configuration))
 
 	// Register Commits Ahead rule
-	r.registerRule(createCommitsAheadRule(r.configuration, r.analyzer))
+	r.registerRule(rules.NewCommitsAheadRuleWithConfig(r.configuration, r.analyzer))
 
 	// Apply enabled/disabled rules configuration
 	r.applyRuleConfiguration()
 }
 
 // Helper functions to create rules with options.
-func createJiraRule(config Config) domain.Rule {
-	var opts []rules.JiraReferenceOption
+// createJiraRule has been replaced by NewJiraReferenceRuleWithConfig
 
-	if config.Conventional.Required {
-		opts = append(opts, rules.WithConventionalCommit())
-	}
+// createSignatureRule has been replaced by NewSignatureRuleWithConfig
 
-	if config.Subject.Jira.BodyRef {
-		opts = append(opts, rules.WithBodyRefChecking())
-	}
+// createSignOffRule has been replaced by NewSignOffRuleWithConfig
 
-	if len(config.Subject.Jira.Projects) > 0 {
-		opts = append(opts, rules.WithValidProjects(config.Subject.Jira.Projects))
-	}
+// createSpellRule has been replaced by NewSpellRuleWithConfig
 
-	return rules.NewJiraReferenceRule(opts...)
-}
+// createSubjectCaseRule has been replaced by NewSubjectCaseRuleWithConfig
 
-func createSignatureRule(config Config) domain.Rule {
-	var opts []rules.SignatureOption
+// createSubjectSuffixRule has been replaced by NewSubjectSuffixRuleWithConfig
 
-	opts = append(opts, rules.WithRequireSignature(config.Security.SignatureRequired))
+// No longer needed - using the domain-oriented constructor directly
 
-	if len(config.Security.AllowedSignatureTypes) > 0 {
-		opts = append(opts, rules.WithAllowedSignatureTypes(config.Security.AllowedSignatureTypes))
-	}
-
-	return rules.NewSignatureRule(opts...)
-}
-
-func createSignOffRule(config Config) domain.Rule {
-	var opts []rules.SignOffOption
-
-	opts = append(opts, rules.WithRequireSignOff(config.Security.SignOffRequired))
-	opts = append(opts, rules.WithAllowMultipleSignOffs(config.Security.AllowMultipleSignOffs))
-
-	return rules.NewSignOffRule(opts...)
-}
-
-func createSpellRule(config Config) domain.Rule {
-	var opts []rules.SpellRuleOption
-
-	if config.SpellCheck.Locale != "" {
-		opts = append(opts, rules.WithLocale(config.SpellCheck.Locale))
-	}
-
-	if len(config.SpellCheck.IgnoreWords) > 0 {
-		opts = append(opts, rules.WithIgnoreWords(config.SpellCheck.IgnoreWords))
-	}
-
-	if len(config.SpellCheck.CustomWords) > 0 {
-		opts = append(opts, rules.WithCustomWords(config.SpellCheck.CustomWords))
-	}
-
-	if config.SpellCheck.MaxErrors > 0 {
-		opts = append(opts, rules.WithMaxErrors(config.SpellCheck.MaxErrors))
-	}
-
-	return rules.NewSpellRule(opts...)
-}
-
-func createSubjectCaseRule(config Config) domain.Rule {
-	var opts []rules.SubjectCaseOption
-
-	if config.Subject.Case != "" {
-		opts = append(opts, rules.WithCaseChoice(config.Subject.Case))
-	}
-
-	if config.Conventional.Required {
-		opts = append(opts, rules.WithSubjectCaseCommitFormat(true))
-	}
-
-	if config.Subject.Imperative {
-		opts = append(opts, rules.WithAllowNonAlpha(true))
-	}
-
-	return rules.NewSubjectCaseRule(opts...)
-}
-
-func createSubjectSuffixRule(config Config) domain.Rule {
-	var opts []rules.SubjectSuffixOption
-
-	if config.Subject.InvalidSuffixes != "" {
-		opts = append(opts, rules.WithInvalidSuffixes(config.Subject.InvalidSuffixes))
-	}
-
-	return rules.NewSubjectSuffixRule(opts...)
-}
-
-func createCommitBodyRule(config Config) domain.Rule {
-	var opts []rules.CommitBodyOption
-
-	opts = append(opts, rules.WithRequireBody(config.Body.Required))
-	opts = append(opts, rules.WithAllowSignOffOnly(config.Body.AllowSignOffOnly))
-
-	return rules.NewCommitBodyRule(opts...)
-}
-
-func createCommitsAheadRule(config Config, analyzer domain.CommitAnalyzer) domain.Rule {
-	var opts []rules.CommitsAheadOption
-	if config.Repository.Reference != "" {
-		opts = append(opts, rules.WithReference(config.Repository.Reference))
-	}
-
-	if config.Repository.MaxCommitsAhead > 0 {
-		opts = append(opts, rules.WithMaxCommitsAhead(config.Repository.MaxCommitsAhead))
-	}
-
-	// Use the analyzer passed to the function
-	if analyzer != nil {
-		opts = append(opts, rules.WithRepositoryGetter(func() domain.CommitAnalyzer {
-			return analyzer
-		}))
-	}
-
-	return rules.NewCommitsAheadRule(opts...)
-}
+// createCommitsAheadRule has been replaced by NewCommitsAheadRuleWithConfig
 
 // registerRule adds a rule to the registry and marks it as active by default.
 func (r *RuleRegistry) registerRule(rule domain.Rule) {

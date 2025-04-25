@@ -19,7 +19,7 @@ type SubjectLengthRule struct {
 	errors    []appErrors.ValidationError
 }
 
-// NewSubjectLengthRule creates a new SubjectLengthRule.
+// NewSubjectLengthRule creates a new SubjectLengthRule with explicitly provided max length.
 func NewSubjectLengthRule(maxLength int) SubjectLengthRule {
 	// Use default if not specified
 	if maxLength <= 0 {
@@ -30,6 +30,11 @@ func NewSubjectLengthRule(maxLength int) SubjectLengthRule {
 		maxLength: maxLength,
 		errors:    make([]appErrors.ValidationError, 0),
 	}
+}
+
+// NewSubjectLengthRuleWithConfig creates a SubjectLengthRule using configuration.
+func NewSubjectLengthRuleWithConfig(config domain.SubjectConfigProvider) SubjectLengthRule {
+	return NewSubjectLengthRule(config.SubjectMaxLength())
 }
 
 // Name returns the rule name.

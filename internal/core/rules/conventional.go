@@ -122,6 +122,28 @@ func NewConventionalCommitRule(options ...ConventionalCommitOption) Conventional
 	return rule
 }
 
+// NewConventionalCommitRuleWithConfig creates a new rule using configuration.
+func NewConventionalCommitRuleWithConfig(config domain.ConventionalConfigProvider) ConventionalCommitRule {
+	var options []ConventionalCommitOption
+
+	// Apply the allowed types if provided
+	if types := config.ConventionalTypes(); len(types) > 0 {
+		options = append(options, WithAllowedTypes(types))
+	}
+
+	// Apply the allowed scopes if provided
+	if scopes := config.ConventionalScopes(); len(scopes) > 0 {
+		options = append(options, WithAllowedScopes(scopes))
+	}
+
+	// Apply the max description length if provided
+	if maxLength := config.ConventionalMaxDescriptionLength(); maxLength > 0 {
+		options = append(options, WithMaxDescLength(maxLength))
+	}
+
+	return NewConventionalCommitRule(options...)
+}
+
 // Name returns the name of the rule.
 func (r ConventionalCommitRule) Name() string {
 	return r.name

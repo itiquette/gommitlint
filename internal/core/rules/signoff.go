@@ -73,6 +73,20 @@ func NewSignOffRule(options ...SignOffOption) *SignOffRule {
 	return rule
 }
 
+// NewSignOffRuleWithConfig creates a SignOffRule using configuration.
+func NewSignOffRuleWithConfig(config domain.SecurityConfigProvider) *SignOffRule {
+	// Build options based on the configuration
+	var options []SignOffOption
+
+	// Set whether sign-offs are required
+	options = append(options, WithRequireSignOff(config.SignOffRequired()))
+
+	// Set whether multiple sign-offs are allowed
+	options = append(options, WithAllowMultipleSignOffs(config.AllowMultipleSignOffs()))
+
+	return NewSignOffRule(options...)
+}
+
 // SetSignOffState sets the sign-off state flags after validation.
 // This allows using value receivers in other methods.
 func (r SignOffRule) SetSignOffState(errList []appErrors.ValidationError, attempted bool, found string) SignOffRule {

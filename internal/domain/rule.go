@@ -80,55 +80,16 @@ type RuleProvider interface {
 	GetActiveRules() []Rule
 }
 
-// RuleValidationConfig defines the configuration needed by validation rules.
-// This interface has many methods due to the comprehensive validation requirements.
+// The RuleValidationConfig interface has been removed.
+// Use the specific configuration provider interfaces instead:
+// - SubjectConfigProvider
+// - BodyConfigProvider
+// - ConventionalConfigProvider
+// - JiraConfigProvider
+// - SecurityConfigProvider
+// - SpellCheckConfigProvider
+// - RepositoryConfigProvider
+// - RulesConfigProvider
 //
-//nolint:interfacebloat // This interface intentionally has many methods
-type RuleValidationConfig interface {
-	// Subject configuration methods
-	SubjectMaxLength() int
-	SubjectCase() string
-	SubjectRequireImperative() bool
-	SubjectInvalidSuffixes() string
-
-	// Conventional commit configuration methods
-	ConventionalTypes() []string
-	ConventionalScopes() []string
-	ConventionalMaxDescriptionLength() int
-	ConventionalRequired() bool
-
-	// Jira configuration methods
-	JiraProjects() []string
-	JiraBodyRef() bool
-	JiraRequired() bool
-	JiraPattern() string
-	JiraStrict() bool
-
-	// Body configuration methods
-	BodyRequired() bool
-	BodyAllowSignOffOnly() bool
-
-	// Security configuration methods
-	SignatureRequired() bool
-	AllowedSignatureTypes() []string
-	SignOffRequired() bool
-	AllowMultipleSignOffs() bool
-	IdentityPublicKeyURI() string
-
-	// Spell check configuration methods
-	SpellLocale() string
-	SpellEnabled() bool
-	SpellIgnoreWords() []string
-	SpellCustomWords() map[string]string
-	SpellMaxErrors() int
-
-	// Repository configuration methods
-	ReferenceBranch() string
-	IgnoreMergeCommits() bool
-	MaxCommitsAhead() int
-	CheckCommitsAhead() bool
-
-	// Rule configuration methods
-	EnabledRules() []string
-	DisabledRules() []string
-}
+// If you need all configuration aspects, use ValidationConfigProvider
+// which combines all the above interfaces.

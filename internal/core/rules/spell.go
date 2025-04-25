@@ -82,6 +82,34 @@ func NewSpellRule(options ...SpellRuleOption) *SpellRule {
 	return rule
 }
 
+// NewSpellRuleWithConfig creates a SpellRule using configuration.
+func NewSpellRuleWithConfig(config domain.SpellCheckConfigProvider) *SpellRule {
+	// Build options based on the configuration
+	var options []SpellRuleOption
+
+	// Set the locale if provided
+	if locale := config.SpellLocale(); locale != "" {
+		options = append(options, WithLocale(locale))
+	}
+
+	// Set the maximum errors if provided
+	if maxErrors := config.SpellMaxErrors(); maxErrors > 0 {
+		options = append(options, WithMaxErrors(maxErrors))
+	}
+
+	// Set the ignore words if provided
+	if ignoreWords := config.SpellIgnoreWords(); len(ignoreWords) > 0 {
+		options = append(options, WithIgnoreWords(ignoreWords))
+	}
+
+	// Set the custom words if provided
+	if customWords := config.SpellCustomWords(); len(customWords) > 0 {
+		options = append(options, WithCustomWords(customWords))
+	}
+
+	return NewSpellRule(options...)
+}
+
 // Name returns the rule identifier.
 func (r SpellRule) Name() string {
 	return "Spell"

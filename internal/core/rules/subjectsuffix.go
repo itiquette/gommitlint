@@ -58,6 +58,19 @@ func NewSubjectSuffixRule(options ...SubjectSuffixOption) *SubjectSuffixRule {
 	return rule
 }
 
+// NewSubjectSuffixRuleWithConfig creates a SubjectSuffixRule using configuration.
+func NewSubjectSuffixRuleWithConfig(config domain.SubjectConfigProvider) *SubjectSuffixRule {
+	// Build options based on the configuration
+	var options []SubjectSuffixOption
+
+	// Set the invalid suffixes if provided
+	if suffixes := config.SubjectInvalidSuffixes(); suffixes != "" {
+		options = append(options, WithInvalidSuffixes(suffixes))
+	}
+
+	return NewSubjectSuffixRule(options...)
+}
+
 // Name returns the rule identifier.
 func (r SubjectSuffixRule) Name() string {
 	return "SubjectSuffix"

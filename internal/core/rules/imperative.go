@@ -150,6 +150,22 @@ func NewImperativeVerbRule(isConventional bool, options ...ImperativeVerbOption)
 	return rule
 }
 
+// NewImperativeVerbRuleWithConfig creates an ImperativeVerbRule using configuration.
+func NewImperativeVerbRuleWithConfig(config domain.SubjectConfigProvider, conventionalConfig domain.ConventionalConfigProvider) ImperativeVerbRule {
+	// Build options based on the configuration
+	var options []ImperativeVerbOption
+
+	// Check if imperative is required
+	isConventional := conventionalConfig.ConventionalRequired()
+
+	// Check if we need to use conventional commit format
+	if isConventional {
+		options = append(options, WithImperativeConventionalCommit(true))
+	}
+
+	return NewImperativeVerbRule(config.SubjectRequireImperative(), options...)
+}
+
 // Name returns the rule name.
 func (r ImperativeVerbRule) Name() string {
 	return "ImperativeVerb"
