@@ -188,6 +188,7 @@ func (s Service) ValidateWithOptions(ctx context.Context, opts Options) (domain.
 
 // CreateServiceWithConfig creates a ValidationService using the provided configuration.
 // This function doesn't depend on the config package, breaking the circular dependency.
+// Deprecated: Use explicit dependency injection with NewService instead.
 func CreateServiceWithConfig(repoPath string, config Config) (Service, error) {
 	// Create repository factory
 	factory, err := git.NewRepositoryFactory(repoPath)
@@ -208,6 +209,34 @@ func CreateServiceWithConfig(repoPath string, config Config) (Service, error) {
 
 	// Create validation service
 	return NewService(engine, commitService, infoProvider), nil
+}
+
+// CreateServiceWithDependencies creates a ValidationService with explicit dependencies.
+// This is the preferred constructor for better testability.
+func CreateServiceWithDependencies(
+	engine Engine,
+	commitService domain.GitCommitService,
+	infoProvider domain.RepositoryInfoProvider,
+) Service {
+	return NewService(engine, commitService, infoProvider)
+}
+
+// CreateServiceWithAnalyzer creates a ValidationService with an analyzer and configuration.
+// This combines the dependency and configuration approach.
+func CreateServiceWithAnalyzer(
+	config Config,
+	analyzer domain.CommitAnalyzer,
+	commitService domain.GitCommitService,
+	infoProvider domain.RepositoryInfoProvider,
+) Service {
+	// Create rule provider with configuration and analyzer
+	ruleProvider := NewRuleProvider(config, analyzer)
+
+	// Create validation engine
+	engine := NewEngine(ruleProvider)
+
+	// Create and return validation service
+	return NewService(engine, commitService, infoProvider)
 }
 
 // FactoryWithConfig creates a validation service factory function that uses

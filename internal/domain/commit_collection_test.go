@@ -79,44 +79,62 @@ func TestCommitCollection_AddAndAddAll(t *testing.T) {
 }
 
 func TestCommitCollection_FilterByAuthor(t *testing.T) {
-	// Create author
-	author := &object.Signature{
-		Name:  "John Doe",
-		Email: "john@example.com",
-	}
-	otherAuthor := &object.Signature{
-		Name:  "Jane Smith",
-		Email: "jane@example.com",
-	}
-	// Create test commits with authors
+	// Create author information
+	authorName := "John Doe"
+	authorEmail := "john@example.com"
+	otherAuthorName := "Jane Smith"
+	otherAuthorEmail := "jane@example.com"
+
+	// Create test commits with authors directly in the CommitInfo struct
 	commit1 := domain.CommitInfo{
-		Hash: "abc123",
+		Hash:        "abc123",
+		AuthorName:  authorName,
+		AuthorEmail: authorEmail,
+		// Still keep RawCommit for backward compatibility during transition
 		RawCommit: &object.Commit{
-			Author: *author,
+			Author: object.Signature{
+				Name:  authorName,
+				Email: authorEmail,
+			},
 		},
 	}
 	commit2 := domain.CommitInfo{
-		Hash: "def456",
+		Hash:        "def456",
+		AuthorName:  otherAuthorName,
+		AuthorEmail: otherAuthorEmail,
+		// Still keep RawCommit for backward compatibility during transition
 		RawCommit: &object.Commit{
-			Author: *otherAuthor,
+			Author: object.Signature{
+				Name:  otherAuthorName,
+				Email: otherAuthorEmail,
+			},
 		},
 	}
 	commit3 := domain.CommitInfo{
-		Hash: "ghi789",
+		Hash:        "ghi789",
+		AuthorName:  authorName,
+		AuthorEmail: authorEmail,
+		// Still keep RawCommit for backward compatibility during transition
 		RawCommit: &object.Commit{
-			Author: *author,
+			Author: object.Signature{
+				Name:  authorName,
+				Email: authorEmail,
+			},
 		},
 	}
+
 	// Create collection
 	collection := domain.NewCommitCollection([]domain.CommitInfo{commit1, commit2, commit3})
+
 	// Filter by author email
-	filtered := collection.FilterByAuthor(author.Email)
+	filtered := collection.FilterByAuthor(authorEmail)
 	require.Equal(t, 2, filtered.Count(), "Should have filtered to author's commits only")
 	require.True(t, filtered.Contains(commit1.Hash), "Should contain commit1")
 	require.False(t, filtered.Contains(commit2.Hash), "Should not contain commit2")
 	require.True(t, filtered.Contains(commit3.Hash), "Should contain commit3")
+
 	// Filter by author name
-	filtered = collection.FilterByAuthor(author.Name)
+	filtered = collection.FilterByAuthor(authorName)
 	require.Equal(t, 2, filtered.Count(), "Should have filtered to author's commits only")
 }
 

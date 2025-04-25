@@ -246,6 +246,8 @@ func (g RepositoryAdapter) GetRepositoryName(_ context.Context) string {
 // findGitDir is moved to repository_helpers.go
 
 // convertCommit converts a go-git commit to a domain commit.
+// This function is responsible for mapping all infrastructure-specific commit data
+// to our domain model, ensuring that domain logic never has to access implementation details.
 func (g RepositoryAdapter) convertCommit(commit *object.Commit) (domain.CommitInfo, error) {
 	// Split the commit message into subject and body
 	message := commit.Message
@@ -254,14 +256,22 @@ func (g RepositoryAdapter) convertCommit(commit *object.Commit) (domain.CommitIn
 	// Check if the commit is a merge commit
 	isMergeCommit := len(commit.ParentHashes) > 1
 
-	// Create domain commit
+	// Format commit date as ISO string
+	commitDate := commit.Committer.When.Format("2006-01-02T15:04:05Z07:00")
+
+	// Create domain commit with all necessary information extracted from raw commit
 	domainCommit := domain.CommitInfo{
 		Hash:          commit.Hash.String(),
 		Subject:       subject,
 		Body:          body,
 		Message:       message,
-		RawCommit:     commit,
+		AuthorName:    commit.Author.Name,
+		AuthorEmail:   commit.Author.Email,
+		CommitDate:    commitDate,
 		IsMergeCommit: isMergeCommit,
+		// Still include RawCommit for backward compatibility, but domain logic should
+		// never access this field directly
+		RawCommit: commit,
 	}
 
 	// Get signature if available

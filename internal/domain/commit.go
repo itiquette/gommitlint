@@ -10,6 +10,7 @@ import (
 )
 
 // CommitInfo represents information about a Git commit.
+// This is a pure domain entity with value semantics.
 type CommitInfo struct {
 	// Hash is the commit hash.
 	Hash string
@@ -29,8 +30,18 @@ type CommitInfo struct {
 	// IsMergeCommit indicates whether this is a merge commit.
 	IsMergeCommit bool
 
+	// AuthorName is the name of the commit author.
+	AuthorName string
+
+	// AuthorEmail is the email of the commit author.
+	AuthorEmail string
+
+	// CommitDate is the date of the commit in ISO format.
+	CommitDate string
+
 	// RawCommit contains the raw commit object from the git library.
-	// This is used by infrastructure code and should not be accessed by domain logic.
+	// This should ONLY be used by infrastructure code and adapters.
+	// Domain logic should never access this field directly.
 	RawCommit interface{}
 }
 

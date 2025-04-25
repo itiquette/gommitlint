@@ -7,14 +7,16 @@ package validate
 
 import (
 	"context"
-	"errors"
+	stderrors "errors"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/config"
-	"github.com/itiquette/gommitlint/internal/core/validation"
+	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/errors"
+	"github.com/itiquette/gommitlint/internal/infrastructure/git"
 )
 
 // Note: Using domain package interfaces instead of a local interface definition
@@ -41,6 +43,7 @@ type ValidationOptions struct {
 }
 
 // ValidationEngine defines the interface for the validation engine.
+// This matches the domain.ValidationEngine interface.
 type ValidationEngine interface {
 	ValidateCommit(ctx context.Context, commit domain.CommitInfo) domain.CommitResult
 	ValidateCommits(ctx context.Context, commits []domain.CommitInfo) domain.ValidationResults
@@ -125,7 +128,7 @@ func (s ValidationService) ValidateMessageFile(ctx context.Context, filePath str
 	// Convert to string and trim whitespace
 	message := strings.TrimSpace(string(messageBytes))
 	if message == "" {
-		return domain.NewValidationResults(), errors.New("empty commit message")
+		return domain.NewValidationResults(), stderrors.New("empty commit message")
 	}
 
 	// Split into subject and body
@@ -196,6 +199,8 @@ func (s ValidationService) ValidateWithOptions(ctx context.Context, opts Validat
 }
 
 // CreateValidationService creates a validation service.
+// This factory method is provided for backward compatibility.
+// For better testability and dependency management, use explicit constructor injection instead.
 func CreateValidationService(repoPath string) (ValidationService, error) {
 	// Create config manager
 	configManager, err := config.New()
@@ -203,68 +208,181 @@ func CreateValidationService(repoPath string) (ValidationService, error) {
 		return ValidationService{}, fmt.Errorf("failed to create configuration manager: %w", err)
 	}
 
-	// Get configuration
-	appConfig := configManager.GetConfig()
+	return CreateValidationServiceWithConfigManager(repoPath, configManager)
+}
 
-	// Convert to validation configuration
-	validationConfig := validation.Config{
-		Subject: validation.SubjectConfig{
-			Case:            appConfig.Subject.Case,
-			Imperative:      appConfig.Subject.Imperative,
-			InvalidSuffixes: appConfig.Subject.InvalidSuffixes,
-			MaxLength:       appConfig.Subject.MaxLength,
-			Jira: validation.JiraConfig{
-				Required: appConfig.Subject.Jira.Required,
-				BodyRef:  appConfig.Subject.Jira.BodyRef,
-				Pattern:  appConfig.Subject.Jira.Pattern,
-				Projects: appConfig.Subject.Jira.Projects,
-			},
-		},
-		Body: validation.BodyConfig{
-			Required:         appConfig.Body.Required,
-			AllowSignOffOnly: appConfig.Body.AllowSignOffOnly,
-		},
-		Conventional: validation.ConventionalConfig{
-			MaxDescriptionLength: appConfig.Conventional.MaxDescriptionLength,
-			Types:                appConfig.Conventional.Types,
-			Scopes:               appConfig.Conventional.Scopes,
-			Required:             appConfig.Conventional.Required,
-		},
-		SpellCheck: validation.SpellCheckConfig{
-			Locale:      appConfig.SpellCheck.Locale,
-			Enabled:     appConfig.SpellCheck.Enabled,
-			IgnoreWords: appConfig.SpellCheck.IgnoreWords,
-			CustomWords: appConfig.SpellCheck.CustomWords,
-			MaxErrors:   appConfig.SpellCheck.MaxErrors,
-		},
-		Security: validation.SecurityConfig{
-			SignatureRequired:     appConfig.Security.SignatureRequired,
-			AllowedSignatureTypes: appConfig.Security.AllowedSignatureTypes,
-			SignOffRequired:       appConfig.Security.SignOffRequired,
-			AllowMultipleSignOffs: appConfig.Security.AllowMultipleSignOffs,
-		},
-		Repository: validation.RepositoryConfig{
-			Reference:       appConfig.Repository.Reference,
-			MaxCommitsAhead: appConfig.Repository.MaxCommitsAhead,
-		},
-		Rules: validation.RulesConfig{
-			EnabledRules:  appConfig.Rules.EnabledRules,
-			DisabledRules: appConfig.Rules.DisabledRules,
-		},
-	}
+// CreateValidationServiceWithConfigManager creates a validation service with an explicit config manager.
+// This provides better testability and dependency management.
+func CreateValidationServiceWithConfigManager(repoPath string, configManager *config.Manager) (ValidationService, error) {
+	// Get validation configuration interface
+	validationConfig := configManager.GetValidationConfig()
 
-	// Create the core validation service with the validation config
-	coreService, err := validation.CreateServiceWithConfig(repoPath, validationConfig)
+	// Create repository factory
+	factory, err := git.NewRepositoryFactory(repoPath)
 	if err != nil {
-		return ValidationService{}, fmt.Errorf("failed to create core validation service: %w", err)
+		return ValidationService{}, fmt.Errorf("failed to create repository factory: %w", err)
 	}
 
-	// Create application service with the same components
-	return NewValidationService(
-		coreService.Engine,
-		coreService.CommitService,
-		coreService.InfoProvider,
+	// Get specialized repository interfaces
+	commitService := factory.CreateGitCommitService()
+	infoProvider := factory.CreateInfoProvider()
+	analyzer := factory.CreateCommitAnalyzer()
+
+	return CreateValidationServiceWithDependencies(
+		validationConfig,
+		commitService,
+		infoProvider,
+		analyzer,
 	), nil
+}
+
+// CreateValidationServiceWithDependencies creates a ValidationService with explicit dependencies.
+// This is the preferred constructor for better testability and dependency management.
+func CreateValidationServiceWithDependencies(
+	config domain.ValidationConfigProvider,
+	commitService domain.GitCommitService,
+	infoProvider domain.RepositoryInfoProvider,
+	analyzer domain.CommitAnalyzer,
+) ValidationService {
+	// Create rule provider with domain configuration
+	// The validation package needs to be updated to accept domain.ValidationConfigProvider
+	// For now, we'll create an adapter to provide the validation-specific config
+	// Create engine using the domain-based rule provider
+	engineProvider := &DomainRuleProvider{
+		config:   config,
+		analyzer: analyzer,
+	}
+
+	// Create validation engine
+	engine := &DomainValidationEngine{
+		provider: engineProvider,
+	}
+
+	// Create and return the validation service
+	return NewValidationService(engine, commitService, infoProvider)
+}
+
+// DomainRuleProvider provides rules using domain interfaces.
+type DomainRuleProvider struct {
+	config   domain.ValidationConfigProvider
+	analyzer domain.CommitAnalyzer
+	rules    []domain.Rule
+}
+
+// GetRules returns all configured validation rules.
+func (p *DomainRuleProvider) GetRules() []domain.Rule {
+	if p.rules == nil {
+		// Initialize rules if not already done
+		p.initializeRules()
+	}
+
+	return p.rules
+}
+
+// GetActiveRules returns all active validation rules.
+func (p *DomainRuleProvider) GetActiveRules() []domain.Rule {
+	// For this adapter, we'll return all rules as active
+	return p.GetRules()
+}
+
+// initializeRules creates all the validation rules.
+func (p *DomainRuleProvider) initializeRules() {
+	p.rules = []domain.Rule{
+		// Add the rules you need with their domain-based constructors
+		rules.NewSpellRuleWithConfig(p.config),
+		rules.NewSubjectLengthRuleWithConfig(p.config),
+		rules.NewCommitBodyRuleWithConfig(p.config),
+		rules.NewConventionalCommitRuleWithConfig(p.config),
+		rules.NewImperativeVerbRuleWithConfig(p.config, p.config),
+		rules.NewSignatureRuleWithConfig(p.config),
+		rules.NewSignOffRuleWithConfig(p.config),
+		rules.NewSubjectCaseRuleWithConfig(p.config, p.config),
+		rules.NewSubjectSuffixRuleWithConfig(p.config),
+		rules.NewCommitsAheadRuleWithConfig(p.config, p.analyzer),
+	}
+
+	// Add Jira rule conditionally
+	if p.config.JiraRequired() {
+		p.rules = append(p.rules, rules.NewJiraReferenceRuleWithConfig(p.config, p.config))
+	}
+}
+
+// DomainValidationEngine adapts the ValidationEngine interface to use domain interfaces.
+type DomainValidationEngine struct {
+	provider domain.RuleProvider
+}
+
+// ValidateCommit validates a single commit.
+func (e *DomainValidationEngine) ValidateCommit(ctx context.Context, commit domain.CommitInfo) domain.CommitResult {
+	activeRules := e.provider.GetActiveRules()
+
+	// Initialize result
+	result := domain.CommitResult{
+		CommitInfo:  commit,
+		RuleResults: make([]domain.RuleResult, 0, len(activeRules)),
+		Passed:      true,
+	}
+
+	// Run each rule
+	for _, rule := range activeRules {
+		// Check for context cancellation
+		if ctx.Err() != nil {
+			break
+		}
+
+		// Check if the rule supports context
+		var ruleErrors []errors.ValidationError
+		if contextualRule, ok := rule.(domain.ContextualRule); ok {
+			// Use the context-aware validation method
+			ruleErrors = contextualRule.ValidateWithContext(ctx, commit)
+		} else {
+			// Fall back to the regular validation method
+			ruleErrors = rule.Validate(commit)
+		}
+
+		// Create rule result
+		ruleResult := domain.RuleResult{
+			RuleID:         rule.Name(),
+			RuleName:       rule.Name(),
+			Message:        rule.Result(),
+			VerboseMessage: rule.VerboseResult(),
+			HelpMessage:    rule.Help(),
+			Errors:         ruleErrors,
+		}
+
+		// Set status based on errors
+		if len(ruleErrors) > 0 {
+			ruleResult.Status = domain.StatusFailed
+			result.Passed = false
+		} else {
+			ruleResult.Status = domain.StatusPassed
+		}
+
+		// Add to results
+		result.RuleResults = append(result.RuleResults, ruleResult)
+	}
+
+	return result
+}
+
+// ValidateCommits validates multiple commits.
+func (e *DomainValidationEngine) ValidateCommits(ctx context.Context, commits []domain.CommitInfo) domain.ValidationResults {
+	results := domain.NewValidationResults()
+
+	for _, commit := range commits {
+		// Check for context cancellation
+		if ctx.Err() != nil {
+			break
+		}
+
+		// Validate commit
+		commitResult := e.ValidateCommit(ctx, commit)
+
+		// Add to results
+		results.AddCommitResult(commitResult)
+	}
+
+	return results
 }
 
 // CreateDefaultValidationService creates a validation service with configuration.

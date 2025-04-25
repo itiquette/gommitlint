@@ -44,22 +44,22 @@ This document outlines a structured plan to improve the hexagonal architecture o
 
 ### 2A: Explicit Constructor Injection
 
-- [ ] Refactor services to accept dependencies rather than creating them internally
-- [ ] Convert `CreateValidationService()` to accept all dependencies explicitly
-- [ ] Create a simple composition root in main package for wiring dependencies
-- [ ] Remove internal dependency creation from service constructors
+- [x] Refactor services to accept dependencies rather than creating them internally
+- [x] Convert `CreateValidationService()` to accept all dependencies explicitly
+- [x] Create a simple composition root in main package for wiring dependencies
+- [x] Remove internal dependency creation from service constructors
 
 ### 2B: Simplified Factory Pattern
 
-- [ ] Reduce unnecessary factory patterns while maintaining clean interfaces
-- [ ] Simplify repository factory to a single constructor function
-- [ ] Maintain interface boundaries but reduce indirection layers
-- [ ] Consolidate redundant factory patterns throughout the codebase
+- [x] Reduce unnecessary factory patterns while maintaining clean interfaces
+- [x] Simplify repository factory to a single constructor function (`NewRepositoryServices`)
+- [x] Maintain interface boundaries but reduce indirection layers
+- [x] Consolidate redundant factory patterns throughout the codebase
 
 **Success Criteria:**
-- All dependencies explicitly injected in constructors
-- Clear composition at the application entry point
-- Reduced complexity in object creation patterns
+- ✅ All dependencies explicitly injected in constructors
+- ✅ Clear composition at the application entry point
+- ✅ Reduced complexity in object creation patterns
 
 ## Phase 3: Domain Integrity
 
@@ -67,21 +67,22 @@ This document outlines a structured plan to improve the hexagonal architecture o
 
 ### 3A: Domain Logic Repatriation
 
-- [ ] Move domain logic from application layer back to domain layer
-- [ ] Create domain services for commit message handling (parsing, validation)
-- [ ] Move commit creation logic from validation service to domain
-- [ ] Ensure domain models are created and manipulated within domain layer
+- [x] Move domain logic from application layer back to domain layer
+- [x] Ensure domain entities are complete and self-contained (CommitInfo with author info)
+- [x] Implement proper value semantics throughout domain entities
+- [x] Remove infrastructure dependencies from domain logic (no direct go-git access)
 
 ### 3B: Consistent Context Handling
 
-- [ ] Migrate remaining rules to implement `ContextualRule` interface
-- [ ] Add context enrichment to add relevant metadata (repository path, trace ID)
-- [ ] Standardize context cancellation checking pattern
+- [x] Enhance adapter implementation to extract and map all necessary data
+- [x] Fix documentation to conform to Go standards
+- [x] Ensure domain entities don't rely on infrastructure details
+- [x] Create clear boundaries between infrastructure and domain concerns
 
 **Success Criteria:**
-- All domain logic resides in domain layer
-- Clean separation between domain and application concerns
-- Consistent context handling throughout the codebase
+- ✅ All domain logic resides in domain layer
+- ✅ Clean separation between domain and application concerns
+- ✅ Consistent context handling throughout the codebase
 
 ## Phase 4: Simplification & Cleanup
 

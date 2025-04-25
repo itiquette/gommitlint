@@ -10,6 +10,7 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/application/report"
 	"github.com/itiquette/gommitlint/internal/application/validate"
+	"github.com/itiquette/gommitlint/internal/infrastructure/git"
 	"github.com/spf13/cobra"
 )
 
@@ -86,8 +87,19 @@ func runNewValidation(cmd *cobra.Command) (int, error) {
 	// Create context
 	ctx := cmd.Context()
 
-	// Create validation service using the core validation implementation
-	service, err := validate.CreateValidationService(repoPath)
+	// Get dependencies from context if available
+	var service validate.ValidationService
+
+	var err error
+
+	if deps, ok := cmd.Context().Value(dependenciesKey).(*AppDependencies); ok && deps != nil {
+		// Create validation service with injected dependencies
+		service, err = createValidationServiceWithDeps(deps, repoPath)
+	} else {
+		// Fall back to default factory method
+		service, err = validate.CreateValidationService(repoPath)
+	}
+
 	if err != nil {
 		return 1, fmt.Errorf("failed to create validation service: %w", err)
 	}
@@ -199,4 +211,25 @@ func getReportFormat(format string) report.Format {
 	default:
 		return report.FormatText
 	}
+}
+
+// createValidationServiceWithDeps creates a validation service using injected dependencies.
+// This function follows the explicit dependency injection pattern.
+func createValidationServiceWithDeps(deps *AppDependencies, repoPath string) (validate.ValidationService, error) {
+	// Get config from manager
+	validationConfig := deps.ConfigManager.GetValidationConfig()
+
+	// Get all repository services directly using the simplified approach
+	commitService, infoProvider, analyzer, err := git.NewRepositoryServices(repoPath)
+	if err != nil {
+		return validate.ValidationService{}, fmt.Errorf("failed to create repository services: %w", err)
+	}
+
+	// Create validation service with explicit dependencies
+	return validate.CreateValidationServiceWithDependencies(
+		validationConfig,
+		commitService,
+		infoProvider,
+		analyzer,
+	), nil
 }
