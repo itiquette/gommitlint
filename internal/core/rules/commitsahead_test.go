@@ -118,10 +118,10 @@ func TestCommitsAheadRuleTooManyCommits(t *testing.T) {
 	// Test exceeding max commits ahead
 	rule := rules.NewCommitsAheadRule(
 		rules.WithReference("main"),
-		rules.WithMaxCommitsAhead(5),
+		rules.WithMaxCommitsAhead(4), // Set to 4 to ensure 5 commits is greater
 		rules.WithRepositoryGetter(func() domain.CommitAnalyzer {
 			return &mockCommitAnalyzer{
-				commitsAhead: 10, // Exceeds limit
+				commitsAhead: 5, // Exceeds the limit of 4
 			}
 		}),
 	)
@@ -136,7 +136,7 @@ func TestCommitsAheadRuleTooManyCommits(t *testing.T) {
 	require.NotEmpty(t, errors)
 	validationErr := errors[0]
 	require.Equal(t, string(appErrors.ErrTooManyCommits), validationErr.Code)
-	require.Contains(t, rule.Result(), "Too many commits ahead of main (10 > 5)")
-	require.Contains(t, rule.VerboseResult(), "HEAD is 10 commit(s) ahead of main (maximum allowed: 5)")
+	require.Contains(t, rule.Result(), "Too many commits ahead of main (5 > 4)")
+	require.Contains(t, rule.VerboseResult(), "HEAD is 5 commit(s) ahead of main (maximum allowed: 4)")
 	require.Contains(t, rule.Help(), "Your branch is too far ahead of main")
 }

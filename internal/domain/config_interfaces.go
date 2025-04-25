@@ -112,24 +112,15 @@ type RepositoryConfigProvider interface {
 	CheckCommitsAhead() bool
 }
 
-// RulesConfigProvider defines configuration for rule enablement/disablement.
-type RulesConfigProvider interface {
-	// EnabledRules returns rules that are explicitly enabled.
-	EnabledRules() []string
+// Note: RulesConfigProvider is defined in rule_provider.go
 
-	// DisabledRules returns rules that are explicitly disabled.
-	DisabledRules() []string
-}
-
-// ValidationConfigProvider combines all configuration providers.
-// Rules can choose to depend on specific providers instead of this combined interface.
-type ValidationConfigProvider interface {
-	SubjectConfigProvider
-	JiraConfigProvider
-	BodyConfigProvider
-	ConventionalConfigProvider
-	SecurityConfigProvider
-	SpellCheckConfigProvider
-	RepositoryConfigProvider
-	RulesConfigProvider
-}
+// Note: ValidationConfigProvider has been removed.
+// Use the specific interfaces above instead:
+// - SubjectConfigProvider
+// - JiraConfigProvider
+// - BodyConfigProvider
+// - ConventionalConfigProvider
+// - SecurityConfigProvider
+// - SpellCheckConfigProvider
+// - RepositoryConfigProvider
+// - RuleConfigProvider

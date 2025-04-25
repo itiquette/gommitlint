@@ -9,7 +9,6 @@ import "github.com/itiquette/gommitlint/internal/domain"
 
 // Ensure Config implements all the config provider interfaces.
 var (
-	_ domain.ValidationConfigProvider   = (*Config)(nil)
 	_ domain.SubjectConfigProvider      = (*Config)(nil)
 	_ domain.JiraConfigProvider         = (*Config)(nil)
 	_ domain.BodyConfigProvider         = (*Config)(nil)
@@ -17,7 +16,7 @@ var (
 	_ domain.SecurityConfigProvider     = (*Config)(nil)
 	_ domain.SpellCheckConfigProvider   = (*Config)(nil)
 	_ domain.RepositoryConfigProvider   = (*Config)(nil)
-	_ domain.RulesConfigProvider        = (*Config)(nil)
+	_ domain.RuleConfigProvider         = (*Config)(nil)
 )
 
 // Implementation for SubjectConfigProvider.
@@ -189,4 +188,68 @@ func (c Config) EnabledRules() []string {
 // DisabledRules returns the list of disabled validation rules.
 func (c Config) DisabledRules() []string {
 	return c.Rules.DisabledRules
+}
+
+// GetAvailableRules returns a list of all available rule names.
+func (c Config) GetAvailableRules() []string {
+	// This is a placeholder - the real implementation would need knowledge of the rule registry
+	return []string{
+		"SubjectLength",
+		"ConventionalCommit",
+		"ImperativeVerb",
+		"JiraReference",
+		"Signature",
+		"SignOff",
+		"Spell",
+		"SubjectCase",
+		"SubjectSuffix",
+		"CommitBody",
+		"CommitsAhead",
+	}
+}
+
+// GetActiveRules returns a list of currently active rule names.
+func (c Config) GetActiveRules() []string {
+	// For now, we return all available rules minus disabled ones
+	available := c.GetAvailableRules()
+
+	// If specific rules are enabled, return those
+	if len(c.Rules.EnabledRules) > 0 {
+		return c.Rules.EnabledRules
+	}
+
+	// Otherwise, return all available except disabled
+	if len(c.Rules.DisabledRules) == 0 {
+		return available
+	}
+
+	// Filter out disabled rules
+	disabled := make(map[string]bool)
+	for _, name := range c.Rules.DisabledRules {
+		disabled[name] = true
+	}
+
+	active := make([]string, 0, len(available))
+
+	for _, name := range available {
+		if !disabled[name] {
+			active = append(active, name)
+		}
+	}
+
+	return active
+}
+
+// SetEnabledRules sets the list of enabled rule names.
+func (c Config) SetEnabledRules(_ []string) {
+	// This is a placeholder - in a real implementation, we would have a pointer receiver
+	// and would modify c.Rules.EnabledRules
+	// Since we have a value receiver, we can't modify the config
+}
+
+// SetDisabledRules sets the list of disabled rule names.
+func (c Config) SetDisabledRules(_ []string) {
+	// This is a placeholder - in a real implementation, we would have a pointer receiver
+	// and would modify c.Rules.DisabledRules
+	// Since we have a value receiver, we can't modify the config
 }

@@ -128,6 +128,9 @@ type RepositoryConfig struct {
 
 	// MaxCommitsAhead specifies the maximum allowed commits ahead of reference branch.
 	MaxCommitsAhead int
+
+	// CheckCommitsAhead determines whether to check the number of commits ahead.
+	CheckCommitsAhead bool
 }
 
 // RulesConfig holds configuration for rule enablement/disablement.
@@ -182,8 +185,9 @@ func DefaultConfig() Config {
 			AllowMultipleSignOffs: true,
 		},
 		Repository: RepositoryConfig{
-			Reference:       "main",
-			MaxCommitsAhead: 5,
+			Reference:         "main",
+			MaxCommitsAhead:   5,
+			CheckCommitsAhead: true,
 		},
 		Rules: RulesConfig{
 			EnabledRules:  []string{},

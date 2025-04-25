@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/itiquette/gommitlint/internal/config"
+	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/infrastructure/git"
 	"github.com/itiquette/gommitlint/internal/ports/cli"
 	"github.com/rs/zerolog"
@@ -33,10 +34,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Create a factory function for repository services
-	// TODO: Phase 3 will remove this factory function entirely in favor of direct dependency injection
-	// using git.NewRepositoryServices directly for all repository operations
-	repositoryFactory := func(path string) (*git.RepositoryFactory, error) {
+	// Create a factory function that returns a domain.RepositoryFactory interface
+	// This follows the Dependency Inversion Principle by depending on domain interfaces
+	// instead of concrete implementations
+	createRepositoryFactory := func(path string) (domain.RepositoryFactory, error) {
 		return git.NewRepositoryFactory(path)
 	}
 
@@ -47,6 +48,6 @@ func main() {
 		commit,
 		date,
 		configManager,
-		repositoryFactory,
+		createRepositoryFactory,
 	)
 }

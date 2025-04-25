@@ -320,3 +320,133 @@ func TestValidationService_ValidateWithOptions(t *testing.T) {
 		require.Equal(t, 1, results.Count())
 	})
 }
+
+// CustomRule is a simple example of a custom validation rule for testing.
+type CustomRule struct {
+	name       string
+	violations []appErrors.ValidationError
+}
+
+// Name returns the rule's name.
+func (r *CustomRule) Name() string {
+	return r.name
+}
+
+// Validate checks a commit for compliance.
+func (r *CustomRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
+	r.violations = nil
+
+	// Example validation: require certain text in the commit message
+	if len(commit.Message) < 10 {
+		r.violations = append(r.violations, appErrors.ValidationError{
+			Code:    "too_short",
+			Message: "Commit message is too short",
+		})
+	}
+
+	return r.violations
+}
+
+// Result returns a concise result message.
+func (r *CustomRule) Result() string {
+	if len(r.violations) > 0 {
+		return "Custom validation failed"
+	}
+
+	return "Custom validation passed"
+}
+
+// VerboseResult returns a detailed result message.
+func (r *CustomRule) VerboseResult() string {
+	if len(r.violations) > 0 {
+		return "Commit message didn't pass custom validation"
+	}
+
+	return "Commit message passed custom validation"
+}
+
+// Help returns guidance for fixing violations.
+func (r *CustomRule) Help() string {
+	return "Make sure your commit message meets the custom requirements"
+}
+
+// Errors returns all validation errors.
+func (r *CustomRule) Errors() []appErrors.ValidationError {
+	return r.violations
+}
+
+// mockValidationEngineWithCustomRules extends mockValidationEngine to support custom rules.
+type mockValidationEngineWithCustomRules struct {
+	mockValidationEngine
+	customRules []domain.Rule
+}
+
+// RegisterCustomRule adds a custom rule.
+func (m *mockValidationEngineWithCustomRules) RegisterCustomRule(rule domain.Rule) {
+	m.customRules = append(m.customRules, rule)
+}
+
+// GetAvailableRuleNames returns names of all rules including custom ones.
+func (m *mockValidationEngineWithCustomRules) GetAvailableRuleNames() []string {
+	names := []string{"BuiltInRule1", "BuiltInRule2"}
+	for _, rule := range m.customRules {
+		names = append(names, rule.Name())
+	}
+
+	return names
+}
+
+// TestCustomRuleRegistration tests the ability to register custom rules.
+func TestCustomRuleRegistration(t *testing.T) {
+	// Create mocks
+	mockCommit := &mockGitCommitService{
+		commits: map[string]domain.CommitInfo{
+			"HEAD": {
+				Hash:    "def456",
+				Subject: "Head commit",
+				Message: "Head commit\n\nTest message",
+			},
+		},
+	}
+	mockInfo := &mockInfoProvider{}
+
+	// Create mock engine with custom rule support
+	mockEngine := &mockValidationEngineWithCustomRules{
+		customRules: []domain.Rule{},
+	}
+
+	// Create service with mock engine
+	service := validate.NewValidationService(
+		mockEngine,
+		mockCommit,
+		mockInfo,
+	)
+
+	// Get rule names before adding custom rule
+	beforeRules := service.GetAvailableRuleNames()
+	require.Len(t, beforeRules, 2) // Should have 2 built-in rules
+
+	// Create and register a custom rule
+	customRule := &CustomRule{
+		name: "TestCustomRule",
+	}
+	err := service.RegisterCustomRule(customRule)
+	require.NoError(t, err)
+
+	// Get rule names after adding custom rule
+	afterRules := service.GetAvailableRuleNames()
+	require.Len(t, afterRules, 3) // Should have 2 built-in rules + 1 custom rule
+
+	// Verify the custom rule is in the list
+	found := false
+
+	for _, name := range afterRules {
+		if name == "TestCustomRule" {
+			found = true
+
+			break
+		}
+	}
+
+	require.True(t, found, "Custom rule should be in available rules")
+}

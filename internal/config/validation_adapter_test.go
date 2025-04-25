@@ -69,8 +69,6 @@ func TestValidationConfigAdapter(t *testing.T) {
 	adapter := NewValidationConfigAdapter(config)
 
 	// Verify adapter implements all the required interfaces
-	var _ domain.ValidationConfigProvider = adapter
-
 	var _ domain.SubjectConfigProvider = adapter
 
 	var _ domain.JiraConfigProvider = adapter

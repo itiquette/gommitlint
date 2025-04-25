@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/domain"
-	"github.com/itiquette/gommitlint/internal/infrastructure/output"
 )
 
 // Format represents the output format for reports.
@@ -46,37 +45,27 @@ type Options struct {
 }
 
 // Generator generates reports from validation results.
+// It implements the domain.ReportGenerator interface.
 type Generator struct {
-	options Options
+	options   Options
+	formatter domain.ResultFormatter
 }
+
+// Ensure Generator implements domain.ReportGenerator.
+var _ domain.ReportGenerator = (*Generator)(nil)
 
 // NewGenerator creates a new report generator.
-func NewGenerator(options Options) Generator {
-	return Generator{
-		options: options,
+func NewGenerator(options Options, formatter domain.ResultFormatter) *Generator {
+	return &Generator{
+		options:   options,
+		formatter: formatter,
 	}
 }
 
-// Generate generates a report from validation results.
-func (g Generator) Generate(results domain.ValidationResults) error {
-	switch g.options.Format {
-	case FormatJSON:
-		return g.generateJSONReport(results)
-	case FormatText:
-		return g.generateTextReport(results)
-	case FormatGitHubActions:
-		return g.generateGitHubActionsReport(results)
-	case FormatGitLabCI:
-		return g.generateGitLabCIReport(results)
-	default:
-		return g.generateTextReport(results)
-	}
-}
-
-// generateJSONReport generates a JSON report.
-func (g Generator) generateJSONReport(results domain.ValidationResults) error {
-	formatter := output.NewJSONFormatter()
-	report := formatter.Format(results)
+// GenerateReport implements the domain.ReportGenerator interface.
+func (g *Generator) GenerateReport(results domain.ValidationResults) error {
+	// Use the injected formatter
+	report := g.formatter.Format(results)
 
 	_, err := g.options.Writer.Write([]byte(report))
 	if err != nil {
@@ -92,83 +81,32 @@ func (g Generator) generateJSONReport(results domain.ValidationResults) error {
 	return nil
 }
 
-// generateTextReport generates a text report.
-func (g Generator) generateTextReport(results domain.ValidationResults) error {
-	formatter := output.NewTextFormatter(g.options.Verbose, g.options.ShowHelp, g.options.LightMode)
-
-	// If a specific rule is requested for help, show only that
-	if g.options.RuleToShowHelp != "" {
-		helpText := formatter.FormatRuleHelp(g.options.RuleToShowHelp, results)
-		_, err := g.options.Writer.Write([]byte(helpText))
-
-		return err
-	}
-
-	// Format full report
-	report := formatter.Format(results)
-
-	_, err := g.options.Writer.Write([]byte(report))
-	if err != nil {
-		return err
-	}
-
-	// If the validation failed and this is the final output, write an error code
-	if !results.AllPassed() && g.options.Writer == os.Stdout {
-		// This is a convention to indicate failure to the shell
-		return fmt.Errorf("validation failed: %d of %d commits failed", results.TotalCommits-results.PassedCommits, results.TotalCommits)
-	}
-
-	return nil
+// Generate is kept for backward compatibility.
+func (g *Generator) Generate(results domain.ValidationResults) error {
+	return g.GenerateReport(results)
 }
 
-// generateGitHubActionsReport generates a GitHub Actions compatible report.
-func (g Generator) generateGitHubActionsReport(results domain.ValidationResults) error {
-	// Create a GitHub Actions formatter
-	formatter := output.NewGitHubActionsFormatter(g.options.Verbose, g.options.ShowHelp)
-
-	// Format the results
-	report := formatter.Format(results)
-
-	// Write the report
-	_, err := g.options.Writer.Write([]byte(report))
-	if err != nil {
-		return err
-	}
-
-	// If the validation failed and this is the final output, write an error code
-	if !results.AllPassed() && g.options.Writer == os.Stdout {
-		// This is a convention to indicate failure to the shell
-		return fmt.Errorf("validation failed: %d of %d commits failed", results.TotalCommits-results.PassedCommits, results.TotalCommits)
-	}
-
-	return nil
+// SetVerbose enables or disables verbose output in reports.
+// This implements the domain.ReportGenerator interface.
+func (g *Generator) SetVerbose(verbose bool) {
+	g.options.Verbose = verbose
 }
 
-// generateGitLabCIReport generates a GitLab CI compatible report.
-func (g Generator) generateGitLabCIReport(results domain.ValidationResults) error {
-	// Create a GitLab CI formatter
-	formatter := output.NewGitLabCIFormatter(g.options.Verbose, g.options.ShowHelp)
+// SetShowHelp enables or disables showing help messages in reports.
+// This implements the domain.ReportGenerator interface.
+func (g *Generator) SetShowHelp(showHelp bool) {
+	g.options.ShowHelp = showHelp
+}
 
-	// Format the results
-	report := formatter.Format(results)
-
-	// Write the report
-	_, err := g.options.Writer.Write([]byte(report))
-	if err != nil {
-		return err
-	}
-
-	// If the validation failed and this is the final output, write an error code
-	if !results.AllPassed() && g.options.Writer == os.Stdout {
-		// This is a convention to indicate failure to the shell
-		return fmt.Errorf("validation failed: %d of %d commits failed", results.TotalCommits-results.PassedCommits, results.TotalCommits)
-	}
-
-	return nil
+// SetRuleToShowHelp sets a specific rule to show help for.
+// This implements the domain.ReportGenerator interface.
+func (g *Generator) SetRuleToShowHelp(ruleName string) {
+	g.options.RuleToShowHelp = ruleName
 }
 
 // GenerateSummary generates a brief summary report.
-func (g Generator) GenerateSummary(results domain.ValidationResults) error {
+// This is used for quick command-line feedback.
+func (g *Generator) GenerateSummary(results domain.ValidationResults) error {
 	var builder strings.Builder
 	if results.AllPassed() {
 		builder.WriteString("✅ All commits passed validation\n")

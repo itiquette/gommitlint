@@ -11,12 +11,16 @@ import (
 )
 
 // JSONFormatter formats validation results as JSON.
+// It implements the domain.ResultFormatter interface.
 type JSONFormatter struct{}
 
 // NewJSONFormatter creates a new JSON formatter.
 func NewJSONFormatter() *JSONFormatter {
 	return &JSONFormatter{}
 }
+
+// Ensure JSONFormatter implements domain.ResultFormatter.
+var _ domain.ResultFormatter = (*JSONFormatter)(nil)
 
 // ValidationErrorOutput represents a validation error in JSON format.
 type ValidationErrorOutput struct {

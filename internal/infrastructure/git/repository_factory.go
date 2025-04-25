@@ -15,10 +15,14 @@ import (
 // RepositoryFactory is being kept for backwards compatibility but will be deprecated in the future.
 
 // RepositoryFactory creates domain-specific repository interfaces.
-// DEPRECATED: Use NewRepositoryAdapter or NewRepositoryServices directly instead.
+// It implements the domain.RepositoryFactory interface to provide
+// access to Git-specific repository services.
 type RepositoryFactory struct {
 	adapter *RepositoryAdapter
 }
+
+// Ensure RepositoryFactory implements domain.RepositoryFactory.
+var _ domain.RepositoryFactory = (*RepositoryFactory)(nil)
 
 // NewRepositoryFactory creates a new repository factory for the given path.
 // DEPRECATED: Use NewRepositoryAdapter or NewRepositoryServices directly instead.

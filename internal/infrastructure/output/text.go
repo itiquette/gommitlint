@@ -17,6 +17,7 @@ import (
 )
 
 // TextFormatter formats validation results as text.
+// It implements the domain.ResultFormatter interface.
 type TextFormatter struct {
 	verbose   bool
 	showHelp  bool
@@ -27,6 +28,9 @@ type TextFormatter struct {
 		fail string
 	}
 }
+
+// Ensure TextFormatter implements domain.ResultFormatter.
+var _ domain.ResultFormatter = (*TextFormatter)(nil)
 
 // ColorScheme defines colors for different UI elements.
 type ColorScheme struct {

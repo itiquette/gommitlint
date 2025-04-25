@@ -80,16 +80,13 @@ type RuleProvider interface {
 	GetActiveRules() []Rule
 }
 
-// The RuleValidationConfig interface has been removed.
-// Use the specific configuration provider interfaces instead:
+// Note: ValidationConfigProvider has been removed.
+// Use the specific interfaces in config_interfaces.go instead:
 // - SubjectConfigProvider
+// - JiraConfigProvider
 // - BodyConfigProvider
 // - ConventionalConfigProvider
-// - JiraConfigProvider
 // - SecurityConfigProvider
 // - SpellCheckConfigProvider
 // - RepositoryConfigProvider
-// - RulesConfigProvider
-//
-// If you need all configuration aspects, use ValidationConfigProvider
-// which combines all the above interfaces.
+// - RuleConfigProvider

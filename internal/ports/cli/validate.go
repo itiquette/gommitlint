@@ -10,7 +10,9 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/application/report"
 	"github.com/itiquette/gommitlint/internal/application/validate"
+	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/infrastructure/git"
+	"github.com/itiquette/gommitlint/internal/infrastructure/output"
 	"github.com/spf13/cobra"
 )
 
@@ -147,7 +149,7 @@ func runNewValidation(cmd *cobra.Command) (int, error) {
 		return 1, fmt.Errorf("validation failed: %w", err)
 	}
 
-	// Create report generator
+	// Create report options
 	reportOptions := report.Options{
 		Format:         getReportFormat(format),
 		Verbose:        verbose,
@@ -157,10 +159,27 @@ func runNewValidation(cmd *cobra.Command) (int, error) {
 		Writer:         cmd.OutOrStdout(),
 	}
 
-	reportGenerator := report.NewGenerator(reportOptions)
+	// Create a formatter that implements domain.ResultFormatter
+	var formatter domain.ResultFormatter
 
-	// Generate report
-	err = reportGenerator.Generate(results)
+	switch reportOptions.Format {
+	case report.FormatJSON:
+		formatter = output.NewJSONFormatter()
+	case report.FormatGitHubActions:
+		formatter = output.NewGitHubFormatter()
+	case report.FormatGitLabCI:
+		formatter = output.NewGitLabFormatter()
+	case report.FormatText:
+		formatter = output.NewTextFormatter(reportOptions.Verbose, reportOptions.ShowHelp, reportOptions.LightMode)
+	default:
+		formatter = output.NewTextFormatter(reportOptions.Verbose, reportOptions.ShowHelp, reportOptions.LightMode)
+	}
+
+	// Create report generator that implements domain.ReportGenerator
+	reportGenerator := report.NewGenerator(reportOptions, formatter)
+
+	// Generate report using the domain interface
+	err = reportGenerator.GenerateReport(results)
 	if err != nil {
 		return 1, fmt.Errorf("failed to generate report: %w", err)
 	}
@@ -214,22 +233,25 @@ func getReportFormat(format string) report.Format {
 }
 
 // createValidationServiceWithDeps creates a validation service using injected dependencies.
-// This function follows the explicit dependency injection pattern.
+// This function follows the hexagonal architecture pattern with explicit dependency injection.
 func createValidationServiceWithDeps(deps *AppDependencies, repoPath string) (validate.ValidationService, error) {
 	// Get config from manager
 	validationConfig := deps.ConfigManager.GetValidationConfig()
 
-	// Get all repository services directly using the simplified approach
-	commitService, infoProvider, analyzer, err := git.NewRepositoryServices(repoPath)
+	// Create a repository factory
+	repoFactory, err := git.NewRepositoryFactory(repoPath)
 	if err != nil {
-		return validate.ValidationService{}, fmt.Errorf("failed to create repository services: %w", err)
+		return validate.ValidationService{}, fmt.Errorf("failed to create repository factory: %w", err)
 	}
 
-	// Create validation service with explicit dependencies
-	return validate.CreateValidationServiceWithDependencies(
+	// Use the factory-based service creation to decouple from specific implementations
+	validationService, err := validate.CreateValidationServiceFromFactory(
 		validationConfig,
-		commitService,
-		infoProvider,
-		analyzer,
-	), nil
+		repoFactory,
+	)
+	if err != nil {
+		return validate.ValidationService{}, fmt.Errorf("failed to create validation service: %w", err)
+	}
+
+	return validationService, nil
 }

@@ -11,12 +11,25 @@ import (
 )
 
 // GitLabCIFormatter formats validation results for GitLab CI.
+// It implements the domain.ResultFormatter interface.
 type GitLabCIFormatter struct {
 	verbose  bool
 	showHelp bool
 }
 
+// Ensure GitLabCIFormatter implements domain.ResultFormatter.
+var _ domain.ResultFormatter = (*GitLabCIFormatter)(nil)
+
+// NewGitLabFormatter creates a new GitLab CI formatter.
+func NewGitLabFormatter() *GitLabCIFormatter {
+	return &GitLabCIFormatter{
+		verbose:  false,
+		showHelp: false,
+	}
+}
+
 // NewGitLabCIFormatter creates a new GitLab CI formatter.
+// Legacy constructor kept for backward compatibility.
 func NewGitLabCIFormatter(verbose, showHelp bool) *GitLabCIFormatter {
 	return &GitLabCIFormatter{
 		verbose:  verbose,

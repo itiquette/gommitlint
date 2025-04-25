@@ -1,6 +1,6 @@
 # Gommitlint Architecture
 
-Gommitlint follows a hexagonal architecture (also known as ports and adapters) to ensure a clean separation of concerns and to make the codebase more maintainable and testable.
+Gommitlint follows a simplified hexagonal architecture (also known as ports and adapters) to ensure a clean separation of concerns and to make the codebase more maintainable and testable.
 
 ## Overview
 
@@ -95,6 +95,8 @@ The application layer orchestrates the domain layer:
 The ports layer provides interfaces to the outside world:
 
 - `/internal/ports/cli/validate.go`: CLI validation command
+- `/internal/ports/cli/installhook.go`: CLI command for installing Git hooks
+- `/internal/ports/cli/removehook.go`: CLI command for removing Git hooks
 
 ### Infrastructure Layer (Adapters)
 
@@ -104,287 +106,332 @@ The infrastructure layer provides concrete implementations of interfaces:
 - `/internal/infrastructure/git/repository_helpers.go`: Helper methods for common Git operations
 - `/internal/infrastructure/git/repository_factory.go`: Factory for creating repository interfaces
 - `/internal/infrastructure/config/provider.go`: Configuration provider
-- `/internal/infrastructure/output/`: Output formatters (text, JSON)
+- `/internal/infrastructure/output/`: Output formatters (text, JSON, GitHub, GitLab)
 
-## Interface Segregation
+## Simplified Interfaces
 
-Following the Interface Segregation Principle, Git repository interfaces are segregated based on client needs:
+The new architecture includes simplified interfaces based on the Interface Segregation Principle, which ensures that clients only depend on the methods they actually use.
+
+### RuleProvider Interface
 
 ```go
-// CommitReader provides read access to individual commits.
-type CommitReader interface {
-    // GetCommit returns a commit by its hash.
-    GetCommit(hash string) (*CommitInfo, error)
+// RuleProvider defines the interface for accessing validation rules.
+type RuleProvider interface {
+    // GetAvailableRules returns all registered rules.
+    GetAvailableRules() []string
+    
+    // GetActiveRules returns currently active rules.
+    GetActiveRules() []string
+    
+    // SetEnabledRules activates specific rules.
+    SetEnabledRules(rules []string)
+    
+    // SetDisabledRules deactivates specific rules.
+    SetDisabledRules(rules []string)
+}
+```
+
+### ValidationConfigAdapter
+
+This adapter implements configuration interfaces for rule validation:
+
+```go
+// ValidationConfigAdapter adapts the configuration to rule validation interfaces.
+type ValidationConfigAdapter struct {
+    config *Config
 }
 
-// CommitHistoryReader provides read access to commit history.
-type CommitHistoryReader interface {
-    // GetCommitRange returns all commits in the given range.
-    GetCommitRange(fromHash, toHash string) ([]*CommitInfo, error)
+// The adapter implements various interfaces:
+// - RuleProvider for rule activation/deactivation
+// - SubjectConfigProvider for subject-related settings
+// - BodyConfigProvider for body-related settings
+// - ConventionalConfigProvider for conventional commit settings
+// - ... and other configuration interfaces
+```
+
+### CommitService Interface
+
+```go
+// CommitService provides access to Git commit operations.
+type CommitService interface {
+    // GetCommit returns a specific commit by hash.
+    GetCommit(ctx context.Context, hash string) (domain.CommitInfo, error)
     
     // GetHeadCommits returns the specified number of commits from HEAD.
-    GetHeadCommits(count int) ([]*CommitInfo, error)
-}
-
-// RepositoryInfoProvider provides general information about the repository.
-type RepositoryInfoProvider interface {
-    // GetCurrentBranch returns the name of the current branch.
-    GetCurrentBranch() (string, error)
+    GetHeadCommits(ctx context.Context, count int) (domain.CommitCollection, error)
     
-    // GetRepositoryName returns the name of the repository.
-    GetRepositoryName() string
-    
-    // IsValid checks if the repository is a valid Git repository.
-    IsValid() bool
-}
-
-// CommitAnalyzer provides analysis functionality for commits.
-type CommitAnalyzer interface {
-    // GetCommitsAhead returns the number of commits ahead of the given reference.
-    GetCommitsAhead(reference string) (int, error)
-}
-
-// GitRepositoryService combines all Git repository interfaces.
-type GitRepositoryService interface {
-    CommitReader
-    CommitHistoryReader
-    RepositoryInfoProvider
-    CommitAnalyzer
+    // GetCommitRange returns commits in the given range.
+    GetCommitRange(ctx context.Context, fromHash, toHash string) (domain.CommitCollection, error)
 }
 ```
 
-These specialized interfaces allow clients to depend only on what they need, reducing coupling.
-
-## Domain Collections
-
-The `CommitCollection` type provides domain-specific operations on groups of commits:
+### ValidationService Interface
 
 ```go
-// CommitCollection represents a collection of commits with common operations.
-type CommitCollection struct {
-    commits []*CommitInfo
-}
-
-// FilterMergeCommits returns a new collection with merge commits filtered out.
-func (c *CommitCollection) FilterMergeCommits() *CommitCollection {
-    // Implementation...
-}
-
-// FilterByAuthor returns a new collection with commits filtered by author.
-func (c *CommitCollection) FilterByAuthor(author string) *CommitCollection {
-    // Implementation...
+// ValidationService provides commit validation functionality.
+type ValidationService interface {
+    // ValidateCommit validates a single commit.
+    ValidateCommit(ctx context.Context, hash string) (domain.ValidationResult, error)
+    
+    // ValidateHeadCommits validates a number of HEAD commits.
+    ValidateHeadCommits(ctx context.Context, count int, skipMergeCommits bool) (domain.ValidationResult, error)
+    
+    // ValidateCommitRange validates a range of commits.
+    ValidateCommitRange(ctx context.Context, fromHash, toHash string, skipMergeCommits bool) (domain.ValidationResult, error)
+    
+    // ValidateMessageFile validates a commit message from a file.
+    ValidateMessageFile(ctx context.Context, filePath string) (domain.ValidationResult, error)
+    
+    // ValidateMessage validates a commit message string.
+    ValidateMessage(ctx context.Context, message string) (domain.ValidationResult, error)
 }
 ```
 
-## Repository Pattern
+## Value Semantics
 
-For Git operations, Gommitlint uses:
-
-1. Repository interfaces in the domain layer
-2. A repository adapter in the infrastructure layer
-3. A factory to create specific repository interfaces
-4. Helper methods to reduce complexity
-
-## Factory Pattern
-
-The `RepositoryFactory` creates specialized interfaces for different use cases:
+The updated architecture uses value semantics extensively for better immutability and functional programming patterns:
 
 ```go
-// RepositoryFactory provides factory methods for creating Git repository services.
-type RepositoryFactory struct {
-    adapter *RepositoryAdapter
+// Using value semantics for immutable data structures
+type ValidationResult struct {
+    PassCount    int
+    FailCount    int
+    Commits      []CommitResult
+    RuleResults  map[string]RuleResult
 }
 
-// CreateCommitReader creates a CommitReader.
-func (f *RepositoryFactory) CreateCommitReader() domain.CommitReader {
-    return f.adapter
-}
-
-// CreateHistoryReader creates a CommitHistoryReader.
-func (f *RepositoryFactory) CreateHistoryReader() domain.CommitHistoryReader {
-    return f.adapter
+// Functions return new structures rather than modifying existing ones
+func (c CommitCollection) FilterMergeCommits() CommitCollection {
+    var filtered []*CommitInfo
+    for _, commit := range c.commits {
+        if !commit.IsMergeCommit {
+            filtered = append(filtered, commit)
+        }
+    }
+    return CommitCollection{commits: filtered}
 }
 ```
 
-## Dependency Injection
+## Functional Options Pattern
 
-Dependencies are injected through:
+Rule creation follows the functional options pattern for flexible configuration:
 
-1. Constructor parameters
-2. Factory pattern for creating repositories
-3. Functional options pattern for configuration
+```go
+// Option type for configuring rules
+type SubjectLengthOption func(*SubjectLengthRule)
+
+// Options function
+func WithMaxLength(length int) SubjectLengthOption {
+    return func(r *SubjectLengthRule) {
+        r.maxLength = length
+    }
+}
+
+// Factory function with options
+func NewSubjectLengthRule(options ...SubjectLengthOption) *SubjectLengthRule {
+    rule := &SubjectLengthRule{
+        BaseRule: NewBaseRule("SubjectLength"),
+        maxLength: DefaultMaxLength,
+    }
+    
+    for _, option := range options {
+        option(rule)
+    }
+    
+    return rule
+}
+
+// Usage
+rule := NewSubjectLengthRule(
+    WithMaxLength(80),
+    WithErrorTemplate(customTemplate),
+)
+```
+
+## Integration Testing
+
+The architecture includes a dedicated integration test package:
+
+- `/internal/integtest/`: Contains integration tests that test multiple components together
+  - `validation_workflow_test.go`: Tests the complete validation workflow
+  - `cli_workflow_test.go`: Tests CLI commands
+  - `comprehensive_test.go`: Tests various scenarios comprehensively
+  - `gittest_helper.go`: Helpers for setting up test Git repositories
+
+This approach provides more robust testing than unit tests alone, ensuring that components work together correctly.
+
+## Example Usage Patterns
+
+### Creating and Using the Validation Service
+
+```go
+// In application code
+func CreateValidationService(cfg *config.Config) (*ValidationService, error) {
+    // Create repository objects
+    repoFactory := git.NewRepositoryFactory("/path/to/repo")
+    commitService := repoFactory.CreateCommitService()
+    infoProvider := repoFactory.CreateRepositoryInfoProvider() 
+    
+    // Create validation config adapter
+    configAdapter := config.NewValidationConfigAdapter(cfg)
+    
+    // Create rule registry
+    ruleRegistry := validation.NewRuleRegistry()
+    
+    // Register built-in rules
+    ruleRegistry.RegisterRule(rules.NewSubjectLengthRule(
+        rules.WithMaxLength(configAdapter.SubjectMaxLength()),
+    ))
+    ruleRegistry.RegisterRule(rules.NewConventionalCommitRule(
+        rules.WithRequireConventional(configAdapter.ConventionalRequired()),
+        rules.WithAllowedTypes(configAdapter.ConventionalTypes()),
+    ))
+    // Register other rules...
+    
+    // Create validation engine
+    engine := validation.NewEngine(ruleRegistry, configAdapter)
+    
+    // Create and return the service
+    return &ValidationService{
+        commitService: commitService,
+        infoProvider:  infoProvider,
+        engine:        engine,
+        config:        configAdapter,
+    }, nil
+}
+```
+
+### Validating a Commit
+
+```go
+func ValidateHeadCommit() error {
+    // Create validation service
+    validationService, err := CreateValidationService(config.Load())
+    if err != nil {
+        return fmt.Errorf("failed to create validation service: %w", err)
+    }
+    
+    // Create context
+    ctx := context.Background()
+    
+    // Validate HEAD commit
+    result, err := validationService.ValidateCommit(ctx, "HEAD")
+    if err != nil {
+        return fmt.Errorf("validation failed: %w", err)
+    }
+    
+    // Process result
+    for _, commitResult := range result.Commits {
+        fmt.Printf("Commit %s: %s\n", commitResult.Hash, commitResult.Subject)
+        
+        for ruleName, ruleResult := range commitResult.RuleResults {
+            if ruleResult.Status == domain.RuleStatusPassed {
+                fmt.Printf("✓ %s: passed\n", ruleName)
+            } else {
+                fmt.Printf("✗ %s: failed\n", ruleName)
+                for _, err := range ruleResult.Errors {
+                    fmt.Printf("  - %s\n", err.Message)
+                }
+            }
+        }
+    }
+    
+    return nil
+}
+```
+
+### Creating a Custom Rule
+
+```go
+// Define your custom rule
+type CustomRule struct {
+    *rules.BaseRule
+    customConfig string
+}
+
+// Implement the Validate method
+func (r *CustomRule) Validate(commit domain.CommitInfo) []*domain.ValidationError {
+    // Your validation logic here
+    if !strings.Contains(commit.Subject, r.customConfig) {
+        return []*domain.ValidationError{
+            domain.NewValidationError(
+                "CustomRule",
+                "custom_rule_violation",
+                fmt.Sprintf("Subject must contain '%s'", r.customConfig),
+            ),
+        }
+    }
+    return nil
+}
+
+// Create a factory function with options
+func NewCustomRule(options ...CustomRuleOption) *CustomRule {
+    rule := &CustomRule{
+        BaseRule:     rules.NewBaseRule("CustomRule"),
+        customConfig: "default",
+    }
+    
+    for _, option := range options {
+        option(rule)
+    }
+    
+    return rule
+}
+
+// Define options
+type CustomRuleOption func(*CustomRule)
+
+func WithCustomConfig(config string) CustomRuleOption {
+    return func(r *CustomRule) {
+        r.customConfig = config
+    }
+}
+
+// Register your rule
+func RegisterCustomRule(registry *validation.RuleRegistry, config string) {
+    registry.RegisterRule(NewCustomRule(
+        WithCustomConfig(config),
+    ))
+}
+```
+
+## Benefits of the Updated Architecture
+
+The updated architecture provides several additional benefits:
+
+1. **Simplified Interfaces**: More focused interfaces with fewer methods make the system easier to understand and implement
+2. **Value Semantics**: Immutable data structures and functional programming patterns improve code safety and readability
+3. **Dedicated Integration Testing**: Comprehensive integration tests ensure components work together correctly
+4. **Explicit Dependencies**: Dependencies are clearly stated and injected, improving testability and flexibility
+5. **Consistent Context Handling**: Context objects are propagated throughout the application for better cancellation and timeout handling
 
 ## Error Handling
 
-The application uses a structured approach to error handling:
-
-1. Domain-specific errors with context information
-2. Error wrapping for maintaining context
-3. Standardized validation error format
-4. Error templates with consistent formatting for messages and help text
-
-The error template system centralizes error message formats:
-
-1. Each error type has a predefined template with consistent wording
-2. Templates include both error messages and help text
-3. Helper functions ensure uniform context handling
-4. Standardized error codes are mapped to templates
-5. Consistent formatting across all validation rules
-
-The template system is implemented in the errorx package:
-- `ErrorTemplate` struct defines standardized formats for messages and help text
-- `NewValidationError` creates templated errors with proper formatting
-- `CreateValidationError` provides a standardized way to create errors with context
-- `WithContext` provides a standardized way to add context information
-
-## Validation Rule Design
-
-Validation rules follow these principles:
-
-1. **Interface-Based**: All rules implement the `domain.Rule` interface
-2. **Functional Options**: Rules use the functional options pattern for configuration
-3. **Immutability**: Rules are immutable after creation
-4. **Self-Contained**: Each rule contains all logic needed for validation
-5. **Plugin-Based**: Rules are registered through a provider
-6. **Focused**: Each rule focuses on a specific aspect of commit message validation
-
-### Rule Interface
+The error handling approach has been improved with better context:
 
 ```go
-type Rule interface {
-    // Name returns the rule's name.
-    Name() string
+// Domain-specific error with context
+validationErr := domain.NewValidationError(
+    "RuleName",           // Rule that found the error
+    "error_code",         // Specific error code
+    "error message",      // Human-readable message
+    domain.WithContext("key", "value"),  // Additional context
+)
 
-    // Validate performs validation against a commit and returns any errors.
-    Validate(commit *CommitInfo) []*ValidationError
-
-    // Result returns a concise result message.
-    Result() string
-
-    // VerboseResult returns a detailed result message.
-    VerboseResult() string
-
-    // Help returns guidance on how to fix rule violations.
-    Help() string
-
-    // Errors returns all validation errors found by this rule.
-    Errors() []*ValidationError
+// Error wrapping for maintaining context
+if err != nil {
+    return fmt.Errorf("failed to validate commit %s: %w", hash, err)
 }
 ```
 
-## Testing
+## Testing Strategy
 
-The application is designed for testability:
+The testing strategy now emphasizes integration testing while maintaining strong unit tests:
 
 1. **Unit Tests**: Each component is tested in isolation
-2. **Table-Driven Tests**: Tests use the table-driven pattern for comprehensive coverage
-3. **Mock Interfaces**: Tests use mocks for dependencies
-4. **Co-located Tests**: Tests are next to the code they test
-5. **Interface-Based Design**: Interface-based design allows for easy mocking
+2. **Integration Tests**: Key workflows are tested end-to-end
+3. **Table-Driven Tests**: Tests use the table-driven pattern for comprehensive coverage
+4. **Test Helpers**: Dedicated helpers simplify test setup
+5. **Realistic Test Data**: Tests use realistic data to better simulate actual usage
 
-## Benefits of the Architecture
-
-The hexagonal architecture provides several benefits:
-
-1. **Cleaner Code**: Clear separation of concerns makes the code easier to understand
-2. **Enhanced Testability**: Dependency inversion makes unit testing straightforward
-3. **Improved Maintainability**: Each component has a single responsibility
-4. **Better Extensibility**: Adding new rules or features follows a consistent pattern
-5. **Reduced Coupling**: Components depend on abstractions, not concrete implementations
-
-
-## Areas for Improvement
-
-### 1. Hexagonal Architecture Refinements
-
-The codebase follows a well-structured hexagonal architecture, but there are opportunities to strengthen the separation of concerns while maintaining simplicity:
-
-1. **Interface Segregation**: The `RuleValidationConfig` interface in `internal/domain/rule.go` has almost 90 methods, which violates the Interface Segregation Principle. Consider breaking it into smaller, purpose-specific interfaces like:
-   ```go
-   // Example of how interfaces could be segregated
-   type SubjectConfigProvider interface {
-       SubjectMaxLength() int
-       SubjectCase() string
-       // ...other subject-specific methods
-   }
-   
-   type BodyConfigProvider interface {
-       BodyRequired() bool
-       BodyAllowSignOffOnly() bool
-       // ...other body-specific methods
-   }
-   ```
-
-2. **Domain Logic Isolation**: Some domain logic exists in the application layer (e.g., in `internal/application/validate/service.go`). For example, the commit message parsing and dummy commit creation in `ValidateMessageFile()` would be more appropriate in the domain layer:
-   ```go
-   // Move this domain logic to the domain layer
-   subject, body := domain.SplitCommitMessage(message)
-   commit := domain.CommitInfo{
-       Hash:          "0000000000000000000000000000000000000000",
-       Subject:       subject,
-       Body:          body,
-       Message:       message,
-       IsMergeCommit: false,
-   }
-   ```
-
-3. **Dependency Direction**: Ensure dependencies always point inward toward the domain layer. For instance, the configuration system should implement domain interfaces rather than the domain depending on configuration types.
-
-4. **Simplified Port Adapters**: The repository factory in `internal/infrastructure/git/repository_factory.go` adds a layer of indirection when the adapter already implements all required interfaces. Consider simplifying this pattern while maintaining the clean boundaries.
-
-5. **Explicit Dependencies**: Some services construct their dependencies internally rather than receiving them through constructors. For example, the validation service in `CreateValidationService()` constructs its own components. Consider making dependencies explicit:
-   ```go
-   // Prefer explicit dependencies
-   func NewValidationService(
-       engine ValidationEngine,
-       commitService domain.GitCommitService,
-       infoProvider domain.RepositoryInfoProvider,
-   ) ValidationService {
-       // ...
-   }
-   ```
-
-### 2. Context Handling
-
-The application has a solid foundation for context handling with the `contextx` package, but there are some areas for improvement:
-
-1. **Consistent Context Value Usage**: The `contextx` package defines several custom context keys (`UserIDKey`, `TraceIDKey`, `RepositoryPathKey`, `RevisionKey`, `RuleNameKey`), but there's limited evidence of these keys being actively used throughout the codebase. Consider using these keys more consistently to propagate important metadata.
-
-2. **Context Timeouts**: Currently, there's no explicit timeout configuration for potentially long-running operations. Consider adding timeout patterns, especially for Git operations that might be resource-intensive:
-
-   ```go
-   // Example of how timeouts could be added
-   ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-   defer cancel()
-   ```
-
-3. **Context Cancellation**: While the codebase has thorough cancellation checks, especially in the git repository adapter, consider standardizing the pattern for all long-running operations.
-
-4. **Dual-Interface Approach**: The codebase uses a smart dual-interface approach (with `Rule` and `ContextualRule`), but not all rules implement the contextual version. Consider gradually migrating all rules to support context.
-
-### 3. Configuration System Simplification
-
-The configuration loading and management has multiple layers:
-- Config loader
-- Config provider
-- Config manager
-- Config validator
-
-Suggestion: Consider a simpler approach to configuration with fewer abstractions. A single configuration manager that handles loading and validation might be sufficient, while still adhering to the hexagonal architecture by implementing domain interfaces.
-
-### 4. Rule Registration Simplification
-
-The rule registration system is somewhat complex:
-
-Suggestion: Consider a more straightforward registration mechanism, possibly using Go's init pattern or a simpler factory function, while ensuring the domain layer remains free of infrastructure concerns.
-
-### General Assessment
-
-- **Hexagonal Architecture**: Well-implemented with clear boundaries, but could benefit from more consistent application of principles.
-- **Idiomatic Go**: Overall, yes. The code follows Go idioms well, with proper use of interfaces, error handling, and package structure.
-- **Maintainability**: Strong, due to clear separation of concerns and consistent patterns.
-- **Testability**: Excellent, with dependency injection and interface-based design enabling thorough testing.
-- **Simplicity**: Good but with room for improvement in some areas, particularly interface design and dependency management.
-- **Coherence**: Strong architectural boundaries make the system coherent.
-- **Conciseness**: Generally good, with the BaseRule pattern helping reduce duplication.
-- **Context Handling**: Well-designed with consistent propagation, but could benefit from more consistent usage of custom context values and timeout patterns.
+This approach provides more robust validation that the system works correctly as a whole.

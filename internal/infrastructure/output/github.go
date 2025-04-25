@@ -11,12 +11,25 @@ import (
 )
 
 // GitHubActionsFormatter formats validation results for GitHub Actions.
+// It implements the domain.ResultFormatter interface.
 type GitHubActionsFormatter struct {
 	verbose  bool
 	showHelp bool
 }
 
+// Ensure GitHubActionsFormatter implements domain.ResultFormatter.
+var _ domain.ResultFormatter = (*GitHubActionsFormatter)(nil)
+
+// NewGitHubFormatter creates a new GitHub Actions formatter.
+func NewGitHubFormatter() *GitHubActionsFormatter {
+	return &GitHubActionsFormatter{
+		verbose:  false,
+		showHelp: false,
+	}
+}
+
 // NewGitHubActionsFormatter creates a new GitHub Actions formatter.
+// Legacy constructor kept for backward compatibility.
 func NewGitHubActionsFormatter(verbose, showHelp bool) *GitHubActionsFormatter {
 	return &GitHubActionsFormatter{
 		verbose:  verbose,

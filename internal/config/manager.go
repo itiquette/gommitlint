@@ -12,13 +12,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
 )
 
 // Manager is the configuration manager that uses value semantics.
+// It provides a unified interface for all configuration operations.
 type Manager struct {
 	// Configuration cache
 	config Config
@@ -35,6 +35,7 @@ type Manager struct {
 // 3. Project configuration from ./.gommitlint.yaml (if exists)
 //
 // Each configuration layer overrides values from the previous layers.
+// This is the preferred entry point for creating a configuration service.
 func New() (*Manager, error) {
 	manager := &Manager{
 		config: DefaultConfig(), // Always start with defaults
@@ -225,9 +226,9 @@ func (m *Manager) GetConfig() Config {
 
 // GetValidationConfig returns a new validation configuration adapter.
 // This is the preferred way to access configuration for validation.
-// It returns a validation.ValidationConfigProvider which combines all
-// the specific configuration provider interfaces.
-func (m *Manager) GetValidationConfig() domain.ValidationConfigProvider {
+// It returns a config adapter that implements all the specific interfaces
+// needed by validation rules.
+func (m *Manager) GetValidationConfig() *ValidationConfigAdapter {
 	return NewValidationConfigAdapter(m.config)
 }
 
