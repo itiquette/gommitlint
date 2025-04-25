@@ -79,3 +79,56 @@ type RuleProvider interface {
 	// GetActiveRules returns all active validation rules based on configuration.
 	GetActiveRules() []Rule
 }
+
+// RuleValidationConfig defines the configuration needed by validation rules.
+// This interface has many methods due to the comprehensive validation requirements.
+//
+//nolint:interfacebloat // This interface intentionally has many methods
+type RuleValidationConfig interface {
+	// Subject configuration methods
+	SubjectMaxLength() int
+	SubjectCase() string
+	SubjectRequireImperative() bool
+	SubjectInvalidSuffixes() string
+
+	// Conventional commit configuration methods
+	ConventionalTypes() []string
+	ConventionalScopes() []string
+	ConventionalMaxDescriptionLength() int
+	ConventionalRequired() bool
+
+	// Jira configuration methods
+	JiraProjects() []string
+	JiraBodyRef() bool
+	JiraRequired() bool
+	JiraPattern() string
+	JiraStrict() bool
+
+	// Body configuration methods
+	BodyRequired() bool
+	BodyAllowSignOffOnly() bool
+
+	// Security configuration methods
+	SignatureRequired() bool
+	AllowedSignatureTypes() []string
+	SignOffRequired() bool
+	AllowMultipleSignOffs() bool
+	IdentityPublicKeyURI() string
+
+	// Spell check configuration methods
+	SpellLocale() string
+	SpellEnabled() bool
+	SpellIgnoreWords() []string
+	SpellCustomWords() map[string]string
+	SpellMaxErrors() int
+
+	// Repository configuration methods
+	ReferenceBranch() string
+	IgnoreMergeCommits() bool
+	MaxCommitsAhead() int
+	CheckCommitsAhead() bool
+
+	// Rule configuration methods
+	EnabledRules() []string
+	DisabledRules() []string
+}

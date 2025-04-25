@@ -15,7 +15,6 @@ import (
 	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/core/validation"
 	"github.com/itiquette/gommitlint/internal/domain"
-	"github.com/itiquette/gommitlint/internal/infrastructure/git"
 )
 
 // Note: Using domain package interfaces instead of a local interface definition
@@ -196,36 +195,81 @@ func (s ValidationService) ValidateWithOptions(ctx context.Context, opts Validat
 	return results, nil
 }
 
-// CreateDefaultValidationService creates a validation service with configuration.
-func CreateDefaultValidationService(repoPath string) (ValidationService, error) {
-	// Create repository factory
-	factory, err := git.NewRepositoryFactory(repoPath)
-	if err != nil {
-		return ValidationService{}, fmt.Errorf("failed to create repository factory: %w", err)
-	}
-
-	// Get specialized repository interfaces
-	commitService := factory.CreateGitCommitService()
-	infoProvider := factory.CreateInfoProvider()
-
-	// Create analyzer for commit analysis - BEFORE creating rule provider
-	analyzer := factory.CreateCommitAnalyzer()
-
+// CreateValidationService creates a validation service.
+func CreateValidationService(repoPath string) (ValidationService, error) {
 	// Create config manager
 	configManager, err := config.New()
 	if err != nil {
 		return ValidationService{}, fmt.Errorf("failed to create configuration manager: %w", err)
 	}
 
-	// Get validation rule configuration from the manager
-	ruleConfig := configManager.GetRuleConfig()
+	// Get configuration
+	appConfig := configManager.GetConfig()
 
-	// Create rule provider with configuration AND analyzer
-	ruleProvider := validation.NewDefaultRuleProvider(ruleConfig, analyzer)
+	// Convert to validation configuration
+	validationConfig := validation.Config{
+		Subject: validation.SubjectConfig{
+			Case:            appConfig.Subject.Case,
+			Imperative:      appConfig.Subject.Imperative,
+			InvalidSuffixes: appConfig.Subject.InvalidSuffixes,
+			MaxLength:       appConfig.Subject.MaxLength,
+			Jira: validation.JiraConfig{
+				Required: appConfig.Subject.Jira.Required,
+				BodyRef:  appConfig.Subject.Jira.BodyRef,
+				Pattern:  appConfig.Subject.Jira.Pattern,
+				Projects: appConfig.Subject.Jira.Projects,
+			},
+		},
+		Body: validation.BodyConfig{
+			Required:         appConfig.Body.Required,
+			AllowSignOffOnly: appConfig.Body.AllowSignOffOnly,
+		},
+		Conventional: validation.ConventionalConfig{
+			MaxDescriptionLength: appConfig.Conventional.MaxDescriptionLength,
+			Types:                appConfig.Conventional.Types,
+			Scopes:               appConfig.Conventional.Scopes,
+			Required:             appConfig.Conventional.Required,
+		},
+		SpellCheck: validation.SpellCheckConfig{
+			Locale:      appConfig.SpellCheck.Locale,
+			Enabled:     appConfig.SpellCheck.Enabled,
+			IgnoreWords: appConfig.SpellCheck.IgnoreWords,
+			CustomWords: appConfig.SpellCheck.CustomWords,
+			MaxErrors:   appConfig.SpellCheck.MaxErrors,
+		},
+		Security: validation.SecurityConfig{
+			SignatureRequired:     appConfig.Security.SignatureRequired,
+			AllowedSignatureTypes: appConfig.Security.AllowedSignatureTypes,
+			SignOffRequired:       appConfig.Security.SignOffRequired,
+			AllowMultipleSignOffs: appConfig.Security.AllowMultipleSignOffs,
+		},
+		Repository: validation.RepositoryConfig{
+			Reference:       appConfig.Repository.Reference,
+			MaxCommitsAhead: appConfig.Repository.MaxCommitsAhead,
+		},
+		Rules: validation.RulesConfig{
+			EnabledRules:  appConfig.Rules.EnabledRules,
+			DisabledRules: appConfig.Rules.DisabledRules,
+		},
+	}
 
-	// Create validation engine
-	engine := validation.NewEngine(ruleProvider)
+	// Create the core validation service with the validation config
+	coreService, err := validation.CreateServiceWithConfig(repoPath, validationConfig)
+	if err != nil {
+		return ValidationService{}, fmt.Errorf("failed to create core validation service: %w", err)
+	}
 
-	// Create validation service
-	return NewValidationService(engine, commitService, infoProvider), nil
+	// Create application service with the same components
+	return NewValidationService(
+		coreService.Engine,
+		coreService.CommitService,
+		coreService.InfoProvider,
+	), nil
+}
+
+// CreateDefaultValidationService creates a validation service with configuration.
+// This function forwards to the CreateValidationService implementation.
+func CreateDefaultValidationService(repoPath string) (ValidationService, error) {
+	// Forward to the standard implementation
+	return CreateValidationService(repoPath)
 }

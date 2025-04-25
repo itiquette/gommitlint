@@ -86,8 +86,8 @@ func runNewValidation(cmd *cobra.Command) (int, error) {
 	// Create context
 	ctx := cmd.Context()
 
-	// Create validation service
-	service, err := validate.CreateDefaultValidationService(repoPath)
+	// Create validation service using the core validation implementation
+	service, err := validate.CreateValidationService(repoPath)
 	if err != nil {
 		return 1, fmt.Errorf("failed to create validation service: %w", err)
 	}

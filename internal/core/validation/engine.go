@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package validation provides the core validation functionality.
+// Package validation provides core validation components.
 package validation
 
 import (
