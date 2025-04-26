@@ -13,8 +13,10 @@ import (
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/core/rules"
+	"github.com/itiquette/gommitlint/internal/defaults"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/errors"
+	"github.com/itiquette/gommitlint/internal/infrastructure/git"
 )
 
 // Note: Using domain package interfaces instead of a local interface definition
@@ -366,34 +368,30 @@ func (s ValidationService) ValidateWithOptions(ctx context.Context, opts Validat
 	return results, nil
 }
 
-// CreateValidationService is a legacy method kept for backward compatibility.
-// For better testability and dependency management, use dependency injection via NewValidationService instead.
-//
-// DEPRECATED: Use CreateValidationServiceFromFactory instead, which accepts domain interface types
-// rather than concrete implementation types.
-func CreateValidationService(_ string) (ValidationService, error) {
-	return ValidationService{}, errors.New("CreateValidationService", errors.ErrInvalidConfig, "deprecated: use CreateValidationServiceFromFactory instead")
-}
+// CreateDefaultValidationService creates a validation service with the given repository path.
+// This is a convenience function that handles creating all the necessary dependencies.
+func CreateDefaultValidationService(repoPath string) (ValidationService, error) {
+	// Create the repository adapter
+	repoAdapter, err := git.NewRepositoryAdapter(repoPath)
+	if err != nil {
+		return ValidationService{}, fmt.Errorf("failed to create repository adapter: %w", err)
+	}
 
-// CreateValidationServiceFromFactory creates a validation service using domain interfaces.
-// This follows the hexagonal architecture pattern by depending on domain interfaces
-// rather than concrete implementations.
-func CreateValidationServiceFromFactory(
-	config ValidationConfig,
-	repoFactory domain.RepositoryFactory,
-) (ValidationService, error) {
-	// Get specialized repository interfaces from the factory
-	commitService := repoFactory.CreateGitCommitService()
-	infoProvider := repoFactory.CreateInfoProvider()
-	analyzer := repoFactory.CreateCommitAnalyzer()
+	// Get config from the default configuration
+	config := defaults.NewDefaultConfig()
 
+	// Return the validation service with dependencies
 	return CreateValidationServiceWithDependencies(
 		config,
-		commitService,
-		infoProvider,
-		analyzer,
+		repoAdapter,
+		repoAdapter,
+		repoAdapter,
 	), nil
 }
+
+// Note: The previous CreateValidationService function was replaced by
+// CreateValidationServiceWithDependencies to better support dependency injection
+// and the hexagonal architecture pattern.
 
 // ValidationConfig represents a composition of all the domain configuration interfaces
 // needed for validation. This follows the Interface Segregation Principle by composing
@@ -924,11 +922,4 @@ func (e *DomainValidationEngine) ValidateCommits(ctx context.Context, commits []
 	}
 
 	return results
-}
-
-// CreateDefaultValidationService creates a validation service with configuration.
-// This function forwards to the CreateValidationService implementation.
-func CreateDefaultValidationService(repoPath string) (ValidationService, error) {
-	// Forward to the standard implementation
-	return CreateValidationService(repoPath)
 }

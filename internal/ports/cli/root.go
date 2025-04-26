@@ -8,8 +8,6 @@ import (
 	"os"
 
 	"github.com/itiquette/gommitlint/internal/config"
-	"github.com/itiquette/gommitlint/internal/domain"
-	"github.com/itiquette/gommitlint/internal/errors"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 )
@@ -27,12 +25,7 @@ const (
 // the Dependency Inversion Principle.
 type AppDependencies struct {
 	// ConfigManager provides configuration values
-	// This is still a concrete type but will be refactored in future phases
 	ConfigManager *config.Manager
-
-	// CreateRepositoryFactory creates a repository factory for the given path
-	// Returns a factory implementing domain.RepositoryFactory
-	CreateRepositoryFactory func(path string) (domain.RepositoryFactory, error)
 }
 
 func newRootCommand(ctx context.Context, versionString string, deps *AppDependencies) *cobra.Command {
@@ -72,13 +65,8 @@ func Execute(version, commitSHA, buildDate string) {
 		os.Exit(1)
 	}
 
-	// Need to adapt the git.NewRepositoryFactory to the domain.RepositoryFactory signature
-	repoFactoryAdapter := func(_ string) (domain.RepositoryFactory, error) {
-		return domain.RepositoryFactory(nil), errors.New("repoFactoryAdapter", errors.ErrInvalidRepo, "this is deprecated, use the proper implementation")
-	}
-
 	// Use the ExecuteWithDependencies function
-	ExecuteWithDependencies(version, commitSHA, buildDate, configManager, repoFactoryAdapter)
+	ExecuteWithDependencies(version, commitSHA, buildDate, configManager)
 }
 
 // ExecuteWithDependencies executes the root command with explicit dependencies.
@@ -90,7 +78,6 @@ func ExecuteWithDependencies(
 	commitSHA,
 	buildDate string,
 	configManager *config.Manager,
-	createRepositoryFactory func(path string) (domain.RepositoryFactory, error),
 ) {
 	ctx := context.Background()
 
@@ -98,8 +85,7 @@ func ExecuteWithDependencies(
 
 	// Create dependencies container
 	deps := &AppDependencies{
-		ConfigManager:           configManager,
-		CreateRepositoryFactory: createRepositoryFactory,
+		ConfigManager: configManager,
 	}
 
 	// Create and execute root command with dependencies

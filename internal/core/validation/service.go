@@ -186,29 +186,17 @@ func (s Service) ValidateWithOptions(ctx context.Context, opts Options) (domain.
 	return results, nil
 }
 
-// CreateServiceWithConfig creates a ValidationService using the provided configuration.
-// This function doesn't depend on the config package, breaking the circular dependency.
-// Deprecated: Use explicit dependency injection with NewService instead.
-func CreateServiceWithConfig(repoPath string, config Config) (Service, error) {
-	// Create repository factory
-	factory, err := git.NewRepositoryFactory(repoPath)
-	if err != nil {
-		return Service{}, fmt.Errorf("failed to create repository factory: %w", err)
-	}
-
-	// Get specialized repository interfaces
-	commitService := factory.CreateGitCommitService()
-	infoProvider := factory.CreateInfoProvider()
-	analyzer := factory.CreateCommitAnalyzer()
-
+// CreateServiceWithAdapter creates a ValidationService using the provided repository adapter and configuration.
+// This is a simpler approach that doesn't require the factory pattern.
+func CreateServiceWithAdapter(repoAdapter *git.RepositoryAdapter, config Config) Service {
 	// Create rule provider with configuration AND analyzer
-	ruleProvider := NewRuleProvider(config, analyzer)
+	ruleProvider := NewRuleProvider(config, repoAdapter)
 
 	// Create validation engine
 	engine := NewEngine(ruleProvider)
 
 	// Create validation service
-	return NewService(engine, commitService, infoProvider), nil
+	return NewService(engine, repoAdapter, repoAdapter)
 }
 
 // CreateServiceWithDependencies creates a ValidationService with explicit dependencies.
@@ -244,24 +232,19 @@ func CreateServiceWithAnalyzer(
 // programmatically configuring the validation service.
 func FactoryWithConfig(config Config) func(string) (Service, error) {
 	return func(repoPath string) (Service, error) {
-		// Create repository factory
-		factory, err := git.NewRepositoryFactory(repoPath)
+		// Create repository adapter
+		repoAdapter, err := git.NewRepositoryAdapter(repoPath)
 		if err != nil {
-			return Service{}, fmt.Errorf("failed to create repository factory: %w", err)
+			return Service{}, fmt.Errorf("failed to create repository adapter: %w", err)
 		}
 
-		// Get specialized repository interfaces
-		commitService := factory.CreateGitCommitService()
-		infoProvider := factory.CreateInfoProvider()
-		analyzer := factory.CreateCommitAnalyzer()
-
 		// Create rule provider with configuration AND analyzer
-		ruleProvider := NewRuleProvider(config, analyzer)
+		ruleProvider := NewRuleProvider(config, repoAdapter)
 
 		// Create validation engine
 		engine := NewEngine(ruleProvider)
 
 		// Create validation service
-		return NewService(engine, commitService, infoProvider), nil
+		return NewService(engine, repoAdapter, repoAdapter), nil
 	}
 }

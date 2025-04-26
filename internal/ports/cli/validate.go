@@ -98,8 +98,8 @@ func runNewValidation(cmd *cobra.Command) (int, error) {
 		// Create validation service with injected dependencies
 		service, err = createValidationServiceWithDeps(deps, repoPath)
 	} else {
-		// Fall back to default factory method
-		service, err = validate.CreateValidationService(repoPath)
+		// Fall back to default service creation
+		service, err = validate.CreateDefaultValidationService(repoPath)
 	}
 
 	if err != nil {
@@ -166,13 +166,23 @@ func runNewValidation(cmd *cobra.Command) (int, error) {
 	case report.FormatJSON:
 		formatter = output.NewJSONFormatter()
 	case report.FormatGitHubActions:
-		formatter = output.NewGitHubFormatter()
+		formatter = output.NewGitHubFormatter().
+			WithVerbose(reportOptions.Verbose).
+			WithShowHelp(reportOptions.ShowHelp)
 	case report.FormatGitLabCI:
-		formatter = output.NewGitLabFormatter()
+		formatter = output.NewGitLabFormatter().
+			WithVerbose(reportOptions.Verbose).
+			WithShowHelp(reportOptions.ShowHelp)
 	case report.FormatText:
-		formatter = output.NewTextFormatter(reportOptions.Verbose, reportOptions.ShowHelp, reportOptions.LightMode)
+		formatter = output.NewTextFormatter().
+			WithVerbose(reportOptions.Verbose).
+			WithShowHelp(reportOptions.ShowHelp).
+			WithLightMode(reportOptions.LightMode)
 	default:
-		formatter = output.NewTextFormatter(reportOptions.Verbose, reportOptions.ShowHelp, reportOptions.LightMode)
+		formatter = output.NewTextFormatter().
+			WithVerbose(reportOptions.Verbose).
+			WithShowHelp(reportOptions.ShowHelp).
+			WithLightMode(reportOptions.LightMode)
 	}
 
 	// Create report generator that implements domain.ReportGenerator
@@ -238,20 +248,19 @@ func createValidationServiceWithDeps(deps *AppDependencies, repoPath string) (va
 	// Get config from manager
 	validationConfig := deps.ConfigManager.GetValidationConfig()
 
-	// Create a repository factory
-	repoFactory, err := git.NewRepositoryFactory(repoPath)
+	// Create a repository adapter
+	repoAdapter, err := git.NewRepositoryAdapter(repoPath)
 	if err != nil {
-		return validate.ValidationService{}, fmt.Errorf("failed to create repository factory: %w", err)
+		return validate.ValidationService{}, fmt.Errorf("failed to create repository adapter: %w", err)
 	}
 
-	// Use the factory-based service creation to decouple from specific implementations
-	validationService, err := validate.CreateValidationServiceFromFactory(
+	// Create the validation service with explicit dependencies
+	service := validate.CreateValidationServiceWithDependencies(
 		validationConfig,
-		repoFactory,
+		repoAdapter, // GitCommitService
+		repoAdapter, // RepositoryInfoProvider
+		repoAdapter, // CommitAnalyzer
 	)
-	if err != nil {
-		return validate.ValidationService{}, fmt.Errorf("failed to create validation service: %w", err)
-	}
 
-	return validationService, nil
+	return service, nil
 }

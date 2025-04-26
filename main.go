@@ -8,8 +8,6 @@ import (
 	"os"
 
 	"github.com/itiquette/gommitlint/internal/config"
-	"github.com/itiquette/gommitlint/internal/domain"
-	"github.com/itiquette/gommitlint/internal/infrastructure/git"
 	"github.com/itiquette/gommitlint/internal/ports/cli"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -34,12 +32,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Create a factory function that returns a domain.RepositoryFactory interface
-	// This follows the Dependency Inversion Principle by depending on domain interfaces
-	// instead of concrete implementations
-	createRepositoryFactory := func(path string) (domain.RepositoryFactory, error) {
-		return git.NewRepositoryFactory(path)
-	}
+	// Previously we had a repository factory function here, but it was removed
+	// in favor of a simpler approach that doesn't require extra dependencies
+	// in the ExecuteWithDependencies function.
 
 	// Execute root command with our dependencies
 	// This approach allows us to replace dependencies for testing
@@ -48,6 +43,5 @@ func main() {
 		commit,
 		date,
 		configManager,
-		createRepositoryFactory,
 	)
 }

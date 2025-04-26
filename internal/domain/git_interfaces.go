@@ -44,3 +44,19 @@ type GitRepositoryService interface {
 	RepositoryInfoProvider
 	CommitAnalyzer
 }
+
+// RepositoryFactory creates instances of various Git repository interfaces.
+// It follows the abstract factory pattern to create related objects.
+type RepositoryFactory interface {
+	// CreateGitCommitService returns an implementation of GitCommitService.
+	CreateGitCommitService() GitCommitService
+
+	// CreateInfoProvider returns an implementation of RepositoryInfoProvider.
+	CreateInfoProvider() RepositoryInfoProvider
+
+	// CreateCommitAnalyzer returns an implementation of CommitAnalyzer.
+	CreateCommitAnalyzer() CommitAnalyzer
+
+	// CreateFullService returns an implementation of GitRepositoryService.
+	CreateFullService() GitRepositoryService
+}

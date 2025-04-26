@@ -11,53 +11,46 @@ import (
 	"github.com/itiquette/gommitlint/internal/domain"
 )
 
-// RepositoryAdapter is used directly in most cases with the NewRepositoryAdapter function.
-// RepositoryFactory is being kept for backwards compatibility but will be deprecated in the future.
-
-// RepositoryFactory creates domain-specific repository interfaces.
-// It implements the domain.RepositoryFactory interface to provide
-// access to Git-specific repository services.
+// RepositoryFactory creates and manages Git repository services.
+// It implements the domain.RepositoryFactory interface.
 type RepositoryFactory struct {
-	adapter *RepositoryAdapter
+	repoPath string
+	adapter  *RepositoryAdapter
 }
 
 // Ensure RepositoryFactory implements domain.RepositoryFactory.
 var _ domain.RepositoryFactory = (*RepositoryFactory)(nil)
 
 // NewRepositoryFactory creates a new repository factory for the given path.
-// DEPRECATED: Use NewRepositoryAdapter or NewRepositoryServices directly instead.
 func NewRepositoryFactory(path string) (*RepositoryFactory, error) {
-	// Create the base repository adapter
 	adapter, err := NewRepositoryAdapter(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create repository adapter: %w", err)
 	}
 
 	return &RepositoryFactory{
-		adapter: adapter,
+		repoPath: path,
+		adapter:  adapter,
 	}, nil
 }
 
-// CreateGitCommitService creates a unified GitCommitService interface.
-// DEPRECATED: Use the adapter directly as it already implements this interface.
+// CreateGitCommitService returns an implementation of domain.GitCommitService.
 func (f *RepositoryFactory) CreateGitCommitService() domain.GitCommitService {
 	return f.adapter
 }
 
-// CreateInfoProvider creates a RepositoryInfoProvider interface.
-// DEPRECATED: Use the adapter directly as it already implements this interface.
+// CreateInfoProvider returns an implementation of domain.RepositoryInfoProvider.
 func (f *RepositoryFactory) CreateInfoProvider() domain.RepositoryInfoProvider {
 	return f.adapter
 }
 
-// CreateCommitAnalyzer creates a CommitAnalyzer interface.
-// DEPRECATED: Use the adapter directly as it already implements this interface.
+// CreateCommitAnalyzer returns an implementation of domain.CommitAnalyzer.
 func (f *RepositoryFactory) CreateCommitAnalyzer() domain.CommitAnalyzer {
 	return f.adapter
 }
 
-// CreateFullService creates a complete GitRepositoryService.
-// DEPRECATED: Use the adapter directly as it already implements this interface.
+// CreateFullService returns an implementation of domain.GitRepositoryService,
+// which combines all Git-related interfaces.
 func (f *RepositoryFactory) CreateFullService() domain.GitRepositoryService {
 	return f.adapter
 }

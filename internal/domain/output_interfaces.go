@@ -26,24 +26,3 @@ type ReportGenerator interface {
 	// SetRuleToShowHelp sets a specific rule to show help for.
 	SetRuleToShowHelp(ruleName string)
 }
-
-// RepositoryFactory defines an interface for creating repository-related services.
-// This interface follows the Abstract Factory pattern to decouple the application layer
-// from specific repository implementations.
-//
-// The factory allows the application to obtain access to different repository services
-// without knowing how they are implemented, which supports the Dependency Inversion Principle.
-type RepositoryFactory interface {
-	// CreateGitCommitService creates a commit service for accessing git commits.
-	CreateGitCommitService() GitCommitService
-
-	// CreateInfoProvider creates an info provider for repository information.
-	CreateInfoProvider() RepositoryInfoProvider
-
-	// CreateCommitAnalyzer creates a commit analyzer for repository analysis.
-	CreateCommitAnalyzer() CommitAnalyzer
-
-	// CreateFullService creates a complete repository service that combines
-	// all the capabilities of the specialized services.
-	CreateFullService() GitRepositoryService
-}

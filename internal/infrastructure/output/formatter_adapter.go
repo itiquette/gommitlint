@@ -75,12 +75,19 @@ func (a *FormatterAdapter) Format(results domain.ValidationResults) string {
 	case "json":
 		formatter = NewJSONFormatter()
 	case "github":
-		formatter = NewGitHubFormatter()
+		formatter = NewGitHubFormatter().
+			WithVerbose(a.verbose).
+			WithShowHelp(a.showHelp)
 	case "gitlab":
-		formatter = NewGitLabFormatter()
+		formatter = NewGitLabFormatter().
+			WithVerbose(a.verbose).
+			WithShowHelp(a.showHelp)
 	default:
 		// Default to text format
-		formatter = NewTextFormatter(a.verbose, a.showHelp, a.lightMode)
+		formatter = NewTextFormatter().
+			WithVerbose(a.verbose).
+			WithShowHelp(a.showHelp).
+			WithLightMode(a.lightMode)
 	}
 
 	// Delegate formatting to the appropriate formatter
