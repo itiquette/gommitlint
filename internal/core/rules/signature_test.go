@@ -167,7 +167,7 @@ FxlS+hzWnbOPMrRKuSfJ+H8mF6t1V3qUYtxHNQvHtcCvG0gx4auPSoxp7qVCVQ==
 			}
 
 			// Create the rule instance
-			rule := rules.NewSignatureRule(options...)
+			var rule = rules.NewSignatureRule(options...)
 
 			// Create a commit for testing
 			commit := domain.CommitInfo{
@@ -175,19 +175,17 @@ FxlS+hzWnbOPMrRKuSfJ+H8mF6t1V3qUYtxHNQvHtcCvG0gx4auPSoxp7qVCVQ==
 			}
 
 			// Execute validation
-			errors := rule.Validate(commit)
-
-			// Update rule state with validation results
-			rule = rule.SetRuleState(errors)
+			var errors []appErrors.ValidationError
+			errors, updatedRule := rules.ValidateSignatureWithState(rule, commit)
 
 			// Check for expected validation result
 			if testCase.expectedValid {
 				require.Empty(t, errors, "Expected no validation errors")
 				// Verify Result() and VerboseResult() methods return expected messages
-				require.Equal(t, "SSH/GPG signature found", rule.Result(), "Expected default valid message")
-				require.Contains(t, rule.VerboseResult(), "SSH/GPG signature found", "Verbose result should indicate valid signature")
+				require.Equal(t, "SSH/GPG signature found", updatedRule.Result(), "Expected default valid message")
+				require.Contains(t, updatedRule.VerboseResult(), "SSH/GPG signature found", "Verbose result should indicate valid signature")
 				// Test Help on valid case
-				require.Contains(t, rule.Help(), "No errors to fix", "Help for valid message should indicate nothing to fix")
+				require.Contains(t, updatedRule.Help(), "No errors to fix", "Help for valid message should indicate nothing to fix")
 			} else {
 				require.NotEmpty(t, errors, "Expected errors but found none")
 				// Check error code if specified
@@ -224,28 +222,28 @@ FxlS+hzWnbOPMrRKuSfJ+H8mF6t1V3qUYtxHNQvHtcCvG0gx4auPSoxp7qVCVQ==
 						"Rule name should be set in ValidationError")
 				}
 				// Verify Help() method provides guidance
-				helpText := rule.Help()
+				helpText := updatedRule.Help()
 				require.NotEmpty(t, helpText, "Help text should not be empty")
 				// Verify Result() method returns expected message
-				require.Equal(t, "Missing or invalid signature", rule.Result(), "Expected error result message")
-				require.NotEqual(t, rule.Result(), rule.VerboseResult(), "Verbose result should be different from regular result")
+				require.Equal(t, "Missing or invalid signature", updatedRule.Result(), "Expected error result message")
+				require.NotEqual(t, updatedRule.Result(), updatedRule.VerboseResult(), "Verbose result should be different from regular result")
 			}
 			// Verify Name() method
-			require.Equal(t, "Signature", rule.Name(), "Name should be 'Signature'")
+			require.Equal(t, "Signature", updatedRule.Name(), "Name should be 'Signature'")
 		})
 	}
 
 	// Test context information in errors
 	t.Run("Context information in errors", func(t *testing.T) {
 		// Test context for SSH format error
-		rule := rules.NewSignatureRule()
+		var rule = rules.NewSignatureRule()
+
 		commit := domain.CommitInfo{
 			Signature: "-----BEGIN SSH SIGNATURE-----\nInvalid\n-----END SSH SIGNATURE-----",
 		}
-		errors := rule.Validate(commit)
 
-		// Update rule state with validation results
-		rule = rule.SetRuleState(errors)
+		var errors []appErrors.ValidationError
+		errors, _ = rules.ValidateSignatureWithState(rule, commit)
 
 		require.NotEmpty(t, errors)
 		require.Equal(t, string(appErrors.ErrInvalidSSHFormat), errors[0].Code)
@@ -253,13 +251,12 @@ FxlS+hzWnbOPMrRKuSfJ+H8mF6t1V3qUYtxHNQvHtcCvG0gx4auPSoxp7qVCVQ==
 		require.Contains(t, errors[0].Context["error_details"], "invalid SSH signature encoding")
 
 		// Test context for GPG format error
+		// Create a new rule to ensure clean state
+		rule = rules.NewSignatureRule()
 		commit = domain.CommitInfo{
 			Signature: "-----BEGIN PGP SIGNATURE-----\nInvalid\n-----END PGP SIGNATURE-----",
 		}
-		errors = rule.Validate(commit)
-
-		// Update rule state with validation results
-		rule.SetRuleState(errors)
+		errors, _ = rules.ValidateSignatureWithState(rule, commit)
 
 		require.NotEmpty(t, errors)
 		require.Equal(t, string(appErrors.ErrInvalidGPGFormat), errors[0].Code)

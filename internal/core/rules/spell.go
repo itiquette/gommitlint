@@ -26,47 +26,66 @@ type SpellRule struct {
 }
 
 // SpellRuleOption is a functional option for configuring the SpellRule.
-type SpellRuleOption func(*SpellRule)
+type SpellRuleOption func(SpellRule) SpellRule
 
 // WithLocale sets the locale for spell checking. Valid values are "US" (default), "UK", or "GB".
 func WithLocale(locale string) SpellRuleOption {
-	return func(rule *SpellRule) {
+	return func(rule SpellRule) SpellRule {
 		rule.locale = locale
+
+		return rule
 	}
 }
 
 // WithMaxErrors limits the number of spelling errors reported.
 func WithMaxErrors(maxErrors int) SpellRuleOption {
-	return func(rule *SpellRule) {
+	return func(rule SpellRule) SpellRule {
 		if maxErrors > 0 {
 			rule.maxErrors = maxErrors
 		}
+
+		return rule
 	}
 }
 
 // WithIgnoreWords provides a list of words to ignore during spell checking.
 func WithIgnoreWords(words []string) SpellRuleOption {
-	return func(rule *SpellRule) {
-		rule.ignoreWords = append(rule.ignoreWords, words...)
+	return func(rule SpellRule) SpellRule {
+		// Create a new slice with the combined contents
+		newIgnoreWords := make([]string, len(rule.ignoreWords), len(rule.ignoreWords)+len(words))
+		copy(newIgnoreWords, rule.ignoreWords)
+		rule.ignoreWords = append(newIgnoreWords, words...)
+
+		return rule
 	}
 }
 
 // WithCustomWords provides a map of custom word mappings (misspelled -> correct).
 func WithCustomWords(wordMap map[string]string) SpellRuleOption {
-	return func(rule *SpellRule) {
+	return func(rule SpellRule) SpellRule {
 		if rule.customWords == nil {
 			rule.customWords = make(map[string]string)
 		}
 
-		for k, v := range wordMap {
-			rule.customWords[k] = v
+		// Create a new map with the combined contents
+		newCustomWords := make(map[string]string, len(rule.customWords)+len(wordMap))
+		for k, v := range rule.customWords {
+			newCustomWords[k] = v
 		}
+
+		for k, v := range wordMap {
+			newCustomWords[k] = v
+		}
+
+		rule.customWords = newCustomWords
+
+		return rule
 	}
 }
 
 // NewSpellRule creates a new SpellRule with the provided options.
-func NewSpellRule(options ...SpellRuleOption) *SpellRule {
-	rule := &SpellRule{
+func NewSpellRule(options ...SpellRuleOption) SpellRule {
+	rule := SpellRule{
 		locale:      "US", // Default locale is US English
 		maxErrors:   20,   // Default max errors to report
 		ignoreWords: []string{},
@@ -76,14 +95,14 @@ func NewSpellRule(options ...SpellRuleOption) *SpellRule {
 
 	// Apply options
 	for _, option := range options {
-		option(rule)
+		rule = option(rule)
 	}
 
 	return rule
 }
 
 // NewSpellRuleWithConfig creates a SpellRule using configuration.
-func NewSpellRuleWithConfig(config domain.SpellCheckConfigProvider) *SpellRule {
+func NewSpellRuleWithConfig(config domain.SpellCheckConfigProvider) SpellRule {
 	// Build options based on the configuration
 	var options []SpellRuleOption
 

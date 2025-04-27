@@ -48,27 +48,29 @@ func TestSubjectLengthRule(t *testing.T) {
 		},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			// Verify test assumptions
-			actualLength := utf8.RuneCountInString(test.subject)
+			actualLength := utf8.RuneCountInString(testCase.subject)
 
 			// Create commit info
 			commit := domain.CommitInfo{
-				Subject: test.subject,
+				Subject: testCase.subject,
 			}
 
-			// Create rule
-			rule := rules.NewSubjectLengthRule(test.maxLength)
+			// Create rule using functional options pattern
+			var rule rules.SubjectLengthRule
+			if testCase.maxLength > 0 {
+				rule = rules.NewSubjectLengthRule(rules.WithMaxLength(testCase.maxLength))
+			} else {
+				rule = rules.NewSubjectLengthRule() // Use default
+			}
 
-			// Validate
+			// Validate using the stateless method
 			errors := rule.Validate(commit)
 
-			// Set errors back to the rule
-			rule = rule.SetErrors(errors)
-
 			// Check result
-			if test.expectError {
+			if testCase.expectError {
 				require.NotEmpty(t, errors, "Expected errors but got none")
 
 				// Check error details
@@ -82,21 +84,82 @@ func TestSubjectLengthRule(t *testing.T) {
 				require.Equal(t, strconv.Itoa(actualLength), err.Context["actual_length"],
 					"Actual length in context should match expected length")
 
-				// Check result message
-				require.Equal(t, "Subject too long", rule.Result(), "Result message should indicate subject is too long")
+				// Test pure function implementation explicitly
+				_, updatedRule := rules.ValidateSubjectLengthWithState(rule, commit)
+				require.Equal(t, "Subject too long", updatedRule.Result(), "Result message should indicate subject is too long")
+				require.True(t, updatedRule.HasErrors(), "HasErrors should return true for invalid subjects")
 			} else {
 				require.Empty(t, errors, "Expected no errors but got: %v", errors)
-				require.Equal(t, "Subject length OK", rule.Result(), "Result message should indicate length is OK")
+
+				// Test pure function implementation explicitly
+				_, updatedRule := rules.ValidateSubjectLengthWithState(rule, commit)
+				require.Equal(t, "Subject length OK", updatedRule.Result(), "Result message should indicate length is OK")
+				require.False(t, updatedRule.HasErrors(), "HasErrors should return false for valid subjects")
 			}
 
 			// Check name
 			require.Equal(t, "SubjectLength", rule.Name(), "Name should always be 'SubjectLength'")
 
+			// For verbose result and help message, we need a rule with state
+			_, ruleWithState := rules.ValidateSubjectLengthWithState(rule, commit)
+
 			// Check verbose result
-			require.NotEmpty(t, rule.VerboseResult(), "VerboseResult should not be empty")
+			require.NotEmpty(t, ruleWithState.VerboseResult(), "VerboseResult should not be empty")
 
 			// Check help message
-			require.NotEmpty(t, rule.Help(), "Help should not be empty")
+			require.NotEmpty(t, ruleWithState.Help(), "Help should not be empty")
 		})
 	}
+}
+
+func TestSubjectLengthRuleWithConfig(t *testing.T) {
+	// Create a mock config provider
+	mockConfig := &mockSubjectConfigProvider{maxLength: 50}
+
+	// Create rule using config
+	rule := rules.NewSubjectLengthRuleWithConfig(mockConfig)
+
+	// Verify the rule uses the config value
+	commit := domain.CommitInfo{
+		Subject: strings.Repeat("a", 51), // One character over the limit
+	}
+
+	// Validate and check for error
+	errors := rule.Validate(commit)
+	require.Len(t, errors, 1, "Should have exactly one error")
+	require.Equal(t, string(appErrors.ErrSubjectTooLong), errors[0].Code)
+
+	// Check context values
+	require.Equal(t, "51", errors[0].Context["actual_length"])
+	require.Equal(t, "50", errors[0].Context["max_length"])
+}
+
+// mockSubjectConfigProvider is a test helper that implements domain.SubjectConfigProvider.
+type mockSubjectConfigProvider struct {
+	maxLength       int
+	invalidSuffixes string
+}
+
+func (m *mockSubjectConfigProvider) SubjectMaxLength() int {
+	return m.maxLength
+}
+
+func (m *mockSubjectConfigProvider) SubjectCase() string {
+	return "lower" // Not used in this test
+}
+
+func (m *mockSubjectConfigProvider) SubjectRequireImperative() bool {
+	return false // Not used in this test
+}
+
+func (m *mockSubjectConfigProvider) SubjectAllowTrailingPeriod() bool {
+	return false // Not used in this test
+}
+
+func (m *mockSubjectConfigProvider) SubjectInvalidSuffixes() string {
+	if m.invalidSuffixes == "" {
+		return "." // Default value if not set
+	}
+
+	return m.invalidSuffixes
 }

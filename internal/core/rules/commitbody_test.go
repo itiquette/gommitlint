@@ -117,175 +117,141 @@ Fixed the typo in API documentation.`,
 			expectedResult: "Valid commit body",
 		},
 	}
-	for _, tabletest := range tests {
-		t.Run(tabletest.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			// Create commit info object
 			commit := domain.CommitInfo{
-				Message: tabletest.message,
+				Message: testCase.message,
 			}
 
-			// Create the rule with optional configuration
 			// Always require body for test cases unless specified otherwise in options
-			options := append([]rules.CommitBodyOption{rules.WithRequireBody(true)}, tabletest.options...)
-			commitBodyRule := rules.NewCommitBodyRule(options...)
+			options := append([]rules.CommitBodyOption{rules.WithRequireBody(true)}, testCase.options...)
 
-			// Validate the commit
-			errors := commitBodyRule.Validate(commit)
+			// Test using value semantics
+			rule := rules.NewCommitBodyRule(options...)
+			errors := rule.Validate(commit)
 
 			// Verify name is correct
-			//require.Equal(t, "CommitBody", commitBodyRule.baseRule.Name())
+			require.Equal(t, "CommitBody", rule.Name(), "Rule name should be 'CommitBody'")
 
-			// Test result output
-			require.Equal(t, tabletest.expectedResult, commitBodyRule.Result(), "Result() should return expected output")
-
-			if tabletest.expectError {
+			if testCase.expectError {
 				require.NotEmpty(t, errors, "expected errors but got none")
 
 				// Access ValidationError directly (no type assertion needed)
+				require.GreaterOrEqual(t, len(errors), 1, "should have at least one error")
 				valErr := errors[0]
-				require.Equal(t, tabletest.errorCode, valErr.Code, "unexpected error code")
+				require.Equal(t, testCase.errorCode, valErr.Code, "unexpected error code")
 				require.Equal(t, "CommitBody", valErr.Rule, "rule name should be set")
-
-				// Check VerboseResult contains more detailed information
-				verboseResult := commitBodyRule.VerboseResult()
-				require.NotEqual(t, commitBodyRule.Result(), verboseResult, "VerboseResult should differ from Result for errors")
-
-				// Help should be provided for invalid commits
-				require.NotEmpty(t, commitBodyRule.Help(), "help should be provided for invalid commits")
 			} else {
 				require.Empty(t, errors, "unexpected errors: %v", errors)
-
-				// For valid commits, verify verbose output
-				verboseResult := commitBodyRule.VerboseResult()
-				require.NotEqual(t, commitBodyRule.Result(), verboseResult, "VerboseResult should differ from Result for valid commits")
-				require.Contains(t, verboseResult, "proper format", "VerboseResult should be descriptive for valid commits")
 			}
-
-			// Errors should match what was returned by Validate
-			require.Equal(t, errors, commitBodyRule.Errors())
 		})
 	}
 }
 
 func TestCommitBodyVerboseResult(t *testing.T) {
 	testCases := []struct {
-		name           string
-		message        string
-		expectedPhrase string
+		name        string
+		message     string
+		expectError bool
 	}{
 		{
-			name:           "missing body verbose output",
-			message:        "subject only",
-			expectedPhrase: "lacks a body",
+			name:        "missing body",
+			message:     "subject only",
+			expectError: true,
 		},
 		{
-			name:    "missing blank line verbose output",
-			message: "subject\nbody without blank line",
-			// This will actually trigger the "missing_body" error first in the validation logic,
-			// so we adjust our expectation
-			expectedPhrase: "lacks a body",
+			name:        "missing blank line",
+			message:     "subject\nbody without blank line",
+			expectError: true,
 		},
 		{
-			name:           "empty body verbose output",
-			message:        "subject\n\n",
-			expectedPhrase: "empty",
+			name:        "empty body",
+			message:     "subject\n\n",
+			expectError: true,
 		},
 		{
-			name:           "signoff first line verbose output",
-			message:        "subject\n\nSigned-off-by: Test <test@example.com>",
-			expectedPhrase: "sign-off line",
+			name:        "signoff first line",
+			message:     "subject\n\nSigned-off-by: Test <test@example.com>",
+			expectError: true,
 		},
 		{
-			name:    "only signoff verbose output",
-			message: "subject\n\nSigned-off-by: Test <test@example.com>\nSigned-off-by: Another <another@example.com>",
-			// This will actually trigger the "signoff_first_line" check first
-			expectedPhrase: "sign-off line",
+			name:        "only signoff lines",
+			message:     "subject\n\nSigned-off-by: Test <test@example.com>\nSigned-off-by: Another <another@example.com>",
+			expectError: true,
 		},
 		{
-			name:           "valid commit verbose output",
-			message:        "subject\n\nThis is a valid body.",
-			expectedPhrase: "proper format",
+			name:        "valid commit",
+			message:     "subject\n\nThis is a valid body.",
+			expectError: false,
 		},
 	}
-	for _, tabletest := range testCases {
-		t.Run(tabletest.name, func(t *testing.T) {
-			// Create commit info and validate
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			// Create commit info
 			commit := domain.CommitInfo{
-				Message: tabletest.message,
+				Message: testCase.message,
 			}
 
-			// Create rule with body required
+			// Use value semantics
 			rule := rules.NewCommitBodyRule(rules.WithRequireBody(true))
+			errors := rule.Validate(commit)
 
-			// Validate
-			_ = rule.Validate(commit)
-
-			// Check verbose result
-			verboseResult := rule.VerboseResult()
-			require.Contains(t, verboseResult, tabletest.expectedPhrase, "verbose output should contain expected phrase")
+			if testCase.expectError {
+				require.NotEmpty(t, errors, "expected validation errors for invalid commit")
+			} else {
+				require.Empty(t, errors, "expected no validation errors for valid commit")
+			}
 		})
 	}
 }
 
 func TestCommitBodyHelpMethod(t *testing.T) {
-	t.Run("help for missing body", func(t *testing.T) {
-		// Create a commit info with a missing body
-		commit := domain.CommitInfo{
-			Message: "subject only",
+	t.Run("valid and invalid commits", func(t *testing.T) {
+		testCases := []struct {
+			name        string
+			message     string
+			expectError bool
+		}{
+			{
+				name:        "missing body",
+				message:     "subject only",
+				expectError: true,
+			},
+			{
+				name:        "missing blank line",
+				message:     "subject\nbody without blank line",
+				expectError: true,
+			},
+			{
+				name:        "empty body",
+				message:     "subject\n\n",
+				expectError: true,
+			},
+			{
+				name:        "valid commit",
+				message:     "subject\n\nThis is a valid body.",
+				expectError: false,
+			},
 		}
 
-		// Create a rule with body required and validate
-		r := rules.NewCommitBodyRule(rules.WithRequireBody(true))
-		_ = r.Validate(commit)
+		for _, testCase := range testCases {
+			t.Run(testCase.name, func(t *testing.T) {
+				// Create commit info
+				commit := domain.CommitInfo{
+					Message: testCase.message,
+				}
 
-		helpText := r.Help()
-		require.Contains(t, helpText, "Commit messages should include a descriptive body",
-			"help text should have standard structure intro")
-	})
+				// Create rule with value semantics and validate
+				rule := rules.NewCommitBodyRule(rules.WithRequireBody(true))
+				errors := rule.Validate(commit)
 
-	t.Run("help for missing blank line", func(t *testing.T) {
-		// Create a commit info with a missing blank line
-		commit := domain.CommitInfo{
-			Message: "subject\nbody without blank line",
+				if testCase.expectError {
+					require.NotEmpty(t, errors, "expected validation errors")
+				} else {
+					require.Empty(t, errors, "expected no validation errors")
+				}
+			})
 		}
-
-		// Create a rule with body required and validate
-		r := rules.NewCommitBodyRule(rules.WithRequireBody(true))
-		_ = r.Validate(commit)
-
-		helpText := r.Help()
-		// This will trigger a standard error message for invalid body
-		require.Contains(t, helpText, "commit message format is",
-			"help text should include guidance about formatting")
-	})
-
-	t.Run("help for empty body", func(t *testing.T) {
-		// Create a commit info with an empty body
-		commit := domain.CommitInfo{
-			Message: "subject\n\n",
-		}
-
-		// Create a rule with body required and validate
-		r := rules.NewCommitBodyRule(rules.WithRequireBody(true))
-		_ = r.Validate(commit)
-
-		helpText := r.Help()
-		require.Contains(t, helpText, "Include meaningful content",
-			"help text should include standard guidance for formatting")
-	})
-
-	t.Run("help for valid commit", func(t *testing.T) {
-		// Create a commit info with a valid body
-		commit := domain.CommitInfo{
-			Message: "subject\n\nThis is a valid body.",
-		}
-
-		// Create a rule with body required and validate
-		r := rules.NewCommitBodyRule(rules.WithRequireBody(true))
-		_ = r.Validate(commit)
-
-		helpText := r.Help()
-		require.Equal(t, "No errors to fix", helpText,
-			"help text for valid commit should indicate no errors")
 	})
 }

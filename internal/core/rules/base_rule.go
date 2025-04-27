@@ -21,92 +21,116 @@ type BaseRule struct {
 }
 
 // NewBaseRule creates a new BaseRule with the given name.
-func NewBaseRule(name string) *BaseRule {
-	return &BaseRule{
+func NewBaseRule(name string) BaseRule {
+	return BaseRule{
 		name:   name,
 		errors: make([]errors.ValidationError, 0),
 	}
 }
 
 // Name returns the rule's name.
-func (r *BaseRule) Name() string {
+func (r BaseRule) Name() string {
 	return r.name
 }
 
-// AddError adds a validation error to the rule's error collection.
-func (r *BaseRule) AddError(err errors.ValidationError) {
-	r.errors = append(r.errors, err)
+// WithError adds a validation error and returns a new BaseRule.
+func (r BaseRule) WithError(err errors.ValidationError) BaseRule {
+	newErrors := make([]errors.ValidationError, len(r.errors), len(r.errors)+1)
+	copy(newErrors, r.errors)
+
+	result := r
+
+	result.errors = append(newErrors, err)
+
+	return result
 }
 
-// AddErrorWithCode creates and adds a new error with the given code and message.
-func (r *BaseRule) AddErrorWithCode(code errors.ValidationErrorCode, message string) {
+// WithErrorWithCode creates and adds a new error with the given code and message,
+// returning a new BaseRule.
+func (r BaseRule) WithErrorWithCode(code errors.ValidationErrorCode, message string) BaseRule {
 	err := errors.New(r.name, code, message)
-	r.errors = append(r.errors, err)
+
+	return r.WithError(err)
 }
 
-// AddErrorWithFormatf creates and adds an error with formatted message.
-func (r *BaseRule) AddErrorWithFormatf(code errors.ValidationErrorCode, format string, args ...interface{}) {
+// WithErrorWithFormatf creates and adds an error with formatted message,
+// returning a new BaseRule.
+func (r BaseRule) WithErrorWithFormatf(code errors.ValidationErrorCode, format string, args ...interface{}) BaseRule {
 	err := errors.NewWithFormat(r.name, code, format, args...)
-	r.errors = append(r.errors, err)
+
+	return r.WithError(err)
 }
 
-// AddErrorWithContext creates and adds an error with the given context.
-func (r *BaseRule) AddErrorWithContext(code errors.ValidationErrorCode, message string, context map[string]string) {
+// WithErrorWithContext creates and adds an error with the given context,
+// returning a new BaseRule.
+func (r BaseRule) WithErrorWithContext(code errors.ValidationErrorCode, message string, context map[string]string) BaseRule {
 	err := errors.New(r.name, code, message, errors.WithContextMap(context))
-	r.errors = append(r.errors, err)
+
+	return r.WithError(err)
 }
 
-// AddErrorWithFormatAndContextf creates an error with formatted message and context.
-func (r *BaseRule) AddErrorWithFormatAndContextf(code errors.ValidationErrorCode, context map[string]string, format string, args ...interface{}) {
+// WithErrorWithFormatAndContextf creates an error with formatted message and context,
+// returning a new BaseRule.
+func (r BaseRule) WithErrorWithFormatAndContextf(code errors.ValidationErrorCode, context map[string]string, format string, args ...interface{}) BaseRule {
 	err := errors.New(
 		r.name,
 		code,
 		fmt.Sprintf(format, args...),
 		errors.WithContextMap(context),
 	)
-	r.errors = append(r.errors, err)
+
+	return r.WithError(err)
 }
 
-// AddErrorWithHelp creates an error with a help message.
-func (r *BaseRule) AddErrorWithHelp(code errors.ValidationErrorCode, message string, help string) {
+// WithErrorWithHelp creates an error with a help message,
+// returning a new BaseRule.
+func (r BaseRule) WithErrorWithHelp(code errors.ValidationErrorCode, message string, help string) BaseRule {
 	err := errors.New(r.name, code, message, errors.WithHelp(help))
-	r.errors = append(r.errors, err)
+
+	return r.WithError(err)
 }
 
-// AddAppError creates and adds a new error with just code and message (no context).
-// This is a convenience method for the common case of simple errors.
-func (r *BaseRule) AddAppError(code errors.ValidationErrorCode, message string) {
+// WithAppError creates and adds a new error with just code and message (no context),
+// returning a new BaseRule. This is a convenience method for the common case of simple errors.
+func (r BaseRule) WithAppError(code errors.ValidationErrorCode, message string) BaseRule {
 	err := errors.New(r.name, code, message)
-	r.errors = append(r.errors, err)
+
+	return r.WithError(err)
 }
 
 // Errors returns all validation errors found by this rule.
-func (r *BaseRule) Errors() []errors.ValidationError {
+func (r BaseRule) Errors() []errors.ValidationError {
 	return r.errors
 }
 
-// ClearErrors clears all recorded errors.
-func (r *BaseRule) ClearErrors() {
-	r.errors = make([]errors.ValidationError, 0)
+// WithClearedErrors returns a new BaseRule with all errors cleared.
+func (r BaseRule) WithClearedErrors() BaseRule {
+	result := r
+	result.errors = make([]errors.ValidationError, 0)
+
+	return result
 }
 
 // HasErrors returns true if the rule has found any errors.
-func (r *BaseRule) HasErrors() bool {
+func (r BaseRule) HasErrors() bool {
 	return len(r.errors) > 0
 }
 
 // ErrorCount returns the number of errors found by this rule.
-func (r *BaseRule) ErrorCount() int {
+func (r BaseRule) ErrorCount() int {
 	return len(r.errors)
 }
 
-// SetVerbosity sets additional information for verbose output.
-func (r *BaseRule) SetVerbosity(verbosity string) {
-	r.verbosity = verbosity
+// WithVerbosity returns a new BaseRule with the specified verbosity.
+func (r BaseRule) WithVerbosity(verbosity string) BaseRule {
+	result := r
+	result.verbosity = verbosity
+
+	return result
 }
 
 // Result returns a concise result message.
-func (r *BaseRule) Result() string {
+func (r BaseRule) Result() string {
 	if !r.hasRun {
 		return "Rule has not been run"
 	}
@@ -119,7 +143,7 @@ func (r *BaseRule) Result() string {
 }
 
 // VerboseResult returns a detailed result message with all errors and context.
-func (r *BaseRule) VerboseResult() string {
+func (r BaseRule) VerboseResult() string {
 	if !r.hasRun {
 		return r.name + ": Rule has not been run"
 	}
@@ -157,7 +181,7 @@ func (r *BaseRule) VerboseResult() string {
 }
 
 // Help returns guidance on how to fix rule violations.
-func (r *BaseRule) Help() string {
+func (r BaseRule) Help() string {
 	if !r.HasErrors() {
 		return r.name + ": No errors to fix"
 	}
@@ -170,7 +194,10 @@ func (r *BaseRule) Help() string {
 	return result
 }
 
-// MarkAsRun marks the rule as having been run.
-func (r *BaseRule) MarkAsRun() {
-	r.hasRun = true
+// WithRun returns a new BaseRule marked as having been run.
+func (r BaseRule) WithRun() BaseRule {
+	result := r
+	result.hasRun = true
+
+	return result
 }

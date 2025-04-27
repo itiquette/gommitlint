@@ -31,7 +31,7 @@ var subjectCaseRegex = regexp.MustCompile(`^(\w+)(?:\(([\w,/-]+)\))?(!)?:[ ](.+)
 //
 // For non-conventional commits, it simply checks the first word of the subject.
 type SubjectCaseRule struct {
-	*BaseRule
+	BaseRule
 	isConventional bool   // Whether to treat as a conventional commit format
 	caseChoice     string // The desired case ("upper", "lower", or "ignore")
 	allowNonAlpha  bool   // Whether to allow non-alphabetic first characters
@@ -40,34 +40,40 @@ type SubjectCaseRule struct {
 }
 
 // SubjectCaseOption is a function that modifies a SubjectCaseRule.
-type SubjectCaseOption func(*SubjectCaseRule)
+type SubjectCaseOption func(SubjectCaseRule) SubjectCaseRule
 
 // WithCaseChoice sets the desired case for the subject.
 func WithCaseChoice(caseChoice string) SubjectCaseOption {
-	return func(rule *SubjectCaseRule) {
+	return func(rule SubjectCaseRule) SubjectCaseRule {
 		if caseChoice == "upper" || caseChoice == "lower" || caseChoice == "ignore" {
 			rule.caseChoice = caseChoice
 		}
+
+		return rule
 	}
 }
 
 // WithSubjectCaseCommitFormat configures whether to treat as a conventional commit.
 func WithSubjectCaseCommitFormat(isConventional bool) SubjectCaseOption {
-	return func(rule *SubjectCaseRule) {
+	return func(rule SubjectCaseRule) SubjectCaseRule {
 		rule.isConventional = isConventional
+
+		return rule
 	}
 }
 
 // WithAllowNonAlpha sets whether to allow non-alphabetic first characters.
 func WithAllowNonAlpha(allow bool) SubjectCaseOption {
-	return func(rule *SubjectCaseRule) {
+	return func(rule SubjectCaseRule) SubjectCaseRule {
 		rule.allowNonAlpha = allow
+
+		return rule
 	}
 }
 
 // NewSubjectCaseRule creates a new SubjectCaseRule with the specified options.
-func NewSubjectCaseRule(options ...SubjectCaseOption) *SubjectCaseRule {
-	rule := &SubjectCaseRule{
+func NewSubjectCaseRule(options ...SubjectCaseOption) SubjectCaseRule {
+	rule := SubjectCaseRule{
 		BaseRule:       NewBaseRule("SubjectCase"),
 		isConventional: false,
 		caseChoice:     "lower", // Default to lowercase
@@ -76,14 +82,14 @@ func NewSubjectCaseRule(options ...SubjectCaseOption) *SubjectCaseRule {
 
 	// Apply options
 	for _, option := range options {
-		option(rule)
+		rule = option(rule)
 	}
 
 	return rule
 }
 
 // NewSubjectCaseRuleWithConfig creates a SubjectCaseRule using configuration.
-func NewSubjectCaseRuleWithConfig(config domain.SubjectConfigProvider, conventionalConfig domain.ConventionalConfigProvider) *SubjectCaseRule {
+func NewSubjectCaseRuleWithConfig(config domain.SubjectConfigProvider, conventionalConfig domain.ConventionalConfigProvider) SubjectCaseRule {
 	// Build options based on the configuration
 	var options []SubjectCaseOption
 
@@ -105,44 +111,102 @@ func NewSubjectCaseRuleWithConfig(config domain.SubjectConfigProvider, conventio
 	return NewSubjectCaseRule(options...)
 }
 
-// Name method is inherited from BaseRule.
-
-// addError adds a structured validation error.
-func (r SubjectCaseRule) addError(code appErrors.ValidationErrorCode, message string, context map[string]string) {
-	// Add the error with context if provided
-	if context != nil {
-		r.AddErrorWithContext(code, message, context)
-	} else {
-		r.AddErrorWithCode(code, message)
-	}
+// Name returns the rule identifier.
+func (r SubjectCaseRule) Name() string {
+	return r.BaseRule.Name()
 }
 
-// The Errors method is inherited from BaseRule.
+// SetErrors sets the validation errors for this rule.
+// This method supports value semantics by returning a new instance.
+func (r SubjectCaseRule) SetErrors(errors []appErrors.ValidationError) SubjectCaseRule {
+	rule := r
+	rule.BaseRule.errors = errors
 
-// Validate validates the commit subject case.
-func (r SubjectCaseRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
-	// Reset errors and state
-	r.ClearErrors()
+	return rule
+}
 
+// ClearErrors removes all existing validation errors.
+// This method supports value semantics by returning a new instance.
+func (r SubjectCaseRule) ClearErrors() SubjectCaseRule {
+	rule := r
+	rule.BaseRule = rule.BaseRule.WithClearedErrors()
+
+	return rule
+}
+
+// AddError adds a structured validation error.
+// This method supports value semantics by returning a new instance.
+func (r SubjectCaseRule) AddError(err appErrors.ValidationError) SubjectCaseRule {
+	rule := r
+	rule.BaseRule = rule.BaseRule.WithError(err)
+
+	return rule
+}
+
+// AddErrorWithCode adds a validation error with the specified code and message.
+// This method supports value semantics by returning a new instance.
+func (r SubjectCaseRule) AddErrorWithCode(code appErrors.ValidationErrorCode, message string) SubjectCaseRule {
+	rule := r
+	rule.BaseRule = rule.BaseRule.WithErrorWithCode(code, message)
+
+	return rule
+}
+
+// AddErrorWithContext adds a validation error with context information.
+// This method supports value semantics by returning a new instance.
+func (r SubjectCaseRule) AddErrorWithContext(code appErrors.ValidationErrorCode, message string, context map[string]string) SubjectCaseRule {
+	rule := r
+	rule.BaseRule = rule.BaseRule.WithErrorWithContext(code, message, context)
+
+	return rule
+}
+
+// HasErrors returns true if the rule has validation errors.
+func (r SubjectCaseRule) HasErrors() bool {
+	return r.BaseRule.HasErrors()
+}
+
+// Errors returns all validation errors found by this rule.
+func (r SubjectCaseRule) Errors() []appErrors.ValidationError {
+	return r.BaseRule.Errors()
+}
+
+// setFirstWord sets the first word and letter for verbose output.
+// This method supports value semantics by returning a new instance.
+//
+//nolint:unused
+func (r SubjectCaseRule) setFirstWord(word string) SubjectCaseRule {
+	r.firstWord = word
+	first, _ := utf8.DecodeRuneInString(word)
+	r.firstLetter = first
+
+	return r
+}
+
+// ValidateWithState performs validation and returns errors along with an updated rule state.
+// Returns both errors and a new rule instance with updated state.
+// Exported for testing purposes.
+func ValidateWithState(rule SubjectCaseRule, commit domain.CommitInfo) ([]appErrors.ValidationError, SubjectCaseRule) {
 	subject := commit.Subject
+	errors := make([]appErrors.ValidationError, 0)
 
 	// Check for empty message first
 	if subject == "" {
-		r.AddErrorWithCode(
-			appErrors.ErrEmptyDescription,
-			"subject is empty",
-		)
+		// Create the error
+		err := appErrors.New(rule.Name(), appErrors.ErrEmptyDescription, "subject is empty")
+		errors = append(errors, err)
 
-		return r.Errors()
+		// Return with updated rule (using value semantics)
+		return errors, rule.SetErrors(errors)
 	}
 
 	// Extract first word
-	firstWord, err := extractSubjectCaseFirstWord(r.isConventional, subject)
+	firstWord, err := extractSubjectCaseFirstWord(rule.isConventional, subject)
 	if err != nil {
 		// Determine the specific error type
 		var errorCode appErrors.ValidationErrorCode
 
-		if r.isConventional {
+		if rule.isConventional {
 			if strings.Contains(err.Error(), "missing subject after type") {
 				errorCode = appErrors.ErrMissingSubject
 			} else {
@@ -152,40 +216,47 @@ func (r SubjectCaseRule) Validate(commit domain.CommitInfo) []appErrors.Validati
 			errorCode = appErrors.ErrInvalidFormat
 		}
 
-		r.addError(
-			errorCode,
-			err.Error(),
-			map[string]string{
-				"subject":         subject,
-				"is_conventional": strconv.FormatBool(r.isConventional),
-			},
-		)
+		context := map[string]string{
+			"subject":         subject,
+			"is_conventional": strconv.FormatBool(rule.isConventional),
+		}
 
-		return r.Errors()
+		// Create the error
+		validationErr := appErrors.New(rule.Name(), errorCode, err.Error(), appErrors.WithContextMap(context))
+		errors = append(errors, validationErr)
+
+		// Update rule state using value semantics
+		updatedRule := rule.SetErrors(errors)
+		updatedRule.firstWord = ""
+		updatedRule.firstLetter = 0
+
+		return errors, updatedRule
 	}
 
 	// Store first word for verbose output
-	r.firstWord = firstWord
-
-	// Decode first rune
+	updatedRule := rule
+	updatedRule.firstWord = firstWord
 	first, size := utf8.DecodeRuneInString(firstWord)
-	r.firstLetter = first
+	updatedRule.firstLetter = first
 
 	if first == utf8.RuneError && size == 0 {
-		r.addError(
+		// Create the error
+		validationErr := appErrors.New(
+			rule.Name(),
 			appErrors.ErrUnknown,
 			"subject does not start with valid UTF-8 text",
-			map[string]string{
+			appErrors.WithContextMap(map[string]string{
 				"subject": subject,
-			},
+			}),
 		)
+		errors = append(errors, validationErr)
 
-		return r.Errors()
+		return errors, updatedRule.SetErrors(errors)
 	}
 
 	// If AllowNonAlpha is enabled and the first character isn't a letter, skip case check
-	if r.allowNonAlpha && !unicode.IsLetter(first) {
-		return r.Errors()
+	if rule.allowNonAlpha && !unicode.IsLetter(first) {
+		return errors, updatedRule
 	}
 
 	// Validate case
@@ -193,7 +264,7 @@ func (r SubjectCaseRule) Validate(commit domain.CommitInfo) []appErrors.Validati
 
 	var errorCode = appErrors.ErrSubjectCase
 
-	switch r.caseChoice {
+	switch rule.caseChoice {
 	case "upper":
 		valid = unicode.IsUpper(first)
 	case "lower":
@@ -205,30 +276,41 @@ func (r SubjectCaseRule) Validate(commit domain.CommitInfo) []appErrors.Validati
 	}
 
 	if !valid {
-		r.addError(
+		// Create the error
+		validationErr := appErrors.New(
+			rule.Name(),
 			errorCode,
-			"commit subject case is not "+r.caseChoice,
-			map[string]string{
-				"expected_case": r.caseChoice,
+			"commit subject case is not "+rule.caseChoice,
+			appErrors.WithContextMap(map[string]string{
+				"expected_case": rule.caseChoice,
 				"actual_case":   map[bool]string{true: "upper", false: "lower"}[unicode.IsUpper(first)],
 				"first_word":    firstWord,
 				"subject":       subject,
-			},
+			}),
 		)
+		errors = append(errors, validationErr)
 	}
 
-	return r.Errors()
+	return errors, updatedRule.SetErrors(errors)
 }
 
-// Result returns a concise result message.
-func (r SubjectCaseRule) Result() string {
-	if r.HasErrors() {
+// Validate validates the commit subject case.
+func (r SubjectCaseRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
+	// Use the pure function approach
+	errors, _ := ValidateWithState(r, commit)
+
+	return errors
+}
+
+// resultImpl returns a concise result message.
+func resultImpl(rule SubjectCaseRule) string {
+	if rule.HasErrors() {
 		// Check for case-specific error
-		errors := r.Errors()
+		errors := rule.Errors()
 		if len(errors) > 0 {
 			switch appErrors.ValidationErrorCode(errors[0].Code) { //nolint:exhaustive
 			case appErrors.ErrSubjectCase:
-				return "Subject should start with " + r.caseChoice
+				return "Subject should start with " + rule.caseChoice
 			case appErrors.ErrEmptyDescription, appErrors.ErrEmptyMessage:
 				return "Subject is empty"
 			case appErrors.ErrInvalidFormat:
@@ -244,11 +326,16 @@ func (r SubjectCaseRule) Result() string {
 	return "Subject case is correct"
 }
 
-// VerboseResult returns a more detailed explanation for verbose mode.
-func (r SubjectCaseRule) VerboseResult() string {
-	if r.HasErrors() {
+// Result returns a concise result message.
+func (r SubjectCaseRule) Result() string {
+	return resultImpl(r)
+}
+
+// verboseResultImpl returns a more detailed explanation for verbose mode.
+func verboseResultImpl(rule SubjectCaseRule) string {
+	if rule.HasErrors() {
 		// Get errors
-		errors := r.Errors()
+		errors := rule.Errors()
 		if len(errors) == 0 {
 			return "Unknown error"
 		}
@@ -281,10 +368,10 @@ func (r SubjectCaseRule) VerboseResult() string {
 			return "Missing subject after conventional commit prefix."
 
 		case appErrors.ErrSubjectCase:
-			if r.caseChoice == "upper" {
-				return "First letter should be uppercase. Found '" + string(r.firstLetter) + "' in '" + r.firstWord + "'."
-			} else if r.caseChoice == "lower" {
-				return "First letter should be lowercase. Found '" + string(r.firstLetter) + "' in '" + r.firstWord + "'."
+			if rule.caseChoice == "upper" {
+				return "First letter should be uppercase. Found '" + string(rule.firstLetter) + "' in '" + rule.firstWord + "'."
+			} else if rule.caseChoice == "lower" {
+				return "First letter should be lowercase. Found '" + string(rule.firstLetter) + "' in '" + rule.firstWord + "'."
 			}
 		}
 
@@ -294,23 +381,28 @@ func (r SubjectCaseRule) VerboseResult() string {
 
 	// Construct a detailed success message
 	var formatType string
-	if r.isConventional {
+	if rule.isConventional {
 		formatType = "conventional commit"
 	} else {
 		formatType = "standard commit"
 	}
 
-	return "Subject has correct " + r.caseChoice + "case for " + formatType + ": '" + r.firstWord + "'"
+	return "Subject has correct " + rule.caseChoice + "case for " + formatType + ": '" + rule.firstWord + "'"
 }
 
-// Help returns a description of how to fix the rule violation.
-func (r SubjectCaseRule) Help() string {
-	if !r.HasErrors() {
+// VerboseResult returns a more detailed explanation for verbose mode.
+func (r SubjectCaseRule) VerboseResult() string {
+	return verboseResultImpl(r)
+}
+
+// helpImpl returns a description of how to fix the rule violation.
+func helpImpl(rule SubjectCaseRule) string {
+	if !rule.HasErrors() {
 		return "No errors to fix"
 	}
 
 	// Get errors
-	errors := r.Errors()
+	errors := rule.Errors()
 	if len(errors) == 0 {
 		return "No specific guidance available"
 	}
@@ -342,11 +434,11 @@ func (r SubjectCaseRule) Help() string {
 			"Example: fix(api): Resolve timeout issue"
 
 	case appErrors.ErrSubjectCase:
-		if r.caseChoice == "upper" {
+		if rule.caseChoice == "upper" {
 			return "Capitalize the first letter of your commit subject.\n" +
 				"Example for conventional commit: feat(auth): Add feature (not 'add feature')\n" +
 				"Example for standard commit: Add feature (not 'add feature')"
-		} else if r.caseChoice == "lower" {
+		} else if rule.caseChoice == "lower" {
 			return "Use lowercase for the first letter of your commit subject.\n" +
 				"Example for conventional commit: feat(auth): add feature (not 'Add feature')\n" +
 				"Example for standard commit: add feature (not 'Add feature')"
@@ -355,6 +447,11 @@ func (r SubjectCaseRule) Help() string {
 
 	// Default help
 	return "Check the capitalization of the first letter in your commit message subject according to your project's guidelines."
+}
+
+// Help returns a description of how to fix the rule violation.
+func (r SubjectCaseRule) Help() string {
+	return helpImpl(r)
 }
 
 // extractSubjectCaseFirstWord extracts the first word from the commit message.

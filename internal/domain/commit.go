@@ -38,11 +38,6 @@ type CommitInfo struct {
 
 	// CommitDate is the date of the commit in ISO format.
 	CommitDate string
-
-	// RawCommit contains the raw commit object from the git library.
-	// This should ONLY be used by infrastructure code and adapters.
-	// Domain logic should never access this field directly.
-	RawCommit interface{}
 }
 
 // SplitCommitMessage splits a commit message into subject and body.

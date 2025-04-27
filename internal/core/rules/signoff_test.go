@@ -208,7 +208,8 @@ This is a detailed description.`,
 			hasAttemptedSignOff := strings.Contains(testCase.message, "Signed") && strings.Contains(testCase.message, "by:")
 
 			// Set validation state back to the rule
-			*rule = rule.SetSignOffState(errors, hasAttemptedSignOff, foundSignOff)
+			rule = rule.SetErrors(errors)
+			rule = rule.SetSignOffInfo(hasAttemptedSignOff, foundSignOff)
 
 			// Check validity
 			if testCase.expectedValid {
@@ -294,7 +295,8 @@ Signed-off-by: Dev Two <dev2@example.com>`
 		hasAttemptedSignOff := true // There is a sign-off attempt
 
 		// Set validation state for subsequent method calls
-		*rule = rule.SetSignOffState(errors, hasAttemptedSignOff, "")
+		rule = rule.SetErrors(errors)
+		rule = rule.SetSignOffInfo(hasAttemptedSignOff, "")
 
 		require.NotEmpty(t, errors, "Should have errors for multiple signoffs")
 		require.Equal(t, string(appErrors.ErrMissingSignoff), errors[0].Code)
@@ -314,7 +316,8 @@ Signed-off-by: Dev Two <dev2@example.com>`
 		hasAttemptedSignOff = false // No sign-off attempt
 
 		// Set validation state for subsequent method calls
-		*rule = rule.SetSignOffState(errors, hasAttemptedSignOff, "")
+		rule = rule.SetErrors(errors)
+		_ = rule.SetSignOffInfo(hasAttemptedSignOff, "")
 
 		require.NotEmpty(t, errors, "Should have errors for missing signoff")
 		require.Equal(t, string(appErrors.ErrMissingSignoff), errors[0].Code)

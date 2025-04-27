@@ -179,14 +179,10 @@ func (m *Manager) LoadFromFile(path string) error {
 		}
 	}
 
-	// Try with gommitlint prefix (standard format)
+	// Unmarshal configuration with gommitlint prefix
 	err = knf.Unmarshal("gommitlint", &gommitConfig)
 	if err != nil {
-		// Try without prefix for backward compatibility
-		err = knf.Unmarshal("", &gommitConfig)
-		if err != nil {
-			return fmt.Errorf("failed to unmarshal configuration: %w", err)
-		}
+		return fmt.Errorf("failed to unmarshal configuration: %w", err)
 	}
 
 	// Convert to internal representation

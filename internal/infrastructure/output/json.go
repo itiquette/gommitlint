@@ -65,7 +65,7 @@ type ValidationResultsOutput struct {
 }
 
 // Format formats validation results as JSON.
-func (f *JSONFormatter) Format(results domain.ValidationResults) string {
+func (f JSONFormatter) Format(results domain.ValidationResults) string {
 	report := ValidationResultsOutput{
 		Timestamp:     time.Now().Format(time.RFC3339),
 		AllPassed:     results.AllPassed(),

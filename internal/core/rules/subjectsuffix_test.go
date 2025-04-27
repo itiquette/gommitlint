@@ -4,11 +4,11 @@
 package rules_test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
+	appErrors "github.com/itiquette/gommitlint/internal/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,7 +18,6 @@ func TestSubjectSuffixRule(t *testing.T) {
 		subject         string
 		invalidSuffixes string
 		expectedValid   bool
-		expectedMessage string
 		expectedCode    string
 	}{
 		{
@@ -26,93 +25,82 @@ func TestSubjectSuffixRule(t *testing.T) {
 			subject:         "Add new feature",
 			invalidSuffixes: ".:;",
 			expectedValid:   true,
-			expectedMessage: "Valid subject suffix",
 		},
 		{
 			name:            "Subject ending with invalid suffix period",
 			subject:         "Update documentation.",
 			invalidSuffixes: ".:;",
 			expectedValid:   false,
-			expectedMessage: "Invalid subject suffix",
-			expectedCode:    "invalid_suffix",
+			expectedCode:    string(appErrors.ErrSubjectSuffix),
 		},
 		{
 			name:            "Subject ending with invalid suffix colon",
 			subject:         "Fix bug:",
 			invalidSuffixes: ".:;",
 			expectedValid:   false,
-			expectedMessage: "Invalid subject suffix",
-			expectedCode:    "invalid_suffix",
+			expectedCode:    string(appErrors.ErrSubjectSuffix),
 		},
 		{
 			name:            "Unicode subject with invalid suffix",
 			subject:         "Fix élément.",
 			invalidSuffixes: ".:;",
 			expectedValid:   false,
-			expectedMessage: "Invalid subject suffix",
-			expectedCode:    "invalid_suffix",
+			expectedCode:    string(appErrors.ErrSubjectSuffix),
 		},
 		{
 			name:            "Unicode character as invalid suffix",
 			subject:         "Update description;",
 			invalidSuffixes: ";",
 			expectedValid:   false,
-			expectedMessage: "Invalid subject suffix",
-			expectedCode:    "invalid_suffix",
+			expectedCode:    string(appErrors.ErrSubjectSuffix),
 		},
 		{
 			name:            "Empty subject",
 			subject:         "",
 			invalidSuffixes: ".:;",
 			expectedValid:   false,
-			expectedMessage: "Invalid subject suffix",
-			expectedCode:    "missing_subject",
+			expectedCode:    string(appErrors.ErrMissingSubject),
 		},
 		{
 			name:            "Subject with Unicode invalid suffix",
 			subject:         "Add new emoji😊",
 			invalidSuffixes: "😊😀",
 			expectedValid:   false,
-			expectedMessage: "Invalid subject suffix",
-			expectedCode:    "invalid_suffix",
+			expectedCode:    string(appErrors.ErrSubjectSuffix),
 		},
 		{
 			name:            "Subject with space as invalid suffix",
 			subject:         "Add feature ",
 			invalidSuffixes: " \t\n",
 			expectedValid:   false,
-			expectedMessage: "Invalid subject suffix",
-			expectedCode:    "invalid_suffix",
+			expectedCode:    string(appErrors.ErrSubjectSuffix),
 		},
 		{
 			name:            "Subject with tab as invalid suffix",
 			subject:         "Add feature\t",
 			invalidSuffixes: " \t\n",
 			expectedValid:   false,
-			expectedMessage: "Invalid subject suffix",
-			expectedCode:    "invalid_suffix",
+			expectedCode:    string(appErrors.ErrSubjectSuffix),
 		},
 		{
 			name:            "Valid Unicode subject",
 			subject:         "修复问题",
 			invalidSuffixes: ".:;",
 			expectedValid:   true,
-			expectedMessage: "Valid subject suffix",
 		},
 		{
 			name:            "Default invalid suffixes",
 			subject:         "Update feature?",
 			invalidSuffixes: "",
 			expectedValid:   false,
-			expectedMessage: "Invalid subject suffix",
-			expectedCode:    "invalid_suffix",
+			expectedCode:    string(appErrors.ErrSubjectSuffix),
 		},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			// Create the rule
-			var rule *rules.SubjectSuffixRule
+			// Create the rule with value semantics
+			var rule rules.SubjectSuffixRule
 			if testCase.invalidSuffixes != "" {
 				rule = rules.NewSubjectSuffixRule(rules.WithInvalidSuffixes(testCase.invalidSuffixes))
 			} else {
@@ -124,58 +112,64 @@ func TestSubjectSuffixRule(t *testing.T) {
 				Subject: testCase.subject,
 			}
 
-			// Validate and store errors
-			result := rule.Validate(commit)
-
-			// Manually set errors in rule for Result(), Help(), etc. methods
-			// This needs to be done if we want to keep using value receivers
-			*rule = rule.SetErrors(result) // Save the returned rule
+			// Validate using the stateless method
+			errors := rule.Validate(commit)
 
 			// Check results
 			if testCase.expectedValid {
-				require.Empty(t, result, "Expected no validation errors")
-				require.Equal(t, testCase.expectedMessage, rule.Result(), "Expected success message doesn't match")
-				require.Contains(t, rule.VerboseResult(), "Subject ends with valid character",
-					"VerboseResult should mention valid character")
+				require.Empty(t, errors, "Expected no validation errors")
+
+				// Test pure function implementation explicitly
+				_, updatedRule := rules.ValidateSubjectSuffixWithState(rule, commit)
+				require.Equal(t, "Valid subject suffix", updatedRule.Result(), "Result message should indicate valid suffix")
+				require.False(t, updatedRule.HasErrors(), "HasErrors should return false for valid subjects")
 			} else {
-				require.NotEmpty(t, result, "Expected validation errors")
-				require.Equal(t, testCase.expectedMessage, rule.Result(), "Expected error message doesn't match")
+				require.NotEmpty(t, errors, "Expected validation errors")
+
+				// Test pure function implementation explicitly
+				_, updatedRule := rules.ValidateSubjectSuffixWithState(rule, commit)
+				require.Equal(t, "Invalid subject suffix", updatedRule.Result(), "Result message should indicate invalid suffix")
+				require.True(t, updatedRule.HasErrors(), "HasErrors should return true for invalid subjects")
+
 				// Access validation error directly
-				validationErr := result[0]
+				validationErr := errors[0]
 				require.Equal(t, testCase.expectedCode, validationErr.Code, "Error code should match expected")
+
 				// Check that context contains required fields
-				if testCase.expectedCode == "invalid_suffix" {
+				if testCase.expectedCode == string(appErrors.ErrSubjectSuffix) {
 					require.Contains(t, validationErr.Context, "last_char", "Context should contain last_char")
 					require.Contains(t, validationErr.Context, "invalid_suffixes", "Context should contain invalid_suffixes")
-					// For special characters like Unicode emoji or tab, don't check the exact character
-					if testCase.subject != "" &&
-						!strings.Contains(testCase.subject, "😊") &&
-						!strings.Contains(testCase.subject, "\t") {
-						lastChar := string(testCase.subject[len(testCase.subject)-1])
-						require.Contains(t, rule.VerboseResult(), lastChar,
-							"VerboseResult should contain the last character")
-					}
 				}
-				// Check context contains subject
+				// Check context contains subject for all error types
 				require.Contains(t, validationErr.Context, "subject", "Context should contain subject")
 			}
+
 			// Check name
 			require.Equal(t, "SubjectSuffix", rule.Name(), "Name should be 'SubjectSuffix'")
-			// Check help text
-			helpText := rule.Help()
-			require.NotEmpty(t, helpText, "Help text should not be empty")
+
+			// For verbose result and help message, we need a rule with state
+			_, ruleWithState := rules.ValidateSubjectSuffixWithState(rule, commit)
+
+			// Check verbose result
+			require.NotEmpty(t, ruleWithState.VerboseResult(), "VerboseResult should not be empty")
+
+			// Check help message
+			require.NotEmpty(t, ruleWithState.Help(), "Help should not be empty")
+
 			// Verify help text is appropriate for the error
 			if !testCase.expectedValid {
+				helpText := ruleWithState.Help()
+
 				switch testCase.expectedCode {
-				case "missing_subject":
+				case string(appErrors.ErrMissingSubject):
 					require.Contains(t, helpText, "Provide a non-empty subject")
-				case "invalid_suffix":
+				case string(appErrors.ErrSubjectSuffix):
 					require.Contains(t, helpText, "Remove the punctuation")
-				case "invalid_utf8":
+				case string(appErrors.ErrInvalidFormat):
 					require.Contains(t, helpText, "valid UTF-8")
 				}
 			} else {
-				require.Contains(t, helpText, "No errors to fix")
+				require.Contains(t, ruleWithState.Help(), "No errors to fix")
 			}
 		})
 	}
@@ -192,7 +186,6 @@ func TestSubjectSuffixOptions(t *testing.T) {
 		}
 
 		errors := rule.Validate(commit)
-		*rule = rule.SetErrors(errors) // Save the returned rule
 
 		require.Empty(t, errors, "Default config should accept valid subject")
 
@@ -202,11 +195,10 @@ func TestSubjectSuffixOptions(t *testing.T) {
 		}
 
 		errors = rule.Validate(invalidCommit)
-		*rule = rule.SetErrors(errors) // Save the returned rule
 
 		require.NotEmpty(t, errors, "Default config should reject subject ending with period")
 		validationErr := errors[0]
-		require.Equal(t, "invalid_suffix", validationErr.Code, "Error code should be 'invalid_suffix'")
+		require.Equal(t, string(appErrors.ErrSubjectSuffix), validationErr.Code, "Error code should be 'invalid_suffix'")
 	})
 
 	t.Run("With custom invalid suffixes", func(t *testing.T) {
@@ -219,11 +211,10 @@ func TestSubjectSuffixOptions(t *testing.T) {
 		}
 
 		errors := rule.Validate(commit)
-		*rule = rule.SetErrors(errors) // Save the returned rule
 
 		require.NotEmpty(t, errors, "Should reject subject with configured invalid suffix")
 		validationErr := errors[0]
-		require.Equal(t, "invalid_suffix", validationErr.Code, "Error code should be 'invalid_suffix'")
+		require.Equal(t, string(appErrors.ErrSubjectSuffix), validationErr.Code, "Error code should be 'invalid_suffix'")
 
 		// Verify context contains the correct invalid suffixes
 		require.Equal(t, "!@#", validationErr.Context["invalid_suffixes"],
@@ -235,7 +226,6 @@ func TestSubjectSuffixOptions(t *testing.T) {
 		}
 
 		errors = rule.Validate(validCommit)
-		*rule = rule.SetErrors(errors) // Save the returned rule
 
 		require.Empty(t, errors, "Should accept subject ending with period when not in invalid set")
 	})
@@ -250,11 +240,32 @@ func TestSubjectSuffixOptions(t *testing.T) {
 		}
 
 		errors := rule.Validate(commit)
-		*rule = rule.SetErrors(errors) // Save the returned rule
 
 		require.NotEmpty(t, errors, "Should reject subject with default invalid suffix")
 		validationErr := errors[0]
 		require.Equal(t, rules.DefaultInvalidSuffixes, validationErr.Context["invalid_suffixes"],
 			"Should fall back to default invalid suffixes")
 	})
+}
+
+func TestSubjectSuffixRuleWithConfig(t *testing.T) {
+	// Create a mock config provider
+	mockConfig := &mockSubjectConfigProvider{invalidSuffixes: "!@#"}
+
+	// Create rule using config
+	rule := rules.NewSubjectSuffixRuleWithConfig(mockConfig)
+
+	// Verify the rule uses the config value
+	commit := domain.CommitInfo{
+		Subject: "Test with exclamation!",
+	}
+
+	// Validate and check for error
+	errors := rule.Validate(commit)
+	require.Len(t, errors, 1, "Should have exactly one error")
+	require.Equal(t, string(appErrors.ErrSubjectSuffix), errors[0].Code)
+
+	// Check context values
+	require.Equal(t, "!", errors[0].Context["last_char"])
+	require.Equal(t, "!@#", errors[0].Context["invalid_suffixes"])
 }

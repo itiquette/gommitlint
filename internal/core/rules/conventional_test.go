@@ -86,39 +86,35 @@ func TestConventionalCommitRule(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			// Create the rule
+			// Create a commit with the test subject
+			commit := domain.CommitInfo{
+				Subject: testCase.subject,
+			}
+
+			// Create the rule with value semantics
 			rule := rules.NewConventionalCommitRule(
 				rules.WithAllowedTypes(allowedTypes),
 				rules.WithAllowedScopes(allowedScopes),
 				rules.WithMaxDescLength(maxDescLength),
 			)
 
-			// Create a commit with the test subject
-			commit := domain.CommitInfo{
-				Subject: testCase.subject,
-			}
-
-			// Validate and get errors
+			// Validate with functional approach
 			errors := rule.Validate(commit)
 
-			// Check results functionally
+			// Check results
 			if testCase.expectValid {
 				require.Empty(t, errors, "Expected no errors but got: %v", errors)
-				// In functional style, we'd compute the result from the errors
-				result := getAFunctionalResult(errors)
-				require.Equal(t, "Valid conventional commit format", result)
 			} else {
 				require.NotEmpty(t, errors, "Expected errors but got none")
+
+				// Verify value semantics version errors
+				require.GreaterOrEqual(t, len(errors), 1, "should have at least one error")
 				valErr := errors[0]
 				require.Equal(t, "ConventionalCommit", valErr.Rule, "Rule name should be set")
 
 				if testCase.errorCode != "" {
 					require.Equal(t, testCase.errorCode, valErr.Code, "Error code should match expected")
 				}
-
-				// In functional style, we'd compute the result from the errors
-				result := getAFunctionalResult(errors)
-				require.Equal(t, "Invalid conventional commit format", result)
 			}
 		})
 	}
@@ -171,32 +167,34 @@ func TestConventionalCommitDescriptionLength(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			// Create the rule with proper configuration
+			// Create commit with the test subject
+			commit := domain.CommitInfo{
+				Subject: testCase.subject,
+			}
+
+			// Use the default if descLength is 0
 			descLength := testCase.descLength
 			if descLength == 0 {
 				descLength = 72 // Default
 			}
 
+			// Test with value semantics
 			rule := rules.NewConventionalCommitRule(
 				rules.WithAllowedTypes(testCase.types),
 				rules.WithAllowedScopes(testCase.scopes),
 				rules.WithMaxDescLength(descLength),
 			)
-
-			// Create a commit with the test subject
-			commit := domain.CommitInfo{
-				Subject: testCase.subject,
-			}
-
-			// Validate
 			errors := rule.Validate(commit)
 
 			if testCase.expectValid {
 				require.Empty(t, errors, "Expected no errors but got: %v", errors)
 			} else {
 				require.NotEmpty(t, errors, "Expected errors but got none")
+
+				// Check value semantics version
+				require.GreaterOrEqual(t, len(errors), 1, "should have at least one error")
 				valErr := errors[0]
-				require.Equal(t, testCase.errorCode, valErr.Code)
+				require.Equal(t, testCase.errorCode, valErr.Code, "Error code should match")
 			}
 		})
 	}
@@ -316,11 +314,14 @@ func TestConventionalCommitHelpMethod(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			// Get the rule and commit setup for this test
 			rule, commit := test.setupRule()
+
+			// Validate using value semantics
 			errors := rule.Validate(commit)
 
-			// Get help text - would be based on errors in functional style
-			help := getAFunctionalHelp(errors, rule)
+			// Get help text from the rule
+			help := rule.Help()
 
 			// Just verify help text is not empty for errors
 			if len(errors) > 0 {
@@ -330,22 +331,4 @@ func TestConventionalCommitHelpMethod(t *testing.T) {
 			}
 		})
 	}
-}
-
-// Helper functions for functional testing
-
-// getFunctionalResult computes the result message based on errors.
-func getAFunctionalResult(errors []appErrors.ValidationError) string {
-	if len(errors) > 0 {
-		return "Invalid conventional commit format"
-	}
-
-	return "Valid conventional commit format"
-}
-
-// getFunctionalHelp computes the help message based on errors.
-func getAFunctionalHelp(_ []appErrors.ValidationError, rule rules.ConventionalCommitRule) string {
-	// In functional style, we'd have a function that generates help based on errors
-	// Here we just use the rule's implementation for simplicity
-	return rule.Help()
 }

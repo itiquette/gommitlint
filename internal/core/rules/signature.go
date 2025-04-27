@@ -23,7 +23,7 @@ import (
 // provide strong assurance about who authored each change, which is especially
 // important for security-sensitive projects.
 type SignatureRule struct {
-	*BaseRule
+	BaseRule
 	requireSignature bool
 	allowedSigTypes  []string
 }
@@ -91,26 +91,13 @@ func NewSignatureRuleWithConfig(config domain.SecurityConfigProvider) SignatureR
 	return NewSignatureRule(options...)
 }
 
-// SetRuleState returns a new rule with the updated validation errors.
-func (r SignatureRule) SetRuleState(errors []appErrors.ValidationError) SignatureRule {
-	// Create a fresh base rule with our errors
-	baseRule := NewBaseRule(r.Name())
-	baseRule.MarkAsRun()
-
-	for _, err := range errors {
-		baseRule.AddError(err)
-	}
-
-	// Create a new rule with the updated base rule
-	result := r
-	result.BaseRule = baseRule
-
-	return result
+// Name returns the rule name.
+func (r SignatureRule) Name() string {
+	return r.BaseRule.Name()
 }
 
-// Validate validates a commit against the rule.
-func (r SignatureRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
-	// Create a new slice for errors
+// validateSignatureWithState validates a commit against the rule and returns errors along with an updated rule state.
+func validateSignatureWithState(rule SignatureRule, commit domain.CommitInfo) ([]appErrors.ValidationError, SignatureRule) {
 	errors := make([]appErrors.ValidationError, 0)
 
 	// Get signature from commit
@@ -119,18 +106,19 @@ func (r SignatureRule) Validate(commit domain.CommitInfo) []appErrors.Validation
 	// Check for empty signature
 	if signature == "" {
 		// If signature is required, add error
-		if r.requireSignature {
-			errors = append(errors, createError(
-				r.Name(),
+		if rule.requireSignature {
+			err := appErrors.New(
+				rule.Name(),
 				appErrors.ErrMissingSignature,
 				"commit does not have a SSH/GPG signature",
-				nil,
-			))
+			)
+			errors = append(errors, err)
+			rule = rule.setErrors(errors)
 
-			return errors
+			return errors, rule
 		}
 
-		return errors
+		return errors, rule
 	}
 
 	// Trim whitespace for validation
@@ -139,48 +127,51 @@ func (r SignatureRule) Validate(commit domain.CommitInfo) []appErrors.Validation
 	// Check for GPG signature
 	if strings.HasPrefix(signature, "-----BEGIN PGP SIGNATURE-----") {
 		// Verify if GPG signatures are allowed
-		if !r.isSignatureTypeAllowed("gpg") {
-			errors = append(errors, createError(
-				r.Name(),
+		if !rule.isSignatureTypeAllowed("gpg") {
+			context := map[string]string{
+				"signature_type": "gpg",
+				"allowed_types":  strings.Join(rule.allowedSigTypes, ", "),
+			}
+
+			rule = rule.addErrorWithContext(
 				appErrors.ErrDisallowedSigType,
 				"GPG signatures are not allowed with current configuration",
-				map[string]string{
-					"signature_type": "gpg",
-					"allowed_types":  strings.Join(r.allowedSigTypes, ", "),
-				},
-			))
+				context,
+			)
 
-			return errors
+			return rule.Errors(), rule
 		}
 
 		// Verify the format of the GPG signature
 		block, err := armor.Decode(strings.NewReader(signature))
 		if err != nil {
-			errors = append(errors, createError(
-				r.Name(),
+			context := map[string]string{
+				"signature_type": "gpg",
+				"error_details":  err.Error(),
+			}
+
+			rule = rule.addErrorWithContext(
 				appErrors.ErrInvalidGPGFormat,
 				"invalid GPG signature format: "+err.Error(),
-				map[string]string{
-					"signature_type": "gpg",
-					"error_details":  err.Error(),
-				},
-			))
+				context,
+			)
 
-			return errors
+			return rule.Errors(), rule
 		}
 
 		if block.Type != "PGP SIGNATURE" {
-			errors = append(errors, createError(
-				r.Name(),
+			context := map[string]string{
+				"signature_type": "gpg",
+				"block_type":     block.Type,
+			}
+
+			rule = rule.addErrorWithContext(
 				appErrors.ErrInvalidGPGFormat,
 				"invalid GPG armor block type: "+block.Type,
-				map[string]string{
-					"signature_type": "gpg",
-					"block_type":     block.Type,
-				},
-			))
+				context,
+			)
 
-			return errors
+			return rule.Errors(), rule
 		}
 
 		// Try to parse the packet
@@ -188,57 +179,60 @@ func (r SignatureRule) Validate(commit domain.CommitInfo) []appErrors.Validation
 
 		_, err = packetReader.Next()
 		if err != nil {
-			errors = append(errors, createError(
-				r.Name(),
+			context := map[string]string{
+				"signature_type": "gpg",
+				"error_details":  err.Error(),
+			}
+
+			rule = rule.addErrorWithContext(
 				appErrors.ErrInvalidGPGFormat,
 				"cannot parse GPG signature packet: "+err.Error(),
-				map[string]string{
-					"signature_type": "gpg",
-					"error_details":  err.Error(),
-				},
-			))
+				context,
+			)
 
-			return errors
+			return rule.Errors(), rule
 		}
 
 		// Check if the signature has an end marker
 		if !strings.Contains(signature, "-----END PGP SIGNATURE-----") {
-			errors = append(errors, createError(
-				r.Name(),
+			context := map[string]string{
+				"signature_type": "gpg",
+				"error_details":  "incomplete GPG signature",
+			}
+
+			rule = rule.addErrorWithContext(
 				appErrors.ErrIncompleteGPGSig,
 				"incomplete GPG signature (missing end marker)",
-				map[string]string{
-					"signature_type": "gpg",
-					"error_details":  "incomplete GPG signature",
-				},
-			))
+				context,
+			)
 
-			return errors
+			return rule.Errors(), rule
 		}
 
 		// Signature is valid (format only)
-		return errors
+		return rule.Errors(), rule
 	}
 
 	// Check for SSH signature
 	if strings.HasPrefix(signature, "-----BEGIN SSH SIGNATURE-----") {
 		// Verify if SSH signatures are allowed
-		if !r.isSignatureTypeAllowed("ssh") {
-			errors = append(errors, createError(
-				r.Name(),
+		if !rule.isSignatureTypeAllowed("ssh") {
+			context := map[string]string{
+				"signature_type": "ssh",
+				"allowed_types":  strings.Join(rule.allowedSigTypes, ", "),
+			}
+
+			rule = rule.addErrorWithContext(
 				appErrors.ErrDisallowedSigType,
 				"SSH signatures are not allowed with current configuration",
-				map[string]string{
-					"signature_type": "ssh",
-					"allowed_types":  strings.Join(r.allowedSigTypes, ", "),
-				},
-			))
+				context,
+			)
 
-			return errors
+			return rule.Errors(), rule
 		}
 
 		// Use SSH-specific validation
-		err := r.verifySSHSignatureFormat(signature)
+		err := verifySSHSignatureFormat(signature)
 		if err != nil {
 			errorCode := appErrors.ErrInvalidSSHFormat
 			if strings.Contains(err.Error(), "incomplete SSH signature") {
@@ -247,39 +241,54 @@ func (r SignatureRule) Validate(commit domain.CommitInfo) []appErrors.Validation
 				errorCode = appErrors.ErrInvalidSSHFormat
 			}
 
-			errors = append(errors, createError(
-				r.Name(),
+			context := map[string]string{
+				"signature_type": "ssh",
+				"error_details":  err.Error(),
+			}
+
+			rule = rule.addErrorWithContext(
 				errorCode,
 				err.Error(),
-				map[string]string{
-					"signature_type": "ssh",
-					"error_details":  err.Error(),
-				},
-			))
+				context,
+			)
 
-			return errors
+			return rule.Errors(), rule
 		}
 
 		// Signature is valid (format only)
-		return errors
+		return rule.Errors(), rule
 	}
 
 	// Not a recognized signature format
-	errors = append(errors, createError(
-		r.Name(),
+	context := map[string]string{
+		"signature_prefix": signature[:signatureSafeMin(len(signature), 20)], // Just capture the first bit for context
+	}
+
+	rule = rule.addErrorWithContext(
 		appErrors.ErrUnknownSigFormat,
 		"unrecognized signature format (must be GPG or SSH)",
-		map[string]string{
-			"signature_prefix": signature[:safeMin(len(signature), 20)], // Just capture the first bit for context
-		},
-	))
+		context,
+	)
+
+	return rule.Errors(), rule
+}
+
+// Validate validates a commit against the rule and returns any errors.
+func (r SignatureRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
+	errors, _ := validateSignatureWithState(r, commit)
 
 	return errors
 }
 
+// ValidateSignatureWithState validates a commit against the rule and returns errors along with an updated rule state.
+// Exported for testing purposes.
+func ValidateSignatureWithState(rule SignatureRule, commit domain.CommitInfo) ([]appErrors.ValidationError, SignatureRule) {
+	return validateSignatureWithState(rule, commit)
+}
+
 // Result returns a concise validation result as a human-readable string.
 func (r SignatureRule) Result() string {
-	if r.HasErrors() {
+	if len(r.Errors()) > 0 {
 		// Always return the same message for consistency with test expectations
 		return "Missing or invalid signature"
 	}
@@ -352,7 +361,7 @@ created by a trusted key. For full security, additional verification is required
 	}
 
 	// Check error code for targeted help
-	if r.ErrorCount() > 0 {
+	if len(r.Errors()) > 0 {
 		errors := r.Errors()
 		if len(errors) == 0 {
 			return "No errors to fix"
@@ -462,9 +471,47 @@ func (r SignatureRule) isSignatureTypeAllowed(sigType string) bool {
 	return false
 }
 
+// setErrors returns a new rule with the updated validation errors.
+func (r SignatureRule) setErrors(errors []appErrors.ValidationError) SignatureRule {
+	result := r
+
+	// Update baseRule
+	baseRule := r.BaseRule
+	for _, err := range errors {
+		baseRule = baseRule.WithError(err)
+	}
+
+	result.BaseRule = baseRule
+
+	return result
+}
+
+// addErrorWithContext adds a validation error with context information.
+func (r SignatureRule) addErrorWithContext(code appErrors.ValidationErrorCode, message string, context map[string]string) SignatureRule {
+	rule := r
+	rule.BaseRule = rule.BaseRule.WithErrorWithContext(code, message, context)
+
+	return rule
+}
+
+// HasErrors returns true if the rule has validation errors.
+func (r SignatureRule) HasErrors() bool {
+	return r.BaseRule.HasErrors()
+}
+
+// Errors returns all validation errors found by this rule.
+func (r SignatureRule) Errors() []appErrors.ValidationError {
+	return r.BaseRule.Errors()
+}
+
+// ErrorCount returns the number of validation errors.
+func (r SignatureRule) ErrorCount() int {
+	return len(r.Errors())
+}
+
 // verifySSHSignatureFormat performs basic validation of SSH signature format
 // without attempting to parse the detailed binary structure.
-func (r SignatureRule) verifySSHSignatureFormat(signature string) error {
+func verifySSHSignatureFormat(signature string) error {
 	if !strings.HasPrefix(signature, "-----BEGIN SSH SIGNATURE-----") {
 		return errors.New("missing SSH signature begin marker")
 	}
@@ -496,4 +543,14 @@ func (r SignatureRule) verifySSHSignatureFormat(signature string) error {
 	}
 
 	return nil
+}
+
+// signatureSafeMin returns the minimum of a and b, safely handling integer overflows.
+// Renamed to avoid conflicts with other files.
+func signatureSafeMin(a, b int) int {
+	if a < b {
+		return a
+	}
+
+	return b
 }

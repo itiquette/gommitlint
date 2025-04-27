@@ -27,6 +27,3 @@ type RuleConfigProvider interface {
 	// SetDisabledRules sets the list of disabled rule names.
 	SetDisabledRules(rules []string)
 }
-
-// RulesConfigProvider is an alias for RuleConfigProvider for backward compatibility.
-type RulesConfigProvider = RuleConfigProvider

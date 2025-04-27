@@ -23,58 +23,69 @@ var SignOffRegex = regexp.MustCompile(`^Signed-off-by: ([^<]+) <([^<>]+@[^<>]+\.
 // their code under the project's license, which is important for legal compliance and
 // establishing clean provenance for all contributions.
 type SignOffRule struct {
-	*BaseRule
+	baseRule            BaseRule
 	requireSignOff      bool
 	allowMultiple       bool
 	customRegex         *regexp.Regexp
 	hasAttemptedSignOff bool   // Track if there was an attempt at signing off
 	foundSignOff        string // Store the found sign-off for verbose output
+	errors              []appErrors.ValidationError
 }
 
 // SignOffOption is a function that modifies a SignOffRule.
-type SignOffOption func(*SignOffRule)
+type SignOffOption func(SignOffRule) SignOffRule
 
 // WithRequireSignOff configures whether the sign-off is mandatory.
 func WithRequireSignOff(require bool) SignOffOption {
-	return func(rule *SignOffRule) {
-		rule.requireSignOff = require
+	return func(rule SignOffRule) SignOffRule {
+		result := rule
+		result.requireSignOff = require
+
+		return result
 	}
 }
 
 // WithAllowMultipleSignOffs configures whether multiple sign-offs are allowed.
 func WithAllowMultipleSignOffs(allow bool) SignOffOption {
-	return func(rule *SignOffRule) {
-		rule.allowMultiple = allow
+	return func(rule SignOffRule) SignOffRule {
+		result := rule
+		result.allowMultiple = allow
+
+		return result
 	}
 }
 
 // WithCustomSignOffRegex sets a custom regular expression for validating sign-offs.
 func WithCustomSignOffRegex(regex *regexp.Regexp) SignOffOption {
-	return func(rule *SignOffRule) {
+	return func(rule SignOffRule) SignOffRule {
+		result := rule
 		if regex != nil {
-			rule.customRegex = regex
+			result.customRegex = regex
 		}
+
+		return result
 	}
 }
 
 // NewSignOffRule creates a new SignOffRule with the specified options.
-func NewSignOffRule(options ...SignOffOption) *SignOffRule {
-	rule := &SignOffRule{
-		BaseRule:       NewBaseRule("SignOff"),
+func NewSignOffRule(options ...SignOffOption) SignOffRule {
+	rule := SignOffRule{
+		baseRule:       NewBaseRule("SignOff"),
 		requireSignOff: true, // By default, sign-off is mandatory
 		allowMultiple:  true, // By default, allow multiple sign-offs
 		customRegex:    nil,  // By default, use the standard regex
+		errors:         make([]appErrors.ValidationError, 0),
 	}
 	// Apply provided options
 	for _, option := range options {
-		option(rule)
+		rule = option(rule)
 	}
 
 	return rule
 }
 
 // NewSignOffRuleWithConfig creates a SignOffRule using configuration.
-func NewSignOffRuleWithConfig(config domain.SecurityConfigProvider) *SignOffRule {
+func NewSignOffRuleWithConfig(config domain.SecurityConfigProvider) SignOffRule {
 	// Build options based on the configuration
 	var options []SignOffOption
 
@@ -87,23 +98,44 @@ func NewSignOffRuleWithConfig(config domain.SecurityConfigProvider) *SignOffRule
 	return NewSignOffRule(options...)
 }
 
-// SetSignOffState sets the sign-off state flags after validation.
-// This allows using value receivers in other methods.
-func (r SignOffRule) SetSignOffState(errList []appErrors.ValidationError, attempted bool, found string) SignOffRule {
-	// Since we're using a value receiver, we return a new copy with the updated values
-	r.hasAttemptedSignOff = attempted
-	r.foundSignOff = found
+// SetErrors sets the validation errors for this rule and returns a new instance.
+func (r SignOffRule) SetErrors(errors []appErrors.ValidationError) SignOffRule {
+	result := r
+	result.errors = errors
 
-	// Create a fresh BaseRule with our errors
-	baseRule := NewBaseRule(r.Name())
-	for _, err := range errList {
-		baseRule.AddError(err)
+	// Also update baseRule for consistency
+	baseRule := r.baseRule
+	for _, err := range errors {
+		baseRule = baseRule.WithError(err)
 	}
 
-	baseRule.MarkAsRun()
-	r.BaseRule = baseRule
+	result.baseRule = baseRule
 
-	return r
+	return result
+}
+
+// SetSignOffInfo sets additional sign-off information (attempted, found) and returns a new instance.
+func (r SignOffRule) SetSignOffInfo(attempted bool, found string) SignOffRule {
+	result := r
+	result.hasAttemptedSignOff = attempted
+	result.foundSignOff = found
+
+	return result
+}
+
+// Errors returns all validation errors.
+func (r SignOffRule) Errors() []appErrors.ValidationError {
+	return r.errors
+}
+
+// HasErrors checks if the rule has any validation errors.
+func (r SignOffRule) HasErrors() bool {
+	return len(r.errors) > 0
+}
+
+// Name returns the rule name.
+func (r SignOffRule) Name() string {
+	return r.baseRule.Name()
 }
 
 // Validate validates a commit message against the rule.

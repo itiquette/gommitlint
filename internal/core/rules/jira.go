@@ -25,8 +25,7 @@ var (
 // traceability between code changes and issue tracking systems, making it easier to
 // understand the purpose and context of each commit.
 type JiraReferenceRule struct {
-	*BaseRule
-	// Store information for verbose output
+	BaseRule        BaseRule
 	foundKeys       []string
 	validateBodyRef bool
 	validProjects   []string
@@ -34,48 +33,58 @@ type JiraReferenceRule struct {
 }
 
 // JiraReferenceOption is a function that modifies a JiraReferenceRule.
-type JiraReferenceOption func(*JiraReferenceRule)
+type JiraReferenceOption func(JiraReferenceRule) JiraReferenceRule
 
 // WithValidProjects sets the list of permitted Jira project keys.
 func WithValidProjects(projects []string) JiraReferenceOption {
-	return func(rule *JiraReferenceRule) {
-		rule.validProjects = projects
+	return func(rule JiraReferenceRule) JiraReferenceRule {
+		result := rule
+		result.validProjects = projects
+
+		return result
 	}
 }
 
 // WithBodyRefChecking enables validation of Jira references in the commit body.
 func WithBodyRefChecking() JiraReferenceOption {
-	return func(rule *JiraReferenceRule) {
-		rule.validateBodyRef = true
+	return func(rule JiraReferenceRule) JiraReferenceRule {
+		result := rule
+		result.validateBodyRef = true
+
+		return result
 	}
 }
 
 // WithConventionalCommit enables conventional commit format handling.
 func WithConventionalCommit() JiraReferenceOption {
-	return func(rule *JiraReferenceRule) {
-		rule.isConventional = true
+	return func(rule JiraReferenceRule) JiraReferenceRule {
+		result := rule
+		result.isConventional = true
+
+		return result
 	}
 }
 
 // NewJiraReferenceRule creates a new JiraReferenceRule with the specified options.
-func NewJiraReferenceRule(options ...JiraReferenceOption) *JiraReferenceRule {
-	rule := &JiraReferenceRule{
+func NewJiraReferenceRule(options ...JiraReferenceOption) JiraReferenceRule {
+	rule := JiraReferenceRule{
 		BaseRule:        NewBaseRule("JiraReference"),
 		foundKeys:       []string{},
 		validateBodyRef: false,
 		validProjects:   []string{},
 		isConventional:  false,
 	}
+
 	// Apply provided options
 	for _, option := range options {
-		option(rule)
+		rule = option(rule)
 	}
 
 	return rule
 }
 
 // NewJiraReferenceRuleWithConfig creates a JiraReferenceRule using a configuration provider.
-func NewJiraReferenceRuleWithConfig(jiraConfig domain.JiraConfigProvider, conventionalConfig domain.ConventionalConfigProvider) *JiraReferenceRule {
+func NewJiraReferenceRuleWithConfig(jiraConfig domain.JiraConfigProvider, conventionalConfig domain.ConventionalConfigProvider) JiraReferenceRule {
 	// Build options based on the configuration
 	var options []JiraReferenceOption
 
@@ -282,15 +291,11 @@ For body references:
 The Jira issue key should follow the format PROJECT-123.`
 }
 
-// Validate performs validation against a commit and returns any errors.
-func (j JiraReferenceRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
-	// Create a copy of the rule to work with (immutable approach)
-	ruleCopy := j
-
-	// Reset errors and found keys on the copy
-	ruleCopy.ClearErrors()
-	ruleCopy.MarkAsRun()
-	ruleCopy.foundKeys = []string{}
+// validateJiraWithState validates a commit and returns both errors and an updated rule state.
+func validateJiraWithState(rule JiraReferenceRule, commit domain.CommitInfo) ([]appErrors.ValidationError, JiraReferenceRule) {
+	// Start with a clean slate and mark as run
+	updatedRule := rule
+	updatedRule.BaseRule = updatedRule.BaseRule.WithClearedErrors().WithRun()
 
 	subject := commit.Subject
 	body := commit.Body
@@ -299,46 +304,100 @@ func (j JiraReferenceRule) Validate(commit domain.CommitInfo) []appErrors.Valida
 	subject = strings.TrimSpace(subject)
 	if subject == "" {
 		// Create a validation error for empty subject
-		err := appErrors.ValidationError{
-			Rule:    ruleCopy.Name(),
-			Code:    string(appErrors.ErrEmptyMessage),
-			Message: "Commit subject is empty",
-		}
-		// Add the error to our copy
-		ruleCopy.AddError(err)
+		err := appErrors.New(
+			updatedRule.Name(),
+			appErrors.ErrEmptyMessage,
+			"Commit subject is empty",
+			appErrors.WithContextMap(map[string]string{}),
+		)
 
-		return ruleCopy.Errors()
+		// Add error and return
+		updatedRule.BaseRule = updatedRule.BaseRule.WithError(err)
+
+		return []appErrors.ValidationError{err}, updatedRule
 	}
 
 	// Validate based on the configured strategy
-	if ruleCopy.validateBodyRef {
-		ruleCopy = ruleCopy.validateBodyReferences(body)
+	var errors []appErrors.ValidationError
+	if rule.validateBodyRef {
+		errors = rule.validateBodyReferences(body)
 	} else {
-		ruleCopy = ruleCopy.validateSubjectReferences(subject)
+		errors = rule.validateSubjectReferences(subject)
 	}
 
-	return ruleCopy.Errors()
+	// Add errors to the updated rule
+	for _, err := range errors {
+		updatedRule.BaseRule = updatedRule.BaseRule.WithError(err)
+	}
+
+	return errors, updatedRule
 }
 
-// addErrorWithContext adds an error with context to the rule and returns a new rule.
-func (j JiraReferenceRule) addErrorWithContext(code appErrors.ValidationErrorCode, message string, context map[string]string) JiraReferenceRule {
-	// Create a new error
-	err := appErrors.ValidationError{
+// Validate performs validation against a commit and returns any errors.
+// This uses value semantics and does not modify the rule's state.
+func (j JiraReferenceRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
+	errors, _ := validateJiraWithState(j, commit)
+
+	return errors
+}
+
+// ValidateJiraWithState is the exported version of validateJiraWithState.
+// This is needed for testing but follows the same pure function approach.
+func ValidateJiraWithState(rule JiraReferenceRule, commit domain.CommitInfo) ([]appErrors.ValidationError, JiraReferenceRule) {
+	return validateJiraWithState(rule, commit)
+}
+
+// Name returns the rule name.
+func (j JiraReferenceRule) Name() string {
+	return j.BaseRule.Name()
+}
+
+// Errors returns all validation errors.
+func (j JiraReferenceRule) Errors() []appErrors.ValidationError {
+	return j.BaseRule.Errors()
+}
+
+// HasErrors checks if there are any validation errors.
+func (j JiraReferenceRule) HasErrors() bool {
+	return j.BaseRule.HasErrors()
+}
+
+// SetErrors sets the errors for this rule and returns a new instance.
+func (j JiraReferenceRule) SetErrors(errors []appErrors.ValidationError) JiraReferenceRule {
+	result := j
+
+	// Update BaseRule with errors
+	baseRule := j.BaseRule.WithClearedErrors()
+	for _, err := range errors {
+		baseRule = baseRule.WithError(err)
+	}
+
+	result.BaseRule = baseRule
+
+	return result
+}
+
+// SetFoundKeys sets the found keys and returns a new instance.
+func (j JiraReferenceRule) SetFoundKeys(keys []string) JiraReferenceRule {
+	result := j
+	result.foundKeys = keys
+
+	return result
+}
+
+// createError creates a validation error without modifying the rule's state.
+func (j JiraReferenceRule) createError(code appErrors.ValidationErrorCode, message string, context map[string]string) appErrors.ValidationError {
+	// Create the validation error
+	return appErrors.ValidationError{
 		Rule:    j.Name(),
 		Code:    string(code),
 		Message: message,
 		Context: context,
 	}
-
-	// Create a new rule with the error added
-	newRule := j
-	newRule.AddError(err)
-
-	return newRule
 }
 
 // validateSubjectReferences validates Jira references in the commit subject.
-func (j JiraReferenceRule) validateSubjectReferences(subject string) JiraReferenceRule {
+func (j JiraReferenceRule) validateSubjectReferences(subject string) []appErrors.ValidationError {
 	lines := strings.Split(subject, "\n")
 
 	firstLine := lines[0]
@@ -350,7 +409,9 @@ func (j JiraReferenceRule) validateSubjectReferences(subject string) JiraReferen
 }
 
 // validateConventionalCommitSubject validates a conventional commit subject line.
-func (j JiraReferenceRule) validateConventionalCommitSubject(firstLine string) JiraReferenceRule {
+func (j JiraReferenceRule) validateConventionalCommitSubject(firstLine string) []appErrors.ValidationError {
+	errors := make([]appErrors.ValidationError, 0)
+
 	matches := jiraKeyRegex.FindAllString(firstLine, -1)
 	if len(matches) == 0 {
 		// Check for invalid format key like PROJ123 (without hyphen)
@@ -359,40 +420,49 @@ func (j JiraReferenceRule) validateConventionalCommitSubject(firstLine string) J
 
 		if len(invalidMatches) > 0 {
 			// Found something that looks like a Jira key but with invalid format
-			return j.addErrorWithContext(
+			err := j.createError(
 				appErrors.ErrInvalidFormat,
 				"invalid Jira issue key format: "+invalidMatches[0]+" (should be PROJECT-123)",
 				map[string]string{
 					"key": invalidMatches[0],
 				},
 			)
+			errors = append(errors, err)
+
+			return errors
 		}
 
 		// No key-like patterns found, report as missing
-		return j.addErrorWithContext(
+		err := j.createError(
 			appErrors.ErrMissingJira,
 			"no Jira issue key found in the commit subject",
 			map[string]string{
 				"subject": firstLine,
 			},
 		)
+		errors = append(errors, err)
+
+		return errors
 	}
 
 	// Validate position for conventional commit format
-	jWithPosition := j.validateKeyPositionInConventional(firstLine, matches)
-	if jWithPosition.HasErrors() {
-		return jWithPosition
+	// This will return any errors or empty slice
+	errors = j.validateKeyPositionInConventional(firstLine, matches)
+	if len(errors) > 0 {
+		return errors
 	}
 
 	// Extract the last match
 	lastMatch := matches[len(matches)-1]
 
 	// Validate the project
-	return jWithPosition.validateJiraProject(lastMatch)
+	return j.validateJiraProject(lastMatch)
 }
 
 // validateKeyPositionInConventional checks if the Jira key is at the end of the subject line.
-func (j JiraReferenceRule) validateKeyPositionInConventional(firstLine string, matches []string) JiraReferenceRule {
+func (j JiraReferenceRule) validateKeyPositionInConventional(firstLine string, matches []string) []appErrors.ValidationError {
+	errors := make([]appErrors.ValidationError, 0)
+
 	// Get the last match
 	lastMatch := matches[len(matches)-1]
 	// Check if the last match is at the end of the first line
@@ -405,16 +475,18 @@ func (j JiraReferenceRule) validateKeyPositionInConventional(firstLine string, m
 
 	for _, suffix := range validSuffixes {
 		if strings.HasSuffix(firstLine, suffix) {
-			// Found at the end, add to found keys
-			newRule := j
-			newRule.foundKeys = append(newRule.foundKeys, lastMatch)
+			// Found at the end - keep track for downstream methods
+			foundKeys := append(j.foundKeys, lastMatch)
+			jWithKeys := j.SetFoundKeys(foundKeys)
+			_ = jWithKeys // In a purely functional approach, we'd return this or pass to a continuation
 
-			return newRule
+			// No errors to return
+			return errors
 		}
 	}
 
 	// Not found at the end, report error
-	return j.addErrorWithContext(
+	err := j.createError(
 		appErrors.ErrInvalidFormat,
 		"in conventional commit format, Jira issue key must be at the end of the first line",
 		map[string]string{
@@ -422,10 +494,15 @@ func (j JiraReferenceRule) validateKeyPositionInConventional(firstLine string, m
 			"key":     lastMatch,
 		},
 	)
+	errors = append(errors, err)
+
+	return errors
 }
 
 // validateNonConventionalCommitSubject validates a non-conventional commit subject.
-func (j JiraReferenceRule) validateNonConventionalCommitSubject(subject string) JiraReferenceRule {
+func (j JiraReferenceRule) validateNonConventionalCommitSubject(subject string) []appErrors.ValidationError {
+	errors := make([]appErrors.ValidationError, 0)
+
 	matches := jiraKeyRegex.FindAllString(subject, -1)
 
 	// Special handling for invalid format like PROJ123 (without hyphen)
@@ -436,75 +513,92 @@ func (j JiraReferenceRule) validateNonConventionalCommitSubject(subject string) 
 
 		if len(invalidMatches) > 0 {
 			// Found something that looks like a Jira key but with invalid format
-			return j.addErrorWithContext(
+			err := j.createError(
 				appErrors.ErrInvalidFormat,
 				"invalid Jira issue key format: "+invalidMatches[0]+" (should be PROJECT-123)",
 				map[string]string{
 					"key": invalidMatches[0],
 				},
 			)
+			errors = append(errors, err)
+
+			return errors
 		}
 
 		// No key-like patterns found, report as missing
-		return j.addErrorWithContext(
+		err := j.createError(
 			appErrors.ErrMissingJira,
 			"no Jira issue key found in the commit subject",
 			map[string]string{
 				"subject": subject,
 			},
 		)
+		errors = append(errors, err)
+
+		return errors
 	}
 
-	// Store all found keys
-	newRule := j
-	newRule.foundKeys = matches
+	// Store all found keys for downstream methods
+	jWithKeys := j.SetFoundKeys(matches)
+	_ = jWithKeys // In purely functional code, we'd pass this forward
 
 	// Validate all found project keys
-	return newRule.validateAllFoundProjects(matches)
+	return j.validateAllFoundProjects(matches)
 }
 
 // validateAllFoundProjects validates all Jira project references found.
-func (j JiraReferenceRule) validateAllFoundProjects(matches []string) JiraReferenceRule {
-	updatedRule := j
+func (j JiraReferenceRule) validateAllFoundProjects(matches []string) []appErrors.ValidationError {
+	errors := make([]appErrors.ValidationError, 0)
 
 	for _, match := range matches {
-		updatedRule = updatedRule.validateJiraProject(match)
-		if updatedRule.HasErrors() {
-			return updatedRule
+		projectErrors := j.validateJiraProject(match)
+		if len(projectErrors) > 0 {
+			errors = append(errors, projectErrors...)
+
+			break // Stop on first error
 		}
 	}
 
-	return updatedRule
+	return errors
 }
 
 // validateBodyReferences validates Jira references in the commit body.
-func (j JiraReferenceRule) validateBodyReferences(body string) JiraReferenceRule {
+func (j JiraReferenceRule) validateBodyReferences(body string) []appErrors.ValidationError {
+	errors := make([]appErrors.ValidationError, 0)
+
 	body = strings.TrimSpace(body)
 	if body == "" {
-		return j.addErrorWithContext(
+		err := j.createError(
 			appErrors.ErrMissingJira,
 			"no Jira issue key found in the commit body",
 			nil,
 		)
+		errors = append(errors, err)
+
+		return errors
 	}
 
 	// Look for "Refs:" lines
 	bodyLines := strings.Split(body, "\n")
 
 	// Check format and locate references
-	lineInfo, updatedRule := j.findRefsAndSignoffLines(bodyLines)
-	if updatedRule.HasErrors() {
-		return updatedRule
+	lineInfo, lineErrors := j.findRefsAndSignoffLines(bodyLines)
+	if len(lineErrors) > 0 {
+		errors = append(errors, lineErrors...)
+
+		return errors
 	}
 
 	// Validate reference ordering
-	updatedRule = updatedRule.validateReferenceLineOrdering(lineInfo)
-	if updatedRule.HasErrors() {
-		return updatedRule
+	orderErrors := j.validateReferenceLineOrdering(lineInfo)
+	if len(orderErrors) > 0 {
+		errors = append(errors, orderErrors...)
+
+		return errors
 	}
 
 	// Validate the Jira keys in the Refs: line
-	return updatedRule.validateJiraKeysInRefLine(bodyLines, lineInfo.refsLine)
+	return j.validateJiraKeysInRefLine(bodyLines, lineInfo.refsLine)
 }
 
 // RefsLineInfo holds information about Refs and Signoff lines.
@@ -517,7 +611,9 @@ type RefsLineInfo struct {
 }
 
 // findRefsAndSignoffLines locates and validates "Refs:" and "Signed-off-by:" lines.
-func (j JiraReferenceRule) findRefsAndSignoffLines(bodyLines []string) (RefsLineInfo, JiraReferenceRule) {
+func (j JiraReferenceRule) findRefsAndSignoffLines(bodyLines []string) (RefsLineInfo, []appErrors.ValidationError) {
+	errors := make([]appErrors.ValidationError, 0)
+
 	info := RefsLineInfo{
 		foundRefs:      false,
 		signOffFound:   false,
@@ -545,7 +641,7 @@ func (j JiraReferenceRule) findRefsAndSignoffLines(bodyLines []string) (RefsLine
 			if invalidFormatRegex.MatchString(line) {
 				matches := invalidFormatRegex.FindStringSubmatch(line)
 				invalidKey := matches[1]
-				updatedRule := j.addErrorWithContext(
+				err := j.createError(
 					appErrors.ErrInvalidFormat,
 					"invalid Jira issue key format: "+invalidKey+" (should be PROJECT-123)",
 					map[string]string{
@@ -553,42 +649,47 @@ func (j JiraReferenceRule) findRefsAndSignoffLines(bodyLines []string) (RefsLine
 						"line": line,
 					},
 				)
+				errors = append(errors, err)
 
-				return info, updatedRule
+				return info, errors
 			}
 
 			// Regular invalid format
-			updatedRule := j.addErrorWithContext(
+			err := j.createError(
 				appErrors.ErrInvalidFormat,
 				"invalid Refs format in commit body, should be 'Refs: PROJ-123' or 'Refs: PROJ-123, PROJ-456'",
 				map[string]string{
 					"line": line,
 				},
 			)
+			errors = append(errors, err)
 
-			return info, updatedRule
+			return info, errors
 		}
 	}
 
 	// Validate that Refs: exists
 	if !info.foundRefs {
-		updatedRule := j.addErrorWithContext(
+		err := j.createError(
 			appErrors.ErrMissingJira,
 			"no Jira issue key found in the commit body with Refs: prefix",
 			nil,
 		)
+		errors = append(errors, err)
 
-		return info, updatedRule
+		return info, errors
 	}
 
-	return info, j
+	return info, errors
 }
 
 // validateReferenceLineOrdering ensures that Refs: appears before Signed-off-by.
-func (j JiraReferenceRule) validateReferenceLineOrdering(info RefsLineInfo) JiraReferenceRule {
+func (j JiraReferenceRule) validateReferenceLineOrdering(info RefsLineInfo) []appErrors.ValidationError {
+	errors := make([]appErrors.ValidationError, 0)
+
 	// Validate that Refs: appears before any Signed-off-by lines
 	if info.signOffFound && info.refsLineNum > info.signOffLineNum {
-		return j.addErrorWithContext(
+		err := j.createError(
 			appErrors.ErrInvalidFormat,
 			"Refs: line must appear before any Signed-off-by lines",
 			map[string]string{
@@ -596,26 +697,35 @@ func (j JiraReferenceRule) validateReferenceLineOrdering(info RefsLineInfo) Jira
 				"signoff_line": strconv.Itoa(info.signOffLineNum),
 			},
 		)
+		errors = append(errors, err)
 	}
 
-	return j
+	return errors
 }
 
 // validateJiraKeysInRefLine validates the Jira keys in the first Refs: line.
-func (j JiraReferenceRule) validateJiraKeysInRefLine(bodyLines []string, _ int) JiraReferenceRule {
-	updatedRule := j
+func (j JiraReferenceRule) validateJiraKeysInRefLine(bodyLines []string, _ int) []appErrors.ValidationError {
+	errors := make([]appErrors.ValidationError, 0)
+
+	var foundKeys []string
 
 	for _, line := range bodyLines {
 		line = strings.TrimSpace(line)
 		if refsLineRegex.MatchString(line) {
 			// Extract and validate all Jira keys
 			matches := jiraKeyRegex.FindAllString(line, -1)
-			updatedRule.foundKeys = matches
+			foundKeys = matches
+
+			// Store for downstream methods
+			jWithKeys := j.SetFoundKeys(foundKeys)
+			_ = jWithKeys // In purely functional code, we'd pass this forward
 
 			for _, match := range matches {
-				updatedRule = updatedRule.validateJiraProject(match)
-				if updatedRule.HasErrors() {
-					return updatedRule
+				projectErrors := j.validateJiraProject(match)
+				if len(projectErrors) > 0 {
+					errors = append(errors, projectErrors...)
+
+					return errors
 				}
 			}
 
@@ -623,31 +733,36 @@ func (j JiraReferenceRule) validateJiraKeysInRefLine(bodyLines []string, _ int) 
 		}
 	}
 
-	return updatedRule
+	return errors
 }
 
 // validateJiraProject checks if a Jira issue key is valid.
-func (j JiraReferenceRule) validateJiraProject(jiraKey string) JiraReferenceRule {
+func (j JiraReferenceRule) validateJiraProject(jiraKey string) []appErrors.ValidationError {
+	errors := make([]appErrors.ValidationError, 0)
+
 	// First, verify the key has the correct format
 	if !jiraKeyRegex.MatchString(jiraKey) {
-		return j.addErrorWithContext(
+		err := j.createError(
 			appErrors.ErrInvalidFormat,
 			"invalid Jira issue key format: "+jiraKey+" (should be PROJECT-123)",
 			map[string]string{
 				"key": jiraKey,
 			},
 		)
+		errors = append(errors, err)
+
+		return errors
 	}
 
 	// If no project list is provided, just validate the format
 	if len(j.validProjects) == 0 {
-		return j
+		return errors
 	}
 
 	// When project list is provided, validate against it
 	projectKey := strings.Split(jiraKey, "-")[0]
 	if !containsString(j.validProjects, projectKey) {
-		return j.addErrorWithContext(
+		err := j.createError(
 			appErrors.ErrInvalidType,
 			"Jira project "+projectKey+" is not a valid project",
 			map[string]string{
@@ -655,9 +770,10 @@ func (j JiraReferenceRule) validateJiraProject(jiraKey string) JiraReferenceRule
 				"valid_projects": strings.Join(j.validProjects, ","),
 			},
 		)
+		errors = append(errors, err)
 	}
 
-	return j
+	return errors
 }
 
 // containsString checks if a string is present in a slice of strings.

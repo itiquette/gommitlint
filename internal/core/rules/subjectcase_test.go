@@ -135,14 +135,14 @@ func TestSubjectCaseRule(t *testing.T) {
 			if testCase.allowNonAlpha {
 				options = append(options, rules.WithAllowNonAlpha(true))
 			}
-			// Create the rule
+			// Create the rule with value semantics
 			rule := rules.NewSubjectCaseRule(options...)
 			// Create a commit for validation
 			commit := domain.CommitInfo{
 				Subject: testCase.message,
 			}
-			// Validate
-			result := rule.Validate(commit)
+			// Validate using the public API with state
+			result, rule := rules.ValidateWithState(rule, commit)
 			// Check validity
 			if testCase.expectedValid {
 				require.Empty(t, result, "Expected no validation errors")
@@ -206,14 +206,14 @@ func TestSubjectCaseRule(t *testing.T) {
 func TestSubjectCaseHelpMessages(t *testing.T) {
 	tests := []struct {
 		name          string
-		setupRule     func() *rules.SubjectCaseRule
+		setupRule     func() rules.SubjectCaseRule
 		commit        domain.CommitInfo
 		expectedHelp  string
 		errorContains string
 	}{
 		{
 			name: "Help for empty subject",
-			setupRule: func() *rules.SubjectCaseRule {
+			setupRule: func() rules.SubjectCaseRule {
 				return rules.NewSubjectCaseRule(rules.WithCaseChoice("lower"))
 			},
 			commit: domain.CommitInfo{
@@ -224,7 +224,7 @@ func TestSubjectCaseHelpMessages(t *testing.T) {
 		},
 		{
 			name: "Help for invalid conventional format",
-			setupRule: func() *rules.SubjectCaseRule {
+			setupRule: func() rules.SubjectCaseRule {
 				return rules.NewSubjectCaseRule(
 					rules.WithCaseChoice("lower"),
 					rules.WithSubjectCaseCommitFormat(true),
@@ -238,7 +238,7 @@ func TestSubjectCaseHelpMessages(t *testing.T) {
 		},
 		{
 			name: "Help for wrong case - upper",
-			setupRule: func() *rules.SubjectCaseRule {
+			setupRule: func() rules.SubjectCaseRule {
 				return rules.NewSubjectCaseRule(rules.WithCaseChoice("upper"))
 			},
 			commit: domain.CommitInfo{
@@ -249,7 +249,7 @@ func TestSubjectCaseHelpMessages(t *testing.T) {
 		},
 		{
 			name: "Help for wrong case - lower",
-			setupRule: func() *rules.SubjectCaseRule {
+			setupRule: func() rules.SubjectCaseRule {
 				return rules.NewSubjectCaseRule(rules.WithCaseChoice("lower"))
 			},
 			commit: domain.CommitInfo{
@@ -260,7 +260,7 @@ func TestSubjectCaseHelpMessages(t *testing.T) {
 		},
 		{
 			name: "No errors to fix",
-			setupRule: func() *rules.SubjectCaseRule {
+			setupRule: func() rules.SubjectCaseRule {
 				return rules.NewSubjectCaseRule(rules.WithCaseChoice("lower"))
 			},
 			commit: domain.CommitInfo{
@@ -272,7 +272,8 @@ func TestSubjectCaseHelpMessages(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			rule := test.setupRule()
-			_ = rule.Validate(test.commit)
+			// Validate and get updated rule with state
+			_, rule = rules.ValidateWithState(rule, test.commit)
 			helpText := rule.Help()
 			require.Contains(t, helpText, test.expectedHelp, "Help text should contain expected guidance")
 
@@ -308,8 +309,8 @@ func TestSubjectCaseErrors(t *testing.T) {
 	commit := domain.CommitInfo{
 		Subject: "lowercase start in subject",
 	}
-	// Validate
-	errors := rule.Validate(commit)
+	// Validate and get errors
+	errors, _ := rules.ValidateWithState(rule, commit)
 	// Check errors
 	require.NotEmpty(t, errors, "Should have validation errors")
 	require.Equal(t, "SubjectCase", errors[0].Rule, "Rule name should be in error")

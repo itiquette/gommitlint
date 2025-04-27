@@ -30,7 +30,7 @@ type testCase struct {
 }
 
 // setupSpellRule creates a spell rule with the specified options from the test case.
-func setupSpellRule(testConfig testCase) (*rules.SpellRule, domain.CommitInfo) {
+func setupSpellRule(testConfig testCase) (rules.SpellRule, domain.CommitInfo) {
 	// Build options based on test case
 	var options []rules.SpellRuleOption
 	if testConfig.locale != "" {
@@ -131,7 +131,7 @@ func validateExpectedWords(t *testing.T, testCase testCase, errors []appErrors.V
 }
 
 // validateRuleMethods checks rule helper methods (Result, Help, Name, VerboseResult).
-func validateRuleMethods(t *testing.T, testCase testCase, rule *rules.SpellRule, errors []appErrors.ValidationError) {
+func validateRuleMethods(t *testing.T, testCase testCase, rule rules.SpellRule, errors []appErrors.ValidationError) {
 	t.Helper()
 	// Verify Name() method
 	require.Equal(t, "Spell", rule.Name(), "Rule name should be 'Spell'")
@@ -151,7 +151,7 @@ func validateRuleMethods(t *testing.T, testCase testCase, rule *rules.SpellRule,
 }
 
 // validateHelpMethod checks the rule's Help method output.
-func validateHelpMethod(t *testing.T, testCase testCase, rule *rules.SpellRule, errors []appErrors.ValidationError) {
+func validateHelpMethod(t *testing.T, testCase testCase, rule rules.SpellRule, errors []appErrors.ValidationError) {
 	t.Helper()
 
 	helpText := rule.Help()
@@ -180,7 +180,7 @@ func validateHelpMethod(t *testing.T, testCase testCase, rule *rules.SpellRule, 
 }
 
 // validateVerboseResult checks the rule's VerboseResult method output.
-func validateVerboseResult(t *testing.T, testCase testCase, rule *rules.SpellRule) {
+func validateVerboseResult(t *testing.T, testCase testCase, rule rules.SpellRule) {
 	t.Helper()
 
 	verboseText := rule.VerboseResult()
@@ -329,11 +329,10 @@ func TestSpellRule(t *testing.T) {
 			// Execute validation
 			errors := rule.Validate(commit)
 
-			// Set errors back to the rule for subsequent method calls
+			// Create some diffs based on the errors found
 			diffs := []misspell.Diff{}
 
 			if len(errors) > 0 {
-				// Create some diffs based on the errors found
 				for _, err := range errors {
 					if original, ok := err.Context["original"]; ok {
 						if corrected, ok := err.Context["corrected"]; ok {
@@ -347,7 +346,7 @@ func TestSpellRule(t *testing.T) {
 			}
 
 			// Update the rule with errors and diffs using SetErrors
-			*rule = rule.SetErrors(errors, diffs)
+			rule = rule.SetErrors(errors, diffs)
 
 			// Validate the errors
 			validateErrors(t, testCase, errors)

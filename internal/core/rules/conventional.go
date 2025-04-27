@@ -99,11 +99,7 @@ func WithMaxDescLength(maxLength int) ConventionalCommitOption {
 // NewConventionalCommitRule creates a new rule with the specified options.
 func NewConventionalCommitRule(options ...ConventionalCommitOption) ConventionalCommitRule {
 	rule := ConventionalCommitRule{
-		BaseRule: BaseRule{
-			name:   "ConventionalCommit",
-			errors: []appErrors.ValidationError{},
-			hasRun: false,
-		},
+		BaseRule: NewBaseRule("ConventionalCommit"),
 		allowedTypes: []string{
 			"feat", "fix", "docs", "style", "refactor", "perf",
 			"test", "build", "ci", "chore", "revert",
@@ -146,38 +142,52 @@ func NewConventionalCommitRuleWithConfig(config domain.ConventionalConfigProvide
 
 // Name returns the name of the rule.
 func (r ConventionalCommitRule) Name() string {
-	return r.name
+	return r.BaseRule.Name()
 }
 
 // Errors returns the validation errors.
 func (r ConventionalCommitRule) Errors() []appErrors.ValidationError {
-	return r.errors
+	return r.BaseRule.Errors()
 }
 
 // HasErrors checks if there are any validation errors.
 func (r ConventionalCommitRule) HasErrors() bool {
-	return len(r.errors) > 0
+	return r.BaseRule.HasErrors()
 }
 
-// addError is a helper that adds errors and returns a new rule.
-func (r ConventionalCommitRule) addError(code appErrors.ValidationErrorCode, message string, context map[string]string) ConventionalCommitRule {
-	err := appErrors.New(r.Name(), code, message, appErrors.WithContextMap(context))
+// SetErrors sets the validation errors for this rule.
+// This method supports value semantics by returning a new instance.
+func (r ConventionalCommitRule) SetErrors(errors []appErrors.ValidationError) ConventionalCommitRule {
+	result := r
+	baseRule := r.BaseRule.WithClearedErrors()
 
-	newRule := r
-	newRule.errors = append(newRule.errors, err)
+	for _, err := range errors {
+		baseRule = baseRule.WithError(err)
+	}
 
-	return newRule
+	result.BaseRule = baseRule
+
+	return result
 }
 
-// Validate validates a commit against the conventional commit rules.
-func (r ConventionalCommitRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
-	// Create a new rule with reset state
-	validatedRule := r
-	validatedRule.errors = []appErrors.ValidationError{}
-	validatedRule.commitType = ""
-	validatedRule.scope = ""
-	validatedRule.hasBreaking = false
-	validatedRule.hasRun = true
+// addError adds an error to the rule and returns a new rule instance.
+func (r ConventionalCommitRule) addError(err appErrors.ValidationError) ConventionalCommitRule {
+	result := r
+	result.BaseRule = r.BaseRule.WithError(err)
+
+	return result
+}
+
+// validateConventionalWithState validates a commit and returns both errors and an updated rule state.
+func validateConventionalWithState(rule ConventionalCommitRule, commit domain.CommitInfo) ([]appErrors.ValidationError, ConventionalCommitRule) {
+	updatedRule := rule
+	// Mark as run
+	updatedRule.BaseRule = updatedRule.BaseRule.WithRun()
+
+	// Reset captured values
+	updatedRule.commitType = ""
+	updatedRule.scope = ""
+	updatedRule.hasBreaking = false
 
 	// Get the subject
 	subject := strings.TrimSpace(commit.Subject)
@@ -189,24 +199,30 @@ func (r ConventionalCommitRule) Validate(commit domain.CommitInfo) []appErrors.V
 	// Check if the subject follows the pattern
 	matches := regex.FindStringSubmatch(subject)
 	if len(matches) == 0 {
-		validatedRule = validatedRule.addError(
+		err := appErrors.New(
+			updatedRule.Name(),
 			appErrors.ErrInvalidFormat,
 			"commit message doesn't follow conventional format: type(scope)!: description",
-			nil,
+			appErrors.WithContextMap(map[string]string{}),
 		)
 
-		return validatedRule.Errors()
+		updatedRule = updatedRule.addError(err)
+
+		return []appErrors.ValidationError{err}, updatedRule
 	}
 
 	// Check for spacing issues
 	if strings.Contains(subject, ":  ") {
-		validatedRule = validatedRule.addError(
+		err := appErrors.New(
+			updatedRule.Name(),
 			appErrors.ErrSpacing,
 			"commit message has too many spaces after colon (should be exactly one)",
-			nil,
+			appErrors.WithContextMap(map[string]string{}),
 		)
 
-		return validatedRule.Errors()
+		updatedRule = updatedRule.addError(err)
+
+		return []appErrors.ValidationError{err}, updatedRule
 	}
 
 	// Extract capture groups
@@ -217,88 +233,116 @@ func (r ConventionalCommitRule) Validate(commit domain.CommitInfo) []appErrors.V
 
 	// Extract and validate type
 	if typeIdx >= 0 && typeIdx < len(matches) {
-		validatedRule.commitType = matches[typeIdx]
-		if !validatedRule.isValidType(validatedRule.commitType) {
-			allowedTypes := strings.Join(validatedRule.allowedTypes, ",")
-			validatedRule = validatedRule.addError(
+		commitType := matches[typeIdx]
+		updatedRule.commitType = commitType
+
+		if !updatedRule.isValidType(commitType) {
+			allowedTypes := strings.Join(updatedRule.allowedTypes, ",")
+			err := appErrors.New(
+				updatedRule.Name(),
 				appErrors.ErrInvalidType,
-				"invalid commit type: "+validatedRule.commitType,
-				map[string]string{
-					"type":          validatedRule.commitType,
+				"invalid commit type: "+commitType,
+				appErrors.WithContextMap(map[string]string{
+					"type":          commitType,
 					"allowed_types": allowedTypes,
-				},
+				}),
 			)
 
-			return validatedRule.Errors()
+			updatedRule = updatedRule.addError(err)
+
+			return []appErrors.ValidationError{err}, updatedRule
 		}
 	}
 
 	// Extract and validate scope
 	if scopeIdx >= 0 && scopeIdx < len(matches) {
-		validatedRule.scope = matches[scopeIdx]
-		if validatedRule.scope != "" && !validatedRule.isValidScope(validatedRule.scope) {
-			allowedScopes := strings.Join(validatedRule.allowedScopes, ",")
-			validatedRule = validatedRule.addError(
+		scope := matches[scopeIdx]
+		updatedRule.scope = scope
+
+		if scope != "" && !updatedRule.isValidScope(scope) {
+			allowedScopes := strings.Join(updatedRule.allowedScopes, ",")
+			err := appErrors.New(
+				updatedRule.Name(),
 				appErrors.ErrInvalidScope,
-				"invalid commit scope: "+validatedRule.scope,
-				map[string]string{
-					"scope":          validatedRule.scope,
+				"invalid commit scope: "+scope,
+				appErrors.WithContextMap(map[string]string{
+					"scope":          scope,
 					"allowed_scopes": allowedScopes,
-				},
+				}),
 			)
 
-			return validatedRule.Errors()
+			updatedRule = updatedRule.addError(err)
+
+			return []appErrors.ValidationError{err}, updatedRule
 		}
 	}
 
 	// Check if scope is required but missing
-	if validatedRule.requireScope && (scopeIdx < 0 || scopeIdx >= len(matches) || matches[scopeIdx] == "") {
-		validatedRule = validatedRule.addError(
+	if updatedRule.requireScope && (scopeIdx < 0 || scopeIdx >= len(matches) || matches[scopeIdx] == "") {
+		err := appErrors.New(
+			updatedRule.Name(),
 			appErrors.ErrInvalidScope,
 			"commit scope is required but not provided",
-			nil,
+			appErrors.WithContextMap(map[string]string{}),
 		)
 
-		return validatedRule.Errors()
+		updatedRule = updatedRule.addError(err)
+
+		return []appErrors.ValidationError{err}, updatedRule
 	}
 
 	// Extract breaking change marker
 	if breakingIdx >= 0 && breakingIdx < len(matches) {
-		validatedRule.hasBreaking = matches[breakingIdx] != ""
+		updatedRule.hasBreaking = matches[breakingIdx] != ""
 	}
 
 	// Validate description
 	if descIdx >= 0 && descIdx < len(matches) {
 		description := matches[descIdx]
 		if strings.TrimSpace(description) == "" {
-			validatedRule = validatedRule.addError(
+			err := appErrors.New(
+				updatedRule.Name(),
 				appErrors.ErrEmptyDescription,
 				"commit description cannot be empty",
-				nil,
+				appErrors.WithContextMap(map[string]string{}),
 			)
 
-			return validatedRule.Errors()
+			updatedRule = updatedRule.addError(err)
+
+			return []appErrors.ValidationError{err}, updatedRule
 		}
 
-		// Check description length - store it for error reporting
+		// Check description length
 		descriptionLength := len(description)
 
 		// Check description length
-		if validatedRule.maxDescLength > 0 && descriptionLength > validatedRule.maxDescLength {
-			validatedRule = validatedRule.addError(
+		if updatedRule.maxDescLength > 0 && descriptionLength > updatedRule.maxDescLength {
+			err := appErrors.New(
+				updatedRule.Name(),
 				appErrors.ErrDescriptionTooLong,
-				fmt.Sprintf("commit description is too long (%d chars, max is %d)", descriptionLength, validatedRule.maxDescLength),
-				map[string]string{
+				fmt.Sprintf("commit description is too long (%d chars, max is %d)", descriptionLength, updatedRule.maxDescLength),
+				appErrors.WithContextMap(map[string]string{
 					"length":     strconv.Itoa(descriptionLength),
-					"max_length": strconv.Itoa(validatedRule.maxDescLength),
-				},
+					"max_length": strconv.Itoa(updatedRule.maxDescLength),
+				}),
 			)
 
-			return validatedRule.Errors()
+			updatedRule = updatedRule.addError(err)
+
+			return []appErrors.ValidationError{err}, updatedRule
 		}
 	}
 
-	return validatedRule.Errors()
+	return []appErrors.ValidationError{}, updatedRule
+}
+
+// Validate validates a commit against the conventional commit rules.
+// This method follows functional programming principles and does not modify the rule's state.
+func (r ConventionalCommitRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
+	// Use the pure functional approach
+	errors, _ := validateConventionalWithState(r, commit)
+
+	return errors
 }
 
 // isValidType checks if the commit type is in the list of allowed types.
@@ -488,6 +532,7 @@ The description should be concise but descriptive.`
 Long descriptions should be moved to the commit body, which comes after a blank line following the subject.
 Example:
 feat: add new authentication method
+
 This commit introduces a new authentication method that allows users to log in with their social media accounts.`, maxLength)
 		case string(appErrors.ErrSpacing):
 			return `Use exactly one space after the colon in commit messages.

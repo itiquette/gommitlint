@@ -6,7 +6,6 @@ package domain_test
 import (
 	"testing"
 
-	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/stretchr/testify/require"
 )
@@ -85,42 +84,21 @@ func TestCommitCollection_FilterByAuthor(t *testing.T) {
 	otherAuthorName := "Jane Smith"
 	otherAuthorEmail := "jane@example.com"
 
-	// Create test commits with authors directly in the CommitInfo struct
+	// Create test commits with authors in the CommitInfo struct
 	commit1 := domain.CommitInfo{
 		Hash:        "abc123",
 		AuthorName:  authorName,
 		AuthorEmail: authorEmail,
-		// Still keep RawCommit for backward compatibility during transition
-		RawCommit: &object.Commit{
-			Author: object.Signature{
-				Name:  authorName,
-				Email: authorEmail,
-			},
-		},
 	}
 	commit2 := domain.CommitInfo{
 		Hash:        "def456",
 		AuthorName:  otherAuthorName,
 		AuthorEmail: otherAuthorEmail,
-		// Still keep RawCommit for backward compatibility during transition
-		RawCommit: &object.Commit{
-			Author: object.Signature{
-				Name:  otherAuthorName,
-				Email: otherAuthorEmail,
-			},
-		},
 	}
 	commit3 := domain.CommitInfo{
 		Hash:        "ghi789",
 		AuthorName:  authorName,
 		AuthorEmail: authorEmail,
-		// Still keep RawCommit for backward compatibility during transition
-		RawCommit: &object.Commit{
-			Author: object.Signature{
-				Name:  authorName,
-				Email: authorEmail,
-			},
-		},
 	}
 
 	// Create collection

@@ -59,8 +59,16 @@ Here's how you can contribute:
 * Want to contribute code? Check out our link:CONTRIBUTING.md[Contribution Guide] to get started.
 
 == For developers
-TODO
-//If you're interested in how it works, see the link:DEVELOPMENT.adoc[Development Guide].
+
+=== Design Philosophy
+
+Gommitlint is built using:
+
+* *Hexagonal Architecture* for clean separation of concerns
+* *Functional Programming* principles for predictable and testable code
+* *Value Semantics* for improved safety and reasoning
+
+See our link:docs/ARCHITECTURE.md[Architecture Documentation] and link:docs/FUNCTIONAL_PROGRAMMING.md[Functional Programming Guide] for more details.
 
 == What's next?
 Check out our https://github.com/itiquette/gommitlint/issues[Issues page].

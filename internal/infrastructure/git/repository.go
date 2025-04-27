@@ -144,7 +144,7 @@ func (g RepositoryAdapter) GetCommitRange(ctx context.Context, fromHash, toHash 
 }
 
 // GetHeadCommits returns the specified number of commits from HEAD.
-func (g *RepositoryAdapter) GetHeadCommits(ctx context.Context, count int) ([]domain.CommitInfo, error) {
+func (g RepositoryAdapter) GetHeadCommits(ctx context.Context, count int) ([]domain.CommitInfo, error) {
 	// Check for context cancellation
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
@@ -269,9 +269,6 @@ func (g RepositoryAdapter) convertCommit(commit *object.Commit) (domain.CommitIn
 		AuthorEmail:   commit.Author.Email,
 		CommitDate:    commitDate,
 		IsMergeCommit: isMergeCommit,
-		// Still include RawCommit for backward compatibility, but domain logic should
-		// never access this field directly
-		RawCommit: commit,
 	}
 
 	// Get signature if available
@@ -283,14 +280,14 @@ func (g RepositoryAdapter) convertCommit(commit *object.Commit) (domain.CommitIn
 }
 
 // IsValid checks if the repository is a valid Git repository.
-func (g *RepositoryAdapter) IsValid(_ context.Context) bool {
+func (g RepositoryAdapter) IsValid(_ context.Context) bool {
 	// No need to check for context cancellation for this simple operation
 	// We were able to open the repository, so it's valid
 	return g.repo != nil
 }
 
 // GetCommitsAhead returns the number of commits ahead of the given reference.
-func (g *RepositoryAdapter) GetCommitsAhead(ctx context.Context, reference string) (int, error) {
+func (g RepositoryAdapter) GetCommitsAhead(ctx context.Context, reference string) (int, error) {
 	// Check for context cancellation
 	if ctx.Err() != nil {
 		return 0, ctx.Err()
@@ -354,28 +351,28 @@ func (g *RepositoryAdapter) GetCommitsAhead(ctx context.Context, reference strin
 }
 
 // findMergeBase finds the common ancestor of two commits.
-func (g *RepositoryAdapter) findMergeBase(hash1, hash2 plumbing.Hash) (plumbing.Hash, error) {
+func (g RepositoryAdapter) findMergeBase(hash1, hash2 plumbing.Hash) (plumbing.Hash, error) {
 	return findMergeBase(g.repo, hash1, hash2)
 }
 
 // resolveRevision resolves a revision to a hash.
 // If the revision is empty, HEAD is used.
-func (g *RepositoryAdapter) resolveRevision(revision string) (plumbing.Hash, error) {
+func (g RepositoryAdapter) resolveRevision(revision string) (plumbing.Hash, error) {
 	return resolveRevision(g.repo, revision)
 }
 
 // getCommitByHash gets a commit by its hash.
-func (g *RepositoryAdapter) getCommitByHash(hash plumbing.Hash) (*object.Commit, error) {
+func (g RepositoryAdapter) getCommitByHash(hash plumbing.Hash) (*object.Commit, error) {
 	return getCommitByHash(g.repo, hash)
 }
 
 // createCommitIterator creates a commit iterator starting from the given hash.
-func (g *RepositoryAdapter) createCommitIterator(hash plumbing.Hash) (object.CommitIter, error) {
+func (g RepositoryAdapter) createCommitIterator(hash plumbing.Hash) (object.CommitIter, error) {
 	return createCommitIterator(g.repo, hash)
 }
 
 // collectCommits collects commits from an iterator, with optional limit and stop condition.
-func (g *RepositoryAdapter) collectCommits(
+func (g RepositoryAdapter) collectCommits(
 	iter object.CommitIter,
 	limit int,
 	stopFn func(*object.Commit) bool,
@@ -384,7 +381,7 @@ func (g *RepositoryAdapter) collectCommits(
 }
 
 // collectAndConvertCommits collects commits from an iterator, converts them to domain commits.
-func (g *RepositoryAdapter) collectAndConvertCommits(
+func (g RepositoryAdapter) collectAndConvertCommits(
 	iter object.CommitIter,
 	limit int,
 	stopFn func(*object.Commit) bool,

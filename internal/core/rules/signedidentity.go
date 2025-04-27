@@ -32,10 +32,11 @@ const (
 // SignedIdentityRule enforces that commits are cryptographically signed
 // with a trusted key. It's used to verify the identity of commit authors.
 type SignedIdentityRule struct {
-	*BaseRule
+	baseRule      BaseRule
 	Identity      string // Email or name of the signer
 	SignatureType string // "GPG" or "SSH"
 	KeyDir        string // Directory used for key verification
+	errors        []appErrors.ValidationError
 }
 
 // SignedIdentityOption is a function that modifies a SignedIdentityRule.
@@ -53,7 +54,11 @@ func WithKeyDirectory(keyDir string) SignedIdentityOption {
 // NewSignedIdentityRule creates a new SignedIdentityRule with the specified options.
 func NewSignedIdentityRule(options ...SignedIdentityOption) SignedIdentityRule {
 	rule := SignedIdentityRule{
-		BaseRule: NewBaseRule("SignedIdentity"),
+		baseRule:      NewBaseRule("SignedIdentity"),
+		errors:        make([]appErrors.ValidationError, 0),
+		Identity:      "",
+		SignatureType: "",
+		KeyDir:        "",
 	}
 	// Apply options
 	for _, option := range options {
@@ -61,6 +66,42 @@ func NewSignedIdentityRule(options ...SignedIdentityOption) SignedIdentityRule {
 	}
 
 	return rule
+}
+
+// Name returns the rule name.
+func (r SignedIdentityRule) Name() string {
+	return r.baseRule.Name()
+}
+
+// SetErrors sets the validation errors for this rule and returns a new instance.
+func (r SignedIdentityRule) SetErrors(errors []appErrors.ValidationError) SignedIdentityRule {
+	result := r
+	result.errors = errors
+
+	// Also update baseRule for consistency
+	baseRule := r.baseRule
+	for _, err := range errors {
+		baseRule = baseRule.WithError(err)
+	}
+
+	result.baseRule = baseRule
+
+	return result
+}
+
+// Errors returns all validation errors.
+func (r SignedIdentityRule) Errors() []appErrors.ValidationError {
+	return r.errors
+}
+
+// HasErrors checks if the rule has any validation errors.
+func (r SignedIdentityRule) HasErrors() bool {
+	return len(r.errors) > 0
+}
+
+// ErrorCount returns the number of validation errors.
+func (r SignedIdentityRule) ErrorCount() int {
+	return len(r.errors)
 }
 
 // Result returns a concise string representation of the rule's status.
@@ -206,7 +247,7 @@ func (r SignedIdentityRule) Help() string {
 }
 
 // ValidateWithIdentity performs validation and returns the errors along with identity info.
-// This approach directly returns all the values we need instead of trying to update state.
+// This is a pure function that doesn't modify the rule's state.
 func (r SignedIdentityRule) ValidateWithIdentity(commit *domain.CommitInfo) ([]appErrors.ValidationError, string, string) {
 	// Create a new errors slice
 	errors := make([]appErrors.ValidationError, 0)
@@ -322,41 +363,35 @@ func (r SignedIdentityRule) ValidateWithIdentity(commit *domain.CommitInfo) ([]a
 	return errors, identity, sigType
 }
 
-// Validate is a compatibility method that calls ValidateWithIdentity but only returns errors.
-func (r SignedIdentityRule) Validate(commit *domain.CommitInfo) []appErrors.ValidationError {
-	errors, _, _ := r.ValidateWithIdentity(commit)
+// validateSignedIdentityWithState validates a commit and returns errors along with an updated rule state.
+func validateSignedIdentityWithState(rule SignedIdentityRule, commit domain.CommitInfo) ([]appErrors.ValidationError, SignedIdentityRule) {
+	errors, identity, sigType := rule.ValidateWithIdentity(&commit)
+	updatedRule := rule.SetIdentityInfo(identity, sigType).SetErrors(errors)
+
+	return errors, updatedRule
+}
+
+// ValidateSignedIdentityWithState validates a commit and returns errors along with an updated rule state.
+// Exported for testing purposes.
+func ValidateSignedIdentityWithState(rule SignedIdentityRule, commit domain.CommitInfo) ([]appErrors.ValidationError, SignedIdentityRule) {
+	return validateSignedIdentityWithState(rule, commit)
+}
+
+// Validate is a compatibility method that calls validateSignedIdentityWithState but only returns errors.
+func (r SignedIdentityRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
+	errors, _ := validateSignedIdentityWithState(r, commit)
 
 	return errors
 }
 
-// SetValidationState sets the rule's state based on validation results.
-func (r SignedIdentityRule) SetValidationState(commit *domain.CommitInfo) SignedIdentityRule {
-	// Get validation results with all information
-	errors, identity, sigType := r.ValidateWithIdentity(commit)
+// SetIdentityInfo sets identity and signature type information and returns a new instance.
+func (r SignedIdentityRule) SetIdentityInfo(identity string, sigType string) SignedIdentityRule {
+	result := r
+	result.Identity = identity
+	result.SignatureType = sigType
 
-	// Create a new base rule with the errors
-	baseRule := NewBaseRule(r.Name())
-	baseRule.MarkAsRun()
-
-	for _, err := range errors {
-		baseRule.AddError(err)
-	}
-
-	// Set all state fields
-	r.BaseRule = baseRule
-	r.Identity = identity
-	r.SignatureType = sigType
-
-	return r
+	return result
 }
-
-// // createError creates a validation error without modifying the rule's state.
-// func createError(ruleName string, code appErrors.ValidationErrorCode, message string, context map[string]string) appErrors.ValidationError {
-// 	if context == nil {
-// 		return appErrors.New(ruleName, code, message)
-// 	}
-// 	return appErrors.New(ruleName, code, message, appErrors.WithContextMap(context))
-// }
 
 // safeMin returns the minimum of two integers (utility function for safety).
 func safeMin(a, b int) int {

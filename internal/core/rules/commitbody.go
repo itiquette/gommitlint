@@ -12,7 +12,7 @@ import (
 
 // CommitBodyRule represents the configuration for commit body validation.
 type CommitBodyRule struct {
-	baseRule         *BaseRule
+	BaseRule
 	requireBody      bool
 	minLines         int
 	allowSignOffOnly bool
@@ -60,7 +60,7 @@ func WithMinimumLines(lines int) CommitBodyOption {
 // NewCommitBodyRule creates a new CommitBodyRule with the specified options.
 func NewCommitBodyRule(options ...CommitBodyOption) CommitBodyRule {
 	rule := CommitBodyRule{
-		baseRule:         NewBaseRule("CommitBody"),
+		BaseRule:         NewBaseRule("CommitBody"),
 		requireBody:      false, // Default to not requiring body
 		minLines:         1,     // Default to requiring at least 1 line
 		allowSignOffOnly: false, // Default to not allowing only sign-off in body
@@ -82,17 +82,45 @@ func NewCommitBodyRuleWithConfig(config domain.BodyConfigProvider) CommitBodyRul
 	)
 }
 
-// Validate validates the commit body.
-func (r CommitBodyRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
-	// Reset errors
-	r.baseRule.ClearErrors()
+// addError adds an error to the rule and returns a new rule instance.
+func (r CommitBodyRule) addError(err appErrors.ValidationError) CommitBodyRule {
+	result := r
+	result.BaseRule = r.BaseRule.WithError(err)
 
-	// Mark the rule as having been run
-	r.baseRule.MarkAsRun()
+	return result
+}
 
+// SetErrors sets the validation errors for this rule.
+// This method supports value semantics by returning a new instance.
+func (r CommitBodyRule) SetErrors(errors []appErrors.ValidationError) CommitBodyRule {
+	result := r
+
+	// Update BaseRule
+	baseRule := r.BaseRule
+	for _, err := range errors {
+		baseRule = baseRule.WithError(err)
+	}
+
+	result.BaseRule = baseRule
+
+	return result
+}
+
+// withRun marks the rule as having been run and returns a new rule instance.
+func (r CommitBodyRule) withRun() CommitBodyRule {
+	result := r
+	result.BaseRule = r.BaseRule.WithRun()
+
+	return result
+}
+
+// validateWithState performs validation and returns both errors and updated rule state.
+func validateWithState(rule CommitBodyRule, commit domain.CommitInfo) ([]appErrors.ValidationError, CommitBodyRule) {
 	// Skip validation if body is not required
-	if !r.requireBody {
-		return r.baseRule.Errors()
+	updatedRule := rule.withRun() // Mark as run first
+
+	if !rule.requireBody {
+		return []appErrors.ValidationError{}, updatedRule
 	}
 
 	// Split message into lines
@@ -100,28 +128,34 @@ func (r CommitBodyRule) Validate(commit domain.CommitInfo) []appErrors.Validatio
 
 	// Check minimum structure
 	if len(lines) < 3 {
-		r.baseRule.AddErrorWithContext(
+		err := appErrors.New(
+			rule.Name(),
 			appErrors.ErrInvalidBody,
 			"commit requires a body, but only subject was provided",
-			map[string]string{
+			appErrors.WithContextMap(map[string]string{
 				"lines": "1",
-			},
+			}),
 		)
 
-		return r.baseRule.Errors()
+		updatedRule = updatedRule.addError(err)
+
+		return []appErrors.ValidationError{err}, updatedRule
 	}
 
 	// Check that the second line is empty (proper separation)
 	if len(lines) >= 2 && strings.TrimSpace(lines[1]) != "" {
-		r.baseRule.AddErrorWithContext(
+		err := appErrors.New(
+			rule.Name(),
 			appErrors.ErrInvalidBody,
 			"missing empty line between subject and body",
-			map[string]string{
+			appErrors.WithContextMap(map[string]string{
 				"second_line": lines[1],
-			},
+			}),
 		)
 
-		return r.baseRule.Errors()
+		updatedRule = updatedRule.addError(err)
+
+		return []appErrors.ValidationError{err}, updatedRule
 	}
 
 	// Check that body is not empty
@@ -129,33 +163,39 @@ func (r CommitBodyRule) Validate(commit domain.CommitInfo) []appErrors.Validatio
 
 	trimmedBody := strings.TrimSpace(strings.Join(bodyLines, "\n"))
 	if trimmedBody == "" {
-		r.baseRule.AddErrorWithContext(
+		err := appErrors.New(
+			rule.Name(),
 			appErrors.ErrInvalidBody,
 			"commit has a blank line after subject but no non-empty body",
-			map[string]string{
+			appErrors.WithContextMap(map[string]string{
 				"total_lines": "0",
-			},
+			}),
 		)
 
-		return r.baseRule.Errors()
+		updatedRule = updatedRule.addError(err)
+
+		return []appErrors.ValidationError{err}, updatedRule
 	}
 
 	// If allowSignOffOnly is not enabled, check that body doesn't start with sign-off lines
 	firstBodyLine := strings.TrimSpace(bodyLines[0])
-	if !r.allowSignOffOnly && isSignOffLine(firstBodyLine) {
-		r.baseRule.AddErrorWithContext(
+	if !rule.allowSignOffOnly && isSignOffLine(firstBodyLine) {
+		err := appErrors.New(
+			rule.Name(),
 			appErrors.ErrInvalidBody,
 			"body starts with a sign-off line instead of meaningful content",
-			map[string]string{
+			appErrors.WithContextMap(map[string]string{
 				"first_line": firstBodyLine,
-			},
+			}),
 		)
 
-		return r.baseRule.Errors()
+		updatedRule = updatedRule.addError(err)
+
+		return []appErrors.ValidationError{err}, updatedRule
 	}
 
 	// If allowSignOffOnly is not enabled, check that body contains meaningful content, not just sign-offs
-	if !r.allowSignOffOnly {
+	if !rule.allowSignOffOnly {
 		hasContent := false
 
 		for _, line := range bodyLines {
@@ -167,24 +207,36 @@ func (r CommitBodyRule) Validate(commit domain.CommitInfo) []appErrors.Validatio
 		}
 
 		if !hasContent {
-			r.baseRule.AddErrorWithContext(
+			err := appErrors.New(
+				rule.Name(),
 				appErrors.ErrInvalidBody,
 				"body contains only sign-off lines without meaningful content",
 				nil,
 			)
 
-			return r.baseRule.Errors()
+			updatedRule = updatedRule.addError(err)
+
+			return []appErrors.ValidationError{err}, updatedRule
 		}
 	}
 
-	return r.baseRule.Errors()
+	return []appErrors.ValidationError{}, updatedRule
+}
+
+// Validate validates the commit body.
+// This uses value semantics and returns the errors without modifying the rule's state.
+func (r CommitBodyRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
+	// Use the pure functional approach
+	errors, _ := validateWithState(r, commit)
+
+	return errors
 }
 
 // VerboseResult returns a more detailed explanation for verbose mode.
 func (r CommitBodyRule) VerboseResult() string {
-	if r.baseRule.HasErrors() {
+	if r.HasErrors() {
 		// Get errors from the BaseRule
-		errors := r.baseRule.Errors()
+		errors := r.BaseRule.Errors()
 
 		// All errors use ErrInvalidBody code, so differentiate by message content
 		if len(errors) > 0 {
@@ -210,24 +262,20 @@ func (r CommitBodyRule) VerboseResult() string {
 
 // Result returns a concise validation result.
 func (r CommitBodyRule) Result() string {
-	if r.baseRule.HasErrors() {
+	if r.HasErrors() {
 		return "Invalid commit body"
 	}
 
 	return "Valid commit body"
 }
 
-// Errors returns the validation errors for the rule.
-func (r CommitBodyRule) Errors() []appErrors.ValidationError {
-	return r.baseRule.Errors()
-}
-
+// Help returns guidance for fixing rule violations.
 func (r CommitBodyRule) Help() string {
-	if !r.baseRule.HasErrors() {
+	if !r.HasErrors() {
 		return "No errors to fix"
 	}
 
-	errors := r.baseRule.Errors()
+	errors := r.Errors()
 	if len(errors) > 0 {
 		msg := errors[0].Message
 
@@ -240,6 +288,7 @@ A proper commit message format is:
 <body content>
 Example:
 Fix bug in user authentication
+
 This patch fixes an issue where login attempts with valid 
 credentials would fail when the username contained special 
 characters. The fix properly escapes special characters
@@ -252,6 +301,7 @@ A proper commit message format is:
 <body content>
 Example:
 Fix bug in user authentication
+
 This patch fixes an issue with the authentication module.`
 		} else if strings.Contains(msg, "non-empty body") || strings.Contains(msg, "meaningful content") {
 			return `Include meaningful content in your commit message body to explain:
@@ -269,8 +319,10 @@ A proper commit message format is:
 <Sign-off lines or other footers>
 Example:
 Fix bug in user authentication
+
 This patch fixes an issue where login attempts would fail.
 The root cause was improper validation of special characters.
+
 Signed-off-by: Developer Name <dev@example.com>`
 		}
 	}
@@ -307,5 +359,15 @@ func isSignOffLine(line string) bool {
 
 // Name returns the rule name.
 func (r CommitBodyRule) Name() string {
-	return "CommitBody"
+	return r.BaseRule.Name()
+}
+
+// Errors returns all validation errors found by this rule.
+func (r CommitBodyRule) Errors() []appErrors.ValidationError {
+	return r.BaseRule.Errors()
+}
+
+// HasErrors returns true if the rule has found any errors.
+func (r CommitBodyRule) HasErrors() bool {
+	return r.BaseRule.HasErrors()
 }

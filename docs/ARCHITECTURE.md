@@ -187,9 +187,11 @@ type ValidationService interface {
 }
 ```
 
-## Value Semantics
+## Functional Programming and Value Semantics
 
-The updated architecture uses value semantics extensively for better immutability and functional programming patterns:
+The updated architecture embraces functional programming principles and value semantics extensively for better immutability, predictability, and testability:
+
+### Value Semantics
 
 ```go
 // Using value semantics for immutable data structures
@@ -202,7 +204,7 @@ type ValidationResult struct {
 
 // Functions return new structures rather than modifying existing ones
 func (c CommitCollection) FilterMergeCommits() CommitCollection {
-    var filtered []*CommitInfo
+    var filtered []CommitInfo
     for _, commit := range c.commits {
         if !commit.IsMergeCommit {
             filtered = append(filtered, commit)
@@ -212,30 +214,102 @@ func (c CommitCollection) FilterMergeCommits() CommitCollection {
 }
 ```
 
+### Fluent Value Methods
+
+Methods are designed to work with value semantics, returning new instances instead of modifying receivers:
+
+```go
+// Value receiver with new instance return
+func (r SubjectCaseRule) AddError(err appErrors.ValidationError) SubjectCaseRule {
+    rule := r
+    rule.BaseRule = rule.BaseRule.WithError(err)
+    return rule
+}
+
+// Chaining methods
+result := rule.
+    ClearErrors().
+    AddError(newError).
+    SetFoundKeys(keys)
+```
+
+### Immutable State Transformations
+
+Business logic operates on state through transformations that return new state:
+
+```go
+// State transformation through chained methods
+func (s *ValidationService) ValidateCommit(ctx context.Context, hash string) (domain.ValidationResult, error) {
+    // Get the commit
+    commit, err := s.commitService.GetCommit(ctx, hash)
+    if err != nil {
+        return domain.ValidationResult{}, fmt.Errorf("failed to get commit: %w", err)
+    }
+    
+    // Transform through validation
+    return s.engine.Validate(commit), nil
+}
+```
+
+### Pure Functional Validation
+
+Validation in rules follows a functional pattern where state is transformed rather than modified:
+
+```go
+// Validation with pure functions and value semantics
+func (r SubjectCaseRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
+    // Validate and return errors without modifying state
+    if !meetsCase(commit.Subject) {
+        return []appErrors.ValidationError{
+            appErrors.New(r.Name(), appErrors.ErrSubjectCase, "Subject case is incorrect"),
+        }
+    }
+    return []appErrors.ValidationError{}
+}
+
+// State transformation function
+func validateWithState(rule SubjectCaseRule, commit domain.CommitInfo) ([]appErrors.ValidationError, SubjectCaseRule) {
+    errors := []appErrors.ValidationError{}
+    updatedRule := rule
+    
+    // Add logic and transform rule as needed
+    if !meetsCase(commit.Subject) {
+        err := appErrors.New(rule.Name(), appErrors.ErrSubjectCase, "Subject case is incorrect")
+        errors = append(errors, err)
+        updatedRule = updatedRule.addError(err)
+    }
+    
+    return errors, updatedRule
+}
+```
+
 ## Functional Options Pattern
 
-Rule creation follows the functional options pattern for flexible configuration:
+Rule creation follows the functional options pattern for flexible configuration with value semantics:
 
 ```go
 // Option type for configuring rules
-type SubjectLengthOption func(*SubjectLengthRule)
+type SubjectLengthOption func(SubjectLengthRule) SubjectLengthRule
 
-// Options function
+// Options function with value semantics
 func WithMaxLength(length int) SubjectLengthOption {
-    return func(r *SubjectLengthRule) {
-        r.maxLength = length
+    return func(r SubjectLengthRule) SubjectLengthRule {
+        result := r
+        result.maxLength = length
+        return result
     }
 }
 
-// Factory function with options
-func NewSubjectLengthRule(options ...SubjectLengthOption) *SubjectLengthRule {
-    rule := &SubjectLengthRule{
+// Factory function with options returning a value
+func NewSubjectLengthRule(options ...SubjectLengthOption) SubjectLengthRule {
+    rule := SubjectLengthRule{
         BaseRule: NewBaseRule("SubjectLength"),
         maxLength: DefaultMaxLength,
     }
     
+    // Apply options in sequence, each returning a new value
     for _, option := range options {
-        option(rule)
+        rule = option(rule)
     }
     
     return rule
@@ -345,15 +419,15 @@ func ValidateHeadCommit() error {
 ```go
 // Define your custom rule
 type CustomRule struct {
-    *rules.BaseRule
-    customConfig string
+    BaseRule      rules.BaseRule
+    customConfig  string
 }
 
-// Implement the Validate method
-func (r *CustomRule) Validate(commit domain.CommitInfo) []*domain.ValidationError {
+// Implement the Validate method with value semantics
+func (r CustomRule) Validate(commit domain.CommitInfo) []domain.ValidationError {
     // Your validation logic here
     if !strings.Contains(commit.Subject, r.customConfig) {
-        return []*domain.ValidationError{
+        return []domain.ValidationError{
             domain.NewValidationError(
                 "CustomRule",
                 "custom_rule_violation",
@@ -365,25 +439,28 @@ func (r *CustomRule) Validate(commit domain.CommitInfo) []*domain.ValidationErro
 }
 
 // Create a factory function with options
-func NewCustomRule(options ...CustomRuleOption) *CustomRule {
-    rule := &CustomRule{
+func NewCustomRule(options ...CustomRuleOption) CustomRule {
+    rule := CustomRule{
         BaseRule:     rules.NewBaseRule("CustomRule"),
         customConfig: "default",
     }
     
+    // Apply options in sequence, each returning a new value
     for _, option := range options {
-        option(rule)
+        rule = option(rule)
     }
     
     return rule
 }
 
-// Define options
-type CustomRuleOption func(*CustomRule)
+// Define options with value semantics
+type CustomRuleOption func(CustomRule) CustomRule
 
 func WithCustomConfig(config string) CustomRuleOption {
-    return func(r *CustomRule) {
-        r.customConfig = config
+    return func(r CustomRule) CustomRule {
+        result := r
+        result.customConfig = config
+        return result
     }
 }
 

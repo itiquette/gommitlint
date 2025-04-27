@@ -81,11 +81,6 @@ func (g *Generator) GenerateReport(results domain.ValidationResults) error {
 	return nil
 }
 
-// Generate is kept for backward compatibility.
-func (g *Generator) Generate(results domain.ValidationResults) error {
-	return g.GenerateReport(results)
-}
-
 // SetVerbose enables or disables verbose output in reports.
 // This implements the domain.ReportGenerator interface.
 func (g *Generator) SetVerbose(verbose bool) {

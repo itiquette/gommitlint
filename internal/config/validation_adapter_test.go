@@ -83,7 +83,7 @@ func TestValidationConfigAdapter(t *testing.T) {
 
 	var _ domain.RepositoryConfigProvider = adapter
 
-	var _ domain.RulesConfigProvider = adapter
+	var _ domain.RuleConfigProvider = adapter
 
 	// Test subject methods
 	t.Run("Subject methods", func(t *testing.T) {
