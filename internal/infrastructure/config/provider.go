@@ -10,35 +10,40 @@ import (
 )
 
 // Provider provides access to configuration.
+// This implementation uses value semantics throughout.
 type Provider struct {
-	config *Config
+	config Config
 }
 
 // Config is the main configuration structure.
+// This uses value semantics instead of pointer semantics.
 type Config struct {
 	// GommitConf is the configuration for gommitlint.
-	GommitConf *GommitLintConfig
+	GommitConf GommitLintConfig
 }
 
 // GommitLintConfig defines the configuration for commit validation.
+// This uses value semantics instead of pointer semantics.
 type GommitLintConfig struct {
 	// Subject is the configuration for commit subject validation.
-	Subject *SubjectConfig
+	Subject SubjectConfig
 
 	// ConventionalCommit is the configuration for conventional commit validation.
-	ConventionalCommit *ConventionalConfig
+	ConventionalCommit ConventionalConfig
 
 	// RequireSignature indicates whether commit signatures are required.
 	RequireSignature bool
 }
 
 // SubjectConfig defines configuration for commit subject validation.
+// This struct already used value semantics.
 type SubjectConfig struct {
 	// MaxLength is the maximum length of the commit subject.
 	MaxLength int
 }
 
 // ConventionalConfig defines configuration for conventional commit validation.
+// This struct already used value semantics.
 type ConventionalConfig struct {
 	// MaxDescriptionLength is the maximum length of the description in a conventional commit.
 	MaxDescriptionLength int
@@ -51,39 +56,45 @@ type ConventionalConfig struct {
 }
 
 // NewProvider creates a new configuration provider.
-func NewProvider() (*Provider, error) {
-	// Create a default configuration
-	config := &Config{
-		GommitConf: &GommitLintConfig{
-			Subject: &SubjectConfig{
+// This implementation returns a value rather than a pointer.
+func NewProvider() (Provider, error) {
+	// Create a default configuration with value semantics
+	// Initialize all nested structures without pointers
+	types := []string{
+		"feat", "fix", "docs", "style", "refactor",
+		"perf", "test", "build", "ci", "chore", "revert",
+	}
+
+	// Create a deep copy of the types slice to ensure immutability
+	typesCopy := make([]string, len(types))
+	copy(typesCopy, types)
+
+	config := Config{
+		GommitConf: GommitLintConfig{
+			Subject: SubjectConfig{
 				MaxLength: 100,
 			},
-			ConventionalCommit: &ConventionalConfig{
+			ConventionalCommit: ConventionalConfig{
 				MaxDescriptionLength: 72,
-				Types: []string{
-					"feat", "fix", "docs", "style", "refactor",
-					"perf", "test", "build", "ci", "chore", "revert",
-				},
-				Scopes: []string{},
+				Types:                typesCopy,
+				Scopes:               make([]string, 0), // Initialize to empty slice, not nil
 			},
 		},
 	}
 
-	return &Provider{
+	return Provider{
 		config: config,
 	}, nil
 }
 
 // GetConfig returns the complete configuration.
-func (p *Provider) GetConfig() *Config {
+// This implementation returns a copy of the configuration.
+func (p Provider) GetConfig() Config {
 	return p.config
 }
 
 // GetGommitConfig returns the GommitLintConfig.
-func (p *Provider) GetGommitConfig() *GommitLintConfig {
-	if p.config == nil || p.config.GommitConf == nil {
-		return nil
-	}
-
+// This implementation returns a copy of the GommitLintConfig.
+func (p Provider) GetGommitConfig() GommitLintConfig {
 	return p.config.GommitConf
 }

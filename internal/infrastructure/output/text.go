@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/fatih/color"
@@ -30,7 +31,7 @@ type TextFormatter struct {
 }
 
 // Ensure TextFormatter implements domain.ResultFormatter.
-var _ domain.ResultFormatter = (*TextFormatter)(nil)
+var _ domain.ResultFormatter = TextFormatter{}
 
 // ColorScheme defines colors for different UI elements.
 type ColorScheme struct {
@@ -48,68 +49,91 @@ type ColorScheme struct {
 
 // NewTextFormatter creates a new text formatter.
 // It implements domain.ResultFormatter interface.
-func NewTextFormatter() *TextFormatter {
-	formatter := &TextFormatter{
+// This implementation returns a value rather than a pointer.
+func NewTextFormatter() TextFormatter {
+	formatter := TextFormatter{
 		verbose:   false,
 		showHelp:  false,
 		lightMode: false,
 	}
 
-	formatter.initColorScheme()
-	formatter.initSymbols()
+	// Initialize the color scheme and symbols
+	formatter = formatter.withInitializedColorScheme()
+	formatter = formatter.withInitializedSymbols()
 
 	return formatter
 }
 
-// WithVerbose sets the verbose flag for the formatter.
-func (f TextFormatter) WithVerbose(verbose bool) *TextFormatter {
+// withInitializedColorScheme creates a new formatter with initialized color scheme.
+// This is a pure function that returns a new TextFormatter without modifying the original.
+func (f TextFormatter) withInitializedColorScheme() TextFormatter {
 	result := f
-	result.verbose = verbose
-	result.initColorScheme()
-	result.initSymbols()
 
-	return &result
-}
-
-// WithShowHelp sets the showHelp flag for the formatter.
-func (f TextFormatter) WithShowHelp(showHelp bool) *TextFormatter {
-	result := f
-	result.showHelp = showHelp
-
-	return &result
-}
-
-// WithLightMode sets the lightMode flag for the formatter.
-func (f TextFormatter) WithLightMode(lightMode bool) *TextFormatter {
-	result := f
-	result.lightMode = lightMode
-	result.initColorScheme()
-	result.initSymbols()
-
-	return &result
-}
-
-// initColorScheme initializes the color scheme based on settings.
-func (f *TextFormatter) initColorScheme() {
 	// Check for NO_COLOR environment variable
 	noColor := os.Getenv("NO_COLOR") != ""
 	if noColor {
 		color.NoColor = true
 	}
 
-	f.colors = getColorScheme(f.lightMode, noColor)
+	result.colors = getColorScheme(result.lightMode, noColor)
+
+	return result
 }
 
-// initSymbols initializes the symbols used for pass/fail status.
-func (f *TextFormatter) initSymbols() {
-	f.symbols.pass = f.colors.Success("PASS")
-	f.symbols.fail = f.colors.Error("FAIL")
+// withInitializedSymbols creates a new formatter with initialized symbols.
+// This is a pure function that returns a new TextFormatter without modifying the original.
+func (f TextFormatter) withInitializedSymbols() TextFormatter {
+	result := f
+
+	result.symbols.pass = result.colors.Success("PASS")
+	result.symbols.fail = result.colors.Error("FAIL")
 
 	if canHandleUnicode() {
-		f.symbols.pass = f.colors.Success("✓")
-		f.symbols.fail = f.colors.Error("✗")
+		result.symbols.pass = result.colors.Success("✓")
+		result.symbols.fail = result.colors.Error("✗")
 	}
+
+	return result
 }
+
+// WithVerbose sets the verbose flag for the formatter.
+// This implementation returns a value rather than a pointer.
+func (f TextFormatter) WithVerbose(verbose bool) TextFormatter {
+	result := f
+	result.verbose = verbose
+
+	// Re-initialize the formatter with the new settings
+	result = result.withInitializedColorScheme()
+	result = result.withInitializedSymbols()
+
+	return result
+}
+
+// WithShowHelp sets the showHelp flag for the formatter.
+// This implementation returns a value rather than a pointer.
+func (f TextFormatter) WithShowHelp(showHelp bool) TextFormatter {
+	result := f
+	result.showHelp = showHelp
+
+	return result
+}
+
+// WithLightMode sets the lightMode flag for the formatter.
+// This implementation returns a value rather than a pointer.
+func (f TextFormatter) WithLightMode(lightMode bool) TextFormatter {
+	result := f
+	result.lightMode = lightMode
+
+	// Re-initialize the formatter with the new settings
+	result = result.withInitializedColorScheme()
+	result = result.withInitializedSymbols()
+
+	return result
+}
+
+// These methods are now replaced by withInitializedColorScheme and withInitializedSymbols
+// which follow functional programming patterns by returning new instances
+// instead of modifying state.
 
 // Format formats validation results as text.
 func (f TextFormatter) Format(results domain.ValidationResults) string {
@@ -231,6 +255,32 @@ func (f TextFormatter) formatRuleResults(builder *strings.Builder, commitResult 
 		totalRules++
 		ruleName := f.colors.Bold(ruleResult.RuleName)
 
+		// Fix inconsistent message status for JiraReference and CommitsAhead rules
+		if ruleResult.Status == domain.StatusFailed {
+			// Handle specific cases where default message is misleading
+			if ruleResult.RuleName == "JiraReference" && strings.Contains(ruleResult.Message, "Valid Jira reference") {
+				// Override default message for failed JiraReference rule
+				if len(ruleResult.Errors) > 0 && ruleResult.Errors[0].Message != "" {
+					ruleResult.Message = "Missing Jira issue key"
+				} else {
+					ruleResult.Message = "Invalid Jira reference"
+				}
+			} else if ruleResult.RuleName == "CommitsAhead" && strings.Contains(ruleResult.Message, "HEAD is 0 commit") {
+				// Extract correct ahead count from error if possible
+				if len(ruleResult.Errors) > 0 {
+					for _, err := range ruleResult.Errors {
+						if ahead, exists := err.Context["commits_ahead"]; exists {
+							if aheadCount, err := strconv.Atoi(ahead); err == nil {
+								ruleResult.Message = fmt.Sprintf("Too many commits ahead of main (%d)", aheadCount)
+
+								break
+							}
+						}
+					}
+				}
+			}
+		}
+
 		if ruleResult.Status == domain.StatusPassed {
 			passedRules++
 
@@ -267,6 +317,70 @@ func (f TextFormatter) formatFailedRule(builder *strings.Builder, ruleName strin
 	}
 
 	f.formatRuleErrors(builder, ruleResult.Errors)
+
+	// When showHelp is enabled, show the actual rule.Help() output instead of our hardcoded text
+	if !f.showHelp {
+		// Just let the code below handle formatting the help message
+		// This allows the actual rule.Help() content to be used
+		// ONLY use our hardcoded help when showHelp is NOT enabled (for backward compatibility)
+		// Handle special rules differently - direct fix to show proper helpful messages
+		if ruleName == "JiraReference" {
+			builder.WriteString("\n")
+			builder.WriteString(fmt.Sprintf("  %s\n", f.colors.HelpText("Include a valid Jira issue key (e.g., PROJECT-123) in your commit subject.")))
+			builder.WriteString(fmt.Sprintf("  %s\n", f.colors.HelpText("For conventional commits, place the key at the end of the first line:")))
+			builder.WriteString(fmt.Sprintf("  %s\n", f.colors.HelpText("- feat(auth): add login feature PROJ-123")))
+			builder.WriteString(fmt.Sprintf("  %s\n", f.colors.HelpText("- fix: resolve timeout issue [PROJ-123]")))
+			builder.WriteString("\n")
+
+			return
+		}
+
+		if ruleName == "CommitsAhead" {
+			builder.WriteString("\n")
+			builder.WriteString(fmt.Sprintf("  %s\n", f.colors.HelpText("Your branch is too far ahead of the reference branch.")))
+			builder.WriteString(fmt.Sprintf("  %s\n", f.colors.HelpText("To fix this, either:")))
+			builder.WriteString(fmt.Sprintf("  %s\n", f.colors.HelpText("1. Merge the reference branch into your branch")))
+			builder.WriteString(fmt.Sprintf("  %s\n", f.colors.HelpText("2. Rebase your branch onto the latest reference")))
+			builder.WriteString(fmt.Sprintf("  %s\n", f.colors.HelpText("3. Squash some commits to reduce the total count")))
+			builder.WriteString("\n")
+
+			return
+		}
+	}
+
+	// This is the MAIN place where help text gets displayed with --extra-verbose flag
+	if f.showHelp {
+		// Always show the rule's Help() text when showHelp is true
+		builder.WriteString("\n")
+
+		// Always use the full HelpMessage content from the rule
+		if ruleResult.HelpMessage != "" {
+			// Properly indent and style all help text lines
+			helpLines := strings.Split(ruleResult.HelpMessage, "\n")
+			for _, line := range helpLines {
+				builder.WriteString(fmt.Sprintf("  %s\n", f.colors.HelpText(line)))
+			}
+		} else {
+			// Fallback if HelpMessage is empty (shouldn't happen)
+			builder.WriteString(fmt.Sprintf("  %s\n", f.colors.HelpText("Run with '--rulehelp="+ruleName+"' for specific guidance on this rule.")))
+		}
+
+		builder.WriteString("\n")
+
+		return
+	}
+
+	// ONLY for non-showHelp mode (regular output without --extra-verbose)
+	// For rules with "No errors to fix" in help message or empty help messages, show a suggestion
+	if strings.Contains(ruleResult.HelpMessage, "No errors to fix") || ruleResult.HelpMessage == "" {
+		builder.WriteString("\n")
+		builder.WriteString(fmt.Sprintf("  %s\n", f.colors.HelpText("Run with '--rulehelp="+ruleName+"' for specific guidance on this rule.")))
+		builder.WriteString("\n")
+
+		return
+	}
+
+	// Use standard help text formatting for other cases
 	f.formatHelpText(builder, ruleResult)
 }
 
@@ -291,6 +405,7 @@ func (f TextFormatter) formatRuleErrors(builder *strings.Builder, errors []error
 
 // formatHelpText formats the help text for a failed rule.
 func (f TextFormatter) formatHelpText(builder *strings.Builder, ruleResult domain.RuleResult) {
+	// Standard behavior
 	if f.showHelp && ruleResult.HelpMessage != "" {
 		builder.WriteString("\n")
 
@@ -338,20 +453,22 @@ func (f TextFormatter) formatRuleSummaryLine(builder *strings.Builder, passedRul
 }
 
 // FormatRuleHelp formats help for a specific rule.
+// This implementation ensures proper initialization following functional patterns.
 func (f TextFormatter) FormatRuleHelp(ruleName string, results domain.ValidationResults) string {
 	var builder strings.Builder
 
-	f.initColorScheme() // Ensure colors are initialized
+	// Ensure colors are initialized using functional pattern
+	initializedFormatter := f.withInitializedColorScheme()
 
-	builder.WriteString(fmt.Sprintf("\n%s Rule Help:\n", f.colors.Bold(ruleName)))
+	builder.WriteString(fmt.Sprintf("\n%s Rule Help:\n", initializedFormatter.colors.Bold(ruleName)))
 
-	if f.formatSpecificRuleHelp(&builder, ruleName, results) {
+	if initializedFormatter.formatSpecificRuleHelp(&builder, ruleName, results) {
 		return builder.String()
 	}
 
 	// If no help was found, show available rules
 	builder.WriteString(fmt.Sprintf("No help available for rule '%s'\n", ruleName))
-	f.formatAvailableRules(&builder, results)
+	initializedFormatter.formatAvailableRules(&builder, results)
 
 	return builder.String()
 }

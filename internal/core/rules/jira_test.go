@@ -63,7 +63,7 @@ func TestJiraReferenceRule(t *testing.T) {
 			validProjects:     validProjects,
 			expectedErrors:    1,
 			expectedErrorCode: appErrors.ErrMissingJira,
-			expectedResult:    "Missing or invalid Jira reference",
+			expectedResult:    "Missing Jira issue key",
 		},
 		{
 			name:              "Invalid Jira project",
@@ -71,7 +71,7 @@ func TestJiraReferenceRule(t *testing.T) {
 			validProjects:     validProjects,
 			expectedErrors:    1,
 			expectedErrorCode: appErrors.ErrInvalidType,
-			expectedResult:    "Missing or invalid Jira reference",
+			expectedResult:    "Invalid Jira project: INVALID",
 		},
 		{
 			name:              "Invalid Jira key format",
@@ -79,7 +79,7 @@ func TestJiraReferenceRule(t *testing.T) {
 			validProjects:     validProjects,
 			expectedErrors:    1,
 			expectedErrorCode: appErrors.ErrInvalidFormat,
-			expectedResult:    "Missing or invalid Jira reference",
+			expectedResult:    "Invalid Jira key format: PROJ123",
 		},
 		{
 			name:           "Jira key not at end",
@@ -95,7 +95,7 @@ func TestJiraReferenceRule(t *testing.T) {
 			validProjects:        validProjects,
 			expectedErrors:       1,
 			expectedErrorCode:    appErrors.ErrInvalidFormat,
-			expectedResult:       "Missing or invalid Jira reference",
+			expectedResult:       "Invalid Jira key format: PROJ-123",
 		},
 		{
 			name:              "Empty subject",
@@ -103,7 +103,7 @@ func TestJiraReferenceRule(t *testing.T) {
 			validProjects:     validProjects,
 			expectedErrors:    1,
 			expectedErrorCode: appErrors.ErrEmptyMessage,
-			expectedResult:    "Missing or invalid Jira reference",
+			expectedResult:    "Invalid Jira reference",
 		},
 	}
 
@@ -384,5 +384,113 @@ func TestJiraReferenceRule(t *testing.T) {
 		bodyVerboseResult := bodyRule.VerboseResult()
 		require.Contains(t, bodyVerboseResult, "PROJ-123", "VerboseResult should include the found key")
 		require.Contains(t, bodyVerboseResult, "in commit body", "VerboseResult should mention body reference")
+	})
+
+	// Test Help method functionality
+	t.Run("help message is appropriate for state", func(t *testing.T) {
+		// Test the success case
+		rule := rules.NewJiraReferenceRule()
+		commit := domain.CommitInfo{
+			Hash:    "abc123",
+			Subject: "feat: add feature PROJ-123",
+		}
+
+		// Validate to update rule state
+		errors, updatedRule := rules.ValidateJiraWithState(rule, commit)
+		require.Empty(t, errors)
+
+		// Check help message for success case
+		helpMsg := updatedRule.Help()
+		require.Contains(t, helpMsg, "Commit message contains valid Jira issue reference")
+		require.Contains(t, helpMsg, "PROJECT-123")
+		require.Contains(t, helpMsg, "This rule checks")
+
+		// Test the error case
+		errorRule := rules.NewJiraReferenceRule()
+		errorCommit := domain.CommitInfo{
+			Hash:    "abc123",
+			Subject: "feat: add feature without jira",
+		}
+
+		// Validate to update rule state with error
+		errors, errorRule = rules.ValidateJiraWithState(errorRule, errorCommit)
+		require.NotEmpty(t, errors)
+
+		// Check help message for error case
+		errorHelpMsg := errorRule.Help()
+		require.NotContains(t, errorHelpMsg, "valid Jira issue reference")
+		require.Contains(t, errorHelpMsg, "Include a valid Jira issue key")
+	})
+
+	// Test result message for errors
+	t.Run("result message matches error state", func(t *testing.T) {
+		tests := []struct {
+			name        string
+			commit      domain.CommitInfo
+			validateErr appErrors.ValidationError
+			wantResult  string
+			hasErrors   bool
+		}{
+			{
+				name: "missing jira reference",
+				commit: domain.CommitInfo{
+					Subject: "Add new feature",
+				},
+				validateErr: appErrors.New("JiraReference", appErrors.ErrMissingJira, "no Jira issue key found in the commit subject"),
+				wantResult:  "Missing Jira issue key",
+				hasErrors:   true,
+			},
+			{
+				name: "invalid project",
+				commit: domain.CommitInfo{
+					Subject: "Add new feature XYZ-123",
+				},
+				validateErr: appErrors.New("JiraReference", appErrors.ErrInvalidType, "invalid project",
+					appErrors.WithContextMap(map[string]string{"project": "XYZ"})),
+				wantResult: "Invalid Jira project: XYZ",
+				hasErrors:  true,
+			},
+			{
+				name: "invalid format",
+				commit: domain.CommitInfo{
+					Subject: "feat: add new feature ABC123",
+				},
+				validateErr: appErrors.New("JiraReference", appErrors.ErrInvalidFormat, "invalid format",
+					appErrors.WithContextMap(map[string]string{"key": "ABC123"})),
+				wantResult: "Invalid Jira key format: ABC123",
+				hasErrors:  true,
+			},
+			{
+				name: "valid commit",
+				commit: domain.CommitInfo{
+					Subject: "feat: add new feature ABC-123",
+				},
+				wantResult: "Valid Jira reference",
+				hasErrors:  false,
+			},
+		}
+
+		for _, testCase := range tests {
+			t.Run(testCase.name, func(t *testing.T) {
+				rule := rules.NewJiraReferenceRule()
+
+				// Mock validation errors
+				if testCase.validateErr.Message != "" {
+					rule = rule.SetErrors([]appErrors.ValidationError{testCase.validateErr})
+				}
+
+				// Check if HasErrors returns correct state
+				require.Equal(t, testCase.hasErrors, rule.HasErrors(), "HasErrors() result does not match expected state")
+
+				// Check if Result message is appropriate for error state
+				result := rule.Result()
+				require.Contains(t, result, testCase.wantResult, "Result message does not match expected content")
+
+				// If rule has errors, result should NOT contain "Valid"
+				if testCase.hasErrors {
+					require.NotContains(t, result, "Valid", "Failed rule should not report 'Valid' in result message")
+				}
+			})
+		}
 	})
 }

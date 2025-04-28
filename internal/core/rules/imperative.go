@@ -276,7 +276,7 @@ func (r ImperativeVerbRule) VerboseResult() string {
 // Help returns guidance on how to fix rule violations.
 func (r ImperativeVerbRule) Help() string {
 	if !r.BaseRule.HasErrors() {
-		return "No errors to fix"
+		return "No errors to fix. This rule checks that commit messages begin with an imperative verb (e.g., Add, Fix, Update) rather than descriptive forms (e.g., Adds, Fixed, Updated)."
 	}
 	// Check error code
 	errors := r.BaseRule.Errors()

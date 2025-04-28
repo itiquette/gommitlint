@@ -450,7 +450,7 @@ func (r ConventionalCommitRule) VerboseResult() string {
 // Help returns guidance on how to fix the rule violation.
 func (r ConventionalCommitRule) Help() string {
 	if !r.HasErrors() {
-		return "No errors to fix"
+		return "No errors to fix. This rule checks that commits follow the conventional commit format with proper type, structure, and description (e.g., feat: add new login feature, fix(auth): resolve timeout issue)."
 	}
 
 	errors := r.Errors()

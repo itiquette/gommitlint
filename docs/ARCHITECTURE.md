@@ -1,21 +1,23 @@
 # Gommitlint Architecture
 
-Gommitlint follows a simplified hexagonal architecture (also known as ports and adapters) to ensure a clean separation of concerns and to make the codebase more maintainable and testable.
+Gommitlint follows a functional hexagonal architecture (also known as ports and adapters) to ensure a clean separation of concerns and to make the codebase more maintainable and testable. The application is prefering functional programming principles with value semantics.
 
 ## Overview
 
 The hexagonal architecture divides the application into layers:
 
-1. **Domain Layer** (center): Core business logic and entities
-2. **Application Layer**: Use cases that orchestrate domain entities
-3. **Ports Layer**: Interfaces that connect the application to the outside world
-4. **Adapters/Infrastructure Layer**: Implementation of interfaces defined in the ports layer
+1. **Domain Layer** (center): Core business logic and entities with immutable data structures
+2. **Application Layer**: Pure functions and transformations that orchestrate domain entities
+3. **Ports Layer**: Functional interfaces that connect the application to the outside world
+4. **Adapters/Infrastructure Layer**: Value-based implementation of interfaces defined in the ports layer
 
 This architectural approach provides several benefits:
+
 - Clear separation of concerns
 - Domain logic isolated from infrastructure details
-- Testability through interface-based design
+- Testability through interface-based design and pure functions
 - Flexibility to change implementation details without affecting core business logic
+- Concurrency safety through value semantics and immutability
 
 ```javascript
 ┌───────────────────────────────────────────────────────────────┐
@@ -30,25 +32,26 @@ This architectural approach provides several benefits:
 │   │   │   ┌───────────────────────────────────────┐   │   │   │
 │   │   │   │             Domain Layer              │   │   │   │
 │   │   │   │                                       │   │   │   │
-│   │   │   │    - Domain Entities                  │   │   │   │
-│   │   │   │    - Rule Interfaces                  │   │   │   │
+│   │   │   │    - Immutable Domain Entities        │   │   │   │
+│   │   │   │    - Pure Rule Interfaces             │   │   │   │
 │   │   │   │    - Value Objects                    │   │   │   │
 │   │   │   │                                       │   │   │   │
 │   │   │   └───────────────────────────────────────┘   │   │   │
 │   │   │                                               │   │   │
-│   │   │    - Validation Service                       │   │   │
-│   │   │    - Report Generation                        │   │   │
+│   │   │    - Functional Validation Services           │   │   │
+│   │   │    - Pure Report Generation                   │   │   │
+│   │   │    - Value-Based Transformations              │   │   │
 │   │   │                                               │   │   │
 │   │   └───────────────────────────────────────────────┘   │   │
 │   │                                                       │   │
-│   │    - CLI Commands                                     │   │
-│   │    - Repository Interfaces                            │   │
+│   │    - Functional CLI Commands                          │   │
+│   │    - Value-Based Repository Interfaces                │   │
 │   │                                                       │   │
 │   └───────────────────────────────────────────────────────┘   │
 │                                                               │
-│    - Git Repository Implementation                            │
-│    - Configuration Provider                                   │
-│    - Output Formatters                                        │
+│    - Git Repository Implementation with Value Semantics       │
+│    - Immutable Configuration Provider                         │
+│    - Functional Output Formatters                             │
 │                                                               │
 └───────────────────────────────────────────────────────────────┘
 ```
@@ -66,6 +69,7 @@ The domain layer is the heart of the application, containing the core business l
 - `/internal/domain/commit_collection.go`: Domain collection for commit operations
 
 Key interfaces:
+
 - `Rule`: Interface that all validation rules implement
 - `CommitReader`: Interface for reading individual commits
 - `CommitHistoryReader`: Interface for accessing commit history
@@ -108,9 +112,9 @@ The infrastructure layer provides concrete implementations of interfaces:
 - `/internal/infrastructure/config/provider.go`: Configuration provider
 - `/internal/infrastructure/output/`: Output formatters (text, JSON, GitHub, GitLab)
 
-## Simplified Interfaces
+## Functional Interfaces
 
-The new architecture includes simplified interfaces based on the Interface Segregation Principle, which ensures that clients only depend on the methods they actually use.
+The architecture includes functional interfaces that emphasize value semantics and immutability based on the Interface Segregation Principle, which ensures that clients only depend on the methods they actually use.
 
 ### RuleProvider Interface
 
@@ -122,76 +126,115 @@ type RuleProvider interface {
     
     // GetActiveRules returns currently active rules.
     GetActiveRules() []string
+}
+
+// FunctionalRuleProvider extends RuleProvider with functional methods.
+type FunctionalRuleProvider interface {
+    RuleProvider
     
-    // SetEnabledRules activates specific rules.
-    SetEnabledRules(rules []string)
+    // WithEnabledRules returns a new provider with specific rules activated.
+    WithEnabledRules(rules []string) FunctionalRuleProvider
     
-    // SetDisabledRules deactivates specific rules.
-    SetDisabledRules(rules []string)
+    // WithDisabledRules returns a new provider with specific rules deactivated.
+    WithDisabledRules(rules []string) FunctionalRuleProvider
 }
 ```
 
 ### ValidationConfigAdapter
 
-This adapter implements configuration interfaces for rule validation:
+This adapter implements configuration interfaces for rule validation using value semantics:
 
 ```go
 // ValidationConfigAdapter adapts the configuration to rule validation interfaces.
 type ValidationConfigAdapter struct {
-    config *Config
+    config Config // Value-based, not pointer-based
 }
 
-// The adapter implements various interfaces:
-// - RuleProvider for rule activation/deactivation
+// The adapter implements various interfaces with functional methods:
+// - FunctionalRuleProvider for immutable rule activation/deactivation
 // - SubjectConfigProvider for subject-related settings
 // - BodyConfigProvider for body-related settings
 // - ConventionalConfigProvider for conventional commit settings
 // - ... and other configuration interfaces
+
+// Transformation methods return new instances:
+func (a ValidationConfigAdapter) WithMaxSubjectLength(length int) ValidationConfigAdapter {
+    newAdapter := a
+    newAdapter.config.MaxSubjectLength = length
+    return newAdapter
+}
 ```
 
 ### CommitService Interface
 
+This interface provides access to Git commit operations while maintaining value semantics:
+
 ```go
 // CommitService provides access to Git commit operations.
 type CommitService interface {
-    // GetCommit returns a specific commit by hash.
+    // GetCommit returns a specific commit by hash as a value.
     GetCommit(ctx context.Context, hash string) (domain.CommitInfo, error)
     
-    // GetHeadCommits returns the specified number of commits from HEAD.
+    // GetHeadCommits returns the specified number of commits from HEAD as values.
     GetHeadCommits(ctx context.Context, count int) (domain.CommitCollection, error)
     
-    // GetCommitRange returns commits in the given range.
+    // GetCommitRange returns commits in the given range as values.
     GetCommitRange(ctx context.Context, fromHash, toHash string) (domain.CommitCollection, error)
+}
+
+// The implementation uses value semantics internally:
+type GitRepository struct {
+    path string
+    // Internal implementation details
+}
+
+// Methods return values, not references
+func (g GitRepository) GetCommit(ctx context.Context, hash string) (domain.CommitInfo, error) {
+    // Implementation that returns a value, not a pointer
 }
 ```
 
 ### ValidationService Interface
 
+The validation service provides pure functionality for commit validation, using value semantics throughout:
+
 ```go
-// ValidationService provides commit validation functionality.
-type ValidationService interface {
-    // ValidateCommit validates a single commit.
-    ValidateCommit(ctx context.Context, hash string) (domain.ValidationResult, error)
-    
-    // ValidateHeadCommits validates a number of HEAD commits.
-    ValidateHeadCommits(ctx context.Context, count int, skipMergeCommits bool) (domain.ValidationResult, error)
-    
-    // ValidateCommitRange validates a range of commits.
-    ValidateCommitRange(ctx context.Context, fromHash, toHash string, skipMergeCommits bool) (domain.ValidationResult, error)
-    
-    // ValidateMessageFile validates a commit message from a file.
-    ValidateMessageFile(ctx context.Context, filePath string) (domain.ValidationResult, error)
-    
-    // ValidateMessage validates a commit message string.
-    ValidateMessage(ctx context.Context, message string) (domain.ValidationResult, error)
+// ValidationService provides commit validation functionality with value semantics.
+type ValidationService struct {
+    engine        ValidationEngine
+    commitService domain.GitCommitService
+    infoProvider  domain.RepositoryInfoProvider
 }
+
+// Transformation methods to create modified services:
+func (s ValidationService) WithEngine(engine ValidationEngine) ValidationService {
+    return ValidationService{
+        engine:        engine,
+        commitService: s.commitService,
+        infoProvider:  s.infoProvider,
+    }
+}
+
+// ValidateCommit validates a single commit and returns results as values.
+func (s ValidationService) ValidateCommit(ctx context.Context, hash string) (domain.ValidationResult, error) {
+    // Implementation that returns values, not references
+}
+
+// ValidateHeadCommits validates a number of HEAD commits with pure functions.
+func (s ValidationService) ValidateHeadCommits(ctx context.Context, count int, skipMergeCommits bool) (domain.ValidationResult, error) {
+    // Pure implementation that transforms data without side effects
+}
+
+// Other validation methods follow the same functional pattern...
 ```
 
 ## Functional Programming and Value Semantics
 
-The updated architecture embraces functional programming principles and value semantics extensively for better immutability, predictability, and testability:
+The entire architecture embraces functional programming principles and value semantics extensively for better immutability, predictability, and testability. For a comprehensive overview of functional patterns used in Gommitlint, see [FUNCTIONAL_PATTERNS.md](FUNCTIONAL_PATTERNS.md) and [FUNCTIONAL_ARCHITECTURE.md](FUNCTIONAL_ARCHITECTURE.md).
 
 ### Value Semantics
+
+All types use value semantics, ensuring immutability and thread safety:
 
 ```go
 // Using value semantics for immutable data structures
@@ -472,9 +515,9 @@ func RegisterCustomRule(registry *validation.RuleRegistry, config string) {
 }
 ```
 
-## Benefits of the Updated Architecture
+## Benefits of the Architecture
 
-The updated architecture provides several additional benefits:
+The architecture provides several additional benefits:
 
 1. **Simplified Interfaces**: More focused interfaces with fewer methods make the system easier to understand and implement
 2. **Value Semantics**: Immutable data structures and functional programming patterns improve code safety and readability
@@ -484,7 +527,7 @@ The updated architecture provides several additional benefits:
 
 ## Error Handling
 
-The error handling approach has been improved with better context:
+The error handling with context:
 
 ```go
 // Domain-specific error with context
@@ -503,7 +546,7 @@ if err != nil {
 
 ## Testing Strategy
 
-The testing strategy now emphasizes integration testing while maintaining strong unit tests:
+The testing strategy emphasizes integration testing while maintaining strong unit tests:
 
 1. **Unit Tests**: Each component is tested in isolation
 2. **Integration Tests**: Key workflows are tested end-to-end

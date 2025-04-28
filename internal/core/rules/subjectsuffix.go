@@ -180,7 +180,7 @@ func (r SubjectSuffixRule) VerboseResult() string {
 // Help returns guidance on how to fix rule violations.
 func (r SubjectSuffixRule) Help() string {
 	if !r.HasErrors() {
-		return "No errors to fix"
+		return "No errors to fix. This rule checks that commit subjects end with an appropriate character and don't have trailing punctuation like '" + r.invalidSuffixes + "' that might affect readability."
 	}
 
 	// Check for specific error codes and provide appropriate help messages

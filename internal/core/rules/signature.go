@@ -354,10 +354,7 @@ func (r SignatureRule) VerboseResult() string {
 // Help returns guidance on how to fix the rule violation.
 func (r SignatureRule) Help() string {
 	if !r.HasErrors() {
-		return `No errors to fix
-Note: This rule only checks that a signature exists and has valid formatting.
-It does NOT verify the cryptographic validity of the signature or that it was 
-created by a trusted key. For full security, additional verification is required.`
+		return "No errors to fix"
 	}
 
 	// Check error code for targeted help

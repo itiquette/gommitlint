@@ -18,31 +18,34 @@ type GitLabCIFormatter struct {
 }
 
 // Ensure GitLabCIFormatter implements domain.ResultFormatter.
-var _ domain.ResultFormatter = (*GitLabCIFormatter)(nil)
+var _ domain.ResultFormatter = GitLabCIFormatter{}
 
 // NewGitLabFormatter creates a new GitLab CI formatter.
 // It implements domain.ResultFormatter interface.
-func NewGitLabFormatter() *GitLabCIFormatter {
-	return &GitLabCIFormatter{
+// This implementation returns a value rather than a pointer.
+func NewGitLabFormatter() GitLabCIFormatter {
+	return GitLabCIFormatter{
 		verbose:  false,
 		showHelp: false,
 	}
 }
 
 // WithVerbose sets the verbose flag for the formatter.
-func (f GitLabCIFormatter) WithVerbose(verbose bool) *GitLabCIFormatter {
+// This implementation returns a value rather than a pointer.
+func (f GitLabCIFormatter) WithVerbose(verbose bool) GitLabCIFormatter {
 	result := f
 	result.verbose = verbose
 
-	return &result
+	return result
 }
 
 // WithShowHelp sets the showHelp flag for the formatter.
-func (f GitLabCIFormatter) WithShowHelp(showHelp bool) *GitLabCIFormatter {
+// This implementation returns a value rather than a pointer.
+func (f GitLabCIFormatter) WithShowHelp(showHelp bool) GitLabCIFormatter {
 	result := f
 	result.showHelp = showHelp
 
-	return &result
+	return result
 }
 
 // Format formats validation results for GitLab CI output.
@@ -119,7 +122,8 @@ func (f GitLabCIFormatter) Format(results domain.ValidationResults) string {
 }
 
 // FormatRuleHelp formats help text for a specific rule.
-func (f GitLabCIFormatter) FormatRuleHelp(ruleName string, results *domain.ValidationResults) string {
+// This implementation correctly uses a value instead of a pointer for the results parameter.
+func (f GitLabCIFormatter) FormatRuleHelp(ruleName string, results domain.ValidationResults) string {
 	var builder strings.Builder
 
 	fmt.Fprintf(&builder, "section_start:$(date ):rulehelp[collapsed=true]\n")

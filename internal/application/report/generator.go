@@ -51,76 +51,159 @@ type Generator struct {
 	formatter domain.ResultFormatter
 }
 
-// Ensure Generator implements domain.ReportGenerator.
-var _ domain.ReportGenerator = (*Generator)(nil)
+// Options returns a copy of the generator's options.
+// This is useful for inspection and testing.
+func (g Generator) Options() Options {
+	return copyOptions(g.options)
+}
+
+// Ensure Generator implements both domain.ReportGenerator and domain.FunctionalReportGenerator.
+var _ domain.ReportGenerator = Generator{}
+var _ domain.FunctionalReportGenerator = Generator{}
 
 // NewGenerator creates a new report generator.
-func NewGenerator(options Options, formatter domain.ResultFormatter) *Generator {
-	return &Generator{
+func NewGenerator(options Options, formatter domain.ResultFormatter) Generator {
+	// Ensure writer is initialized with a default if not provided
+	if options.Writer == nil {
+		options.Writer = os.Stdout
+	}
+
+	return Generator{
 		options:   options,
 		formatter: formatter,
 	}
 }
 
 // GenerateReport implements the domain.ReportGenerator interface.
-func (g *Generator) GenerateReport(results domain.ValidationResults) error {
+func (g Generator) GenerateReport(results domain.ValidationResults) error {
 	// Use the injected formatter
 	report := g.formatter.Format(results)
 
-	_, err := g.options.Writer.Write([]byte(report))
-	if err != nil {
+	// Use a pure function to write the report
+	if err := writeReport(g.options.Writer, report); err != nil {
 		return err
 	}
 
+	// Use a pure function to handle failure cases
+	return handleFailure(results, g.options.Writer)
+}
+
+// writeReport is a pure function to write content to a writer.
+func writeReport(writer io.Writer, content string) error {
+	_, err := writer.Write([]byte(content))
+
+	return err
+}
+
+// handleFailure is a pure function that returns appropriate error for failed validations.
+func handleFailure(results domain.ValidationResults, writer io.Writer) error {
 	// If the validation failed and this is the final output, write an error code
-	if !results.AllPassed() && g.options.Writer == os.Stdout {
+	if !results.AllPassed() && writer == os.Stdout {
 		// This is a convention to indicate failure to the shell
-		return fmt.Errorf("validation failed: %d of %d commits failed", results.TotalCommits-results.PassedCommits, results.TotalCommits)
+		return fmt.Errorf("validation failed: %d of %d commits failed",
+			results.TotalCommits-results.PassedCommits, results.TotalCommits)
 	}
 
 	return nil
 }
 
+// WithVerbose returns a new Generator with verbose setting updated.
+// This implements the domain.FunctionalReportGenerator interface.
+func (g Generator) WithVerbose(verbose bool) domain.FunctionalReportGenerator {
+	newOptions := copyOptions(g.options)
+	newOptions.Verbose = verbose
+
+	return Generator{
+		options:   newOptions,
+		formatter: g.formatter,
+	}
+}
+
+// copyOptions creates a deep copy of Options to ensure immutability.
+func copyOptions(opts Options) Options {
+	return Options{
+		Format:         opts.Format,
+		Verbose:        opts.Verbose,
+		ShowHelp:       opts.ShowHelp,
+		RuleToShowHelp: opts.RuleToShowHelp,
+		LightMode:      opts.LightMode,
+		Writer:         opts.Writer,
+	}
+}
+
 // SetVerbose enables or disables verbose output in reports.
-// This implements the domain.ReportGenerator interface.
-func (g *Generator) SetVerbose(verbose bool) {
-	g.options.Verbose = verbose
+// This implements the domain.ReportGenerator interface for backward compatibility.
+// Using underscore parameter name to indicate deliberately unused parameter.
+func (g Generator) SetVerbose(_ bool) {
+	// Do nothing - this is maintained for interface compatibility only
+	// Use WithVerbose instead for functional style
+}
+
+// WithShowHelp returns a new Generator with showHelp setting updated.
+// This implements the domain.FunctionalReportGenerator interface.
+func (g Generator) WithShowHelp(showHelp bool) domain.FunctionalReportGenerator {
+	newOptions := copyOptions(g.options)
+	newOptions.ShowHelp = showHelp
+
+	return Generator{
+		options:   newOptions,
+		formatter: g.formatter,
+	}
 }
 
 // SetShowHelp enables or disables showing help messages in reports.
-// This implements the domain.ReportGenerator interface.
-func (g *Generator) SetShowHelp(showHelp bool) {
-	g.options.ShowHelp = showHelp
+// This implements the domain.ReportGenerator interface for backward compatibility.
+// Using underscore parameter name to indicate deliberately unused parameter.
+func (g Generator) SetShowHelp(_ bool) {
+	// Do nothing - this is maintained for interface compatibility only
+	// Use WithShowHelp instead for functional style
+}
+
+// WithRuleToShowHelp returns a new Generator with ruleToShowHelp setting updated.
+// This implements the domain.FunctionalReportGenerator interface.
+func (g Generator) WithRuleToShowHelp(ruleName string) domain.FunctionalReportGenerator {
+	newOptions := copyOptions(g.options)
+	newOptions.RuleToShowHelp = ruleName
+
+	return Generator{
+		options:   newOptions,
+		formatter: g.formatter,
+	}
 }
 
 // SetRuleToShowHelp sets a specific rule to show help for.
-// This implements the domain.ReportGenerator interface.
-func (g *Generator) SetRuleToShowHelp(ruleName string) {
-	g.options.RuleToShowHelp = ruleName
+// This implements the domain.ReportGenerator interface for backward compatibility.
+// Using underscore parameter name to indicate deliberately unused parameter.
+func (g Generator) SetRuleToShowHelp(_ string) {
+	// Do nothing - this is maintained for interface compatibility only
+	// Use WithRuleToShowHelp instead for functional style
 }
 
 // GenerateSummary generates a brief summary report.
 // This is used for quick command-line feedback.
-func (g *Generator) GenerateSummary(results domain.ValidationResults) error {
+func (g Generator) GenerateSummary(results domain.ValidationResults) error {
+	// Generate the summary content using a pure function
+	summary := buildSummary(results)
+
+	// Write the summary using the pure function
+	if err := writeReport(g.options.Writer, summary); err != nil {
+		return err
+	}
+
+	// Handle failure cases using a pure function
+	return handleFailure(results, g.options.Writer)
+}
+
+// buildSummary is a pure function that creates a summary string from validation results.
+func buildSummary(results domain.ValidationResults) string {
 	var builder strings.Builder
 	if results.AllPassed() {
 		builder.WriteString("✅ All commits passed validation\n")
 	} else {
 		builder.WriteString("❌ Some commits failed validation\n")
-		builder.WriteString(fmt.Sprintf("   Failed: %d/%d\n", results.TotalCommits-results.PassedCommits, results.TotalCommits))
+		builder.WriteString(fmt.Sprintf("   Failed: %d/%d\n",
+			results.TotalCommits-results.PassedCommits, results.TotalCommits))
 	}
 
-	// Write the summary
-	_, err := g.options.Writer.Write([]byte(builder.String()))
-	if err != nil {
-		return err
-	}
-
-	// If the validation failed and this is the final output, write an error code
-	if !results.AllPassed() && g.options.Writer == os.Stdout {
-		// This is a convention to indicate failure to the shell
-		return fmt.Errorf("validation failed: %d of %d commits failed", results.TotalCommits-results.PassedCommits, results.TotalCommits)
-	}
-
-	return nil
+	return builder.String()
 }

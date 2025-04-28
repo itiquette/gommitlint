@@ -315,6 +315,7 @@ func (r SpellRule) VerboseResult() string {
 
 // Help returns help information for fixing rule violations.
 func (r SpellRule) Help() string {
+	// Check if there are errors
 	if len(r.errors) == 0 {
 		return "No errors to fix"
 	}

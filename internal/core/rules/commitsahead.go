@@ -253,24 +253,24 @@ func (r CommitsAheadRule) Result() string {
 
 			switch appErrors.ValidationErrorCode(validationErr.Code) { //nolint:exhaustive
 			case appErrors.ErrInvalidRepo:
-				return "Repository object is nil - Git repository not accessible"
+				return "Git repository not accessible"
 			case appErrors.ErrTooManyCommits:
 				// Extract ahead count from context if possible
-				if aheadStr, exists := validationErr.Context["ahead"]; exists {
+				if aheadStr, exists := validationErr.Context["commits_ahead"]; exists {
 					if ahead, err := strconv.Atoi(aheadStr); err == nil {
-						return fmt.Sprintf("Too many commits ahead of %s (%d > %d)", r.ref, ahead, r.maxCommitsAhead)
+						return fmt.Sprintf("Too many commits ahead of %s (%d)", r.ref, ahead)
 					}
 				}
 
-				// Use stored ahead count if available
+				// Fallback to stored ahead count in rule's state
 				if r.ahead > 0 {
-					return fmt.Sprintf("Too many commits ahead of %s (%d > %d)", r.ref, r.ahead, r.maxCommitsAhead)
+					return fmt.Sprintf("Too many commits ahead of %s (%d)", r.ref, r.ahead)
 				}
 
-				// Fallback to generic message
+				// Generic fallback message
 				return "Too many commits ahead of reference branch"
 			case appErrors.ErrInvalidConfig:
-				return "Invalid reference branch configuration"
+				return "Invalid branch configuration"
 			default:
 				return "Validation error occurred"
 			}
@@ -279,6 +279,7 @@ func (r CommitsAheadRule) Result() string {
 		return "Too many commits ahead of reference branch"
 	}
 
+	// Only for success case
 	return fmt.Sprintf("HEAD is %d commit(s) ahead of %s", r.ahead, r.ref)
 }
 
@@ -338,21 +339,22 @@ func (r CommitsAheadRule) VerboseResult() string {
 
 // Help returns guidance on how to fix the rule violation.
 func (r CommitsAheadRule) Help() string {
+	// First check if the rule has errors - this should be the primary check
 	if !r.HasErrors() {
 		return "No errors to fix"
 	}
 
-	// Check error code
+	// Now check error code for specific guidance
 	errors := r.Errors()
 	if len(errors) > 0 {
 		validationErr := errors[0]
 
 		// Extract ahead count from context if possible
-		ahead := r.ahead
+		aheadValue := r.ahead
 
-		if aheadStr, exists := validationErr.Context["ahead"]; exists {
+		if aheadStr, exists := validationErr.Context["commits_ahead"]; exists {
 			if parsedAhead, err := strconv.Atoi(aheadStr); err == nil {
-				ahead = parsedAhead
+				aheadValue = parsedAhead
 			}
 		}
 
@@ -368,7 +370,7 @@ func (r CommitsAheadRule) Help() string {
 3. Squash some commits to reduce the total count:
    git rebase -i HEAD~%d
 The maximum allowed commits ahead is %d, but your branch is %d commits ahead.`,
-				r.ref, r.ref, r.ref, r.ref, r.ref, ahead, r.maxCommitsAhead, ahead)
+				r.ref, r.ref, r.ref, r.ref, r.ref, aheadValue, r.maxCommitsAhead, aheadValue)
 		case appErrors.ErrInvalidRepo:
 			return "The Git repository is not accessible. Ensure you are in a valid Git repository and have appropriate permissions."
 		case appErrors.ErrInvalidConfig:
@@ -376,10 +378,14 @@ The maximum allowed commits ahead is %d, but your branch is %d commits ahead.`,
 		case appErrors.ErrGitOperationFailed:
 			return "Ensure your repository is valid and accessible, then try again."
 		}
+
+		// Default help for any other error cases
+		return fmt.Sprintf(`Ensure your branch is not more than %d commits ahead of %s by regularly merging or rebasing.
+For better git hygiene, consider using smaller, more focused commits.`, r.maxCommitsAhead, r.ref)
 	}
 
-	// Default help
-	return fmt.Sprintf(`Ensure your branch is not more than %d commits ahead of %s by regularly merging or rebasing.`, r.maxCommitsAhead, r.ref)
+	// If we somehow have HasErrors() true but no specific errors, provide a default message
+	return fmt.Sprintf("Ensure your branch is not more than %d commits ahead of %s", r.maxCommitsAhead, r.ref)
 }
 
 // Name returns the rule name.

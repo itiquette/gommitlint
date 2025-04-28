@@ -5,7 +5,9 @@
 package cli
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/itiquette/gommitlint/internal/application/report"
@@ -70,9 +72,36 @@ Examples:
 	return validateCmd
 }
 
-// runNewValidation handles the core validation logic and returns an exit code.
-func runNewValidation(cmd *cobra.Command) (int, error) {
-	// Get flags
+// We'll use a functional approach instead of storing context in a struct
+// to avoid the containedctx linter error
+
+type ValidationParameters struct {
+	// No context is stored directly in the struct - we'll pass it as a parameter
+	OutWriter io.Writer
+
+	// Validation options
+	MessageFile      string
+	GitReference     string
+	CommitCount      int
+	RevisionRange    string
+	BaseBranch       string
+	SkipMergeCommits bool
+	RepoPath         string
+
+	// Reporting options
+	Verbose      bool
+	ExtraVerbose bool
+	LightMode    bool
+	RuleHelp     string
+	Format       string
+
+	// Dependencies
+	Dependencies *AppDependencies
+}
+
+// NewValidationParameters creates ValidationParameters from a cobra command.
+func NewValidationParameters(cmd *cobra.Command) ValidationParameters {
+	// Extract all parameters from the command
 	messageFile, _ := cmd.Flags().GetString("message-file")
 	gitReference, _ := cmd.Flags().GetString("git-reference")
 	commitCount, _ := cmd.Flags().GetInt("commit-count")
@@ -86,106 +115,158 @@ func runNewValidation(cmd *cobra.Command) (int, error) {
 	skipMergeCommits, _ := cmd.Flags().GetBool("skip-merge-commits")
 	repoPath, _ := cmd.Flags().GetString("repo-path")
 
-	// Create context
-	ctx := cmd.Context()
-
 	// Get dependencies from context if available
-	var service validate.ValidationService
+	var deps *AppDependencies
 
-	var err error
-
-	if deps, ok := cmd.Context().Value(dependenciesKey).(*AppDependencies); ok && deps != nil {
-		// Create validation service with injected dependencies
-		service, err = createValidationServiceWithDeps(deps, repoPath)
-	} else {
-		// Fall back to default service creation
-		service, err = validate.CreateDefaultValidationService(repoPath)
+	if cmd.Context() != nil {
+		if d, ok := cmd.Context().Value(dependenciesKey).(*AppDependencies); ok {
+			deps = d
+		}
 	}
 
-	if err != nil {
-		return 1, fmt.Errorf("failed to create validation service: %w", err)
+	return ValidationParameters{
+		OutWriter:        cmd.OutOrStdout(),
+		MessageFile:      messageFile,
+		GitReference:     gitReference,
+		CommitCount:      commitCount,
+		RevisionRange:    revisionRange,
+		BaseBranch:       baseBranch,
+		Verbose:          verbose,
+		ExtraVerbose:     extraVerbose,
+		LightMode:        lightMode,
+		RuleHelp:         ruleHelp,
+		Format:           format,
+		SkipMergeCommits: skipMergeCommits,
+		RepoPath:         repoPath,
+		Dependencies:     deps,
 	}
+}
 
+// We don't store context in the struct anymore, so we don't need these methods
+
+// ToValidationOptions converts ValidationParameters to validate.ValidationOptions.
+func (p ValidationParameters) ToValidationOptions() (validate.ValidationOptions, error) {
 	// Process validation flags with precedence
 	opts := validate.ValidationOptions{
-		SkipMergeCommits: skipMergeCommits,
+		SkipMergeCommits: p.SkipMergeCommits,
 	}
 
 	// Default to validating HEAD if no other option is provided
-	if gitReference == "" && revisionRange == "" && baseBranch == "" && messageFile == "" && commitCount <= 0 {
+	if p.GitReference == "" && p.RevisionRange == "" && p.BaseBranch == "" && p.MessageFile == "" && p.CommitCount <= 0 {
 		// Default behavior uses HEAD
 		opts.CommitHash = "HEAD"
 	}
 
 	// Apply validation source with precedence order
-	if messageFile != "" {
+	if p.MessageFile != "" {
 		// 1. Message from file (highest priority)
-		opts.MessageFile = messageFile
-	} else if baseBranch != "" {
+		opts.MessageFile = p.MessageFile
+	} else if p.BaseBranch != "" {
 		// 2. Base branch comparison
-		opts.FromHash = baseBranch
+		opts.FromHash = p.BaseBranch
 		opts.ToHash = "HEAD"
-	} else if revisionRange != "" {
+	} else if p.RevisionRange != "" {
 		// 3. Revision range
 		// Parse revision range (format: from..to)
-		parts := parseRevisionRange(revisionRange)
+		parts := parseRevisionRange(p.RevisionRange)
 		if len(parts) == 2 {
 			opts.FromHash = parts[0]
 			opts.ToHash = parts[1]
 		} else {
-			return 1, fmt.Errorf("invalid revision range format: %s (expected format: from..to)", revisionRange)
+			return validate.ValidationOptions{}, fmt.Errorf("invalid revision range format: %s (expected format: from..to)", p.RevisionRange)
 		}
-	} else if gitReference != "" {
+	} else if p.GitReference != "" {
 		// 4. Single git reference
-		opts.CommitHash = gitReference
-	} else if commitCount > 0 {
+		opts.CommitHash = p.GitReference
+	} else if p.CommitCount > 0 {
 		// 5. Commit count
-		opts.CommitCount = commitCount
+		opts.CommitCount = p.CommitCount
 	}
 
-	// Validate according to options
+	return opts, nil
+}
+
+// ToReportOptions converts ValidationParameters to report.Options.
+func (p ValidationParameters) ToReportOptions() report.Options {
+	return report.Options{
+		Format:         getReportFormat(p.Format),
+		Verbose:        p.Verbose,
+		ShowHelp:       p.ExtraVerbose || p.RuleHelp != "",
+		RuleToShowHelp: p.RuleHelp,
+		LightMode:      p.LightMode,
+		Writer:         p.OutWriter,
+	}
+}
+
+// CreateFormatter creates a formatter based on the parameters.
+func (p ValidationParameters) CreateFormatter() domain.ResultFormatter {
+	reportOptions := p.ToReportOptions()
+
+	switch reportOptions.Format {
+	case report.FormatJSON:
+		return output.NewJSONFormatter()
+	case report.FormatGitHubActions:
+		return output.NewGitHubFormatter().
+			WithVerbose(reportOptions.Verbose).
+			WithShowHelp(reportOptions.ShowHelp)
+	case report.FormatGitLabCI:
+		return output.NewGitLabFormatter().
+			WithVerbose(reportOptions.Verbose).
+			WithShowHelp(reportOptions.ShowHelp)
+	case report.FormatText:
+		fallthrough
+	default:
+		return output.NewTextFormatter().
+			WithVerbose(reportOptions.Verbose).
+			WithShowHelp(reportOptions.ShowHelp).
+			WithLightMode(reportOptions.LightMode)
+	}
+}
+
+// CreateValidationService creates a validation service based on parameters.
+func (p ValidationParameters) CreateValidationService() (validate.ValidationService, error) {
+	if p.Dependencies != nil {
+		// Create validation service with injected dependencies
+		return createValidationServiceWithDeps(p.Dependencies, p.RepoPath)
+	}
+
+	// Fall back to default service creation
+	return validate.CreateDefaultValidationService(p.RepoPath)
+}
+
+// runNewValidation handles the core validation logic and returns an exit code.
+// This implementation uses the functional approach with immutable parameters.
+func runNewValidation(cmd *cobra.Command) (int, error) {
+	// Create parameters object to encapsulate all inputs
+	params := NewValidationParameters(cmd)
+
+	// Create validation service
+	service, err := params.CreateValidationService()
+	if err != nil {
+		return 1, fmt.Errorf("failed to create validation service: %w", err)
+	}
+
+	// Convert parameters to validation options
+	opts, err := params.ToValidationOptions()
+	if err != nil {
+		return 1, err
+	}
+
+	// Validate according to options - pass the context from the command
+	ctx := cmd.Context()
+	if ctx == nil {
+		// Use background context as fallback for tests
+		ctx = context.Background()
+	}
+
 	results, err := service.ValidateWithOptions(ctx, opts)
 	if err != nil {
 		return 1, fmt.Errorf("validation failed: %w", err)
 	}
 
-	// Create report options
-	reportOptions := report.Options{
-		Format:         getReportFormat(format),
-		Verbose:        verbose,
-		ShowHelp:       extraVerbose || ruleHelp != "",
-		RuleToShowHelp: ruleHelp,
-		LightMode:      lightMode,
-		Writer:         cmd.OutOrStdout(),
-	}
-
-	// Create a formatter that implements domain.ResultFormatter
-	var formatter domain.ResultFormatter
-
-	switch reportOptions.Format {
-	case report.FormatJSON:
-		formatter = output.NewJSONFormatter()
-	case report.FormatGitHubActions:
-		formatter = output.NewGitHubFormatter().
-			WithVerbose(reportOptions.Verbose).
-			WithShowHelp(reportOptions.ShowHelp)
-	case report.FormatGitLabCI:
-		formatter = output.NewGitLabFormatter().
-			WithVerbose(reportOptions.Verbose).
-			WithShowHelp(reportOptions.ShowHelp)
-	case report.FormatText:
-		formatter = output.NewTextFormatter().
-			WithVerbose(reportOptions.Verbose).
-			WithShowHelp(reportOptions.ShowHelp).
-			WithLightMode(reportOptions.LightMode)
-	default:
-		formatter = output.NewTextFormatter().
-			WithVerbose(reportOptions.Verbose).
-			WithShowHelp(reportOptions.ShowHelp).
-			WithLightMode(reportOptions.LightMode)
-	}
-
-	// Create report generator that implements domain.ReportGenerator
+	// Create formatter and report generator
+	formatter := params.CreateFormatter()
+	reportOptions := params.ToReportOptions()
 	reportGenerator := report.NewGenerator(reportOptions, formatter)
 
 	// Generate report using the domain interface

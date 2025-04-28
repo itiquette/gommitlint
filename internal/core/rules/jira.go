@@ -109,6 +109,29 @@ func NewJiraReferenceRuleWithConfig(jiraConfig domain.JiraConfigProvider, conven
 // Result returns a concise rule message.
 func (j JiraReferenceRule) Result() string {
 	if j.HasErrors() {
+		errors := j.Errors()
+		if len(errors) > 0 {
+			validationErr := errors[0]
+			switch validationErr.Code {
+			case string(appErrors.ErrMissingJira):
+				return "Missing Jira issue key"
+			case string(appErrors.ErrInvalidFormat):
+				if key, exists := validationErr.Context["key"]; exists {
+					return "Invalid Jira key format: " + key
+				}
+
+				return "Invalid Jira key format"
+			case string(appErrors.ErrInvalidType):
+				if project, exists := validationErr.Context["project"]; exists {
+					return "Invalid Jira project: " + project
+				}
+
+				return "Invalid Jira project"
+			default:
+				return "Invalid Jira reference"
+			}
+		}
+
 		return "Missing or invalid Jira reference"
 	}
 
@@ -197,59 +220,57 @@ func (j JiraReferenceRule) VerboseResult() string {
 
 // Help returns a description of how to fix the rule violation.
 func (j JiraReferenceRule) Help() string {
-	if !j.HasErrors() {
-		return "No errors to fix"
-	}
-	// Check error code
-	errors := j.Errors()
-	if len(errors) > 0 {
-		// errors[0] is already a ValidationError, so no need for type assertion
-		validationErr := errors[0]
-		switch validationErr.Code {
-		case string(appErrors.ErrMissingJira):
-			// For missing Jira references, use template help
-			if j.validateBodyRef {
-				return `Include a valid Jira issue key (e.g., PROJECT-123) in your commit body with the "Refs:" prefix.
+	// First check if the rule has errors - this should be the primary check
+	if j.HasErrors() {
+		errors := j.Errors()
+		if len(errors) > 0 {
+			// errors[0] is already a ValidationError, so no need for type assertion
+			validationErr := errors[0]
+			switch validationErr.Code {
+			case string(appErrors.ErrMissingJira):
+				// For missing Jira references, use template help
+				if j.validateBodyRef {
+					return `Include a valid Jira issue key (e.g., PROJECT-123) in your commit body with the "Refs:" prefix.
 Examples:
 - Refs: PROJECT-123
 - Refs: PROJECT-123, PROJECT-456
 - Refs: PROJECT-123, PROJECT-456, PROJECT-789
 The Refs: line should appear at the end of the commit body, before any Signed-off-by lines.`
-			}
+				}
 
-			return `Include a valid Jira issue key (e.g., PROJECT-123) in your commit subject.
+				return `Include a valid Jira issue key (e.g., PROJECT-123) in your commit subject.
 For conventional commits, place the Jira key at the end of the first line:
 - feat(auth): add login feature PROJ-123
 - fix: resolve timeout issue [PROJ-123]
 - docs(readme): update installation steps (PROJ-123)
 For other commit formats, include the Jira key anywhere in the subject.`
-		case string(appErrors.ErrInvalidType):
-			// For invalid project types
-			projectKeys := j.validProjects
-			if len(projectKeys) > 0 {
-				return `The Jira project reference is not recognized as a valid project.
+			case string(appErrors.ErrInvalidType):
+				// For invalid project types
+				projectKeys := j.validProjects
+				if len(projectKeys) > 0 {
+					return `The Jira project reference is not recognized as a valid project.
 Valid projects: ` + strings.Join(projectKeys, ", ") + `
 Please use one of these project keys in your Jira reference.`
-			}
+				}
 
-			return `The Jira project reference is not valid.
+				return `The Jira project reference is not valid.
 Jira project keys should be uppercase letters followed by a hyphen and numbers (e.g., PROJECT-123).`
-		case string(appErrors.ErrInvalidFormat):
-			// This handles multiple format errors with specific messages
-			if j.validateBodyRef {
-				// For body validation errors
-				if strings.Contains(validationErr.Message, "must appear before") {
-					return `The "Refs:" line must appear before any "Signed-off-by" lines in your commit message.
+			case string(appErrors.ErrInvalidFormat):
+				// This handles multiple format errors with specific messages
+				if j.validateBodyRef {
+					// For body validation errors
+					if strings.Contains(validationErr.Message, "must appear before") {
+						return `The "Refs:" line must appear before any "Signed-off-by" lines in your commit message.
 The correct order is:
 1. Commit subject
 2. Blank line
 3. Commit body (if any)
 4. Refs: line(s)
 5. Signed-off-by line(s)`
-				}
+					}
 
-				if strings.Contains(validationErr.Message, "invalid Refs format") {
-					return `The "Refs:" line in your commit body has an invalid format.
+					if strings.Contains(validationErr.Message, "invalid Refs format") {
+						return `The "Refs:" line in your commit body has an invalid format.
 The correct format is:
 Refs: PROJECT-123
 or for multiple references:
@@ -259,9 +280,9 @@ Make sure:
 - Project keys follow the format PROJECT-123
 - Multiple references are separated by commas
 - The Refs line appears before any Signed-off-by lines`
-				}
-			} else if strings.Contains(validationErr.Message, "must be at the end") {
-				return `In conventional commit format, place the Jira issue key at the end of the first line.
+					}
+				} else if strings.Contains(validationErr.Message, "must be at the end") {
+					return `In conventional commit format, place the Jira issue key at the end of the first line.
 Examples:
 - feat(auth): add login feature PROJ-123
 - fix: resolve timeout issue [PROJ-123]
@@ -269,26 +290,67 @@ Examples:
 Avoid putting the Jira key in the middle of the line:
 - INCORRECT: feat(PROJ-123): add login feature
 - INCORRECT: fix: PROJ-123 resolve timeout issue`
-			} else if strings.Contains(validationErr.Message, "empty") {
-				return "Provide a non-empty commit message with a Jira issue reference"
-			} else if strings.Contains(validationErr.Message, "invalid Jira issue key format") {
-				// Use the general format template
-				return `Invalid Jira issue key format. Make sure it follows the pattern PROJECT-123.
+				} else if strings.Contains(validationErr.Message, "empty") {
+					return "Provide a non-empty commit message with a Jira issue reference"
+				} else if strings.Contains(validationErr.Message, "invalid Jira issue key format") {
+					// Use the general format template
+					return `Invalid Jira issue key format. Make sure it follows the pattern PROJECT-123.
 Jira keys should be uppercase letters followed by a hyphen and numbers (e.g., PROJECT-123).`
-			}
-			// General invalid format
-			return `The commit message format is invalid. Make sure it follows the expected pattern.
+				}
+				// General invalid format
+				return `The commit message format is invalid. Make sure it follows the expected pattern.
 For conventional commits:
 - feat(scope): description PROJ-123
 For body references:
 - Subject line
 - 
 - Refs: PROJ-123`
+			default:
+				// Check message for clues if it's a non-standard validation error
+				if strings.Contains(validationErr.Message, "no Jira issue key") {
+					return `Include a valid Jira issue key (e.g., PROJECT-123) in your commit.
+For conventional commits, place the Jira key at the end of the first line:
+- feat(auth): add login feature PROJ-123
+- fix: resolve timeout issue [PROJ-123]
+
+If body references are enabled, use the "Refs:" prefix:
+- Refs: PROJECT-123
+- Refs: PROJECT-123, PROJECT-456`
+				}
+
+				// Default error help message if none of the above conditions match
+				return `Include a valid Jira issue key (e.g., PROJECT-123) in your commit message.
+The Jira issue key should follow the format PROJECT-123.
+
+For conventional commits, place the key at the end of the subject:
+- feat(auth): add feature PROJ-123
+- fix: resolve timeout issue [PROJ-123]
+
+For body references, use the "Refs:" line in the commit body:
+- Refs: PROJ-123`
+			}
 		}
+
+		// Fallback for when j.HasErrors() is true but there are no specific errors
+		return `Include a valid Jira issue key (e.g., PROJECT-123) in your commit message.
+The Jira issue key should follow the format PROJECT-123.
+
+For conventional commits, place the key at the end of the subject:
+- feat(auth): add feature PROJ-123
+- fix: resolve timeout issue [PROJ-123]
+
+For body references, use the "Refs:" line in the commit body:
+- Refs: PROJ-123`
 	}
-	// Default help
-	return `Ensure your commit message contains a valid Jira issue reference.
-The Jira issue key should follow the format PROJECT-123.`
+
+	// Success case (when j.HasErrors() is false)
+	if j.validateBodyRef {
+		return `Commit message contains valid Jira issue reference(s) in the body using the correct "Refs:" format.
+This rule checks for properly formatted Jira issue references in the commit body.`
+	}
+
+	return `Commit message contains valid Jira issue reference(s) in the subject line with correct format (PROJECT-123).
+This rule checks for properly formatted Jira issue references in the commit subject.`
 }
 
 // validateJiraWithState validates a commit and returns both errors and an updated rule state.
@@ -328,6 +390,14 @@ func validateJiraWithState(rule JiraReferenceRule, commit domain.CommitInfo) ([]
 	// Add errors to the updated rule
 	for _, err := range errors {
 		updatedRule.BaseRule = updatedRule.BaseRule.WithError(err)
+	}
+
+	// Set found keys if available from validation
+	if len(errors) == 0 && subject != "" {
+		matches := jiraKeyRegex.FindAllString(subject, -1)
+		if len(matches) > 0 {
+			updatedRule = updatedRule.SetFoundKeys(matches)
+		}
 	}
 
 	return errors, updatedRule

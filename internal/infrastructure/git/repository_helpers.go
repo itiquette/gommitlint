@@ -93,61 +93,90 @@ func createCommitIterator(repo *git.Repository, hash plumbing.Hash) (object.Comm
 }
 
 // collectCommits collects commits from an iterator, with optional limit and stop condition.
+// This function now follows functional programming principles, avoiding state mutation.
 func collectCommits(
 	iter object.CommitIter,
 	limit int,
 	stopFn func(*object.Commit) bool,
 ) ([]*object.Commit, error) {
-	var commits []*object.Commit
+	// Pre-allocate capacity if we know the limit
+	initialCapacity := 10 // Default reasonable capacity
+	if limit > 0 {
+		initialCapacity = limit
+	}
 
-	count := 0
+	// Create a function to collect commits without modifying external state
+	return collectCommitsWithAccumulator(iter, limit, stopFn, make([]*object.Commit, 0, initialCapacity), 0)
+}
 
-	// Iterate through the commits
-	err := iter.ForEach(func(commit *object.Commit) error {
-		// Check for nil commit
-		if commit == nil {
-			return errors.New("nil commit encountered")
-		}
+// collectCommitsWithAccumulator is a helper function that implements the actual collection logic.
+// It uses a functional approach with accumulators to avoid mutating state externally.
+func collectCommitsWithAccumulator(
+	iter object.CommitIter,
+	limit int,
+	stopFn func(*object.Commit) bool,
+	commits []*object.Commit,
+	count int,
+) ([]*object.Commit, error) {
+	// Get the next commit
+	commit, err := iter.Next()
 
-		// Check if we should stop processing
-		if stopFn != nil && stopFn(commit) {
-			return errors.New("stop")
-		}
-
-		// Add the commit to the list
-		commits = append(commits, commit)
-		count++
-
-		// Check if we've reached the limit
-		if limit > 0 && count >= limit {
-			return errors.New("limit")
-		}
-
-		return nil
-	})
-
-	// The iterator will return an error if we stopped early
+	// Handle completion of iteration
 	if err != nil {
-		if err.Error() == "stop" || err.Error() == "limit" {
-			// These are expected control-flow errors, not actual errors
+		// Normal end of iteration
+		if err.Error() == "EOF" {
 			return commits, nil
 		}
 
-		return nil, fmt.Errorf("error iterating commits: %w", err)
+		// Real error
+		return commits, fmt.Errorf("error iterating commits: %w", err)
 	}
 
-	return commits, nil
+	// Check for nil commit
+	if commit == nil {
+		return commits, errors.New("nil commit encountered")
+	}
+
+	// Check if we should stop processing
+	if stopFn != nil && stopFn(commit) {
+		return commits, nil
+	}
+
+	// Create a new slice with the commit appended
+	newCommits := append(commits, commit)
+	newCount := count + 1
+
+	// Check if we've reached the limit
+	if limit > 0 && newCount >= limit {
+		return newCommits, nil
+	}
+
+	// Continue recursively with updated state
+	return collectCommitsWithAccumulator(iter, limit, stopFn, newCommits, newCount)
 }
 
 // getAncestors builds a map of all ancestors of a commit.
-func getAncestors(repo *git.Repository, commit *object.Commit, ancestors map[plumbing.Hash]bool) error {
+// This is a pure function that returns a new ancestors map rather than modifying a passed map.
+func getAncestors(repo *git.Repository, commit *object.Commit) (map[plumbing.Hash]bool, error) {
+	return getAncestorsWithAccumulator(repo, commit, make(map[plumbing.Hash]bool))
+}
+
+// getAncestorsWithAccumulator is a helper function that builds an ancestors map recursively.
+// This function allows accumulating results while maintaining functional purity at the public API.
+func getAncestorsWithAccumulator(repo *git.Repository, commit *object.Commit, ancestors map[plumbing.Hash]bool) (map[plumbing.Hash]bool, error) {
+	// Create a new map with the current ancestors
+	result := make(map[plumbing.Hash]bool, len(ancestors)+1)
+	for k, v := range ancestors {
+		result[k] = v
+	}
+
 	// Mark this commit as an ancestor
-	ancestors[commit.Hash] = true
+	result[commit.Hash] = true
 
 	// Process parents
 	for _, parentHash := range commit.ParentHashes {
 		// Skip if already processed
-		if ancestors[parentHash] {
+		if result[parentHash] {
 			continue
 		}
 
@@ -156,16 +185,21 @@ func getAncestors(repo *git.Repository, commit *object.Commit, ancestors map[plu
 			continue
 		}
 
-		err = getAncestors(repo, parent, ancestors)
+		// Recursively get ancestors for the parent
+		updatedResult, err := getAncestorsWithAccumulator(repo, parent, result)
 		if err != nil {
-			return err
+			return result, err
 		}
+
+		// Use the updated result for subsequent iterations
+		result = updatedResult
 	}
 
-	return nil
+	return result, nil
 }
 
 // findMergeBase finds the common ancestor of two commits using a breadth-first search algorithm.
+// This is now a pure function that doesn't mutate any state.
 func findMergeBase(repo *git.Repository, hash1, hash2 plumbing.Hash) (plumbing.Hash, error) {
 	// Get the first commit and its ancestors
 	commit1, err := repo.CommitObject(hash1)
@@ -173,9 +207,8 @@ func findMergeBase(repo *git.Repository, hash1, hash2 plumbing.Hash) (plumbing.H
 		return plumbing.ZeroHash, fmt.Errorf("failed to get commit %s: %w", hash1.String(), err)
 	}
 
-	ancestors1 := make(map[plumbing.Hash]bool)
-
-	err = getAncestors(repo, commit1, ancestors1)
+	// Get all ancestors of the first commit using our pure function
+	ancestors1, err := getAncestors(repo, commit1)
 	if err != nil {
 		return plumbing.ZeroHash, fmt.Errorf("failed to get ancestors of %s: %w", hash1.String(), err)
 	}
@@ -186,23 +219,35 @@ func findMergeBase(repo *git.Repository, hash1, hash2 plumbing.Hash) (plumbing.H
 		return plumbing.ZeroHash, fmt.Errorf("failed to get commit %s: %w", hash2.String(), err)
 	}
 
-	// Walk up the ancestry chain to find the first common ancestor
-	queue := []*object.Commit{commit2}
+	// Use breadthFirstSearch to find the first common ancestor
+	return findCommonAncestor(repo, commit2, ancestors1)
+}
+
+// findCommonAncestor implements a breadth-first search to find the first common ancestor.
+// This has been extracted as a separate pure function for better separation of concerns.
+func findCommonAncestor(repo *git.Repository, startCommit *object.Commit, ancestorsMap map[plumbing.Hash]bool) (plumbing.Hash, error) {
+	// Initialize the queue with the start commit
+	queue := []*object.Commit{startCommit}
+
+	// Create a new visited map (immutable approach)
 	visited := make(map[plumbing.Hash]bool)
 
+	// Implement breadth-first search
 	for len(queue) > 0 {
+		// Dequeue the first commit
 		current := queue[0]
 		queue = queue[1:]
 
-		// Skip if already visited
+		// Skip if already visited (avoid cycles)
 		if visited[current.Hash] {
 			continue
 		}
 
+		// Mark as visited by creating a new map entry
 		visited[current.Hash] = true
 
 		// Check if this is a common ancestor
-		if ancestors1[current.Hash] {
+		if ancestorsMap[current.Hash] {
 			return current.Hash, nil
 		}
 
@@ -213,10 +258,11 @@ func findMergeBase(repo *git.Repository, hash1, hash2 plumbing.Hash) (plumbing.H
 				continue
 			}
 
+			// Create a new queue instead of mutating the existing one
 			queue = append(queue, parent)
 		}
 	}
 
 	// No common ancestor found (should not happen in a normal Git repository)
-	return plumbing.ZeroHash, fmt.Errorf("no common ancestor found between %s and %s", hash1.String(), hash2.String())
+	return plumbing.ZeroHash, fmt.Errorf("no common ancestor found with %s", startCommit.Hash.String())
 }

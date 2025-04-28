@@ -398,7 +398,7 @@ func (r SubjectCaseRule) VerboseResult() string {
 // helpImpl returns a description of how to fix the rule violation.
 func helpImpl(rule SubjectCaseRule) string {
 	if !rule.HasErrors() {
-		return "No errors to fix"
+		return "No errors to fix. This rule checks that commit message subjects follow the required case style (" + rule.caseChoice + " case) for consistency."
 	}
 
 	// Get errors

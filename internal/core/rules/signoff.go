@@ -275,7 +275,7 @@ func (r SignOffRule) VerboseResult() string {
 // Help returns a description of how to fix the rule violation.
 func (r SignOffRule) Help() string {
 	if !r.HasErrors() {
-		return "No errors to fix"
+		return "No errors to fix. This rule checks that commits have a proper Signed-off-by line indicating Developer Certificate of Origin (DCO) agreement."
 	}
 	// Check error code for more targeted help
 	errors := r.Errors()

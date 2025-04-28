@@ -12,6 +12,71 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestHookInstallationParameters tests the functional parameters type.
+func TestHookInstallationParameters(t *testing.T) {
+	// Create a temporary directory using Go's testing utility - automatically cleaned up
+	tmpDir := t.TempDir()
+
+	// Set up a real Git repository
+	err := setupGitRepo(tmpDir)
+	require.NoError(t, err, "Failed to set up Git repository")
+
+	// Test the basic parameters
+	params := NewHookInstallationParameters(false, tmpDir)
+	require.False(t, params.Force)
+	require.Equal(t, tmpDir, params.RepoPath)
+	require.Equal(t, "commit-msg", params.HookType)
+
+	// Test immutability with the With* methods
+	updatedParams := params.WithForce(true)
+	require.False(t, params.Force, "Original should be unchanged")
+	require.True(t, updatedParams.Force, "New instance should have updated value")
+
+	customTypeParams := params.WithHookType("custom-hook")
+	require.Equal(t, "commit-msg", params.HookType, "Original should be unchanged")
+	require.Equal(t, "custom-hook", customTypeParams.HookType, "New instance should have updated value")
+
+	customPathParams := params.WithRepoPath("/custom/path")
+	require.Equal(t, tmpDir, params.RepoPath, "Original should be unchanged")
+	require.Equal(t, "/custom/path", customPathParams.RepoPath, "New instance should have updated value")
+
+	// Test the functional methods
+	hookPath, err := params.FindHookPath()
+	require.NoError(t, err)
+	require.Contains(t, hookPath, ".git/hooks/commit-msg")
+
+	err = params.EnsureHooksDirectory()
+	require.NoError(t, err)
+
+	content := params.GetHookContent()
+	require.Contains(t, content, "gommitlint")
+
+	// Test CanInstallHook with a clean repo (should be ok to install)
+	err = params.CanInstallHook()
+	require.NoError(t, err)
+
+	// Create a hook and then test with force=false (should fail) and force=true (should pass)
+	hooksDir := filepath.Join(tmpDir, ".git", "hooks")
+	err = os.MkdirAll(hooksDir, 0755)
+	require.NoError(t, err)
+
+	err = os.WriteFile(
+		filepath.Join(hooksDir, "commit-msg"),
+		[]byte("#!/bin/sh\necho 'existing hook'\n"),
+		0600,
+	)
+	require.NoError(t, err)
+
+	// Without force
+	err = params.CanInstallHook()
+	require.Error(t, err)
+
+	// With force
+	forceParams := params.WithForce(true)
+	err = forceParams.CanInstallHook()
+	require.NoError(t, err)
+}
+
 func TestInstallHook(t *testing.T) {
 	// Create a temporary directory using Go's testing utility - automatically cleaned up
 	tmpDir := t.TempDir()

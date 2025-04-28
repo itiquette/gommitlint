@@ -137,7 +137,7 @@ func (r SubjectLengthRule) VerboseResult() string {
 // Help returns guidance on how to fix rule violations.
 func (r SubjectLengthRule) Help() string {
 	if len(r.Errors()) == 0 {
-		return "No help needed"
+		return fmt.Sprintf("No errors to fix. This rule checks that commit subject lines don't exceed %d characters to ensure readability in various Git tools.", r.maxLength)
 	}
 
 	// Get max length from context

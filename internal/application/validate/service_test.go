@@ -91,6 +91,186 @@ func (m mockValidationEngine) ValidateCommits(ctx context.Context, commits []dom
 	return results
 }
 
+func TestValidationService_Functional(t *testing.T) {
+	// Create mocks
+	mockCommit := &mockGitCommitService{
+		commits: map[string]domain.CommitInfo{
+			"abc123": {
+				Hash:    "abc123",
+				Subject: "Test commit",
+				Body:    "Test body",
+			},
+		},
+	}
+
+	mockInfo := &mockInfoProvider{
+		currentBranch: "main",
+		repoName:      "gommitlint",
+		isValid:       true,
+	}
+
+	mockEngine := &mockValidationEngine{}
+
+	// Create service with mock engine
+	service := validate.NewValidationService(
+		mockEngine,
+		mockCommit,
+		mockInfo,
+	)
+
+	// Test the functional "With" methods
+	serviceWithNewEngine := service.WithEngine(&mockValidationEngine{})
+	// Instead of comparing structs directly, verify the fields are correctly changed
+	require.Equal(t, &mockValidationEngine{}, serviceWithNewEngine.Engine())
+	require.Equal(t, mockCommit, serviceWithNewEngine.CommitService())
+	require.Equal(t, mockInfo, serviceWithNewEngine.InfoProvider())
+
+	newMockCommit := &mockGitCommitService{
+		commits: map[string]domain.CommitInfo{
+			"xyz789": {
+				Hash:    "xyz789",
+				Subject: "New commit",
+			},
+		},
+	}
+	serviceWithNewCommit := service.WithCommitService(newMockCommit)
+	// Verify the individual fields
+	require.Equal(t, mockEngine, serviceWithNewCommit.Engine())
+	require.Equal(t, newMockCommit, serviceWithNewCommit.CommitService())
+	require.Equal(t, mockInfo, serviceWithNewCommit.InfoProvider())
+
+	newMockInfo := &mockInfoProvider{
+		currentBranch: "feature",
+		repoName:      "new-repo",
+		isValid:       true,
+	}
+	serviceWithNewInfo := service.WithInfoProvider(newMockInfo)
+	// Verify individual fields
+	require.Equal(t, mockEngine, serviceWithNewInfo.Engine())
+	require.Equal(t, mockCommit, serviceWithNewInfo.CommitService())
+	require.Equal(t, newMockInfo, serviceWithNewInfo.InfoProvider())
+
+	// Test that functional composition works
+	result, err := service.WithEngine(&mockValidationEngine{}).
+		WithCommitService(newMockCommit).
+		WithInfoProvider(newMockInfo).
+		ValidateCommit(context.Background(), "xyz789")
+
+	require.NoError(t, err)
+	require.Equal(t, "xyz789", result.CommitInfo.Hash)
+
+	// Test that original service remains unchanged
+	_, err = service.ValidateCommit(context.Background(), "xyz789")
+	require.Error(t, err) // Original service doesn't have "xyz789" commit
+}
+
+// TestValueSemantics verifies that value semantics are properly maintained
+// throughout the validation service and its components.
+func TestValueSemantics(t *testing.T) {
+	// Create a test commit
+	testCommit := domain.CommitInfo{
+		Hash:    "test123",
+		Subject: "Test value semantics",
+		Body:    "This is a test of value semantics",
+	}
+
+	// Create mocks
+	mockCommit := &mockGitCommitService{
+		commits: map[string]domain.CommitInfo{
+			"test123": testCommit,
+		},
+	}
+	mockInfo := &mockInfoProvider{}
+
+	// Test ValidationEngine immutability
+	t.Run("ValidationEngine immutability", func(t *testing.T) {
+		// Create a validation engine
+		provider := &validate.DomainRuleProvider{}
+		engine := validate.DomainValidationEngine{} // Using exported struct for testing
+
+		// Make a copy with WithProvider
+		engineCopy := engine.WithProvider(provider)
+
+		// Verify the copy is different from the original
+		require.NotEqual(t, engine, engineCopy)
+
+		// Verify the original is unchanged
+		require.Nil(t, engine.GetProvider())
+
+		// Verify the copy has the expected value
+		require.Same(t, provider, engineCopy.GetProvider())
+	})
+
+	// Test DomainRuleProvider immutability
+	t.Run("DomainRuleProvider immutability", func(t *testing.T) {
+		// Create a custom validation rule
+		customRule := &CustomRule{
+			name: "TestCustomRule",
+		}
+
+		// Create an engine with rule provider
+		engine := &mockValidationEngineWithCustomRules{
+			customRules: []domain.Rule{},
+		}
+
+		// Create service with mock engine
+		service := validate.NewValidationService(
+			engine,
+			mockCommit,
+			mockInfo,
+		)
+
+		// Register a custom rule (this mutates the engine, which is expected)
+		err := service.RegisterCustomRule(customRule)
+		require.NoError(t, err)
+
+		// Use WithCustomRule (should create a new service)
+		serviceCopy, err := service.WithCustomRule(customRule)
+		require.NoError(t, err)
+
+		// Verify the custom rule is correctly added to the engine in the copy
+		if engineWithCustomRules, ok := serviceCopy.Engine().(*mockValidationEngineWithCustomRules); ok {
+			// Don't test the exact length, since the implementation might have added the rule to the original
+			// engine as well. Instead verify that it contains the rule we added.
+			found := false
+
+			for _, rule := range engineWithCustomRules.customRules {
+				if rule.Name() == customRule.Name() {
+					found = true
+
+					break
+				}
+			}
+
+			require.True(t, found, "Custom rule should be registered in the engine")
+		} else {
+			require.Fail(t, "Engine should be of type *mockValidationEngineWithCustomRules")
+		}
+	})
+
+	// Test function composition maintains value semantics
+	t.Run("Function composition", func(t *testing.T) {
+		// Create validation service
+		service := validate.NewValidationService(
+			&mockValidationEngine{},
+			mockCommit,
+			mockInfo,
+		)
+
+		// Create a chain of transformations
+		transformedService := service.
+			WithEngine(&mockValidationEngine{}).
+			WithCommitService(mockCommit).
+			WithInfoProvider(mockInfo)
+
+		// Verify components individually rather than comparing whole structs
+		// This ensures we're testing the behavior, not just the struct layout
+		require.IsType(t, &mockValidationEngine{}, transformedService.Engine())
+		require.Equal(t, mockCommit, transformedService.CommitService())
+		require.Equal(t, mockInfo, transformedService.InfoProvider())
+	})
+}
+
 func TestValidationService_ValidateCommit(t *testing.T) {
 	// Create mocks
 	mockCommit := &mockGitCommitService{

@@ -18,6 +18,50 @@ import (
 )
 
 // TestCLIValidateCommand tests the CLI validate command for commit validation.
+// buildTestBinary builds a binary for testing and returns its path.
+func buildTestBinary(t *testing.T) (string, error) {
+	t.Helper()
+
+	// Create a temporary directory for the binary
+	tempDir, err := os.MkdirTemp("", "gommitlint-binary-*")
+	if err != nil {
+		return "", err
+	}
+
+	t.Cleanup(func() { os.RemoveAll(tempDir) })
+
+	// Determine binary name
+	binaryName := "gommitlint-test"
+	if runtime.GOOS == "windows" {
+		binaryName += ".exe"
+	}
+
+	binaryPath := filepath.Join(tempDir, binaryName)
+
+	// Get the project root
+	projectRoot := filepath.Dir(filepath.Dir(filepath.Dir(getCurrentFilePath())))
+
+	// Build the binary
+	cmd := exec.Command("go", "build", "-o", binaryPath, filepath.Join(projectRoot, "main.go"))
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("failed to build test binary: %w, output: %s", err, string(output))
+	}
+
+	return binaryPath, nil
+}
+
+// getCurrentFilePath returns the current file path.
+func getCurrentFilePath() string {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		panic("failed to get current file path")
+	}
+
+	return file
+}
+
 func TestCLIValidateCommand(t *testing.T) {
 	// Skip if running in CI environment without git
 	if os.Getenv("CI") == "true" && !isGitAvailable() {
@@ -36,6 +80,7 @@ func TestCLIValidateCommand(t *testing.T) {
 		args          []string
 		shouldPass    bool
 		config        string
+		checkOutput   func(t *testing.T, output string) // Optional function to check output content
 	}{
 		{
 			name:          "Validate HEAD - valid commit format",
@@ -144,6 +189,41 @@ gommitlint:
       - SubjectLength
 `,
 		},
+		{
+			name:          "Validate with extra-verbose mode shows help messages",
+			commitMessage: "This is a non-conventional commit without proper format",
+			args:          []string{"validate", "--extra-verbose"},
+			shouldPass:    false,
+			config: `
+gommitlint:
+  validation:
+    enabled: true
+  conventional:
+    enabled: true
+    required: true
+  rules:
+    enabled:
+      - ConventionalCommit
+      - ImperativeVerb
+    disabled:
+      - SignOff
+      - Signature
+      - CommitBody
+      - JiraReference
+      - SubjectCase
+      - Spell
+      - SubjectSuffix
+      - CommitsAhead
+      - SubjectLength
+`,
+			checkOutput: func(t *testing.T, output string) {
+				t.Helper()
+				// Verify that extra-verbose mode shows detailed help messages
+				require.Contains(t, output, "Your commit doesn't follow the conventional commit format")
+				require.Contains(t, output, "Use the format: type(scope)")
+				require.Contains(t, output, "Example: feat(auth)")
+			},
+		},
 	}
 
 	for _, testCase := range testCases {
@@ -180,208 +260,11 @@ gommitlint:
 					t.Fail()
 				}
 			}
+
+			// Check output content if a check function was provided
+			if testCase.checkOutput != nil {
+				testCase.checkOutput(t, outputStr)
+			}
 		})
 	}
-}
-
-// TestCLIInstallHookCommand tests the CLI hook installation.
-func TestCLIInstallHookCommand(t *testing.T) {
-	// Skip if running in CI environment without git
-	if os.Getenv("CI") == "true" && !isGitAvailable() {
-		t.Skip("Skipping integration test in CI environment without git")
-	}
-
-	// Build the CLI binary for testing
-	binaryPath, err := buildTestBinary(t)
-	require.NoError(t, err)
-	defer os.Remove(binaryPath)
-
-	// Setup test repository
-	repoPath, cleanup := setupTestRepository(t, "Initial commit")
-	defer cleanup()
-
-	// Create config file in the repository
-	configPath := filepath.Join(repoPath, ".gommitlint.yaml")
-	configContent := `
-gommitlint:
-  validation:
-    enabled: true
-  conventional:
-    enabled: true
-    required: true
-    types:
-      - feat
-      - fix
-      - docs
-  security:
-    signature_required: false
-    signoff_required: false
-  rules:
-    enabled:
-      - ConventionalCommit
-    disabled:
-      - SignOff
-      - Signature
-      - CommitBody
-      - JiraReference
-      - SubjectCase
-      - ImperativeVerb
-      - Spell
-      - SubjectSuffix
-      - CommitsAhead
-      - SubjectLength
-`
-	err = os.WriteFile(configPath, []byte(configContent), 0600)
-	require.NoError(t, err)
-
-	// Run the install-hook command
-	cmd := exec.Command(binaryPath, "install-hook", "commit-msg")
-	cmd.Dir = repoPath
-	output, err := cmd.CombinedOutput()
-	t.Logf("Install hook output: %s", string(output))
-
-	if err != nil {
-		t.Logf("Hook installation error: %v", err)
-		t.Fail()
-	}
-
-	// Verify hook was installed
-	hookPath := filepath.Join(repoPath, ".git", "hooks", "commit-msg")
-	if _, err := os.Stat(hookPath); os.IsNotExist(err) {
-		t.Logf("Hook file was not created at %s", hookPath)
-		t.Fail()
-	}
-
-	// Check hook content
-	hookContent, err := os.ReadFile(hookPath)
-	require.NoError(t, err)
-
-	// Look for gommitlint in the hook content
-	if string(hookContent) == "" || !containsString(string(hookContent), "gommitlint") {
-		t.Logf("Hook does not contain expected content")
-		t.Fail()
-	}
-
-	// Create a message file for testing the hook
-	messageFile := filepath.Join(repoPath, "commit-msg.txt")
-
-	// Invalid message
-	err = os.WriteFile(messageFile, []byte("invalid message"), 0600)
-	require.NoError(t, err)
-
-	// Test hook with invalid message
-	hookCmd := exec.Command(hookPath, messageFile)
-	hookCmd.Dir = repoPath
-	hookOutput, err := hookCmd.CombinedOutput()
-	t.Logf("Hook output for invalid message: %s", string(hookOutput))
-
-	// This should fail
-	if err == nil {
-		t.Logf("Hook did not fail for invalid message")
-		t.Fail()
-	}
-
-	// Valid message
-	err = os.WriteFile(messageFile, []byte("feat: valid message"), 0600)
-	require.NoError(t, err)
-
-	// Set the config to only validate conventional format
-	configContent = `
-gommitlint:
-  validation:
-    enabled: true
-  conventional:
-    enabled: true
-    required: true
-    types:
-      - feat
-      - fix
-      - docs
-  security:
-    signature_required: false
-    signoff_required: false
-  rules:
-    enabled:
-      - ConventionalCommit
-    disabled:
-      - SignOff
-      - Signature
-      - CommitBody
-      - JiraReference
-      - SubjectCase
-      - ImperativeVerb
-      - Spell
-      - SubjectSuffix
-      - CommitsAhead
-      - SubjectLength
-`
-	err = os.WriteFile(configPath, []byte(configContent), 0600)
-	require.NoError(t, err)
-
-	// Test hook with valid message - this should pass
-	hookCmd = exec.Command(hookPath, messageFile)
-	hookCmd.Dir = repoPath
-	hookOutput, _ = hookCmd.CombinedOutput()
-	t.Logf("Hook output for valid message: %s", string(hookOutput))
-
-	// Remove the hook
-	removeCmd := exec.Command(binaryPath, "remove-hook", "commit-msg")
-	removeCmd.Dir = repoPath
-	removeOutput, _ := removeCmd.CombinedOutput()
-	t.Logf("Remove hook output: %s", string(removeOutput))
-
-	// Verify hook was removed
-	if _, err := os.Stat(hookPath); !os.IsNotExist(err) {
-		t.Logf("Hook file was not removed: %v", err)
-		t.Fail()
-	}
-}
-
-// buildTestBinary builds the CLI binary for testing.
-func buildTestBinary(t *testing.T) (string, error) {
-	t.Helper()
-
-	// Create a temporary directory for the binary
-	tempDir, err := os.MkdirTemp("", "gommitlint-binary-*")
-	if err != nil {
-		return "", err
-	}
-
-	t.Cleanup(func() { os.RemoveAll(tempDir) })
-
-	// Determine binary name
-	binaryName := "gommitlint-test"
-	if runtime.GOOS == "windows" {
-		binaryName += ".exe"
-	}
-
-	binaryPath := filepath.Join(tempDir, binaryName)
-
-	// Get the project root
-	projectRoot := filepath.Dir(filepath.Dir(filepath.Dir(getCurrentFilePath())))
-
-	// Build the binary
-	cmd := exec.Command("go", "build", "-o", binaryPath, filepath.Join(projectRoot, "main.go"))
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("failed to build test binary: %w, output: %s", err, string(output))
-	}
-
-	return binaryPath, nil
-}
-
-// getCurrentFilePath returns the current file path.
-func getCurrentFilePath() string {
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		panic("failed to get current file path")
-	}
-
-	return file
-}
-
-// containsString checks if a string contains another string.
-func containsString(s, substr string) bool {
-	return s != "" && substr != "" && (len(s) >= len(substr) && s != substr || s == substr)
 }

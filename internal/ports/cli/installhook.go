@@ -60,13 +60,69 @@ Examples:
 	return installHookCmd
 }
 
-// installHook installs a Git commit-msg hook in the specified repository.
-func installHook(force bool, repoPath string) error {
-	// Set hook type to commit-msg (only supported type)
-	hookType := "commit-msg"
+// HookInstallationParameters contains all parameters needed for hook installation.
+// This structure follows the functional patterns of immutability and value semantics.
+type HookInstallationParameters struct {
+	Force    bool
+	RepoPath string
+	HookType string
+}
 
+// NewHookInstallationParameters creates HookInstallationParameters with defaults.
+func NewHookInstallationParameters(force bool, repoPath string) HookInstallationParameters {
+	// Default to commit-msg hook type (currently the only supported type)
+	return HookInstallationParameters{
+		Force:    force,
+		RepoPath: repoPath,
+		HookType: "commit-msg",
+	}
+}
+
+// WithHookType returns a new HookInstallationParameters with the hook type updated.
+func (p HookInstallationParameters) WithHookType(hookType string) HookInstallationParameters {
+	result := p
+	result.HookType = hookType
+
+	return result
+}
+
+// WithForce returns a new HookInstallationParameters with the force flag updated.
+func (p HookInstallationParameters) WithForce(force bool) HookInstallationParameters {
+	result := p
+	result.Force = force
+
+	return result
+}
+
+// WithRepoPath returns a new HookInstallationParameters with the repo path updated.
+func (p HookInstallationParameters) WithRepoPath(repoPath string) HookInstallationParameters {
+	result := p
+	result.RepoPath = repoPath
+
+	return result
+}
+
+// FindHookPath determines the hook file path based on the parameters.
+func (p HookInstallationParameters) FindHookPath() (string, error) {
 	// Find Git root directory
-	gitDir, err := findGitDirectory(repoPath)
+	gitDir, err := findGitDirectory(p.RepoPath)
+	if err != nil {
+		return "", fmt.Errorf("could not find Git directory: %w", err)
+	}
+
+	// Hooks directory path
+	hooksDir := filepath.Join(gitDir, "hooks")
+
+	// Path to the hook file
+	hookPath := filepath.Join(hooksDir, p.HookType)
+
+	return hookPath, nil
+}
+
+// EnsureHooksDirectory ensures the hooks directory exists.
+func (p HookInstallationParameters) EnsureHooksDirectory() error {
+	// Find Git root directory
+	gitDir, err := findGitDirectory(p.RepoPath)
 	if err != nil {
 		return fmt.Errorf("could not find Git directory: %w", err)
 	}
@@ -77,16 +133,54 @@ func installHook(force bool, repoPath string) error {
 		return fmt.Errorf("could not create hooks directory: %w", err)
 	}
 
-	// Path to the hook file
-	hookPath := filepath.Join(hooksDir, hookType)
+	return nil
+}
+
+// GetHookContent returns the content for the hook based on its type.
+func (p HookInstallationParameters) GetHookContent() string {
+	// Currently, only commit-msg hooks are supported
+	return generateCommitMsgHook()
+}
+
+// CanInstallHook checks if a hook can be installed based on parameters.
+func (p HookInstallationParameters) CanInstallHook() error {
+	hookPath, err := p.FindHookPath()
+	if err != nil {
+		return err
+	}
 
 	// Check if hook already exists
-	if _, err := os.Stat(hookPath); err == nil && !force {
+	if _, err := os.Stat(hookPath); err == nil && !p.Force {
 		return fmt.Errorf("hook already exists at %s (use --force to overwrite)", hookPath)
 	}
 
+	return nil
+}
+
+// installHook installs a Git commit-msg hook in the specified repository.
+// This implementation follows functional programming patterns with immutable parameters.
+func installHook(force bool, repoPath string) error {
+	// Create parameters with defaults
+	params := NewHookInstallationParameters(force, repoPath)
+
+	// Ensure hooks directory exists
+	if err := params.EnsureHooksDirectory(); err != nil {
+		return err
+	}
+
+	// Check if we can install the hook
+	if err := params.CanInstallHook(); err != nil {
+		return err
+	}
+
+	// Get the hook path
+	hookPath, err := params.FindHookPath()
+	if err != nil {
+		return err
+	}
+
 	// Get the hook content
-	hookContent := generateCommitMsgHook()
+	hookContent := params.GetHookContent()
 
 	// Write the hook file
 	if err := os.WriteFile(hookPath, []byte(hookContent), 0600); err != nil {

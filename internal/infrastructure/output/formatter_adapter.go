@@ -10,6 +10,7 @@ import (
 
 // FormatterAdapter adapts various output formatters to the domain.ResultFormatter interface.
 // It serves as a factory for creating appropriate formatters based on format type.
+// This implementation uses value semantics throughout.
 type FormatterAdapter struct {
 	format     string
 	verbose    bool
@@ -19,8 +20,9 @@ type FormatterAdapter struct {
 }
 
 // NewFormatterAdapter creates a new formatter adapter.
-func NewFormatterAdapter(format string, options ...FormatterOption) *FormatterAdapter {
-	adapter := &FormatterAdapter{
+// This implementation returns a value rather than a pointer.
+func NewFormatterAdapter(format string, options ...FormatterOption) FormatterAdapter {
+	adapter := FormatterAdapter{
 		format:     format,
 		verbose:    false,
 		lightMode:  false,
@@ -28,47 +30,60 @@ func NewFormatterAdapter(format string, options ...FormatterOption) *FormatterAd
 		targetRule: "",
 	}
 
-	// Apply options
+	// Apply options using the new functional approach for value semantics
 	for _, option := range options {
-		option(adapter)
+		adapter = option(adapter)
 	}
 
 	return adapter
 }
 
 // FormatterOption is a function that configures a FormatterAdapter.
-type FormatterOption func(*FormatterAdapter)
+// This implementation returns a new FormatterAdapter instead of modifying the existing one.
+type FormatterOption func(FormatterAdapter) FormatterAdapter
 
 // WithVerbose sets the verbose flag.
 func WithVerbose(verbose bool) FormatterOption {
-	return func(a *FormatterAdapter) {
-		a.verbose = verbose
+	return func(a FormatterAdapter) FormatterAdapter {
+		result := a
+		result.verbose = verbose
+
+		return result
 	}
 }
 
 // WithLightMode sets the light mode flag.
 func WithLightMode(lightMode bool) FormatterOption {
-	return func(a *FormatterAdapter) {
-		a.lightMode = lightMode
+	return func(a FormatterAdapter) FormatterAdapter {
+		result := a
+		result.lightMode = lightMode
+
+		return result
 	}
 }
 
 // WithShowHelp sets the show help flag.
 func WithShowHelp(showHelp bool) FormatterOption {
-	return func(a *FormatterAdapter) {
-		a.showHelp = showHelp
+	return func(a FormatterAdapter) FormatterAdapter {
+		result := a
+		result.showHelp = showHelp
+
+		return result
 	}
 }
 
 // WithTargetRule sets the specific rule to show help for.
 func WithTargetRule(ruleName string) FormatterOption {
-	return func(a *FormatterAdapter) {
-		a.targetRule = ruleName
+	return func(a FormatterAdapter) FormatterAdapter {
+		result := a
+		result.targetRule = ruleName
+
+		return result
 	}
 }
 
 // Format formats the validation results according to the configured format.
-func (a *FormatterAdapter) Format(results domain.ValidationResults) string {
+func (a FormatterAdapter) Format(results domain.ValidationResults) string {
 	var formatter domain.ResultFormatter
 
 	switch a.format {
@@ -95,4 +110,4 @@ func (a *FormatterAdapter) Format(results domain.ValidationResults) string {
 }
 
 // Ensure FormatterAdapter implements domain.ResultFormatter.
-var _ domain.ResultFormatter = (*FormatterAdapter)(nil)
+var _ domain.ResultFormatter = FormatterAdapter{}

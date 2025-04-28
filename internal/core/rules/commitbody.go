@@ -272,7 +272,7 @@ func (r CommitBodyRule) Result() string {
 // Help returns guidance for fixing rule violations.
 func (r CommitBodyRule) Help() string {
 	if !r.HasErrors() {
-		return "No errors to fix"
+		return "No errors to fix. This rule checks for proper commit message structure, including a blank line between subject and body, and appropriate body content length."
 	}
 
 	errors := r.Errors()

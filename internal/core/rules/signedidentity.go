@@ -187,10 +187,11 @@ func (r SignedIdentityRule) VerboseResult() string {
 
 // Help returns a description of how to fix the rule violation.
 func (r SignedIdentityRule) Help() string {
+	// First check if the rule has errors
 	if !r.HasErrors() {
 		return "No errors to fix"
 	}
-	// First check for specific error codes
+	// Then check for specific error codes
 	if r.ErrorCount() > 0 {
 		// Get the first error
 		firstErr := r.Errors()[0]

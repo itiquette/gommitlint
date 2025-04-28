@@ -18,31 +18,34 @@ type GitHubActionsFormatter struct {
 }
 
 // Ensure GitHubActionsFormatter implements domain.ResultFormatter.
-var _ domain.ResultFormatter = (*GitHubActionsFormatter)(nil)
+var _ domain.ResultFormatter = GitHubActionsFormatter{}
 
 // NewGitHubFormatter creates a new GitHub Actions formatter.
 // It implements domain.ResultFormatter interface.
-func NewGitHubFormatter() *GitHubActionsFormatter {
-	return &GitHubActionsFormatter{
+// This implementation returns a value rather than a pointer.
+func NewGitHubFormatter() GitHubActionsFormatter {
+	return GitHubActionsFormatter{
 		verbose:  false,
 		showHelp: false,
 	}
 }
 
 // WithVerbose sets the verbose flag for the formatter.
-func (f GitHubActionsFormatter) WithVerbose(verbose bool) *GitHubActionsFormatter {
+// This implementation returns a value rather than a pointer.
+func (f GitHubActionsFormatter) WithVerbose(verbose bool) GitHubActionsFormatter {
 	result := f
 	result.verbose = verbose
 
-	return &result
+	return result
 }
 
 // WithShowHelp sets the showHelp flag for the formatter.
-func (f GitHubActionsFormatter) WithShowHelp(showHelp bool) *GitHubActionsFormatter {
+// This implementation returns a value rather than a pointer.
+func (f GitHubActionsFormatter) WithShowHelp(showHelp bool) GitHubActionsFormatter {
 	result := f
 	result.showHelp = showHelp
 
-	return &result
+	return result
 }
 
 // Format formats validation results for GitHub Actions output.
@@ -124,7 +127,8 @@ func (f GitHubActionsFormatter) Format(results domain.ValidationResults) string 
 }
 
 // FormatRuleHelp formats help text for a specific rule.
-func (f GitHubActionsFormatter) FormatRuleHelp(ruleName string, results *domain.ValidationResults) string {
+// This implementation correctly uses a value instead of a pointer for the results parameter.
+func (f GitHubActionsFormatter) FormatRuleHelp(ruleName string, results domain.ValidationResults) string {
 	var builder strings.Builder
 
 	fmt.Fprintf(&builder, "::group::Help for rule: %s\n", ruleName)
