@@ -94,14 +94,14 @@ body:
 	require.Contains(t, err.Error(), "does not exist")
 }
 
-func TestLoadLegacyFormat(t *testing.T) {
+func TestLoadNestedConfig(t *testing.T) {
 	// Create a temporary directory for config files
 	tmpDir, err := os.MkdirTemp("", "gommitlint-test")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 
-	// Create a test config file with legacy format
-	tmpFile := filepath.Join(tmpDir, "legacy-config.yaml")
+	// Create a test config file with nested format
+	tmpFile := filepath.Join(tmpDir, "nested-config.yaml")
 	testYaml := `gommitlint:
   subject:
     maxLength: 60

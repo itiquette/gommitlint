@@ -88,14 +88,56 @@ func validateSubjectSuffixWithState(rule SubjectSuffixRule, commit domain.Commit
 
 	subject := commit.Subject
 	if subject == "" {
+		// Create error context with rich information
+		errorCtx := appErrors.NewContext()
+
+		helpMessage := `Empty Subject Error: Cannot validate suffixes on an empty subject.
+
+Your commit message has an empty subject line, so suffix validation cannot be performed.
+
+✅ CORRECT FORMAT:
+- A commit message should start with a subject line:
+  "Add a descriptive subject"
+  
+  This is a descriptive body that explains the change in detail.
+  It can span multiple lines.
+
+❌ INCORRECT FORMAT:
+- Your commit has an empty subject line
+
+WHY THIS MATTERS:
+- The subject line is the most visible part of a commit message
+- It provides a concise summary of changes that appears in logs
+- Without a subject, it's difficult to identify the purpose of the commit
+
+NEXT STEPS:
+1. Add a meaningful subject line to your commit
+   - Use 'git commit --amend' to edit your most recent commit
+   - Follow your project's commit message conventions
+   
+2. If using conventional commits, remember the format:
+   type(scope): subject`
+
+		// Create the context map for backwards compatibility
 		context := map[string]string{
 			"subject": subject,
 		}
-		updatedRule.BaseRule = updatedRule.BaseRule.WithErrorWithContext(
+
+		// Create the error with rich context
+		validationErr := appErrors.CreateRichError(
+			updatedRule.Name(),
 			appErrors.ErrMissingSubject,
 			"subject is empty",
-			context,
+			helpMessage,
+			errorCtx,
 		)
+
+		// Add context for backward compatibility
+		for k, v := range context {
+			validationErr = validationErr.WithContext(k, v)
+		}
+
+		updatedRule.BaseRule = updatedRule.BaseRule.WithError(validationErr)
 
 		return updatedRule.Errors(), updatedRule
 	}
@@ -104,30 +146,124 @@ func validateSubjectSuffixWithState(rule SubjectSuffixRule, commit domain.Commit
 
 	// Check for invalid UTF-8
 	if lastChar == utf8.RuneError && size == 0 {
+		// Create error context with rich information
+		errorCtx := appErrors.NewContext()
+
+		helpMessage := `UTF-8 Encoding Error: Subject contains invalid Unicode characters.
+
+Your commit subject contains invalid UTF-8 encoded text, which prevents suffix validation.
+
+✅ CORRECT FORMAT:
+- Commit messages should contain only valid UTF-8 encoded text
+- This ensures compatibility with all Git tools and platforms
+
+❌ INCORRECT FORMAT:
+- Your commit subject contains characters that are not valid UTF-8
+- This can happen when copying text from certain applications or documents
+
+WHY THIS MATTERS:
+- Invalid UTF-8 can cause display problems in different environments
+- It may prevent some Git tools from properly processing your commits
+- Consistent text encoding improves compatibility across platforms
+
+NEXT STEPS:
+1. Re-type your commit message using only valid characters
+   - Use 'git commit --amend' to edit your most recent commit
+   - Avoid copy-pasting from sources that might contain special formatting
+
+2. If you need to use special characters or symbols:
+   - Ensure they are properly encoded as UTF-8
+   - Consider using Unicode escape sequences for rare characters`
+
+		// Create the context map for backwards compatibility
 		context := map[string]string{
 			"subject": subject,
 		}
-		updatedRule.BaseRule = updatedRule.BaseRule.WithErrorWithContext(
+
+		// Create the error with rich context
+		validationErr := appErrors.CreateRichError(
+			updatedRule.Name(),
 			appErrors.ErrInvalidFormat,
 			"subject does not end with valid UTF-8 text",
-			context,
+			helpMessage,
+			errorCtx,
 		)
+
+		// Add context for backward compatibility
+		for k, v := range context {
+			validationErr = validationErr.WithContext(k, v)
+		}
+
+		updatedRule.BaseRule = updatedRule.BaseRule.WithError(validationErr)
 
 		return updatedRule.Errors(), updatedRule
 	}
 
 	// Check if the last character is in the invalid suffix set
 	if strings.ContainsRune(rule.invalidSuffixes, lastChar) {
+		// Create error context with rich information
+		errorCtx := appErrors.NewContext()
+
+		// Build example string that shows what the subject would look like without the invalid suffix
+		exampleSubject := strings.TrimRightFunc(subject, func(r rune) bool {
+			return strings.ContainsRune(rule.invalidSuffixes, r)
+		})
+
+		helpMessage := fmt.Sprintf(`Invalid Subject Suffix Error: Subject ends with forbidden punctuation (%q).
+
+Your commit subject ends with punctuation that should be removed for consistency.
+
+✅ CORRECT FORMAT:
+- Commit subjects should end without punctuation:
+  "%s"
+
+❌ INCORRECT FORMAT:
+- Your subject ends with "%s" which is not allowed:
+  "%s"
+
+WHY THIS MATTERS:
+- Consistent formatting improves readability of commit history
+- Many tools expect commit subjects without trailing punctuation
+- Removing trailing punctuation keeps commit logs cleaner
+  
+NEXT STEPS:
+1. Remove the trailing %q from your subject line
+2. If using a GUI, edit your commit message and remove the punctuation
+3. If using the command line:
+   - Use 'git commit --amend' to edit the most recent commit
+   - For older commits, use 'git rebase -i' and edit the commit
+
+INVALID SUFFIXES IN THIS PROJECT:
+- The following characters are not allowed at the end of subjects: %q`,
+			string(lastChar),
+			exampleSubject,
+			string(lastChar),
+			subject,
+			string(lastChar),
+			rule.invalidSuffixes)
+
+		// Create the context map for backwards compatibility
 		context := map[string]string{
 			"subject":          subject,
 			"last_char":        string(lastChar),
 			"invalid_suffixes": rule.invalidSuffixes,
 		}
-		updatedRule.BaseRule = updatedRule.BaseRule.WithErrorWithContext(
+
+		// Create the error with rich context
+		validationErr := appErrors.CreateRichError(
+			updatedRule.Name(),
 			appErrors.ErrSubjectSuffix,
 			fmt.Sprintf("subject has invalid suffix %q (invalid suffixes: %q)", string(lastChar), rule.invalidSuffixes),
-			context,
+			helpMessage,
+			errorCtx,
 		)
+
+		// Add context for backward compatibility
+		for k, v := range context {
+			validationErr = validationErr.WithContext(k, v)
+		}
+
+		updatedRule.BaseRule = updatedRule.BaseRule.WithError(validationErr)
 	}
 
 	return updatedRule.Errors(), updatedRule

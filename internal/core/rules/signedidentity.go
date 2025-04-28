@@ -259,12 +259,40 @@ func (r SignedIdentityRule) ValidateWithIdentity(commit *domain.CommitInfo) ([]a
 
 	// Validate commit
 	if commit == nil {
-		errors = append(errors, createError(
+		// Create error context with rich information
+		errorCtx := appErrors.NewContext()
+
+		helpMessage := `Invalid Commit Error: The commit object is nil.
+
+The SignedIdentity rule requires a valid commit object to verify its signature.
+This error typically indicates an internal problem with how commit data is being passed.
+
+✅ TECHNICAL INFORMATION:
+
+This is usually an internal error in one of these scenarios:
+1. An invalid commit reference was provided (non-existent commit)
+2. The Git repository has connectivity or corruption issues
+3. There's a bug in the application's commit processing logic
+
+WHY THIS MATTERS:
+- Without a valid commit object, it's impossible to verify the signature
+- This prevents the rule from performing its security validation
+- Signature verification is essential for ensuring commit authenticity
+
+NEXT STEPS:
+1. If you're a user: Report this as a bug with details on how to reproduce
+2. If you're a developer: Check how commit objects are being passed to validation
+3. Verify that the Git repository is accessible and not corrupted`
+
+		err := appErrors.CreateRichError(
 			r.Name(),
 			appErrors.ErrCommitNil,
 			"commit cannot be nil",
-			nil,
-		))
+			helpMessage,
+			errorCtx,
+		)
+
+		errors = append(errors, err)
 
 		return errors, identity, sigType
 	}
@@ -274,12 +302,49 @@ func (r SignedIdentityRule) ValidateWithIdentity(commit *domain.CommitInfo) ([]a
 
 	// Check for empty signature
 	if signature == "" || len(strings.TrimSpace(signature)) == 0 {
-		errors = append(errors, createError(
+		// Create error context with rich information
+		errorCtx := appErrors.NewContext()
+
+		helpMessage := `Missing Signature Error: No cryptographic signature found for this commit.
+
+The SignedIdentity rule requires commits to be signed with a trusted cryptographic key.
+A signature verifies the identity of the committer and ensures the commit hasn't been tampered with.
+
+✅ RECOMMENDED ACTIONS:
+
+1. Configure Git to sign with GPG (most common):
+   git config --global user.signingkey YOUR_GPG_KEY_ID
+   git config --global commit.gpgsign true
+   
+   # If you don't have a GPG key yet:
+   gpg --gen-key
+   gpg --list-secret-keys --keyid-format LONG
+
+2. Alternatively, configure SSH signing (Git 2.34+):
+   git config --global gpg.format ssh
+   git config --global user.signingkey ~/.ssh/id_ed25519.pub
+   git config --global commit.gpgsign true
+
+3. Sign an individual commit without changing global config:
+   git commit -S -m "Your commit message"
+
+WHY THIS MATTERS:
+- Signatures provide cryptographic proof of authorship
+- They prevent impersonation in the commit history
+- They're often required for security-sensitive projects
+- They help validate the integrity of your repository
+
+For more information, visit: https://git-scm.com/book/en/v2/Git-Tools-Signing-Your-Work`
+
+		err := appErrors.CreateRichError(
 			r.Name(),
 			appErrors.ErrMissingSignature,
 			"no signature provided",
-			nil,
-		))
+			helpMessage,
+			errorCtx,
+		)
+
+		errors = append(errors, err)
 
 		return errors, identity, sigType
 	}
@@ -289,15 +354,50 @@ func (r SignedIdentityRule) ValidateWithIdentity(commit *domain.CommitInfo) ([]a
 		// Sanitize keyDir to prevent path traversal
 		_, err := sigverify.SanitizePath(r.KeyDir)
 		if err != nil {
-			errors = append(errors, createError(
+			// Create error context with rich information
+			errorCtx := appErrors.NewContext()
+
+			helpMessage := fmt.Sprintf(`Invalid Key Directory Error: The trusted keys directory is invalid.
+
+The SignedIdentity rule couldn't access or use the configured trusted keys directory.
+Error details: %s
+
+✅ RECOMMENDED ACTIONS:
+
+1. Check if the directory exists and has correct permissions:
+   ls -la %s
+   
+2. Ensure the directory is readable by the current user:
+   chmod 755 %s
+
+3. If using a relative path, make sure it's relative to the correct working directory
+
+4. Provide an absolute path to avoid path resolution issues:
+   /home/user/keys/trusted/ instead of ./keys/trusted/
+
+WHY THIS MATTERS:
+- The trusted keys directory contains the public keys used to verify commit signatures
+- Without access to these keys, signature verification cannot be performed
+- Proper verification requires a secure, well-maintained set of trusted keys
+
+TECHNICAL DETAILS:
+The error occurred while trying to access: %s
+Error message: %s`,
+				err, r.KeyDir, r.KeyDir, r.KeyDir, err)
+
+			err2 := appErrors.CreateRichError(
 				r.Name(),
 				appErrors.ErrInvalidKeyDir,
 				fmt.Sprintf("invalid key directory: %s", err),
-				map[string]string{
-					"key_dir": r.KeyDir,
-					"error":   err.Error(),
-				},
-			))
+				helpMessage,
+				errorCtx,
+			)
+
+			// Add additional context
+			err2 = err2.WithContext("key_dir", r.KeyDir)
+			err2 = err2.WithContext("error", err.Error())
+
+			errors = append(errors, err2)
 
 			return errors, identity, sigType
 		}
@@ -313,14 +413,52 @@ func (r SignedIdentityRule) ValidateWithIdentity(commit *domain.CommitInfo) ([]a
 			// For now, we'll just simulate a verification
 			if !strings.Contains(signature, "-----BEGIN PGP SIGNATURE-----") ||
 				!strings.Contains(signature, "-----END PGP SIGNATURE-----") {
-				errors = append(errors, createError(
+				// Create error context with rich information
+				errorCtx := appErrors.NewContext()
+
+				helpMessage := `Invalid GPG Signature Format Error: The GPG signature is incomplete or malformed.
+
+The commit has a GPG signature, but it's missing the required begin/end markers that identify a complete signature.
+
+✅ RECOMMENDED ACTIONS:
+
+1. Verify your GPG installation is working correctly:
+   gpg --version
+   
+2. Check your Git GPG configuration:
+   git config --list | grep gpg
+   
+3. Try signing a new commit with verbose output:
+   GIT_TRACE=1 git commit -S -m "Test signing" --verbose
+   
+4. If the issue persists, try clearing your GPG agent:
+   gpgconf --kill gpg-agent
+   
+5. For MacOS users, ensure the GPG Suite is properly installed
+   For Windows users, check that GPG4Win is configured correctly
+
+WHY THIS MATTERS:
+- Incomplete signatures cannot be verified
+- This may indicate a problem with your Git-GPG integration
+- Proper signature format is required for security verification
+
+TECHNICAL DETAILS:
+- A valid GPG signature must begin with "-----BEGIN PGP SIGNATURE-----"
+- And must end with "-----END PGP SIGNATURE-----"
+- Your signature appears to be missing one or both of these markers`
+
+				err := appErrors.CreateRichError(
 					r.Name(),
 					appErrors.ErrInvalidSignatureFormat,
 					"incomplete GPG signature (missing begin/end markers)",
-					map[string]string{
-						"signature_type": GPG,
-					},
-				))
+					helpMessage,
+					errorCtx,
+				)
+
+				// Add additional context
+				err = err.WithContext("signature_type", GPG)
+
+				errors = append(errors, err)
 
 				return errors, identity, sigType
 			}
@@ -330,28 +468,109 @@ func (r SignedIdentityRule) ValidateWithIdentity(commit *domain.CommitInfo) ([]a
 			// For now, we'll just simulate a verification
 			if strings.Contains(signature, "-----BEGIN SSH SIGNATURE-----") &&
 				!strings.Contains(signature, "-----END SSH SIGNATURE-----") {
-				errors = append(errors, createError(
+				// Create error context with rich information
+				errorCtx := appErrors.NewContext()
+
+				helpMessage := `Invalid SSH Signature Format Error: The SSH signature is incomplete.
+
+The commit has an SSH signature, but it's missing the required end marker for a complete signature.
+
+✅ RECOMMENDED ACTIONS:
+
+1. Verify your SSH key is properly configured:
+   ssh-add -l
+   
+2. Check your Git SSH signing configuration:
+   git config --list | grep gpg.format
+   git config --list | grep user.signingkey
+   
+3. Try signing a new commit with verbose output:
+   GIT_TRACE=1 git commit -S -m "Test signing" --verbose
+   
+4. Ensure you're using a recent version of Git that supports SSH signing:
+   git --version (should be 2.34.0 or later)
+   
+5. If using a non-standard SSH key format, ensure it's compatible with Git
+
+WHY THIS MATTERS:
+- Incomplete signatures cannot be verified
+- This may indicate a problem with your Git-SSH integration
+- Proper signature format is required for security verification
+
+TECHNICAL DETAILS:
+- A valid SSH signature must begin with "-----BEGIN SSH SIGNATURE-----"
+- And must end with "-----END SSH SIGNATURE-----"
+- Your signature has the begin marker but is missing the end marker`
+
+				err := appErrors.CreateRichError(
 					r.Name(),
 					appErrors.ErrInvalidSignatureFormat,
 					"incomplete SSH signature (missing end marker)",
-					map[string]string{
-						"signature_type": SSH,
-					},
-				))
+					helpMessage,
+					errorCtx,
+				)
+
+				// Add additional context
+				err = err.WithContext("signature_type", SSH)
+
+				errors = append(errors, err)
 
 				return errors, identity, sigType
 			}
 
 			identity = "SSH Signature Format Verified"
 		default:
-			errors = append(errors, createError(
+			// Create error context with rich information
+			errorCtx := appErrors.NewContext()
+
+			// Get a safe prefix of the signature for display
+			sigPrefix := signature[:safeMin(len(signature), 20)]
+
+			helpMessage := fmt.Sprintf(`Unknown Signature Type Error: Cannot recognize the signature format.
+
+The commit has a signature that doesn't match either GPG or SSH signature formats.
+The signature begins with: "%s"
+
+✅ RECOMMENDED ACTIONS:
+
+1. Use a standard GPG signature:
+   git config --global user.signingkey YOUR_GPG_KEY_ID
+   git config --global commit.gpgsign true
+   git commit -S -m "Your message"
+
+2. Or use SSH signing (Git 2.34+):
+   git config --global gpg.format ssh
+   git config --global user.signingkey ~/.ssh/id_ed25519.pub
+   git config --global commit.gpgsign true
+   git commit -S -m "Your message"
+
+3. Check for signature corruption:
+   - Verify your Git version supports the signature format you're using
+   - If you're using a custom signing tool, ensure it produces standard formats
+   - Consider re-signing the commit with standard tools
+
+WHY THIS MATTERS:
+- Git only supports GPG and SSH signatures natively
+- Non-standard formats cannot be verified
+- Unrecognized signatures don't provide the security benefits of signing
+
+TECHNICAL DETAILS:
+- GPG signatures start with "-----BEGIN PGP SIGNATURE-----"
+- SSH signatures start with "-----BEGIN SSH SIGNATURE-----"
+- Your signature format doesn't match either pattern`, sigPrefix)
+
+			err := appErrors.CreateRichError(
 				r.Name(),
 				appErrors.ErrUnknownSigFormat,
 				"unknown signature type",
-				map[string]string{
-					"signature": signature[:safeMin(len(signature), 20)],
-				},
-			))
+				helpMessage,
+				errorCtx,
+			)
+
+			// Add additional context
+			err = err.WithContext("signature", sigPrefix)
+
+			errors = append(errors, err)
 
 			return errors, identity, sigType
 		}

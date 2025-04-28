@@ -16,6 +16,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/itiquette/gommitlint/internal/domain"
+	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
 
 // RepositoryAdapter adapts a git repository to the domain model.
@@ -57,23 +58,67 @@ func NewRepositoryAdapter(path string) (RepositoryAdapter, error) {
 }
 
 // GetCommit returns a commit by its hash.
-// This implementation applies functional patterns consistently.
+// This implementation applies functional patterns consistently and uses enhanced error handling.
 func (g RepositoryAdapter) GetCommit(ctx context.Context, hash string) (domain.CommitInfo, error) {
 	// Check for context cancellation
 	if ctx.Err() != nil {
-		return domain.CommitInfo{}, ctx.Err()
+		// Create a rich error context
+		errCtx := appErrors.NewContext()
+
+		// Create an enhanced error
+		err := appErrors.CreateRichError(
+			"GitRepository",
+			appErrors.ErrContextCancelled,
+			fmt.Sprintf("Context cancelled while getting commit %s: %s", hash, ctx.Err()),
+			"The operation was cancelled. This may be due to a timeout or manual cancellation.",
+			errCtx,
+		)
+
+		return domain.CommitInfo{}, err
 	}
 
 	// Instead of repeating the logic for resolving and getting commits,
 	// use our helper function to get exactly 1 commit
 	commits, err := g.getCommitsFromHash(ctx, hash, 1)
 	if err != nil {
-		return domain.CommitInfo{}, fmt.Errorf("failed to get commit with hash %s: %w", hash, err)
+		// Create a rich error context
+		errCtx := appErrors.NewContext()
+
+		// Create an enhanced error
+		richErr := appErrors.CreateRichError(
+			"GitRepository",
+			appErrors.ErrGitOperationFailed,
+			fmt.Sprintf("Failed to get commit with hash %s: %s", hash, err),
+			"Check that the commit reference is valid and the repository is accessible.",
+			errCtx,
+		)
+
+		// Add extra context
+		richErr = richErr.WithContext("git_reference", hash)
+		richErr = richErr.WithContext("repository_path", g.path)
+
+		return domain.CommitInfo{}, richErr
 	}
 
 	// Ensure we got exactly one commit
 	if len(commits) == 0 {
-		return domain.CommitInfo{}, fmt.Errorf("commit not found: %s", hash)
+		// Create a rich error context
+		errCtx := appErrors.NewContext()
+
+		// Create an enhanced error
+		richErr := appErrors.CreateRichError(
+			"GitRepository",
+			appErrors.ErrCommitNotFound,
+			"Commit not found: "+hash,
+			"Verify the commit reference is correct and exists in the repository.",
+			errCtx,
+		)
+
+		// Add extra context
+		richErr = richErr.WithContext("git_reference", hash)
+		richErr = richErr.WithContext("repository_path", g.path)
+
+		return domain.CommitInfo{}, richErr
 	}
 
 	// Return the first (and only) commit
@@ -85,24 +130,70 @@ func (g RepositoryAdapter) GetCommit(ctx context.Context, hash string) (domain.C
 func (g RepositoryAdapter) GetCommitRange(ctx context.Context, fromHash, toHash string) ([]domain.CommitInfo, error) {
 	// Check for context cancellation
 	if ctx.Err() != nil {
-		return nil, ctx.Err()
+		// Create enhanced error
+		errCtx := appErrors.NewContext()
+
+		richErr := appErrors.CreateRichError(
+			"GitRepository",
+			appErrors.ErrContextCancelled,
+			fmt.Sprintf("Context cancelled while getting commit range %s..%s: %s", fromHash, toHash, ctx.Err()),
+			"The operation was cancelled. This may be due to a timeout or manual cancellation.",
+			errCtx,
+		)
+
+		// Add range context
+		richErr = richErr.WithContext("from_hash", fromHash)
+		richErr = richErr.WithContext("to_hash", toHash)
+
+		return nil, richErr
 	}
 
 	// Resolve the hashes
 	hashes, err := g.resolveHashRange(ctx, fromHash, toHash)
 	if err != nil {
+		// Error is already enhanced from resolveHashRange
 		return nil, err
 	}
 
 	// Create iterator - we don't use getCommitsFromHash here because we need a custom stop condition
 	iter, err := g.createCommitIterator(hashes.toHash)
 	if err != nil {
-		return nil, err
+		// Create enhanced error
+		errCtx := appErrors.NewContext()
+
+		richErr := appErrors.CreateRichError(
+			"GitRepository",
+			appErrors.ErrGitOperationFailed,
+			fmt.Sprintf("Failed to create commit iterator for hash %s: %s", toHash, err),
+			"Check that the repository is accessible and the commit reference is valid.",
+			errCtx,
+		)
+
+		// Add context
+		richErr = richErr.WithContext("to_hash", toHash)
+		richErr = richErr.WithContext("repository_path", g.path)
+
+		return nil, richErr
 	}
 
 	// Check for context cancellation before proceeding with potentially lengthy operation
 	if ctx.Err() != nil {
-		return nil, ctx.Err()
+		// Create enhanced error
+		errCtx := appErrors.NewContext()
+
+		richErr := appErrors.CreateRichError(
+			"GitRepository",
+			appErrors.ErrContextCancelled,
+			fmt.Sprintf("Context cancelled while processing commit range %s..%s: %s", fromHash, toHash, ctx.Err()),
+			"The operation was cancelled. This may be due to a timeout or manual cancellation.",
+			errCtx,
+		)
+
+		// Add range context
+		richErr = richErr.WithContext("from_hash", fromHash)
+		richErr = richErr.WithContext("to_hash", toHash)
+
+		return nil, richErr
 	}
 
 	// Collect and convert commits until we reach the "from" commit
@@ -110,12 +201,29 @@ func (g RepositoryAdapter) GetCommitRange(ctx context.Context, fromHash, toHash 
 		return commit.Hash == hashes.fromHash
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get commit range: %w", err)
+		// Create enhanced error
+		errCtx := appErrors.NewContext()
+
+		richErr := appErrors.CreateRichError(
+			"GitRepository",
+			appErrors.ErrGitOperationFailed,
+			fmt.Sprintf("Failed to collect commits from range %s..%s: %s", fromHash, toHash, err),
+			"Check that the repository is accessible and the commit references are valid.",
+			errCtx,
+		)
+
+		// Add context
+		richErr = richErr.WithContext("from_hash", fromHash)
+		richErr = richErr.WithContext("to_hash", toHash)
+		richErr = richErr.WithContext("repository_path", g.path)
+
+		return nil, richErr
 	}
 
 	// Create a new immutable collection (rather than mutating an existing one)
 	result, err := g.ensureFromCommitIncluded(ctx, domainCommits, hashes.fromHash)
 	if err != nil {
+		// Error is already enhanced from ensureFromCommitIncluded
 		return nil, err
 	}
 
@@ -138,19 +246,64 @@ func (g RepositoryAdapter) resolveHashRange(
 ) (hashRange, error) {
 	// Check for context cancellation
 	if ctx.Err() != nil {
-		return hashRange{}, ctx.Err()
+		// Create enhanced error
+		errCtx := appErrors.NewContext()
+
+		richErr := appErrors.CreateRichError(
+			"GitRepository",
+			appErrors.ErrContextCancelled,
+			fmt.Sprintf("Context cancelled while resolving hash range %s..%s: %s", fromHashStr, toHashStr, ctx.Err()),
+			"The operation was cancelled. This may be due to a timeout or manual cancellation.",
+			errCtx,
+		)
+
+		// Add range context
+		richErr = richErr.WithContext("from_hash", fromHashStr)
+		richErr = richErr.WithContext("to_hash", toHashStr)
+
+		return hashRange{}, richErr
 	}
 
 	// Resolve the "to" hash
 	toHash, err := g.resolveRevision(toHashStr)
 	if err != nil {
-		return hashRange{}, fmt.Errorf("failed to resolve 'to' hash %s: %w", toHashStr, err)
+		// Create enhanced error
+		errCtx := appErrors.NewContext()
+
+		richErr := appErrors.CreateRichError(
+			"GitRepository",
+			appErrors.ErrRangeNotFound,
+			fmt.Sprintf("Failed to resolve 'to' hash %s: %s", toHashStr, err),
+			"Check that the 'to' reference exists in the repository.",
+			errCtx,
+		)
+
+		// Add context
+		richErr = richErr.WithContext("to_hash", toHashStr)
+		richErr = richErr.WithContext("repository_path", g.path)
+
+		return hashRange{}, richErr
 	}
 
 	// Resolve the "from" hash
 	fromHash, err := g.resolveRevision(fromHashStr)
 	if err != nil {
-		return hashRange{}, fmt.Errorf("failed to resolve 'from' hash %s: %w", fromHashStr, err)
+		// Create enhanced error
+		errCtx := appErrors.NewContext()
+
+		richErr := appErrors.CreateRichError(
+			"GitRepository",
+			appErrors.ErrRangeNotFound,
+			fmt.Sprintf("Failed to resolve 'from' hash %s: %s", fromHashStr, err),
+			"Check that the 'from' reference exists in the repository.",
+			errCtx,
+		)
+
+		// Add context
+		richErr = richErr.WithContext("from_hash", fromHashStr)
+		richErr = richErr.WithContext("repository_path", g.path)
+
+		return hashRange{}, richErr
 	}
 
 	return hashRange{

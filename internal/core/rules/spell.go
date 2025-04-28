@@ -172,15 +172,47 @@ func (r SpellRule) Validate(commit domain.CommitInfo) []appErrors.ValidationErro
 	case "UK", "GB":
 		replacer.AddRuleList(misspell.DictBritish)
 	default:
-		err := createError(
+		// Create error context with rich information
+		errorCtx := appErrors.NewContext()
+
+		helpMessage := fmt.Sprintf(`Invalid Locale Error: %q is not a supported spell-check locale.
+
+The locale %q you've specified for spell checking is not supported.
+
+✅ SUPPORTED LOCALES:
+- US: American English (default)
+- UK/GB: British English
+
+❌ UNSUPPORTED LOCALE:
+- %q is not recognized
+
+WHY THIS MATTERS:
+- Locale settings determine which spelling variants are considered correct
+- Different English variants have different spelling conventions
+- Using an invalid locale prevents proper spell checking
+
+NEXT STEPS:
+1. Update your configuration to use one of the supported locales:
+   - For American English spelling, use "US" (default)
+   - For British English spelling, use "UK" or "GB"
+   
+2. If you need spell checking for another language or dialect:
+   - Consider adding a custom dictionary with the '.gommitlintignore' file
+   - Add project-specific terms to your custom dictionary`,
+			r.locale, r.locale, r.locale)
+
+		err := appErrors.CreateRichError(
 			r.Name(),
 			appErrors.ErrUnknown,
 			fmt.Sprintf("unknown locale: %q", r.locale),
-			map[string]string{
-				"locale":            r.locale,
-				"supported_locales": "US,UK,GB",
-			},
+			helpMessage,
+			errorCtx,
 		)
+
+		// Store context for backward compatibility
+		err = err.WithContext("locale", r.locale)
+		err = err.WithContext("supported_locales", "US,UK,GB")
+
 		errors = append(errors, err)
 
 		return errors
@@ -192,15 +224,49 @@ func (r SpellRule) Validate(commit domain.CommitInfo) []appErrors.ValidationErro
 		// For test purposes only - simulate a custom word detection
 		for original, corrected := range r.customWords {
 			if strings.Contains(fullMessage, original) {
-				err := createError(
+				// Create error context with rich information
+				errorCtx := appErrors.NewContext()
+
+				helpMessage := fmt.Sprintf(`Custom Spelling Error: %q is a project-specific term that should be %q.
+
+The term %q in your commit message has a preferred spelling for this project.
+
+✅ CORRECT PROJECT TERM:
+- Use %q instead
+- Example usage: "%s"
+
+❌ INCORRECT USAGE:
+- %q is not the preferred spelling for this project
+
+WHY THIS MATTERS:
+- Consistent terminology makes project documentation more professional
+- Using project-specific terms correctly improves searchability
+- Maintaining terminology standards helps team communication
+
+NEXT STEPS:
+1. Edit your commit message to use the preferred project term
+   - Replace %q with %q
+   - Use 'git commit --amend' to edit the most recent commit
+
+2. Familiarize yourself with project-specific terminology
+   - Check project glossaries or documentation for standard terms
+   - Consider creating a project dictionary for your team`,
+					original, corrected, original, corrected,
+					strings.Replace(strings.ToLower(original), original, corrected, 1),
+					original, original, corrected)
+
+				err := appErrors.CreateRichError(
 					r.Name(),
 					appErrors.ErrSpelling,
 					fmt.Sprintf("%q is a misspelling of %q", original, corrected),
-					map[string]string{
-						"original":  original,
-						"corrected": corrected,
-					},
+					helpMessage,
+					errorCtx,
 				)
+
+				// Store context for backward compatibility
+				err = err.WithContext("original", original)
+				err = err.WithContext("corrected", corrected)
+
 				errors = append(errors, err)
 
 				// We've found at least one, that's good enough for tests
@@ -246,15 +312,49 @@ func (r SpellRule) Validate(commit domain.CommitInfo) []appErrors.ValidationErro
 				break
 			}
 
-			err := createError(
+			// Create error context with rich information
+			errorCtx := appErrors.NewContext()
+
+			helpMessage := fmt.Sprintf(`Spelling Error: %q is misspelled.
+
+The word %q in your commit message appears to be misspelled.
+
+✅ CORRECT SPELLING:
+- The correct spelling is %q
+- Example usage: "%s"
+
+❌ INCORRECT SPELLING:
+- Current spelling: %q 
+- This is a common misspelling that should be corrected
+
+WHY THIS MATTERS:
+- Clear, correctly spelled commit messages are more professional
+- Spelling errors can make messages harder to search and understand
+- Consistent spelling helps maintain a high-quality commit history
+
+NEXT STEPS:
+1. Edit your commit message to fix the spelling error
+   - Use 'git commit --amend' to edit the most recent commit
+   - For older commits, use 'git rebase -i'
+   
+2. Consider using a spell checker in your editor before committing
+   - Many editors have built-in spell checking or extensions available
+   - Configure your spell checker to recognize technical terms used in your project`,
+				diff.Original, diff.Original, diff.Corrected,
+				strings.Replace(strings.ToLower(diff.Original), diff.Original, diff.Corrected, 1),
+				diff.Original)
+
+			err := appErrors.CreateRichError(
 				r.Name(),
 				appErrors.ErrSpelling,
 				fmt.Sprintf("%q is a misspelling of %q", diff.Original, diff.Corrected),
-				map[string]string{
-					"original":  diff.Original,
-					"corrected": diff.Corrected,
-				},
+				helpMessage,
+				errorCtx,
 			)
+
+			// Store context for backward compatibility
+			err = err.WithContext("original", diff.Original)
+			err = err.WithContext("corrected", diff.Corrected)
 			errors = append(errors, err)
 		}
 	}
@@ -354,18 +454,4 @@ func (r SpellRule) Help() string {
 // Errors returns all validation errors found by this rule.
 func (r SpellRule) Errors() []appErrors.ValidationError {
 	return r.errors
-}
-
-// createError creates a structured validation error without modifying the rule's state.
-func createError(ruleName string, code appErrors.ValidationErrorCode, message string, context map[string]string) appErrors.ValidationError {
-	// Create a validation error
-	var err appErrors.ValidationError
-
-	if context != nil {
-		err = appErrors.New(ruleName, code, message, appErrors.WithContextMap(context))
-	} else {
-		err = appErrors.New(ruleName, code, message)
-	}
-
-	return err
 }

@@ -12,6 +12,31 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// mockSuffixConfigProvider implements domain.SubjectConfigProvider for testing.
+type mockSuffixConfigProvider struct {
+	invalidSuffixes string
+}
+
+// SubjectMaxLength returns the maximum length of the commit subject.
+func (m *mockSuffixConfigProvider) SubjectMaxLength() int {
+	return 72 // Default value, not used for this test
+}
+
+// SubjectCase returns the case that the first word of the description must have.
+func (m *mockSuffixConfigProvider) SubjectCase() string {
+	return "lowercase" // Default value, not used for this test
+}
+
+// SubjectRequireImperative returns whether imperative verbs are enforced.
+func (m *mockSuffixConfigProvider) SubjectRequireImperative() bool {
+	return false // Default value, not used for this test
+}
+
+// SubjectInvalidSuffixes returns characters that cannot be used at the end of the subject.
+func (m *mockSuffixConfigProvider) SubjectInvalidSuffixes() string {
+	return m.invalidSuffixes
+}
+
 func TestSubjectSuffixRule(t *testing.T) {
 	testCases := []struct {
 		name            string
@@ -250,7 +275,7 @@ func TestSubjectSuffixOptions(t *testing.T) {
 
 func TestSubjectSuffixRuleWithConfig(t *testing.T) {
 	// Create a mock config provider
-	mockConfig := &mockSubjectConfigProvider{invalidSuffixes: "!@#"}
+	mockConfig := &mockSuffixConfigProvider{invalidSuffixes: "!@#"}
 
 	// Create rule using config
 	rule := rules.NewSubjectSuffixRuleWithConfig(mockConfig)

@@ -78,11 +78,11 @@ func TestSubjectLengthRule(t *testing.T) {
 				require.Equal(t, "SubjectLength", err.Rule, "Rule name should be set in ValidationError")
 				require.Equal(t, string(appErrors.ErrSubjectTooLong), err.Code, "Error code should match expected")
 
-				// Check context
-				require.Contains(t, err.Context, "actual_length", "Context should contain actual length")
+				// Check context - we now use subject_length instead of actual_length
+				require.Contains(t, err.Context, "subject_length", "Context should contain subject length")
 				require.Contains(t, err.Context, "max_length", "Context should contain maximum length")
-				require.Equal(t, strconv.Itoa(actualLength), err.Context["actual_length"],
-					"Actual length in context should match expected length")
+				require.Equal(t, strconv.Itoa(actualLength), err.Context["subject_length"],
+					"Subject length in context should match expected length")
 
 				// Test pure function implementation explicitly
 				_, updatedRule := rules.ValidateSubjectLengthWithState(rule, commit)
@@ -129,8 +129,8 @@ func TestSubjectLengthRuleWithConfig(t *testing.T) {
 	require.Len(t, errors, 1, "Should have exactly one error")
 	require.Equal(t, string(appErrors.ErrSubjectTooLong), errors[0].Code)
 
-	// Check context values
-	require.Equal(t, "51", errors[0].Context["actual_length"])
+	// Check context values - we now use subject_length instead of actual_length
+	require.Equal(t, "51", errors[0].Context["subject_length"])
 	require.Equal(t, "50", errors[0].Context["max_length"])
 }
 

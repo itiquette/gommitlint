@@ -224,14 +224,26 @@ func (e ValidationError) Error() string {
 }
 
 // WithContext adds context information to a ValidationError.
+// Note: This implementation was updated for immutability with functional programming principles.
 func (e ValidationError) WithContext(key, value string) ValidationError {
-	if e.Context == nil {
-		e.Context = make(map[string]string)
+	result := e
+
+	// Create a new context map if needed
+	if result.Context == nil {
+		result.Context = make(map[string]string)
+	} else {
+		// Copy the existing map
+		newContext := make(map[string]string, len(result.Context)+1)
+		for k, v := range result.Context {
+			newContext[k] = v
+		}
+
+		result.Context = newContext
 	}
 
-	e.Context[key] = value
+	result.Context[key] = value
 
-	return e
+	return result
 }
 
 // WithIntContext adds an integer context value.

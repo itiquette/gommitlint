@@ -74,18 +74,53 @@ func validateSubjectLengthWithState(rule SubjectLengthRule, commit domain.Commit
 
 	// Check if subject is too long
 	if subjectLength > rule.maxLength {
-		// Create context for the error
-		context := map[string]string{
-			"actual_length": strconv.Itoa(subjectLength),
-			"max_length":    strconv.Itoa(rule.maxLength),
-		}
+		// Create error context with rich information
+		ctx := appErrors.NewContext().WithCommit(
+			commit.Hash,    // commit hash
+			commit.Message, // full commit message
+			commit.Subject, // subject line
+			commit.Body,    // body text
+		)
+
+		// Create an enhanced validation error
+		errorMessage := fmt.Sprintf("Subject length (%d) exceeds maximum allowed (%d)", subjectLength, rule.maxLength)
+
+		// Generate a rich help message with examples
+		helpMessage := fmt.Sprintf(`Subject line is too long (%d characters). It should be at most %d characters.
+
+Why this matters:
+- Shorter subjects are more readable in Git logs and UIs 
+- Many Git tools truncate subjects longer than 50-72 characters
+- Short subjects force you to be concise and descriptive
+
+Examples of good subject lines:
+- Add user authentication feature (%d chars)
+- Fix timeout issue in API requests (%d chars)
+- Update documentation for deployment process (%d chars)
+
+How to fix:
+1. Remove unnecessary details (save them for the body)
+2. Use more concise wording
+3. Focus on the core change, not implementation details`,
+			subjectLength, rule.maxLength,
+			len("Add user authentication feature"),
+			len("Fix timeout issue in API requests"),
+			len("Update documentation for deployment process"))
+
+		validationErr := appErrors.CreateRichError(
+			rule.Name(),
+			appErrors.ErrSubjectTooLong,
+			errorMessage,
+			helpMessage,
+			ctx,
+		)
+
+		// Add additional context specific to this rule
+		validationErr = validationErr.WithContext("subject_length", strconv.Itoa(subjectLength))
+		validationErr = validationErr.WithContext("max_length", strconv.Itoa(rule.maxLength))
 
 		// Update rule with error using value semantics
-		updatedRule.BaseRule = updatedRule.BaseRule.WithErrorWithContext(
-			appErrors.ErrSubjectTooLong,
-			fmt.Sprintf("Subject length (%d) exceeds maximum allowed (%d)", subjectLength, rule.maxLength),
-			context,
-		)
+		updatedRule.BaseRule = updatedRule.BaseRule.WithError(validationErr)
 	}
 
 	return updatedRule.Errors(), updatedRule
@@ -112,23 +147,16 @@ func (r SubjectLengthRule) Result() string {
 // VerboseResult returns a detailed result message.
 func (r SubjectLengthRule) VerboseResult() string {
 	if len(r.Errors()) > 0 {
-		// Get context values
-		actualLength := "unknown"
-		maxLength := strconv.Itoa(r.maxLength)
-
+		// Get the first error
 		if errors := r.Errors(); len(errors) > 0 {
-			if ctx := errors[0].Context; ctx != nil {
-				if val, ok := ctx["actual_length"]; ok {
-					actualLength = val
-				}
+			// Use the enhanced error formatting
+			formatter := appErrors.NewTextFormatter(true) // verbose mode
 
-				if val, ok := ctx["max_length"]; ok {
-					maxLength = val
-				}
-			}
+			return formatter.FormatError(errors[0])
 		}
 
-		return fmt.Sprintf("Subject length (%s characters) exceeds maximum length (%s characters)", actualLength, maxLength)
+		// Fallback if no specific errors
+		return fmt.Sprintf("Subject length exceeds maximum length of %d characters", r.maxLength)
 	}
 
 	return fmt.Sprintf("Subject length is within the limit of %d characters", r.maxLength)
@@ -140,21 +168,70 @@ func (r SubjectLengthRule) Help() string {
 		return fmt.Sprintf("No errors to fix. This rule checks that commit subject lines don't exceed %d characters to ensure readability in various Git tools.", r.maxLength)
 	}
 
-	// Get max length from context
-	maxLength := r.maxLength
-
+	// If we have errors with the enhanced format, use their built-in help
 	if errors := r.Errors(); len(errors) > 0 {
+		// Get help from the enhanced error
+		helpText := errors[0].GetHelp()
+		if helpText != "" {
+			return helpText
+		}
+
+		// Get current length if available
+		currentLength := 0
+
 		if ctx := errors[0].Context; ctx != nil {
-			if val, ok := ctx["max_length"]; ok {
+			if val, ok := ctx["subject_length"]; ok {
 				if parsedVal, err := strconv.Atoi(val); err == nil {
-					maxLength = parsedVal
+					currentLength = parsedVal
 				}
 			}
 		}
+
+		// Detailed help with examples
+		if currentLength > 0 {
+			return fmt.Sprintf(`Subject line is too long (%d characters). It should be at most %d characters.
+
+Why this matters:
+- Shorter subjects are more readable in Git logs and UIs 
+- Many Git tools truncate subjects longer than 50-72 characters
+- Short subjects force you to be concise and descriptive
+
+Examples of good subject lines:
+- Add user authentication feature (%d chars)
+- Fix timeout issue in API requests (%d chars)
+- Update documentation for deployment process (%d chars)
+
+How to fix:
+1. Remove unnecessary details (save them for the body)
+2. Use more concise wording
+3. Focus on the core change, not implementation details`,
+				currentLength, r.maxLength,
+				len("Add user authentication feature"),
+				len("Fix timeout issue in API requests"),
+				len("Update documentation for deployment process"))
+		}
+
+		// Fallback to template-based help message
+		return fmt.Sprintf(`Ensure the subject line is at most %d characters long.
+
+Why this matters:
+- Shorter subjects are more readable in Git logs and UIs
+- Many Git tools truncate subjects longer than 50-72 characters
+- Short subjects force you to be concise and descriptive
+
+Examples of good subject lines:
+- Add user authentication feature
+- Fix timeout issue in API requests
+- Update documentation for deployment process
+
+How to fix:
+1. Remove unnecessary details (save them for the body)
+2. Use more concise wording
+3. Focus on the core change, not implementation details`, r.maxLength)
 	}
 
-	// Use the template-based help message
-	return appErrors.FormatHelp(appErrors.ErrSubjectTooLong, maxLength)
+	// Default help message
+	return fmt.Sprintf("Keep the subject line under %d characters for better readability.", r.maxLength)
 }
 
 // Errors returns all validation errors.

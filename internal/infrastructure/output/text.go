@@ -385,19 +385,30 @@ func (f TextFormatter) formatFailedRule(builder *strings.Builder, ruleName strin
 }
 
 // formatRuleErrors formats the validation errors for a rule.
-func (f TextFormatter) formatRuleErrors(builder *strings.Builder, errors []errors.ValidationError) {
-	if len(errors) == 0 {
+func (f TextFormatter) formatRuleErrors(builder *strings.Builder, validationErrors []errors.ValidationError) {
+	if len(validationErrors) == 0 {
 		return
 	}
 
-	for _, err := range errors {
-		builder.WriteString(fmt.Sprintf("    - %s\n",
-			f.colors.Error(err.Message)))
+	// Create a text formatter for validation errors
+	errorFormatter := errors.NewTextFormatter(!f.verbose) // invert verbose setting: we want compact when not verbose
 
-		// Show context if verbose
-		if f.verbose && len(err.Context) > 0 {
-			for key, value := range err.Context {
-				builder.WriteString(fmt.Sprintf("      %s: %s\n", key, value))
+	for _, err := range validationErrors {
+		// Use the enhanced error formatting if a help message is available
+		// Use enhanced error formatting based on verbosity
+		if !f.verbose {
+			// Simple format for non-verbose mode
+			builder.WriteString(fmt.Sprintf("    - %s\n",
+				f.colors.Error(err.Message)))
+		} else {
+			// In verbose mode, use the enhanced formatter to get rich error display
+			// Indent the text
+			errorText := errorFormatter.FormatError(err)
+
+			// Add indentation to each line
+			lines := strings.Split(strings.TrimSpace(errorText), "\n")
+			for _, line := range lines {
+				builder.WriteString(fmt.Sprintf("    %s\n", line))
 			}
 		}
 	}
@@ -406,17 +417,48 @@ func (f TextFormatter) formatRuleErrors(builder *strings.Builder, errors []error
 // formatHelpText formats the help text for a failed rule.
 func (f TextFormatter) formatHelpText(builder *strings.Builder, ruleResult domain.RuleResult) {
 	// Standard behavior
-	if f.showHelp && ruleResult.HelpMessage != "" {
+	if f.showHelp {
 		builder.WriteString("\n")
 
-		// Properly indent and style all help text lines
-		helpLines := strings.Split(ruleResult.HelpMessage, "\n")
-		for _, line := range helpLines {
-			builder.WriteString(fmt.Sprintf("  %s\n",
-				f.colors.HelpText(line)))
+		// First, check for enhanced errors with help messages
+		if len(ruleResult.Errors) > 0 {
+			helpMessage := ""
+
+			// Try to get help from the first error with a help message
+			for _, err := range ruleResult.Errors {
+				if help := err.GetHelp(); help != "" {
+					helpMessage = help
+
+					break
+				}
+			}
+
+			// If we found a help message, use it
+			if helpMessage != "" {
+				// Properly indent and style all help text lines
+				helpLines := strings.Split(helpMessage, "\n")
+				for _, line := range helpLines {
+					builder.WriteString(fmt.Sprintf("  %s\n",
+						f.colors.HelpText(line)))
+				}
+
+				builder.WriteString("\n")
+
+				return
+			}
 		}
 
-		builder.WriteString("\n")
+		// Fallback to rule's help message if enhanced error doesn't have one
+		if ruleResult.HelpMessage != "" {
+			// Properly indent and style all help text lines
+			helpLines := strings.Split(ruleResult.HelpMessage, "\n")
+			for _, line := range helpLines {
+				builder.WriteString(fmt.Sprintf("  %s\n",
+					f.colors.HelpText(line)))
+			}
+
+			builder.WriteString("\n")
+		}
 	} else if f.verbose && ruleResult.RuleID != "" {
 		// In verbose mode, show a compact tip if we have a rule ID
 		builder.WriteString(fmt.Sprintf("    %s Run with '--rulehelp=%s' for detailed instructions\n\n",

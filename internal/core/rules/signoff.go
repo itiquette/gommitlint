@@ -151,11 +151,50 @@ func (r SignOffRule) Validate(commit domain.CommitInfo) []appErrors.ValidationEr
 	body := commit.Body
 	// Handle empty body
 	if strings.TrimSpace(body) == "" {
-		errors = append(errors, r.createError(
-			"empty_message",
+		// Create error context with rich information
+		errorCtx := appErrors.NewContext()
+
+		helpMessage := `Empty Commit Body Error: Cannot find sign-off in an empty message.
+
+A sign-off line must be present in the commit body to certify you have the right to submit
+your contribution under the project's license (Developer Certificate of Origin).
+
+✅ CORRECT FORMAT:
+- A commit with a proper body and sign-off:
+
+  feat: add new feature
+  
+  This commit adds a new feature that does something useful.
+  Here's more description about what it does.
+  
+  Signed-off-by: Your Name <your.email@example.com>
+
+❌ INCORRECT FORMAT:
+- Your commit has an empty body with no sign-off line
+
+WHY THIS MATTERS:
+- Sign-offs provide a legal attestation that you have the right to contribute
+- They help establish a clear chain of provenance for all code
+- They're required by many open source projects for legal compliance
+
+NEXT STEPS:
+1. Add a meaningful commit message body with a description of your changes
+2. Add a sign-off line at the end using one of these methods:
+   - Use 'git commit --signoff' or 'git commit -s' to add it automatically
+   - Manually add 'Signed-off-by: Your Name <your.email@example.com>' at the end`
+
+		err := appErrors.CreateRichError(
+			r.Name(),
+			appErrors.ErrEmptyMessage,
 			"commit message body is empty; no sign-off found",
-			nil,
-		))
+			helpMessage,
+			errorCtx,
+		)
+
+		// Store the original code for test compatibility
+		err = err.WithContext("original_code", "empty_message")
+
+		errors = append(errors, err)
 
 		return errors
 	}
@@ -208,21 +247,108 @@ func (r SignOffRule) Validate(commit domain.CommitInfo) []appErrors.ValidationEr
 
 	// No valid sign-off found - distinguish between format issues and completely missing signoff
 	if hasAttemptedSignOff {
-		errors = append(errors, r.createError(
-			"invalid_format",
+		// Create error context with rich information
+		errorCtx := appErrors.NewContext()
+
+		helpMessage := `Invalid Sign-off Format Error: The sign-off line format is incorrect.
+
+Your commit appears to have an attempted sign-off line, but it doesn't match the required format.
+
+✅ CORRECT FORMAT:
+- The sign-off line must follow this exact format:
+  
+  Signed-off-by: Your Name <your.email@example.com>
+  
+  Examples:
+  Signed-off-by: Jane Doe <jane.doe@example.com>
+  Signed-off-by: John Smith <john.smith@company.org>
+
+❌ COMMON FORMATTING MISTAKES:
+- Misspelled "Signed-off-by:" (e.g., "Signed by:" or "Singed-off-by:")
+- Missing hyphen (e.g., "Signed off by:")
+- Using parentheses instead of angle brackets (e.g., "Signed-off-by: Name (email@example.com)")
+- Incorrect email format (e.g., missing @ or domain)
+- Extra spaces in the wrong places
+- Special characters in the wrong places
+
+WHY THIS MATTERS:
+- Precise sign-off formatting enables automatic verification tools
+- The format follows the Developer Certificate of Origin standard
+- Consistent formatting makes review and compliance checking easier
+
+NEXT STEPS:
+1. Add a correctly formatted sign-off:
+   Signed-off-by: Your Name <your.email@example.com>
+
+2. Or use Git's built-in signoff feature:
+   git commit --signoff   (or the shorthand -s flag)
+   
+3. Ensure your Git user.name and user.email are configured correctly:
+   git config --global user.name "Your Name"
+   git config --global user.email "your.email@example.com"`
+
+		err := appErrors.CreateRichError(
+			r.Name(),
+			appErrors.ErrInvalidFormat,
 			"Invalid sign-off format. Must use 'Signed-off-by: Name <email@example.com>' format",
-			map[string]string{
-				"message": body,
-			},
-		))
+			helpMessage,
+			errorCtx,
+		)
+
+		// Store message context and original code for test compatibility
+		err = err.WithContext("message", body)
+		err = err.WithContext("original_code", "invalid_format")
+
+		errors = append(errors, err)
 	} else {
-		errors = append(errors, r.createError(
-			"missing_signoff",
+		// Create error context with rich information
+		errorCtx := appErrors.NewContext()
+
+		helpMessage := `Missing Sign-off Error: No Developer Certificate of Origin sign-off found.
+
+Your commit message is missing a required Developer Certificate of Origin (DCO) sign-off line.
+
+✅ CORRECT FORMAT:
+- A commit with a proper sign-off looks like this:
+  
+  feat: add new feature
+  
+  This commit adds a new feature that does something useful.
+  Here's more description about what it does.
+  
+  Signed-off-by: Your Name <your.email@example.com>
+
+❌ INCORRECT FORMAT:
+- Your commit has no sign-off line at all
+- The sign-off is not at the end of the commit message
+
+WHY THIS MATTERS:
+- The sign-off certifies you have the right to submit your contribution
+- It's a legal attestation that your contribution complies with the project's licensing
+- It helps establish clear provenance for all contributed code
+
+NEXT STEPS:
+1. Add a sign-off line at the end of your commit message using one of these methods:
+   - Use 'git commit --signoff' or 'git commit -s' to add it automatically
+   - Manually add 'Signed-off-by: Your Name <your.email@example.com>' at the end
+   
+2. Ensure your Git user name and email are configured correctly:
+   git config --global user.name "Your Name"
+   git config --global user.email "your.email@example.com"`
+
+		err := appErrors.CreateRichError(
+			r.Name(),
+			appErrors.ErrMissingSignoff,
 			"Missing Signed-off-by line. Commit must be signed-off using 'Signed-off-by: Name <email@example.com>' format",
-			map[string]string{
-				"message": body,
-			},
-		))
+			helpMessage,
+			errorCtx,
+		)
+
+		// Store message context and original code for test compatibility
+		err = err.WithContext("message", body)
+		err = err.WithContext("original_code", "missing_signoff")
+
+		errors = append(errors, err)
 	}
 
 	return errors

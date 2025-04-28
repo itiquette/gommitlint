@@ -199,11 +199,49 @@ func validateConventionalWithState(rule ConventionalCommitRule, commit domain.Co
 	// Check if the subject follows the pattern
 	matches := regex.FindStringSubmatch(subject)
 	if len(matches) == 0 {
-		err := appErrors.New(
+		// Create error context with rich information
+		ctx := appErrors.NewContext().WithCommit(
+			commit.Hash,    // commit hash
+			commit.Message, // full commit message
+			commit.Subject, // subject line
+			commit.Body,    // body text
+		)
+
+		// Create a rich error
+		err := appErrors.CreateRichError(
 			updatedRule.Name(),
 			appErrors.ErrInvalidFormat,
 			"commit message doesn't follow conventional format: type(scope)!: description",
-			appErrors.WithContextMap(map[string]string{}),
+			`Your commit message doesn't follow the conventional format: type(scope)!: description
+
+The Conventional Commits specification is a lightweight convention for creating commit messages.
+This format makes commits readable and machine-parsable, allowing automated tools to generate changelogs.
+
+Required format:
+<type>[optional scope][optional !]: <description>
+
+Examples of valid conventional commits:
+- feat: add user authentication
+- fix(auth): resolve login timeout issue
+- docs: update installation instructions
+- perf(api): optimize database queries
+- feat(user)!: change user API response format
+
+Common types:
+- feat: a new feature
+- fix: a bug fix
+- docs: documentation changes
+- style: changes that don't affect code meaning (whitespace, formatting)
+- refactor: code change that neither fixes a bug nor adds a feature
+- perf: code change that improves performance
+- test: adding or correcting tests
+- build: changes to build system or dependencies
+- ci: changes to CI configuration
+- chore: other changes that don't modify src or test files
+- revert: reverts a previous commit
+
+The format is strict and requires the specific characters shown above.`,
+			ctx,
 		)
 
 		updatedRule = updatedRule.addError(err)
@@ -213,11 +251,26 @@ func validateConventionalWithState(rule ConventionalCommitRule, commit domain.Co
 
 	// Check for spacing issues
 	if strings.Contains(subject, ":  ") {
-		err := appErrors.New(
+		// Create error context
+		ctx := appErrors.NewContext().WithCommit(
+			commit.Hash,    // commit hash
+			commit.Message, // full commit message
+			commit.Subject, // subject line
+			commit.Body,    // body text
+		)
+
+		// Create a rich error
+		err := appErrors.CreateRichError(
 			updatedRule.Name(),
 			appErrors.ErrSpacing,
 			"commit message has too many spaces after colon (should be exactly one)",
-			appErrors.WithContextMap(map[string]string{}),
+			`Use exactly one space after the colon in commit messages.
+Correct:
+feat: add new feature
+Incorrect:
+feat:  add new feature
+The conventional commit format requires exactly one space between the colon and the description.`,
+			ctx,
 		)
 
 		updatedRule = updatedRule.addError(err)
@@ -394,43 +447,10 @@ func (r ConventionalCommitRule) VerboseResult() string {
 			return "Unknown error"
 		}
 
-		// errors[0] is already a ValidationError, so no need for type assertion
-		validationErr := errors[0]
+		// Use the enhanced error formatter for rich output
+		formatter := appErrors.NewTextFormatter(true) // verbose mode
 
-		// Return a more detailed error message in verbose mode
-		switch validationErr.Code {
-		case string(appErrors.ErrInvalidFormat):
-			return "Invalid format: doesn't follow conventional format 'type(scope)!: description'"
-		case string(appErrors.ErrInvalidType):
-			var allowedTypes string
-			if val, ok := validationErr.Context["allowed_types"]; ok {
-				allowedTypes = strings.ReplaceAll(val, ",", ", ")
-			}
-
-			return fmt.Sprintf("Invalid type '%s'. Must be one of: %s", r.commitType, allowedTypes)
-		case string(appErrors.ErrInvalidScope):
-			var allowedScopes string
-			if val, ok := validationErr.Context["allowed_scopes"]; ok {
-				allowedScopes = strings.ReplaceAll(val, ",", ", ")
-			}
-
-			return fmt.Sprintf("Invalid scope '%s'. Must be one of: %s", r.scope, allowedScopes)
-		case string(appErrors.ErrEmptyDescription):
-			return "Commit description is empty. A description following the colon is required."
-		case string(appErrors.ErrDescriptionTooLong):
-			maxLength := "100"
-			if ml, ok := validationErr.Context["max_length"]; ok {
-				maxLength = ml
-			}
-
-			return fmt.Sprintf("Commit description is too long. Maximum is %s characters but got %s characters.",
-				maxLength, validationErr.Context["length"])
-		case string(appErrors.ErrSpacing):
-			return "Spacing error: There should be exactly one space after the colon."
-		}
-
-		// Default to the error message
-		return validationErr.Message
+		return formatter.FormatError(errors[0])
 	}
 
 	// Build a nice formatted success message
@@ -455,101 +475,253 @@ func (r ConventionalCommitRule) Help() string {
 
 	errors := r.Errors()
 	if len(errors) > 0 {
-		// Cast to ValidationError if possible
-		// errors[0] is already a ValidationError, so no need for type assertion
+		// Get help text from the enhanced error
+		helpText := errors[0].GetHelp()
+		if helpText != "" {
+			return helpText
+		}
+
+		// Fallback to default help by error code
 		validationErr := errors[0]
 
 		switch validationErr.Code {
 		case string(appErrors.ErrInvalidFormat):
-			return `Follow the conventional commit format:
-    <type>[optional scope][optional !]: <description>
-Examples:
-- feat: add new feature
-- fix(auth): resolve login issue
-- feat(api)!: change user API endpoints
+			return `Your commit message doesn't follow the conventional format: type(scope)!: description
+
+The Conventional Commits specification is a lightweight convention for creating commit messages.
+This format makes commits readable and machine-parsable, allowing automated tools to generate changelogs.
+
+Required format:
+<type>[optional scope][optional !]: <description>
+
+Examples of valid conventional commits:
+- feat: add user authentication
+- fix(auth): resolve login timeout issue
+- docs: update installation instructions
+- perf(api): optimize database queries
+- feat(user)!: change user API response format
+
+Common types:
+- feat: a new feature
+- fix: a bug fix
+- docs: documentation changes
+- style: changes that don't affect code meaning (whitespace, formatting)
+- refactor: code change that neither fixes a bug nor adds a feature
+- perf: code change that improves performance
+- test: adding or correcting tests
+- build: changes to build system or dependencies
+- ci: changes to CI configuration
+- chore: other changes that don't modify src or test files
+- revert: reverts a previous commit
+
 The format is strict and requires the specific characters shown above.`
 		case string(appErrors.ErrInvalidType):
-			allowedTypes := ""
-			if val, ok := validationErr.Context["allowed_types"]; ok {
-				allowedTypes = strings.ReplaceAll(val, ",", ", ")
-			}
+			allowedTypes := strings.Join(r.allowedTypes, ", ")
 
-			return fmt.Sprintf(`Use only allowed commit types: %s
-Examples:
-- feat: adds a new feature
-- fix: fixes a bug
+			return fmt.Sprintf(`Invalid commit type - Use only allowed types: %s
+
+Each commit type has a specific purpose:
+
+- feat: adds a new feature to the application or library
+  Example: feat: add user authentication
+  
+- fix: patches a bug in the codebase
+  Example: fix: prevent crash when invalid data is submitted
+  
 - docs: documentation only changes
-- style: formatting changes
+  Example: docs: update API documentation with new endpoints
+  
+- style: changes that don't affect code meaning (white-space, formatting, missing semi-colons)
+  Example: style: format code according to linting rules
+  
 - refactor: code change that neither fixes a bug nor adds a feature
-- perf: improves performance
-- test: adds missing tests or corrects existing tests
-- build: affects build system or external dependencies
-- ci: changes CI configuration files and scripts
+  Example: refactor: simplify authentication logic
+  
+- perf: code changes that improve performance
+  Example: perf: optimize database queries
+  
+- test: adding missing tests or correcting existing tests
+  Example: test: add unit tests for login function
+  
+- build: changes that affect the build system or external dependencies
+  Example: build: update webpack configuration
+  
+- ci: changes to CI configuration files and scripts
+  Example: ci: add new GitHub Actions workflow
+  
 - chore: other changes that don't modify src or test files
-- revert: reverts a previous commit`, allowedTypes)
+  Example: chore: update dependencies
+  
+- revert: reverts a previous commit
+  Example: revert: feat: add login feature
+
+Choose one of the allowed types for your commit.`, allowedTypes)
 		case string(appErrors.ErrInvalidScope):
+			allowedScopes := strings.Join(r.allowedScopes, ", ")
 			if r.requireScope {
-				allowedScopes := ""
-				if val, ok := validationErr.Context["allowed_scopes"]; ok {
-					allowedScopes = strings.ReplaceAll(val, ",", ", ")
+				if len(r.allowedScopes) > 0 {
+					return fmt.Sprintf(`Scope Error: A scope is required and must be one of: %s
+
+The scope indicates which part of the project is affected by your change.
+It must be placed in parentheses immediately after the commit type.
+
+Correct format:
+<type>(<scope>): <description>
+
+Examples with valid scopes:
+- feat(%s): add login functionality
+- fix(%s): resolve data validation error
+- docs(%s): update API documentation
+
+Each scope represents a specific area of the codebase. Using the correct scope
+helps maintainers understand which areas are being modified.`,
+						allowedScopes,
+						r.allowedScopes[0],
+						r.allowedScopes[0],
+						r.allowedScopes[0])
 				}
 
-				if allowedScopes != "" {
-					return fmt.Sprintf(`A scope is required and must be one of: %s
-Example:
-- feat(%s): add new feature
-The scope must be in parentheses and directly after the type.`, allowedScopes, r.allowedScopes[0])
-				}
+				return `Scope Error: A scope is required but was not provided.
 
-				return `A scope is required but was not provided.
-Example:
-- feat(auth): add new feature
-The scope must be in parentheses and directly after the type.`
+The scope indicates which part of the project is affected by your change.
+It must be placed in parentheses immediately after the commit type.
+
+Correct format:
+<type>(<scope>): <description>
+
+Examples with scopes:
+- feat(auth): add login functionality
+- fix(api): resolve data validation error
+- docs(readme): update installation instructions
+
+Each scope represents a specific area of the codebase. Using an appropriate scope
+helps maintainers understand which areas are being modified.`
 			}
 
-			allowedScopes := ""
-			if val, ok := validationErr.Context["allowed_scopes"]; ok {
-				allowedScopes = strings.ReplaceAll(val, ",", ", ")
-			}
+			return fmt.Sprintf(`Scope Error: Invalid scope used. Use only allowed scopes: %s
 
-			return fmt.Sprintf(`Use only allowed scopes: %s
-Example:
-- feat(%s): add new feature
-The scope must be in parentheses and directly after the type.`, allowedScopes, r.allowedScopes[0])
+The scope indicates which part of the project is affected by your change.
+It must be placed in parentheses immediately after the commit type.
+
+Correct format:
+<type>(<scope>): <description>
+
+Examples with valid scopes:
+- feat(%s): add login functionality
+- fix(%s): resolve data validation error
+- docs(%s): update API documentation
+
+Each scope represents a specific area of the codebase. Using the correct scope
+helps maintainers understand which areas are being modified.`,
+				allowedScopes,
+				r.allowedScopes[0],
+				r.allowedScopes[0],
+				r.allowedScopes[0])
 		case string(appErrors.ErrEmptyDescription):
-			return `Provide a description after the colon.
-Examples:
-- feat: add new user authentication feature
-- fix(auth): resolve login issue with special characters
-The description should be concise but descriptive.`
+			return `Description Error: Your commit message is missing a description.
+
+The description is a required part of a conventional commit message that explains what changes were made.
+It should be concise but descriptive enough to understand the purpose of the commit.
+
+Correct format:
+<type>[optional scope][optional !]: <description>
+
+Examples of good descriptions:
+- feat: add user authentication system
+- fix(auth): resolve login timeout issue
+- docs: update installation instructions
+- refactor(api): simplify error handling
+- test: add unit tests for user service
+
+A good description:
+- Starts with a lowercase letter
+- Uses imperative, present tense ("add", not "added" or "adds")
+- Does not end with a period
+- Is clear and specific about what was changed
+- Is concise but descriptive (aim for 50 characters or less)
+
+Without a proper description, your commit history will be difficult to understand and navigate.`
 		case string(appErrors.ErrDescriptionTooLong):
-			maxLength := "100"
-			if ml, ok := validationErr.Context["max_length"]; ok {
-				maxLength = ml
-			}
+			return fmt.Sprintf(`Description Length Error: Your commit description exceeds the maximum length of %d characters.
 
-			return fmt.Sprintf(`Keep the commit description under %s characters.
-Long descriptions should be moved to the commit body, which comes after a blank line following the subject.
-Example:
-feat: add new authentication method
+The subject line of a commit should be concise and focused on the core change.
+Longer explanations should be placed in the commit body after a blank line.
 
-This commit introduces a new authentication method that allows users to log in with their social media accounts.`, maxLength)
+Instead of using a long description like this:
+❌ feat: implement comprehensive user authentication system with social login integration and multi-factor authentication options
+
+Split it into a concise subject and detailed body:
+✅ feat: add user authentication system
+
+This commit implements:
+- Email/password login
+- Social login integration
+- Multi-factor authentication
+- Session management
+- Password recovery
+
+Keeping your subject line under %d characters improves readability in:
+- Git history logs
+- GitHub/GitLab commit lists
+- CLI outputs
+- Changelogs
+- Email notifications
+
+Remember that the commit body (separated by a blank line) can contain all the details needed to fully understand the change.`, r.maxDescLength, r.maxDescLength)
 		case string(appErrors.ErrSpacing):
-			return `Use exactly one space after the colon in commit messages.
-Correct:
+			return `Spacing Error: You must use exactly one space after the colon in commit messages.
+
+The conventional commit format is very specific about spacing:
+- Exactly ONE space must follow the colon
+- No spaces before the colon
+- Additional spaces change the parsing of the message
+
+Examples:
+
+✅ Correct:
 feat: add new feature
-Incorrect:
-feat:  add new feature
-The conventional commit format requires exactly one space between the colon and the description.`
+fix(auth): resolve login issue
+
+❌ Incorrect:
+feat:  add new feature  (too many spaces after colon)
+feat : add new feature  (space before colon)
+feat:add new feature    (no space after colon)
+
+This strict spacing requirement ensures consistent parsing across tools and
+helps maintain a clean, readable commit history. Even a single extra space
+can cause problems with automated tools that generate changelogs or analyze
+commit history.`
 		}
 	}
 
 	// Default help
-	return `Follow the conventional commit format:
+	return `Your commit message should follow the conventional commit format
+
+The Conventional Commits specification is a lightweight convention for creating commit messages.
+This format makes commits readable and machine-parsable, allowing automated tools to generate changelogs.
+
+Required format:
 <type>[optional scope][optional !]: <description>
-Examples:
-- feat: add new feature
-- fix(auth): resolve login issue
-- feat(api)!: change user API endpoints
+
+Examples of valid conventional commits:
+- feat: add user authentication
+- fix(auth): resolve login timeout issue
+- docs: update installation instructions
+- perf(api): optimize database queries
+- feat(user)!: change user API response format
+
+Common types:
+- feat: a new feature
+- fix: a bug fix
+- docs: documentation changes
+- style: changes that don't affect code meaning (whitespace, formatting)
+- refactor: code change that neither fixes a bug nor adds a feature
+- perf: code change that improves performance
+- test: adding or correcting tests
+- build: changes to build system or dependencies
+- ci: changes to CI configuration
+- chore: other changes that don't modify src or test files
+- revert: reverts a previous commit
+
 For more information, see https://www.conventionalcommits.org/`
 }

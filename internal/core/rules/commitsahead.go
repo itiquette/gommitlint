@@ -111,12 +111,36 @@ func validateCommitsAheadWithState(ctx context.Context, rule CommitsAheadRule, _
 
 	// Skip validation if we can't get the repository
 	if rule.repositoryGetter == nil {
-		err := createCommitsAheadError(
+		// Create error context with rich information
+		ctx := appErrors.NewContext()
+
+		helpMessage := `Repository Error: Unable to access the Git repository.
+
+The CommitsAhead rule requires access to the Git repository to check the number of commits
+ahead of the reference branch. However, the repository object is nil, which means the
+system cannot access Git information.
+
+This could be caused by:
+- The current directory is not a Git repository
+- The Git repository is corrupt or missing
+- Insufficient permissions to access the repository
+- The Git binary is not installed or not in PATH
+- Internal configuration issues in the application
+
+To fix this issue:
+1. Ensure you are running the command from within a valid Git repository
+2. Verify that Git is properly installed and accessible
+3. Check repository permissions and integrity with 'git status'
+4. If running in CI/CD, ensure Git is available in the build environment`
+
+		err := appErrors.CreateRichError(
 			rule.Name(),
 			appErrors.ErrInvalidRepo,
 			"Repository object is nil",
-			nil,
+			helpMessage,
+			ctx,
 		)
+
 		errors = append(errors, err)
 		updatedRule.errors = errors
 
@@ -125,12 +149,34 @@ func validateCommitsAheadWithState(ctx context.Context, rule CommitsAheadRule, _
 
 	analyzer := rule.repositoryGetter()
 	if analyzer == nil {
-		err := createCommitsAheadError(
+		// Create error context with rich information
+		ctx := appErrors.NewContext()
+
+		helpMessage := `Repository Access Error: The Git repository analyzer is not available.
+
+The CommitsAhead rule successfully obtained a repository getter function, but the function
+returned nil when called. This indicates a problem accessing or initializing the Git repository analyzer.
+
+This could be caused by:
+- The repository was accessible during initialization but became unavailable
+- Permission issues with the Git repository
+- A corrupted Git repository state
+- Internal application errors in the Git integration
+
+To fix this issue:
+1. Verify that the repository is still accessible with 'git status'
+2. Check if Git hooks or configurations have been modified unexpectedly
+3. Ensure that no other processes are locking the Git repository
+4. Try running 'git gc' to clean up the repository if it's corrupted`
+
+		err := appErrors.CreateRichError(
 			rule.Name(),
 			appErrors.ErrInvalidRepo,
 			"Repository object is nil - Git repository not accessible",
-			nil,
+			helpMessage,
+			ctx,
 		)
+
 		errors = append(errors, err)
 		updatedRule.errors = errors
 
@@ -140,15 +186,51 @@ func validateCommitsAheadWithState(ctx context.Context, rule CommitsAheadRule, _
 	// Get commits ahead
 	ahead, err := analyzer.GetCommitsAhead(ctx, rule.ref)
 	if err != nil {
-		// Create validation error for repository error
-		validationErr := createCommitsAheadError(
+		// Create error context with rich information
+		errorCtx := appErrors.NewContext()
+
+		helpMessage := `Repository Operation Error: Failed to calculate commits ahead.
+
+The CommitsAhead rule encountered an error while trying to determine how many commits
+your current branch is ahead of the reference branch '${rule.ref}'.
+
+Error details: ${err.Error()}
+
+This could be caused by:
+- The reference branch '${rule.ref}' doesn't exist
+- Network issues when trying to access remote repository
+- Git configuration problems
+- Git repository corruption
+- Permission issues with the repository
+
+To fix this issue:
+1. Verify that the reference branch exists:
+   git branch -a | grep ${rule.ref}
+
+2. Make sure your local repository is up-to-date:
+   git fetch
+
+3. Check for any Git configuration issues:
+   git config --list
+
+4. If the reference branch is remote, ensure you have access to it:
+   git ls-remote origin ${rule.ref}
+
+5. Try running Git garbage collection if repository seems corrupted:
+   git gc`
+
+		validationErr := appErrors.CreateRichError(
 			rule.Name(),
 			"repo_access_error",
 			"Error accessing repository: "+err.Error(),
-			map[string]string{
-				"error": err.Error(),
-			},
+			helpMessage,
+			errorCtx,
 		)
+
+		// Add additional context
+		validationErr = validationErr.WithContext("error", err.Error())
+		validationErr = validationErr.WithContext("reference", rule.ref)
+
 		errors = append(errors, validationErr)
 		updatedRule.errors = errors
 
@@ -157,20 +239,64 @@ func validateCommitsAheadWithState(ctx context.Context, rule CommitsAheadRule, _
 
 	// Check if we exceed the maximum
 	if rule.maxCommitsAhead > 0 && ahead > rule.maxCommitsAhead {
-		// Create validation error for too many commits ahead
-		err := createCommitsAheadError(
+		// Create error context with rich information
+		errorCtx := appErrors.NewContext()
+
+		exceedCount := ahead - rule.maxCommitsAhead
+
+		helpMessage := fmt.Sprintf(`Too Many Commits Error: Your branch has too many commits ahead of '%s'.
+
+Your branch is currently %d commits ahead of the reference branch '%s', which exceeds
+the maximum allowed limit of %d commits. This means your branch has diverged significantly
+from the reference branch and should be synchronized.
+
+✅ RECOMMENDED ACTIONS:
+
+1. Merge the reference branch into your branch to stay up-to-date:
+   git fetch
+   git merge %s
+
+2. Rebase your branch onto the latest reference branch version:
+   git fetch
+   git rebase %s
+
+3. Squash some of your commits to reduce the total count:
+   git rebase -i HEAD~%d
+   (in the editor, change some "pick" to "squash" or "fixup")
+
+4. Consider creating a pull request/merge request if your feature is complete
+
+WHY THIS MATTERS:
+- Keeping branches in sync reduces future merge conflicts
+- Smaller, more focused branches are easier to review and merge
+- Long-lived branches can accumulate technical debt
+- Following branch hygiene helps maintain project velocity
+
+Current commits ahead:  %d
+Maximum allowed:        %d
+Exceeds maximum by:     %d commits`,
+			rule.ref, ahead, rule.ref, rule.maxCommitsAhead,
+			rule.ref, rule.ref, ahead, ahead, rule.maxCommitsAhead, exceedCount)
+
+		// We don't have specific commit info for this rule since it operates on the repository level
+
+		// Create the rich error
+		err := appErrors.CreateRichError(
 			rule.Name(),
 			appErrors.ErrTooManyCommits,
 			fmt.Sprintf("HEAD is %d commits ahead of %s (maximum allowed: %d)",
 				ahead, rule.ref, rule.maxCommitsAhead),
-			map[string]string{
-				"commits_ahead":     strconv.Itoa(ahead),
-				"max_allowed":       strconv.Itoa(rule.maxCommitsAhead),
-				"reference":         rule.ref,
-				"exceeds_by":        strconv.Itoa(ahead - rule.maxCommitsAhead),
-				"is_feature_branch": "false", // Simplified as we don't have branch information
-			},
+			helpMessage,
+			errorCtx,
 		)
+
+		// Add additional context using WithContext method from ValidationError
+		err = err.WithContext("commits_ahead", strconv.Itoa(ahead))
+		err = err.WithContext("max_allowed", strconv.Itoa(rule.maxCommitsAhead))
+		err = err.WithContext("reference", rule.ref)
+		err = err.WithContext("exceeds_by", strconv.Itoa(exceedCount))
+		err = err.WithContext("is_feature_branch", "false") // Simplified as we don't have branch information
+
 		errors = append(errors, err)
 		updatedRule.errors = errors
 
@@ -181,21 +307,6 @@ func validateCommitsAheadWithState(ctx context.Context, rule CommitsAheadRule, _
 	updatedRule.ahead = ahead
 
 	return errors, updatedRule
-}
-
-// createCommitsAheadError creates a validation error for CommitsAheadRule.
-func createCommitsAheadError(ruleName string, code appErrors.ValidationErrorCode, message string, ctx map[string]string) appErrors.ValidationError {
-	err := appErrors.New(
-		ruleName,
-		code,
-		message,
-	).WithContext("validation_rule", ruleName)
-
-	for k, v := range ctx {
-		err = err.WithContext(k, v)
-	}
-
-	return err
 }
 
 // ValidateWithContext checks if the current HEAD exceeds the maximum allowed commits ahead of the reference branch.

@@ -183,14 +183,41 @@ func validateImperativeWithState(rule ImperativeVerbRule, commit domain.CommitIn
 
 	// Check for empty message
 	if subject == "" {
-		err := appErrors.New(
+		// Create error context with rich information
+		ctx := appErrors.NewContext().WithCommit(
+			commit.Hash,    // commit hash
+			commit.Message, // full commit message
+			commit.Subject, // subject line
+			commit.Body,    // body text
+		)
+
+		// Create a rich error
+		helpMessage := `Your commit message is empty, which doesn't provide any information about the changes.
+
+A good commit message should:
+1. Begin with an imperative verb (e.g., "Add", "Fix", "Update")
+2. Clearly describe what the commit does
+3. Be concise but informative
+
+Examples of good commit messages:
+- Add user authentication feature
+- Fix bug in payment processing
+- Update documentation with examples
+- Refactor database connection logic
+
+Please write a descriptive commit message to help others understand your changes.`
+
+		err := appErrors.CreateRichError(
 			updatedRule.Name(),
 			appErrors.ErrMissingSubject,
 			"Commit message is empty",
-			appErrors.WithContextMap(map[string]string{
-				"word": "(empty message)",
-			}),
+			helpMessage,
+			ctx,
 		)
+
+		// Add additional context
+		err = err.WithContext("word", "(empty message)")
+
 		updatedRule.BaseRule = updatedRule.BaseRule.WithError(err)
 		updatedRule.firstWord = "(empty message)"
 
@@ -300,31 +327,116 @@ The correct format is: type(scope): subject
 		case appErrors.ErrNoFirstWord:
 			return "Start your commit message with a word (letters or numbers). Remove any leading special characters."
 		case appErrors.ErrNonVerb:
-			return `Use the imperative mood for the first word in your commit message.
-Examples of imperative verbs:
-- Add, Fix, Update, Remove, Change, Refactor, Implement
-Avoid:
-- Past tense: Added, Fixed, Updated
-- Gerund: Adding, Fixing, Updating
-- 3rd person: Adds, Fixes, Updates
-- Articles or pronouns: The, A, This, I, We
-The imperative form is preferred because it completes the sentence:
-"If applied, this commit will [your commit message]"`
+			return `Non-Verb Error: The word "${r.firstWord}" is not a verb.
+
+Git commit messages should start with an imperative verb. You used a non-verb word
+like an article, pronoun, preposition, or noun instead of an action verb.
+
+✅ CORRECT commit messages (start with verbs):
+- Add user authentication feature
+- Fix login timeout issue
+- Update documentation with examples
+- Remove deprecated API endpoints
+- Refactor database connection logic
+
+❌ INCORRECT commit messages (start with non-verbs):
+- The new login feature              (starts with article)
+- This commit fixes the bug          (starts with pronoun)
+- User authentication added          (starts with noun)
+- Documentation for API              (starts with noun)
+- Our implementation of feature      (starts with pronoun)
+
+WHY IMPERATIVE VERBS MATTER:
+Git itself uses imperative form in auto-generated commit messages like "Merge branch..."
+This creates a consistent, actionable commit history. Imperative verbs complete this sentence:
+"If applied, this commit will [your commit message]"
+
+COMMON IMPERATIVE VERBS TO USE:
+Add       Fix       Update    Remove    Change
+Refactor  Implement Optimize  Improve   Merge
+Create    Delete    Revert    Extract   Move
+Rename    Simplify  Adjust    Configure Test`
 		case appErrors.ErrPastTense:
-			return `Avoid using past tense verbs at the start of commit messages.
-Instead of "Added feature", use "Add feature".
-Use the imperative mood that completes the sentence:
-"If applied, this commit will [your commit message]"`
+			return `Past Tense Error: The word "${r.firstWord}" is in past tense.
+
+Git commit messages should use the imperative mood (present tense), not past tense.
+You used a past tense verb like "Added", "Updated", or "Fixed".
+
+✅ CORRECT (imperative mood):       ❌ INCORRECT (past tense):
+- Add feature                       - Added feature
+- Fix bug                           - Fixed bug
+- Update documentation              - Updated documentation
+- Implement authentication          - Implemented authentication
+- Remove deprecated code            - Removed deprecated code
+
+WHY THIS MATTERS:
+Using imperative mood creates consistency across the commit history and
+follows Git's own conventions. It completes the sentence:
+"If applied, this commit will [your commit message]"
+
+HOW TO FIX:
+Convert your past tense verb to present imperative form:
+- "Added" → "Add"
+- "Fixed" → "Fix"
+- "Updated" → "Update"
+- "Implemented" → "Implement"
+- "Removed" → "Remove"
+
+Simply drop the "-ed" ending in most cases.`
 		case appErrors.ErrGerund:
-			return `Avoid using gerund (-ing) forms at the start of commit messages.
-Instead of "Adding feature", use "Add feature".
-Use the imperative mood that completes the sentence:
-"If applied, this commit will [your commit message]"`
+			return `Gerund Error: The word "${r.firstWord}" is a gerund (verb ending in "-ing").
+
+Git commit messages should use the imperative mood, not continuous/gerund forms.
+You used a gerund verb form like "Adding", "Fixing", or "Updating".
+
+✅ CORRECT (imperative mood):       ❌ INCORRECT (gerund form):
+- Add feature                       - Adding feature
+- Fix bug                           - Fixing bug
+- Update documentation              - Updating documentation
+- Implement authentication          - Implementing authentication
+- Remove deprecated code            - Removing deprecated code
+
+WHY THIS MATTERS:
+Using imperative mood creates consistency across the commit history and
+follows Git's own conventions. It completes the sentence:
+"If applied, this commit will [your commit message]"
+
+HOW TO FIX:
+Convert your gerund verb to present imperative form:
+- "Adding" → "Add"
+- "Fixing" → "Fix"
+- "Updating" → "Update"
+- "Implementing" → "Implement"
+- "Removing" → "Remove"
+
+Simply drop the "-ing" ending and use the base verb form.`
 		case appErrors.ErrThirdPerson:
-			return `Avoid using third-person present verbs at the start of commit messages.
-Instead of "Adds feature", use "Add feature".
-Use the imperative mood that completes the sentence:
-"If applied, this commit will [your commit message]"`
+			return `Third Person Error: The word "${r.firstWord}" is in third person form.
+
+Git commit messages should use the imperative mood, not third-person present tense.
+You used a third-person verb form like "Adds", "Fixes", or "Updates".
+
+✅ CORRECT (imperative mood):       ❌ INCORRECT (third person):
+- Add feature                       - Adds feature
+- Fix bug                           - Fixes bug
+- Update documentation              - Updates documentation
+- Implement authentication          - Implements authentication
+- Remove deprecated code            - Removes deprecated code
+
+WHY THIS MATTERS:
+Using imperative mood creates consistency across the commit history and
+follows Git's own conventions. It completes the sentence:
+"If applied, this commit will [your commit message]"
+
+HOW TO FIX:
+Convert your third-person verb to present imperative form:
+- "Adds" → "Add"
+- "Fixes" → "Fix"
+- "Updates" → "Update"
+- "Implements" → "Implement"
+- "Removes" → "Remove"
+
+Simply drop the "-s" ending to get the imperative form.`
 		}
 	}
 	// Default help based on message content
@@ -371,32 +483,78 @@ func validateFormat(rule *ImperativeVerbRule, subject string) bool {
 		if !conventionalCommitRegex.MatchString(subject) {
 			// If it doesn't match the pattern fully, figure out specific issue
 			if regexp.MustCompile(`^([a-z]+)(?:\(([\w,/-]+)\))?(!)?:[ ]$`).MatchString(subject) {
+				// Create error context
+				ctx := appErrors.NewContext()
+				// We don't have the full commit here, but we can add the subject
+
 				// Empty subject after colon
-				err := appErrors.New(
+				helpMessage := `Your conventional commit is missing a description after the type and colon.
+
+A conventional commit must include a description that explains what changes were made.
+
+Correct format:
+<type>[optional scope][optional !]: <description>
+
+Examples:
+- feat: add user authentication
+- fix(auth): resolve login timeout issue
+- docs: update installation instructions
+
+Please add a clear description after the colon.`
+
+				err := appErrors.CreateRichError(
 					rule.Name(),
 					appErrors.ErrMissingSubject,
 					"Missing subject after type in conventional commit",
-					appErrors.WithContextMap(map[string]string{
-						"subject": subject,
-						"word":    "(missing subject)",
-					}),
+					helpMessage,
+					ctx,
 				)
+
+				// Add context details
+				err = err.WithContext("subject", subject)
+				err = err.WithContext("word", "(missing subject)")
 
 				rule.BaseRule = rule.BaseRule.WithError(err)
 				rule.firstWord = "(missing subject)"
 
 				return false
 			}
+			// Create error context
+			ctx := appErrors.NewContext()
+			// We don't have the full commit here, but we can add the subject
+
 			// General format issue
-			err := appErrors.New(
+			helpMessage := `Your commit message doesn't follow the conventional format.
+
+The correct format is:
+<type>[optional scope][optional !]: <description>
+
+Examples:
+- feat: add user authentication
+- fix(auth): resolve login timeout issue
+- docs: update installation instructions
+
+Common types:
+- feat: a new feature
+- fix: a bug fix
+- docs: documentation changes
+- style: formatting changes
+- refactor: code change that neither adds a feature nor fixes a bug
+- test: adding or correcting tests
+
+Please format your commit message according to the conventional commit specification.`
+
+			err := appErrors.CreateRichError(
 				rule.Name(),
 				appErrors.ErrInvalidFormat,
 				"Invalid conventional commit format",
-				appErrors.WithContextMap(map[string]string{
-					"subject": subject,
-					"word":    "(invalid format)",
-				}),
+				helpMessage,
+				ctx,
 			)
+
+			// Add context details
+			err = err.WithContext("subject", subject)
+			err = err.WithContext("word", "(invalid format)")
 
 			rule.BaseRule = rule.BaseRule.WithError(err)
 			rule.firstWord = "(invalid format)"
@@ -406,15 +564,37 @@ func validateFormat(rule *ImperativeVerbRule, subject string) bool {
 	}
 	// For non-conventional commits, check if it starts with a valid character
 	if !regexp.MustCompile(`^[a-zA-Z0-9]`).MatchString(strings.TrimSpace(subject)) {
-		err := appErrors.New(
+		// Create error context
+		ctx := appErrors.NewContext()
+		// We don't have the full commit here, but we can add the subject
+
+		helpMessage := `Your commit message doesn't start with a letter or number.
+
+A commit message should start with an imperative verb like:
+- Add
+- Fix
+- Update
+- Remove
+- Refactor
+
+Examples of good commit messages:
+- Add user authentication feature
+- Fix bug in payment processing
+- Update documentation with examples
+
+Please revise your commit message to start with an imperative verb.`
+
+		err := appErrors.CreateRichError(
 			rule.Name(),
 			appErrors.ErrInvalidFormat,
 			"Invalid commit message format",
-			appErrors.WithContextMap(map[string]string{
-				"subject": subject,
-				"word":    "(invalid format)",
-			}),
+			helpMessage,
+			ctx,
 		)
+
+		// Add context details
+		err = err.WithContext("subject", subject)
+		err = err.WithContext("word", "(invalid format)")
 
 		rule.BaseRule = rule.BaseRule.WithError(err)
 		rule.firstWord = "(invalid format)"
@@ -435,32 +615,79 @@ func validateFirstWord(rule ImperativeVerbRule, subject string) ([]appErrors.Val
 		// Map generic errors to specific error codes
 		var errCode appErrors.ValidationErrorCode
 
-		context := map[string]string{"subject": subject}
+		var helpMessage string
+
+		// Create error context with commit information
+		ctx := appErrors.NewContext()
 
 		if strings.Contains(err.Error(), "invalid conventional commit format") {
 			errCode = appErrors.ErrInvalidFormat
-			context["word"] = "(invalid format)"
 			updatedRule.firstWord = "(invalid format)"
+			helpMessage = `Your commit message doesn't follow the conventional format.
+
+The correct format is:
+<type>[optional scope][optional !]: <description>
+
+Examples:
+- feat: add user authentication
+- fix(auth): resolve login timeout issue
+- docs: update installation instructions
+
+Please format your commit message according to the conventional commit specification.`
 		} else if strings.Contains(err.Error(), "missing subject after type") {
 			errCode = appErrors.ErrMissingSubject
-			context["word"] = "(missing subject)"
 			updatedRule.firstWord = "(missing subject)"
+			helpMessage = `Your conventional commit is missing a description after the type and colon.
+
+A conventional commit must include a description that explains what changes were made.
+
+Correct format:
+<type>[optional scope][optional !]: <description>
+
+Examples:
+- feat: add user authentication
+- fix(auth): resolve login timeout issue
+- docs: update installation instructions
+
+Please add a clear description after the colon.`
 		} else if strings.Contains(err.Error(), "no valid first word found") {
 			errCode = appErrors.ErrNoFirstWord
-			context["word"] = "(no valid first word)"
 			updatedRule.firstWord = "(no valid first word)"
+			helpMessage = `Your commit message doesn't start with a valid word.
+
+A commit message should start with a letter or number, preferably an imperative verb.
+
+Examples of good commit messages:
+- Add user authentication feature
+- Fix bug in payment processing
+- Update documentation with examples
+
+Please start your commit message with an imperative verb.`
 		} else {
 			errCode = appErrors.ErrUnknown
-			context["word"] = "(validation error)"
 			updatedRule.firstWord = "(validation error)"
+			helpMessage = `There was an error validating your commit message.
+
+A commit message should:
+1. Begin with an imperative verb (e.g., "Add", "Fix", "Update")
+2. Follow conventional commit format if required
+3. Be concise but descriptive
+
+Please check your commit message format and try again.`
 		}
 
-		validationErr := appErrors.New(
+		// Create a rich error with detailed help
+		validationErr := appErrors.CreateRichError(
 			updatedRule.Name(),
 			errCode,
 			err.Error(),
-			appErrors.WithContextMap(context),
+			helpMessage,
+			ctx,
 		)
+
+		// Add additional context
+		validationErr = validationErr.WithContext("subject", subject)
+		validationErr = validationErr.WithContext("word", updatedRule.firstWord)
 
 		updatedRule.BaseRule = updatedRule.BaseRule.WithError(validationErr)
 
@@ -492,15 +719,44 @@ func validateIsImperative(rule ImperativeVerbRule, word string) ([]appErrors.Val
 	}
 
 	if nonImperativeStarters[wordLower] {
-		err := appErrors.New(
+		// Create error context with rich information
+		ctx := appErrors.NewContext()
+
+		// Detailed help message
+		helpMessage := `Non-Verb Error: The word "${word}" is not a verb.
+
+Git commit messages should start with an imperative verb. You used a non-verb word
+like an article, pronoun, preposition, or noun instead of an action verb.
+
+✅ CORRECT commit messages (start with verbs):
+- Add user authentication feature
+- Fix login timeout issue
+- Update documentation with examples
+- Remove deprecated API endpoints
+- Refactor database connection logic
+
+❌ INCORRECT commit messages (start with non-verbs):
+- The new login feature              (starts with article)
+- This commit fixes the bug          (starts with pronoun)
+- User authentication added          (starts with noun)
+- Documentation for API              (starts with noun)
+- Our implementation of feature      (starts with pronoun)
+
+WHY IMPERATIVE VERBS MATTER:
+Git itself uses imperative form in auto-generated commit messages.
+This creates a consistent, actionable commit history.`
+
+		err := appErrors.CreateRichError(
 			updatedRule.Name(),
 			appErrors.ErrNonVerb,
 			"first word of commit must be an imperative verb: \""+word+"\" is not a verb",
-			appErrors.WithContextMap(map[string]string{
-				"word": word,
-				"type": "non_verb",
-			}),
+			helpMessage,
+			ctx,
 		)
+
+		// Add additional context
+		err = err.WithContext("word", word)
+		err = err.WithContext("type", "non_verb")
 
 		updatedRule.BaseRule = updatedRule.BaseRule.WithError(err)
 		updatedRule.verbType = "non_verb"
@@ -518,15 +774,43 @@ func validateIsImperative(rule ImperativeVerbRule, word string) ([]appErrors.Val
 	// Check for specific non-imperative forms
 	// Past tense verbs often end in "ed" and their stem is different
 	if strings.HasSuffix(wordLower, "ed") && stem != wordLower && !isBaseFormWithEDEnding(updatedRule, wordLower) {
-		err := appErrors.New(
+		// Create error context with rich information
+		ctx := appErrors.NewContext()
+
+		// Detailed help message for past tense
+		helpMessage := `Past Tense Error: The word "${word}" is in past tense.
+
+Git commit messages should use the imperative mood (present tense), not past tense.
+You used a past tense verb like "Added", "Updated", or "Fixed".
+
+✅ CORRECT (imperative mood):       ❌ INCORRECT (past tense):
+- Add feature                       - Added feature
+- Fix bug                           - Fixed bug
+- Update documentation              - Updated documentation
+- Implement authentication          - Implemented authentication
+- Remove deprecated code            - Removed deprecated code
+
+WHY THIS MATTERS:
+Using imperative mood creates consistency across the commit history and
+follows Git's own conventions. It completes the sentence:
+"If applied, this commit will [your commit message]"
+
+HOW TO FIX:
+Convert your past tense verb to present imperative form:
+- "${word}" → "${stem}" or another present imperative form`
+
+		err := appErrors.CreateRichError(
 			updatedRule.Name(),
 			appErrors.ErrPastTense,
 			"first word of commit must be an imperative verb: \""+word+"\" appears to be past tense",
-			appErrors.WithContextMap(map[string]string{
-				"word": word,
-				"type": "past_tense",
-			}),
+			helpMessage,
+			ctx,
 		)
+
+		// Add additional context
+		err = err.WithContext("word", word)
+		err = err.WithContext("type", "past_tense")
+		err = err.WithContext("suggested_form", stem)
 
 		updatedRule.BaseRule = updatedRule.BaseRule.WithError(err)
 		updatedRule.verbType = "past_tense"
@@ -536,15 +820,55 @@ func validateIsImperative(rule ImperativeVerbRule, word string) ([]appErrors.Val
 
 	// Gerunds end in "ing"
 	if strings.HasSuffix(wordLower, "ing") && len(wordLower) > 4 {
-		err := appErrors.New(
+		// Create error context with rich information
+		ctx := appErrors.NewContext()
+
+		// Suggested base form (strip "ing" and optionally add "e" if needed)
+		suggestedForm := strings.TrimSuffix(wordLower, "ing")
+		// Handle special cases like "writing" -> "write" (not "writ")
+		if len(suggestedForm) > 2 && !strings.HasSuffix(suggestedForm, "e") &&
+			(suggestedForm[len(suggestedForm)-1] == 't' ||
+				suggestedForm[len(suggestedForm)-1] == 'v' ||
+				suggestedForm[len(suggestedForm)-1] == 'd') {
+			suggestedForm += "e"
+		}
+
+		// Detailed help message for gerund
+		helpMessage := `Gerund Error: The word "${word}" is a gerund (verb ending in "-ing").
+
+Git commit messages should use the imperative mood, not continuous/gerund forms.
+You used a gerund verb form like "Adding", "Fixing", or "Updating".
+
+✅ CORRECT (imperative mood):       ❌ INCORRECT (gerund form):
+- Add feature                       - Adding feature
+- Fix bug                           - Fixing bug
+- Update documentation              - Updating documentation
+- Implement authentication          - Implementing authentication
+- Remove deprecated code            - Removing deprecated code
+
+WHY THIS MATTERS:
+Using imperative mood creates consistency across the commit history and
+follows Git's own conventions. It completes the sentence:
+"If applied, this commit will [your commit message]"
+
+HOW TO FIX:
+Convert your gerund verb to present imperative form:
+- "${word}" → "${suggestedForm}" or another present imperative form
+
+Simply drop the "-ing" ending and use the base verb form.`
+
+		err := appErrors.CreateRichError(
 			updatedRule.Name(),
 			appErrors.ErrGerund,
 			"first word of commit must be an imperative verb: \""+word+"\" appears to be a gerund",
-			appErrors.WithContextMap(map[string]string{
-				"word": word,
-				"type": "gerund",
-			}),
+			helpMessage,
+			ctx,
 		)
+
+		// Add additional context
+		err = err.WithContext("word", word)
+		err = err.WithContext("type", "gerund")
+		err = err.WithContext("suggested_form", suggestedForm)
 
 		updatedRule.BaseRule = updatedRule.BaseRule.WithError(err)
 		updatedRule.verbType = "gerund"
@@ -554,15 +878,45 @@ func validateIsImperative(rule ImperativeVerbRule, word string) ([]appErrors.Val
 
 	// 3rd person singular typically ends in "s" and stem is different
 	if strings.HasSuffix(wordLower, "s") && stem != wordLower && !isBaseFormWithSEnding(updatedRule, wordLower) {
-		err := appErrors.New(
+		// Create error context with rich information
+		ctx := appErrors.NewContext()
+
+		// Detailed help message for third person
+		helpMessage := `Third Person Error: The word "${word}" is in third person form.
+
+Git commit messages should use the imperative mood, not third-person present tense.
+You used a third-person verb form like "Adds", "Fixes", or "Updates".
+
+✅ CORRECT (imperative mood):       ❌ INCORRECT (third person):
+- Add feature                       - Adds feature
+- Fix bug                           - Fixes bug
+- Update documentation              - Updates documentation
+- Implement authentication          - Implements authentication
+- Remove deprecated code            - Removes deprecated code
+
+WHY THIS MATTERS:
+Using imperative mood creates consistency across the commit history and
+follows Git's own conventions. It completes the sentence:
+"If applied, this commit will [your commit message]"
+
+HOW TO FIX:
+Convert your third-person verb to present imperative form:
+- "${word}" → "${stem}" or another present imperative form
+
+Simply drop the "-s" ending to get the imperative form.`
+
+		err := appErrors.CreateRichError(
 			updatedRule.Name(),
 			appErrors.ErrThirdPerson,
 			"first word of commit must be an imperative verb: \""+word+"\" appears to be 3rd person present",
-			appErrors.WithContextMap(map[string]string{
-				"word": word,
-				"type": "third_person",
-			}),
+			helpMessage,
+			ctx,
 		)
+
+		// Add additional context
+		err = err.WithContext("word", word)
+		err = err.WithContext("type", "third_person")
+		err = err.WithContext("suggested_form", stem)
 
 		updatedRule.BaseRule = updatedRule.BaseRule.WithError(err)
 		updatedRule.verbType = "third_person"

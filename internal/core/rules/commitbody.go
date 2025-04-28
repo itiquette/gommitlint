@@ -128,14 +128,57 @@ func validateWithState(rule CommitBodyRule, commit domain.CommitInfo) ([]appErro
 
 	// Check minimum structure
 	if len(lines) < 3 {
-		err := appErrors.New(
+		// Create error context with rich information
+		ctx := appErrors.NewContext().WithCommit(
+			commit.Hash,    // commit hash
+			commit.Message, // full commit message
+			commit.Subject, // subject line
+			commit.Body,    // body text
+		)
+
+		helpMessage := `Missing Body Error: Your commit requires a descriptive body.
+
+A proper commit message should include a subject line followed by a blank line and a detailed body 
+that explains the changes. The body provides important context about why the change was made 
+and any relevant details that reviewers should know.
+
+✅ CORRECT FORMAT:
+<subject line>
+<BLANK LINE>
+<detailed body text>
+
+Example of a good commit message:
+
+feat: add user authentication
+
+This commit implements user authentication with the following features:
+- Email/password login
+- Password reset functionality
+- Session management
+- Rate limiting for failed login attempts
+
+The implementation follows security best practices with password hashing
+and protection against common attacks.
+
+❌ INCORRECT FORMAT:
+<subject line only>
+
+WHY A BODY MATTERS:
+- Helps reviewers understand your changes
+- Documents your intentions for future reference
+- Makes the git history more useful for troubleshooting
+- Provides context that code alone cannot express`
+
+		err := appErrors.CreateRichError(
 			rule.Name(),
 			appErrors.ErrInvalidBody,
 			"commit requires a body, but only subject was provided",
-			appErrors.WithContextMap(map[string]string{
-				"lines": "1",
-			}),
+			helpMessage,
+			ctx,
 		)
+
+		// Add additional context
+		err = err.WithContext("lines", "1")
 
 		updatedRule = updatedRule.addError(err)
 
@@ -144,14 +187,51 @@ func validateWithState(rule CommitBodyRule, commit domain.CommitInfo) ([]appErro
 
 	// Check that the second line is empty (proper separation)
 	if len(lines) >= 2 && strings.TrimSpace(lines[1]) != "" {
-		err := appErrors.New(
+		// Create error context with rich information
+		ctx := appErrors.NewContext().WithCommit(
+			commit.Hash,    // commit hash
+			commit.Message, // full commit message
+			commit.Subject, // subject line
+			commit.Body,    // body text
+		)
+
+		helpMessage := `Missing Blank Line Error: Your commit is missing an empty line between the subject and body.
+
+Git commit messages must follow a specific format with a blank line separating the subject from 
+the body. This format allows tools to properly parse the commit and display it correctly in logs.
+
+✅ CORRECT FORMAT:
+<subject line>
+<BLANK LINE>
+<body text>
+
+Example:
+feat: add login functionality
+
+This commit adds a new login screen with email and password fields.
+The implementation includes validation and error handling.
+
+❌ INCORRECT FORMAT:
+feat: add login functionality
+This commit adds a new login screen with email and password fields.
+The implementation includes validation and error handling.
+
+WHY THIS MATTERS:
+- The blank line is required by Git's commit message format
+- Without it, tools may not correctly separate subject from body
+- The separation makes commit logs much more readable
+- Many Git tools specifically look for this format`
+
+		err := appErrors.CreateRichError(
 			rule.Name(),
 			appErrors.ErrInvalidBody,
 			"missing empty line between subject and body",
-			appErrors.WithContextMap(map[string]string{
-				"second_line": lines[1],
-			}),
+			helpMessage,
+			ctx,
 		)
+
+		// Add additional context
+		err = err.WithContext("second_line", lines[1])
 
 		updatedRule = updatedRule.addError(err)
 
@@ -163,14 +243,55 @@ func validateWithState(rule CommitBodyRule, commit domain.CommitInfo) ([]appErro
 
 	trimmedBody := strings.TrimSpace(strings.Join(bodyLines, "\n"))
 	if trimmedBody == "" {
-		err := appErrors.New(
+		// Create error context with rich information
+		ctx := appErrors.NewContext().WithCommit(
+			commit.Hash,    // commit hash
+			commit.Message, // full commit message
+			commit.Subject, // subject line
+			commit.Body,    // body text
+		)
+
+		helpMessage := `Empty Body Error: Your commit has a blank line after the subject but no actual body content.
+
+While you've correctly included a blank line after your subject, you haven't provided any descriptive
+text in the body. The body of a commit message should explain what changes were made and why.
+
+✅ CORRECT FORMAT:
+<subject line>
+<BLANK LINE>
+<non-empty body with meaningful content>
+
+Example:
+feat: add user profile page
+
+This commit implements the user profile page with the following features:
+- Display user information including name, email, and avatar
+- Account settings section with editable fields
+- Activity history with recent actions
+- Responsive design for mobile devices
+
+❌ INCORRECT FORMAT:
+feat: add user profile page
+
+[empty body or only whitespace]
+
+HOW TO FIX:
+Add descriptive text after the blank line explaining:
+- What changes you made in detail
+- Why you made these changes
+- Any relevant context or references
+- Implementation details that may not be obvious from the code`
+
+		err := appErrors.CreateRichError(
 			rule.Name(),
 			appErrors.ErrInvalidBody,
 			"commit has a blank line after subject but no non-empty body",
-			appErrors.WithContextMap(map[string]string{
-				"total_lines": "0",
-			}),
+			helpMessage,
+			ctx,
 		)
+
+		// Add additional context
+		err = err.WithContext("total_lines", "0")
 
 		updatedRule = updatedRule.addError(err)
 
@@ -180,14 +301,59 @@ func validateWithState(rule CommitBodyRule, commit domain.CommitInfo) ([]appErro
 	// If allowSignOffOnly is not enabled, check that body doesn't start with sign-off lines
 	firstBodyLine := strings.TrimSpace(bodyLines[0])
 	if !rule.allowSignOffOnly && isSignOffLine(firstBodyLine) {
-		err := appErrors.New(
+		// Create error context with rich information
+		ctx := appErrors.NewContext().WithCommit(
+			commit.Hash,    // commit hash
+			commit.Message, // full commit message
+			commit.Subject, // subject line
+			commit.Body,    // body text
+		)
+
+		helpMessage := `Sign-Off First Error: Your commit body starts with a sign-off line instead of meaningful content.
+
+Sign-off lines like "Signed-off-by:" should appear at the end of the commit message, after the
+descriptive body text. Starting the body with sign-off lines means you're missing actual content
+that explains what your changes do and why they were made.
+
+✅ CORRECT FORMAT:
+<subject line>
+<BLANK LINE>
+<descriptive content about the changes>
+<BLANK LINE>
+<sign-off lines>
+
+Example:
+feat: add user registration
+
+This commit implements a secure user registration flow with:
+- Email validation
+- Password strength requirements
+- CAPTCHA protection
+- Rate limiting to prevent abuse
+
+Signed-off-by: Developer Name <dev@example.com>
+
+❌ INCORRECT FORMAT:
+feat: add user registration
+
+Signed-off-by: Developer Name <dev@example.com>
+
+HOW TO FIX:
+1. Add descriptive content before any sign-off lines
+2. Explain what changes were made and why
+3. Place all sign-off information at the end of the message
+4. Separate sign-offs from content with a blank line`
+
+		err := appErrors.CreateRichError(
 			rule.Name(),
 			appErrors.ErrInvalidBody,
 			"body starts with a sign-off line instead of meaningful content",
-			appErrors.WithContextMap(map[string]string{
-				"first_line": firstBodyLine,
-			}),
+			helpMessage,
+			ctx,
 		)
+
+		// Add additional context
+		err = err.WithContext("first_line", firstBodyLine)
 
 		updatedRule = updatedRule.addError(err)
 
@@ -207,11 +373,58 @@ func validateWithState(rule CommitBodyRule, commit domain.CommitInfo) ([]appErro
 		}
 
 		if !hasContent {
-			err := appErrors.New(
+			// Create error context with rich information
+			ctx := appErrors.NewContext().WithCommit(
+				commit.Hash,    // commit hash
+				commit.Message, // full commit message
+				commit.Subject, // subject line
+				commit.Body,    // body text
+			)
+
+			helpMessage := `Sign-Off Only Error: Your commit body contains only sign-off lines without any meaningful content.
+
+A commit message body should explain what changes were made and why they were necessary.
+Sign-off lines are important for attribution and certification, but they don't replace descriptive content.
+
+✅ CORRECT FORMAT:
+<subject line>
+<BLANK LINE>
+<descriptive content about the changes>
+<BLANK LINE>
+<sign-off lines>
+
+Example:
+fix: resolve memory leak in background processor
+
+This commit fixes a memory leak that occurred when the background processor
+was handling large file uploads. The issue was caused by an unclosed resource
+that is now properly managed with try-with-resources pattern.
+
+The fix includes:
+- Proper resource cleanup in the FileProcessor class
+- Additional unit tests to verify memory usage
+- Logging improvements to help detect similar issues
+
+Signed-off-by: Developer Name <dev@example.com>
+
+❌ INCORRECT FORMAT:
+fix: resolve memory leak in background processor
+
+Signed-off-by: Developer Name <dev@example.com>
+Co-authored-by: Another Dev <another@example.com>
+
+HOW TO FIX:
+1. Add descriptive content explaining what you changed
+2. Explain why the change was necessary
+3. Include any relevant details about the implementation
+4. Keep the sign-offs at the end of the message`
+
+			err := appErrors.CreateRichError(
 				rule.Name(),
 				appErrors.ErrInvalidBody,
 				"body contains only sign-off lines without meaningful content",
-				nil,
+				helpMessage,
+				ctx,
 			)
 
 			updatedRule = updatedRule.addError(err)
@@ -277,6 +490,13 @@ func (r CommitBodyRule) Help() string {
 
 	errors := r.Errors()
 	if len(errors) > 0 {
+		// Get help text from the enhanced error
+		helpText := errors[0].GetHelp()
+		if helpText != "" {
+			return helpText
+		}
+
+		// If the enhanced help is not available, fall back to the old help system
 		msg := errors[0].Message
 
 		// Provide specific help based on the error message

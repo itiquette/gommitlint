@@ -6,6 +6,7 @@ package rules
 
 import (
 	"errors"
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -192,8 +193,69 @@ func ValidateWithState(rule SubjectCaseRule, commit domain.CommitInfo) ([]appErr
 
 	// Check for empty message first
 	if subject == "" {
+		// Create error context with rich information
+		errorCtx := appErrors.NewContext()
+
+		// Determine example subject based on rule configuration
+		var exampleSubject string
+
+		if rule.isConventional {
+			var firstWord string
+			if rule.caseChoice == "upper" {
+				firstWord = "Add"
+			} else {
+				firstWord = "add"
+			}
+
+			exampleSubject = fmt.Sprintf("feat: %s a descriptive subject", firstWord)
+		} else {
+			var firstWord string
+			if rule.caseChoice == "upper" {
+				firstWord = "Add"
+			} else {
+				firstWord = "add"
+			}
+
+			exampleSubject = firstWord + " a descriptive subject"
+		}
+
+		helpMessage := fmt.Sprintf(`Empty Subject Error: Cannot validate case on an empty subject.
+
+Your commit has an empty subject line, so case validation cannot be performed.
+
+✅ CORRECT FORMAT:
+- A commit message should start with a subject line:
+  %s
+  
+  This is a descriptive body that explains the change in detail.
+  It can span multiple lines.
+
+❌ INCORRECT FORMAT:
+- Your commit has an empty subject line
+
+WHY THIS MATTERS:
+- The subject line is the most visible part of a commit message
+- It provides a concise summary of changes that appears in logs
+- Without a subject, it's difficult to identify the purpose of the commit
+
+NEXT STEPS:
+1. Add a meaningful subject line to your commit
+   - Use 'git commit --amend' to edit your most recent commit
+   - Follow your project's capitalization conventions (%scase first letter)
+   
+2. If using conventional commits, remember the format:
+   type(scope): subject`,
+			exampleSubject,
+			rule.caseChoice)
+
 		// Create the error
-		err := appErrors.New(rule.Name(), appErrors.ErrEmptyDescription, "subject is empty")
+		err := appErrors.CreateRichError(
+			rule.Name(),
+			appErrors.ErrEmptyDescription,
+			"subject is empty",
+			helpMessage,
+			errorCtx,
+		)
 		errors = append(errors, err)
 
 		// Return with updated rule (using value semantics)
@@ -221,8 +283,140 @@ func ValidateWithState(rule SubjectCaseRule, commit domain.CommitInfo) ([]appErr
 			"is_conventional": strconv.FormatBool(rule.isConventional),
 		}
 
+		// Create error context with rich information
+		errorCtx := appErrors.NewContext()
+
+		var helpMessage string
+
+		if rule.isConventional && strings.Contains(err.Error(), "conventional commit format") {
+			helpMessage = fmt.Sprintf(`Invalid Format Error: The commit message does not follow conventional format.
+
+Your commit message does not follow the conventional commit format required by this project.
+
+✅ CORRECT FORMAT:
+- Conventional commit format follows this pattern:
+  type(optional scope): description
+  
+  Examples:
+  feat: add new user registration
+  fix(auth): resolve login timeout issue
+  docs(readme): update installation instructions
+
+❌ INCORRECT FORMAT:
+- Your message: "%s"
+- This doesn't match the expected pattern
+
+WHY THIS MATTERS:
+- Conventional commits provide a structured commit history
+- They enable automated tools to generate changelogs
+- They make it easier to understand the purpose of each commit
+
+NEXT STEPS:
+1. Rewrite your commit message following the conventional format:
+   - Choose a type (feat, fix, docs, style, refactor, perf, test, etc.)
+   - Add optional scope in parentheses if relevant
+   - Add description after the colon and space
+   
+2. Use 'git commit --amend' to edit your most recent commit
+   
+3. Remember to apply the correct case (%scase) to the first letter of your description`,
+				subject,
+				rule.caseChoice)
+		} else if strings.Contains(err.Error(), "missing subject") {
+			helpMessage = fmt.Sprintf(`Missing Subject Error: No subject after conventional prefix.
+
+Your commit has a conventional prefix but is missing the subject description.
+
+✅ CORRECT FORMAT:
+- Conventional commit format needs a description after the prefix:
+  type(optional scope): description
+  
+  Examples:
+  feat: add new user registration
+  fix(auth): resolve login timeout issue
+
+❌ INCORRECT FORMAT:
+- Your message just has the prefix without a description: "%s"
+
+WHY THIS MATTERS:
+- The subject description explains what the commit does
+- Without a subject, the commit's purpose is unclear
+- Complete conventional commits follow a specific format
+
+NEXT STEPS:
+1. Add a descriptive subject after the conventional prefix:
+   - Make it concise but informative
+   - Start with a %scase letter as required by your project
+   
+2. Use 'git commit --amend' to edit your most recent commit`,
+				subject,
+				rule.caseChoice)
+		} else {
+			// Determine example format based on rule configuration
+			var exampleFormat string
+
+			if rule.isConventional {
+				var firstWord string
+				if rule.caseChoice == "upper" {
+					firstWord = "Add"
+				} else {
+					firstWord = "add"
+				}
+
+				exampleFormat = fmt.Sprintf("feat: %s a descriptive subject", firstWord)
+			} else {
+				var firstWord string
+				if rule.caseChoice == "upper" {
+					firstWord = "Add"
+				} else {
+					firstWord = "add"
+				}
+
+				exampleFormat = firstWord + " a descriptive subject"
+			}
+
+			helpMessage = fmt.Sprintf(`Invalid Format Error: Cannot determine the first word to check case.
+
+Your commit message has a format issue that prevents case validation.
+
+✅ CORRECT FORMAT:
+- Commit messages should start with a word that can be checked for case:
+  %s
+  
+❌ INCORRECT FORMAT:
+- Your message: "%s"
+- No valid first word could be found for case checking
+
+WHY THIS MATTERS:
+- Clear, well-formatted commit messages are important for project history
+- Following consistent formatting makes the repository more professional
+- Case conventions help with readability and consistency
+
+NEXT STEPS:
+1. Ensure your commit message starts with a valid word
+   - Start with a letter (not a symbol, number, or whitespace)
+   - Follow your project's case conventions (%scase)
+   
+2. Use 'git commit --amend' to edit your most recent commit`,
+				exampleFormat,
+				subject,
+				rule.caseChoice)
+		}
+
 		// Create the error
-		validationErr := appErrors.New(rule.Name(), errorCode, err.Error(), appErrors.WithContextMap(context))
+		validationErr := appErrors.CreateRichError(
+			rule.Name(),
+			errorCode,
+			err.Error(),
+			helpMessage,
+			errorCtx,
+		)
+
+		// Store context for backward compatibility
+		for k, v := range context {
+			validationErr = validationErr.WithContext(k, v)
+		}
+
 		errors = append(errors, validationErr)
 
 		// Update rule state using value semantics
@@ -276,18 +470,119 @@ func ValidateWithState(rule SubjectCaseRule, commit domain.CommitInfo) ([]appErr
 	}
 
 	if !valid {
+		// Create error context with rich information
+		errorCtx := appErrors.NewContext()
+		actualCase := map[bool]string{true: "upper", false: "lower"}[unicode.IsUpper(first)]
+
+		// Create correct example
+		var correctExample, incorrectExample string
+
+		if rule.isConventional {
+			if rule.caseChoice == "upper" {
+				correctExample = "feat: Add new feature"
+				incorrectExample = "feat: add new feature"
+			} else {
+				correctExample = "feat: add new feature"
+				incorrectExample = "feat: Add new feature"
+			}
+		} else {
+			if rule.caseChoice == "upper" {
+				correctExample = "Add new feature"
+				incorrectExample = "add new feature"
+			} else {
+				correctExample = "add new feature"
+				incorrectExample = "Add new feature"
+			}
+		}
+
+		// Determine correct and incorrect first letter description
+		var correctCaseDescription, incorrectCaseDescription string
+		if rule.caseChoice == "upper" {
+			correctCaseDescription = "First letter should be capitalized:"
+			incorrectCaseDescription = "First letter should NOT be lowercase:"
+		} else {
+			correctCaseDescription = "First letter should be lowercase:"
+			incorrectCaseDescription = "First letter should NOT be uppercase:"
+		}
+
+		// Determine action verb
+		var actionVerb string
+		if rule.caseChoice == "upper" {
+			actionVerb = "capitalize"
+		} else {
+			actionVerb = "use lowercase for"
+		}
+
+		// Create correction example
+		var suggestionExample string
+
+		if rule.caseChoice == "upper" {
+			upperFirst := strings.ToUpper(string(first))
+			suggestionExample = fmt.Sprintf("Instead of: \"%s\", use: \"%s%s\"", firstWord, upperFirst, firstWord[1:])
+		} else {
+			lowerFirst := strings.ToLower(string(first))
+			suggestionExample = fmt.Sprintf("Instead of: \"%s\", use: \"%s%s\"", firstWord, lowerFirst, firstWord[1:])
+		}
+
+		// Create example
+		var caseExample string
+		if rule.caseChoice == "upper" {
+			caseExample = "Example: \"Add\" not \"add\""
+		} else {
+			caseExample = "Example: \"add\" not \"Add\""
+		}
+
+		helpMessage := fmt.Sprintf(`Subject Case Error: First word should start with %scase.
+
+Your commit subject's first word "%s" does not use the required capitalization.
+
+✅ CORRECT FORMAT:
+- %s
+  %s
+
+❌ INCORRECT FORMAT:
+- %s
+  %s
+
+WHY THIS MATTERS:
+- Consistent capitalization improves readability of commit history
+- It helps maintain a professional and organized project history
+- It follows project conventions for commit message style
+
+NEXT STEPS:
+1. Edit your commit message to %s the first letter of the subject
+   %s
+   
+2. If using conventional commits, remember the format is:
+   type(scope): subject  <-- apply case rules to first word of subject
+
+3. For single-word commits, pay extra attention to the first letter
+   %s`,
+			rule.caseChoice,
+			firstWord,
+			correctCaseDescription,
+			correctExample,
+			incorrectCaseDescription,
+			incorrectExample,
+			actionVerb,
+			suggestionExample,
+			caseExample)
+
 		// Create the error
-		validationErr := appErrors.New(
+		validationErr := appErrors.CreateRichError(
 			rule.Name(),
 			errorCode,
 			"commit subject case is not "+rule.caseChoice,
-			appErrors.WithContextMap(map[string]string{
-				"expected_case": rule.caseChoice,
-				"actual_case":   map[bool]string{true: "upper", false: "lower"}[unicode.IsUpper(first)],
-				"first_word":    firstWord,
-				"subject":       subject,
-			}),
+			helpMessage,
+			errorCtx,
 		)
+
+		// Store context for backward compatibility
+		validationErr = validationErr.WithContext("expected_case", rule.caseChoice)
+		validationErr = validationErr.WithContext("actual_case", actualCase)
+		validationErr = validationErr.WithContext("first_word", firstWord)
+		validationErr = validationErr.WithContext("subject", subject)
+
 		errors = append(errors, validationErr)
 	}
 

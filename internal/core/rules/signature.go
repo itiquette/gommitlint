@@ -107,11 +107,48 @@ func validateSignatureWithState(rule SignatureRule, commit domain.CommitInfo) ([
 	if signature == "" {
 		// If signature is required, add error
 		if rule.requireSignature {
-			err := appErrors.New(
+			// Create error context with rich information
+			errorCtx := appErrors.NewContext()
+
+			helpMessage := `Missing Signature Error: Your commit lacks a cryptographic signature.
+
+Git commit signatures provide cryptographic verification of commit authorship.
+Without a signature, there's no way to verify that you are the actual author of the commit.
+
+✅ RECOMMENDED ACTIONS:
+
+1. Set up GPG signing (most common):
+   git config --global user.signingkey YOUR_GPG_KEY_ID
+   git config --global commit.gpgsign true
+   
+   # If you don't have a GPG key yet:
+   gpg --gen-key
+   gpg --list-secret-keys --keyid-format LONG
+
+2. Alternatively, set up SSH signing (Git 2.34+):
+   git config --global gpg.format ssh
+   git config --global user.signingkey ~/.ssh/id_ed25519.pub
+   git config --global commit.gpgsign true
+
+3. Sign an individual commit:
+   git commit -S -m "Your commit message"
+
+WHY THIS MATTERS:
+- Signatures verify the authenticity of commits
+- They prevent identity spoofing in repositories
+- They're often required in security-critical projects
+- They establish a trusted chain of code provenance
+
+For more information, visit: https://git-scm.com/book/en/v2/Git-Tools-Signing-Your-Work`
+
+			err := appErrors.CreateRichError(
 				rule.Name(),
 				appErrors.ErrMissingSignature,
 				"commit does not have a SSH/GPG signature",
+				helpMessage,
+				errorCtx,
 			)
+
 			errors = append(errors, err)
 			rule = rule.setErrors(errors)
 
@@ -128,16 +165,51 @@ func validateSignatureWithState(rule SignatureRule, commit domain.CommitInfo) ([
 	if strings.HasPrefix(signature, "-----BEGIN PGP SIGNATURE-----") {
 		// Verify if GPG signatures are allowed
 		if !rule.isSignatureTypeAllowed("gpg") {
-			context := map[string]string{
-				"signature_type": "gpg",
-				"allowed_types":  strings.Join(rule.allowedSigTypes, ", "),
-			}
+			// Create error context with rich information
+			errorCtx := appErrors.NewContext()
 
-			rule = rule.addErrorWithContext(
+			allowedTypes := strings.Join(rule.allowedSigTypes, ", ")
+
+			helpMessage := fmt.Sprintf(`Disallowed Signature Type Error: GPG signatures are not allowed.
+
+Your commit uses a GPG signature, but the current configuration only allows the following signature types:
+%s
+
+✅ RECOMMENDED ACTIONS:
+
+1. Use an allowed signature type:
+   %s
+
+2. For SSH signing (if allowed):
+   git config --global gpg.format ssh
+   git config --global user.signingkey ~/.ssh/id_ed25519.pub
+   git config --global commit.gpgsign true
+
+3. Configure your project to accept GPG signatures:
+   - Review your project's commit signing policy
+   - Update the configuration to include "gpg" in allowed signature types
+
+WHY THIS MATTERS:
+- Projects may restrict signature types for security standardization
+- Different signature formats have different security properties
+- Using a consistent signature type simplifies verification
+- Some environments may only support specific verification methods`,
+				allowedTypes, allowedTypes)
+
+			err := appErrors.CreateRichError(
+				rule.Name(),
 				appErrors.ErrDisallowedSigType,
 				"GPG signatures are not allowed with current configuration",
-				context,
+				helpMessage,
+				errorCtx,
 			)
+
+			// Add additional context after creating the error
+			err = err.WithContext("signature_type", "gpg")
+			err = err.WithContext("allowed_types", allowedTypes)
+
+			errors = append(errors, err)
+			rule = rule.setErrors(errors)
 
 			return rule.Errors(), rule
 		}
@@ -217,16 +289,54 @@ func validateSignatureWithState(rule SignatureRule, commit domain.CommitInfo) ([
 	if strings.HasPrefix(signature, "-----BEGIN SSH SIGNATURE-----") {
 		// Verify if SSH signatures are allowed
 		if !rule.isSignatureTypeAllowed("ssh") {
-			context := map[string]string{
-				"signature_type": "ssh",
-				"allowed_types":  strings.Join(rule.allowedSigTypes, ", "),
-			}
+			// Create error context with rich information
+			errorCtx := appErrors.NewContext()
 
-			rule = rule.addErrorWithContext(
+			allowedTypes := strings.Join(rule.allowedSigTypes, ", ")
+
+			helpMessage := fmt.Sprintf(`Disallowed Signature Type Error: SSH signatures are not allowed.
+
+Your commit uses an SSH signature, but the current configuration only allows the following signature types:
+%s
+
+✅ RECOMMENDED ACTIONS:
+
+1. Use an allowed signature type:
+   %s
+
+2. For GPG signing (if allowed):
+   git config --global user.signingkey YOUR_GPG_KEY_ID
+   git config --global commit.gpgsign true
+   
+   # If you don't have a GPG key yet:
+   gpg --gen-key
+   gpg --list-secret-keys --keyid-format LONG
+
+3. Configure your project to accept SSH signatures:
+   - Review your project's commit signing policy
+   - Update the configuration to include "ssh" in allowed signature types
+
+WHY THIS MATTERS:
+- Projects may restrict signature types for security standardization
+- Different signature formats have different security properties
+- Using a consistent signature type simplifies verification
+- Some environments may only support specific verification methods`,
+				allowedTypes, allowedTypes)
+
+			err := appErrors.CreateRichError(
+				rule.Name(),
 				appErrors.ErrDisallowedSigType,
 				"SSH signatures are not allowed with current configuration",
-				context,
+				helpMessage,
+				errorCtx,
 			)
+
+			// Add additional context after creating the error
+			err = err.WithContext("signature_type", "ssh")
+			err = err.WithContext("allowed_types", allowedTypes)
+
+			errors = append(errors, err)
+			rule = rule.setErrors(errors)
 
 			return rule.Errors(), rule
 		}
@@ -260,15 +370,52 @@ func validateSignatureWithState(rule SignatureRule, commit domain.CommitInfo) ([
 	}
 
 	// Not a recognized signature format
-	context := map[string]string{
-		"signature_prefix": signature[:signatureSafeMin(len(signature), 20)], // Just capture the first bit for context
-	}
+	// Create error context with rich information
+	errorCtx := appErrors.NewContext()
+	sigPrefix := signature[:signatureSafeMin(len(signature), 20)]
 
-	rule = rule.addErrorWithContext(
+	helpMessage := fmt.Sprintf(`Unknown Signature Format Error: Your commit signature format is not recognized.
+
+Your commit has a signature that doesn't match either GPG or SSH signature formats.
+The signature begins with: "%s"
+
+✅ RECOMMENDED ACTIONS:
+
+1. Use a standard GPG signature:
+   git config --global user.signingkey YOUR_GPG_KEY_ID
+   git config --global commit.gpgsign true
+   git commit -S -m "Your message"
+
+2. Or use SSH signing (Git 2.34+):
+   git config --global gpg.format ssh
+   git config --global user.signingkey ~/.ssh/id_ed25519.pub
+   git config --global commit.gpgsign true
+   git commit -S -m "Your message"
+
+3. Check for signature corruption:
+   - Verify your Git version supports the signature format you're using
+   - If you're using a custom signing tool, ensure it produces standard formats
+   - Consider re-signing the commit with standard tools
+
+WHY THIS MATTERS:
+- Only standardized signature formats can be verified by Git and other tools
+- Non-standard formats won't provide the security benefits of signing
+- Git only supports GPG and SSH signatures natively`,
+		sigPrefix)
+
+	err := appErrors.CreateRichError(
+		rule.Name(),
 		appErrors.ErrUnknownSigFormat,
 		"unrecognized signature format (must be GPG or SSH)",
-		context,
+		helpMessage,
+		errorCtx,
 	)
+
+	// Add additional context after creating the error
+	err = err.WithContext("signature_prefix", sigPrefix)
+
+	errors = append(errors, err)
+	rule = rule.setErrors(errors)
 
 	return rule.Errors(), rule
 }
