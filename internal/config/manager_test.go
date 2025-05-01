@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNew(t *testing.T) {
+func TestNewManager(t *testing.T) {
 	// Create a temporary directory for config files
 	tmpDir, err := os.MkdirTemp("", "gommitlint-test")
 	require.NoError(t, err)
@@ -43,7 +43,7 @@ body:
 	}()
 
 	// Create a new manager
-	manager, err := New()
+	manager, err := NewManager()
 	require.NoError(t, err)
 
 	// Check that config was loaded
@@ -73,7 +73,7 @@ body:
 	require.NoError(t, err)
 
 	// Create a new manager
-	manager, err := New()
+	manager, err := NewManager()
 	require.NoError(t, err)
 
 	// Load from the file
@@ -114,7 +114,7 @@ func TestLoadNestedConfig(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a new manager
-	manager, err := New()
+	manager, err := NewManager()
 	require.NoError(t, err)
 
 	// Load from the file
@@ -129,32 +129,34 @@ func TestLoadNestedConfig(t *testing.T) {
 	require.NotNil(t, config)
 }
 
-func TestUpdateConfig(t *testing.T) {
+func TestSetConfig(t *testing.T) {
 	// Create a new manager
-	manager, err := New()
+	manager, err := NewManager()
 	require.NoError(t, err)
 
 	// Get initial config
 	initialConfig := manager.GetConfig()
 	require.Equal(t, 100, initialConfig.Subject.MaxLength)
 
-	// Update config
-	manager.UpdateConfig(
-		WithSubjectMaxLength(60),
-		WithBodyRequired(true),
-		WithConventionalRequired(false),
-	)
+	// Update config using the Config methods
+	updatedConfig := initialConfig.
+		WithSubjectMaxLength(60).
+		WithBodyRequired(true).
+		WithConventionalRequired(false)
+
+	// Set the updated config
+	manager.SetConfig(updatedConfig)
 
 	// Check that config was updated
-	updatedConfig := manager.GetConfig()
-	require.Equal(t, 60, updatedConfig.Subject.MaxLength)
-	require.True(t, updatedConfig.Body.Required)
-	require.False(t, updatedConfig.Conventional.Required)
+	finalConfig := manager.GetConfig()
+	require.Equal(t, 60, finalConfig.Subject.MaxLength)
+	require.True(t, finalConfig.Body.Required)
+	require.False(t, finalConfig.Conventional.Required)
 }
 
-func TestSetConfig(t *testing.T) {
+func TestCreateCustomConfig(t *testing.T) {
 	// Create a new manager
-	manager, err := New()
+	manager, err := NewManager()
 	require.NoError(t, err)
 
 	// Create a custom config
@@ -180,15 +182,17 @@ func TestSetConfig(t *testing.T) {
 
 func TestGetValidationConfig(t *testing.T) {
 	// Create a new manager
-	manager, err := New()
+	manager, err := NewManager()
 	require.NoError(t, err)
 
 	// Update config with non-default values
-	manager.UpdateConfig(
-		WithSubjectMaxLength(60),
-		WithBodyRequired(true),
-		WithConventionalRequired(false),
-	)
+	updatedConfig := manager.GetConfig().
+		WithSubjectMaxLength(60).
+		WithBodyRequired(true).
+		WithConventionalRequired(false)
+
+	// Set the updated config
+	manager.SetConfig(updatedConfig)
 
 	// Get validation config
 	validationConfig := manager.GetValidationConfig()

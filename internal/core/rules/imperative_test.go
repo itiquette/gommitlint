@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
@@ -165,7 +166,13 @@ func TestImperativeVerbRule(t *testing.T) {
 			}
 
 			// Create rule
-			rule := rules.NewImperativeVerbRule(testCase.isConventional)
+			// Create rule with imperative required and the conventional setting
+			var options []rules.ImperativeVerbOption
+			if testCase.isConventional {
+				options = append(options, rules.WithImperativeConventionalCommit(true))
+			}
+
+			rule := rules.NewImperativeVerbRule(true, options...)
 
 			// Validate and get errors
 			errors := rule.Validate(commitInfo)
@@ -230,7 +237,7 @@ func TestImperativeVerbRuleOptions(t *testing.T) {
 	t.Run("Custom non-imperative starters", func(t *testing.T) {
 		// Create a custom rule with non-imperative starters
 		customWords := map[string]bool{"commit": true}
-		rule := rules.NewImperativeVerbRule(false,
+		rule := rules.NewImperativeVerbRule(true,
 			rules.WithCustomNonImperativeStarters(customWords))
 
 		// Test with a message that would normally be valid
@@ -245,7 +252,7 @@ func TestImperativeVerbRuleOptions(t *testing.T) {
 	t.Run("Custom base forms with ED", func(t *testing.T) {
 		// Add a custom word ending in 'ed' that should be considered valid
 		customEdForms := map[string]bool{"crated": true}
-		rule := rules.NewImperativeVerbRule(false,
+		rule := rules.NewImperativeVerbRule(true,
 			rules.WithAdditionalBaseFormsEndingWithED(customEdForms))
 
 		// Test with custom word
@@ -256,7 +263,7 @@ func TestImperativeVerbRuleOptions(t *testing.T) {
 		require.Empty(t, errors, "Should accept custom ED form")
 
 		// Test default behavior for comparison
-		defaultRule := rules.NewImperativeVerbRule(false)
+		defaultRule := rules.NewImperativeVerbRule(true)
 		defaultErrors := defaultRule.Validate(commit)
 		require.NotEmpty(t, defaultErrors, "Default should reject 'crated'")
 	})
@@ -264,6 +271,7 @@ func TestImperativeVerbRuleOptions(t *testing.T) {
 	t.Run("Multiple options combined", func(t *testing.T) {
 		// Combine multiple options
 		rule := rules.NewImperativeVerbRule(true,
+			rules.WithImperativeConventionalCommit(true),
 			rules.WithCustomNonImperativeStarters(map[string]bool{"execute": true}),
 			rules.WithAdditionalBaseFormsEndingWithS(map[string]bool{"canvas": true}))
 
@@ -296,7 +304,7 @@ func TestDifficultVerbCases(t *testing.T) {
 
 	for _, message := range validCases {
 		t.Run("Valid: "+message, func(t *testing.T) {
-			rule := rules.NewImperativeVerbRule(false)
+			rule := rules.NewImperativeVerbRule(true)
 			commit := domain.CommitInfo{Subject: message}
 			errors := rule.Validate(commit)
 			require.Empty(t, errors, "Should accept valid imperative verb: "+message)
@@ -312,10 +320,97 @@ func TestDifficultVerbCases(t *testing.T) {
 
 	for _, message := range invalidCases {
 		t.Run("Invalid: "+message, func(t *testing.T) {
-			rule := rules.NewImperativeVerbRule(false)
+			rule := rules.NewImperativeVerbRule(true)
 			commit := domain.CommitInfo{Subject: message}
 			errors := rule.Validate(commit)
 			require.NotEmpty(t, errors, "Should reject non-imperative form: "+message)
+		})
+	}
+}
+
+// TestImperativeVerbRuleWithConfig tests the rule with unified configuration.
+func TestImperativeVerbRuleWithConfig(t *testing.T) {
+	tests := []struct {
+		name         string
+		configureFn  func(config.Config) config.Config
+		subject      string
+		expectErrors bool
+	}{
+		{
+			name: "With conventional required and valid conventional commit",
+			configureFn: func(cfg config.Config) config.Config {
+				return cfg.WithConventionalRequired(true)
+			},
+			subject:      "feat: Add new feature",
+			expectErrors: false,
+		},
+		{
+			name: "With conventional required and invalid subject",
+			configureFn: func(cfg config.Config) config.Config {
+				return cfg.WithConventionalRequired(true)
+			},
+			subject:      "feat: Added new feature",
+			expectErrors: true,
+		},
+		{
+			name: "With conventional not required and valid subject",
+			configureFn: func(cfg config.Config) config.Config {
+				return cfg.WithConventionalRequired(false)
+			},
+			subject:      "Add new feature",
+			expectErrors: false,
+		},
+		{
+			name: "With imperative not required",
+			configureFn: func(cfg config.Config) config.Config {
+				return cfg.WithSubjectImperative(false)
+			},
+			subject:      "Added new feature", // Would normally fail
+			expectErrors: false,               // But passes because imperative is not required
+		},
+		{
+			name: "With both conventional and imperative required",
+			configureFn: func(cfg config.Config) config.Config {
+				return cfg.WithConventionalRequired(true).WithSubjectImperative(true)
+			},
+			subject:      "feat: Add new feature",
+			expectErrors: false,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			// Create unified config with specified options
+			unifiedConfig := testCase.configureFn(config.NewConfig())
+
+			// Create rule with unified config
+			// Create rule with options
+			isConventional := unifiedConfig.ConventionalRequired()
+			options := []rules.ImperativeVerbOption{}
+
+			if isConventional {
+				options = append(options, rules.WithImperativeConventionalCommit(true))
+			}
+
+			rule := rules.NewImperativeVerbRule(
+				unifiedConfig.SubjectRequireImperative(),
+				options...)
+
+			// Create a test commit
+			commit := domain.CommitInfo{
+				Hash:    "abc123",
+				Subject: testCase.subject,
+				Message: testCase.subject,
+			}
+
+			// Validate the commit
+			errors := rule.Validate(commit)
+
+			if testCase.expectErrors {
+				require.NotEmpty(t, errors, "Expected validation errors but got none")
+			} else {
+				require.Empty(t, errors, "Expected no validation errors but got: %v", errors)
+			}
 		})
 	}
 }

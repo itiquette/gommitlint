@@ -64,7 +64,7 @@ func getCurrentFilePath() string {
 
 func TestCLIValidateCommand(t *testing.T) {
 	// Skip if running in CI environment without git
-	if os.Getenv("CI") == "true" && !isGitAvailable() {
+	if os.Getenv("CI") == "true" && !IsGitAvailable() {
 		t.Skip("Skipping integration test in CI environment without git")
 	}
 
@@ -84,31 +84,31 @@ func TestCLIValidateCommand(t *testing.T) {
 	}{
 		{
 			name:          "Validate HEAD - valid commit format",
-			commitMessage: "feat: add new feature with proper format",
+			commitMessage: "feat: add new feature with proper format\n\nThis is a detailed description of the feature.\nIt spans multiple lines to ensure we have proper body content.\n\nSigned-off-by: Test User <test@example.com>",
 			args:          []string{"validate"},
-			shouldPass:    false, // Fails because SignOff rule is enabled by default
+			shouldPass:    true, // Should pass with signoff added
 			config: `
 gommitlint:
-  validation:
-    enabled: true
   subject:
     max_length: 50
-  conventional:
-    enabled: true
+  conventional-commit:
     required: true
     types:
       - feat
       - fix
       - docs
+  body:
+    required: false
+    allow_sign_off_only: true
   security:
     signature_required: false
-    signoff_required: false
+    signoff_required: true
   rules:
     enabled:
       - SubjectLength
       - ConventionalCommit
-    disabled:
       - SignOff
+    disabled:
       - Signature
       - CommitBody
       - JiraReference
@@ -126,10 +126,7 @@ gommitlint:
 			shouldPass:    false,
 			config: `
 gommitlint:
-  validation:
-    enabled: true
-  conventional:
-    enabled: true
+  conventional-commit:
     required: true
     types:
       - feat
@@ -156,28 +153,28 @@ gommitlint:
 		},
 		{
 			name:          "Validate with custom config - valid commit",
-			commitMessage: "custom: special type",
+			commitMessage: "custom: special type\n\nThis is a commit with a custom type.\n\nSigned-off-by: Test User <test@example.com>",
 			args:          []string{"validate"},
-			shouldPass:    false, // Now expecting to fail since "custom" isn't in default allowed types
+			shouldPass:    true, // Should pass with 'custom' in allowed types
 			config: `
 gommitlint:
-  validation:
-    enabled: true
-  conventional:
-    enabled: true
+  conventional-commit:
     required: true
     types:
       - custom
       - feat
       - fix
+  body:
+    required: false
+    allow_sign_off_only: true
   security:
     signature_required: false
-    signoff_required: false
+    signoff_required: true
   rules:
     enabled:
       - ConventionalCommit
-    disabled:
       - SignOff
+    disabled:
       - Signature
       - CommitBody
       - JiraReference
@@ -196,10 +193,7 @@ gommitlint:
 			shouldPass:    false,
 			config: `
 gommitlint:
-  validation:
-    enabled: true
-  conventional:
-    enabled: true
+  conventional-commit:
     required: true
   rules:
     enabled:
@@ -229,7 +223,7 @@ gommitlint:
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			// Setup test repository
-			repoPath, cleanup := setupTestRepository(t, testCase.commitMessage)
+			repoPath, cleanup := SetupTestRepository(t, testCase.commitMessage)
 			defer cleanup()
 
 			// Create config file in the repository

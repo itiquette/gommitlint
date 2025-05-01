@@ -18,10 +18,10 @@ import (
 	"github.com/itiquette/gommitlint/internal/domain"
 )
 
-// setupTestRepository creates a temporary Git repository for testing.
+// SetupTestRepository creates a temporary Git repository for testing.
 // It initializes a git repository with a commit containing the given message.
 // Returns the repository path and a cleanup function.
-func setupTestRepository(t *testing.T, commitMessage string) (string, func()) {
+func SetupTestRepository(t *testing.T, commitMessage string) (string, func()) {
 	t.Helper()
 
 	// Create a temporary directory
@@ -69,8 +69,8 @@ func runGitCommand(dir string, args ...string) error {
 // execCommand is used to allow mocking in tests.
 var execCommand = exec.Command
 
-// isGitAvailable checks if git is available on the system.
-func isGitAvailable() bool {
+// IsGitAvailable checks if git is available on the system.
+func IsGitAvailable() bool {
 	cmd := exec.Command("git", "--version")
 
 	return cmd.Run() == nil
@@ -82,7 +82,7 @@ func createTestConfigManager(t *testing.T, configPath string) *config.Manager {
 	t.Helper()
 
 	// Create manager with defaults
-	manager, err := config.New()
+	manager, err := config.NewManager()
 	require.NoError(t, err)
 
 	// Reset config to explicitly load only our test config

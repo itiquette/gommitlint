@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
@@ -262,4 +263,153 @@ FxlS+hzWnbOPMrRKuSfJ+H8mF6t1V3qUYtxHNQvHtcCvG0gx4auPSoxp7qVCVQ==
 		require.Equal(t, string(appErrors.ErrInvalidGPGFormat), errors[0].Code)
 		require.Equal(t, "gpg", errors[0].Context["signature_type"])
 	})
+}
+
+func TestSignatureRuleWithConfig(t *testing.T) {
+	// Example of a valid GPG signature
+	validGPGSignature := `-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v2
+
+iQEcBAABCAAGBQJiJdwiAAoJEKbfr8MEmRYZlNQH/2f+/DjCj/3fVL2OFMElZIe6
+r6te4sJFR5qSfm5Fg4zuvg8T3m1fUHSLQAddMjqrYtgZBOYwkqX2rnJA8QthI1n0
+Wsh2QpuHqLLR1RP4rQQP0Vaz7ZCJa7dVXLjGSD9uFJFYl9NDZx04bxJQP8AUfTLk
+e3ce/NzKGP8qTdBnRP3ca1Qw5CHLxAcTF79Z8v6VQu608QYVN9UnIYHLZEH7b9ov
+q4XB9GFcGJiVbKQVGTJEIruvjRvvHcC2yY3kOUTGVUUI5+VAXkQvVxW10PqLlf13
+LVlEr9iqRHQXX3ZocPjLcfRYVhyG1yw8PmGfRcYOKHdfDsUJSLYRXWKqTwXjRtc=
+=zZJx
+-----END PGP SIGNATURE-----`
+
+	// Example of a valid SSH signature
+	validSSHSignature := `-----BEGIN SSH SIGNATURE-----
+U1NIU0lHAAAAAQAAABMAAAAHc3NoLXJzYQAAAQEAAAGBAJJU9e7iZTLCR6kiJz9jnj96
+imcZvh/3zMfxLPPR3qZFKsJ5LQKAP8GzHY9AVP9SkMAO4Fj8eiLceGy3NKhSxW7ekpgw
+IxOJXPScY8UlfvRZ9ftknNLOzQA7Mx+Kx+74QOciZ/Ctk7JAkOlCYKNbLKq8QwbQ+9RL
+XY5MVe8iE9in3V4nM7dOtcNT5RWHjvmFtcVQCQUE9g4+xSQlg4RG0PvtQDU3DP3Tjjf+
+R06m3OuBUUWX2wGaJSq9VKQlpv2aILXo5mhY7YVc82K8TJLK6pVsxgD73Hh4jCJ5J+8M
+mzMiMUHVtZ8K1Z94mXzWMgvdBTvnOG1bLMBCJ1QpywAAASAAAAAIaGlzdG9yeQAAAnMA
+AIJBh5q9m0CoHUo4gvdj4JEVzdj74FpMDKD+/s5MH6SXZTe6Ux4Pp7pOcvcF8cIVK2Hc
+GDw7dXF9YzDM6TQGrZzHMLSKxJiEbKbJEwPBFahDUQP3o7MDfMXS9I23CLyd1JnmOGLP
+a/K3XXxijJo6GNgpLhpkNzk2JnP5kSHLdp4LlLs/ByijLICOoBHQEAXJHhRp4GHuRpT4
+a0G5Z3xhN014pKDLDI1/hEyemtSZlMkDJwoW9nc1q7AE8lNM1WBmeSZXqoZbgZn3V2Nl
+FxlS+hzWnbOPMrRKuSfJ+H8mF6t1V3qUYtxHNQvHtcCvG0gx4auPSoxp7qVCVQ==
+-----END SSH SIGNATURE-----`
+
+	tests := []struct {
+		name         string
+		configSetup  func() config.Config
+		signature    string
+		expectErrors bool
+		description  string
+	}{
+		{
+			name: "Signature required - valid GPG signature",
+			configSetup: func() config.Config {
+				return config.NewConfig().
+					WithSignatureRequired(true).
+					WithAllowedSignatureTypes([]string{"gpg", "ssh"})
+			},
+			signature:    validGPGSignature,
+			expectErrors: false,
+			description:  "Should pass with valid GPG signature",
+		},
+		{
+			name: "Signature required - valid SSH signature",
+			configSetup: func() config.Config {
+				return config.NewConfig().
+					WithSignatureRequired(true).
+					WithAllowedSignatureTypes([]string{"gpg", "ssh"})
+			},
+			signature:    validSSHSignature,
+			expectErrors: false,
+			description:  "Should pass with valid SSH signature",
+		},
+		{
+			name: "Signature required - missing signature",
+			configSetup: func() config.Config {
+				return config.NewConfig().
+					WithSignatureRequired(true).
+					WithAllowedSignatureTypes([]string{"gpg", "ssh"})
+			},
+			signature:    "",
+			expectErrors: true,
+			description:  "Should fail when signature is required but missing",
+		},
+		{
+			name: "Signature not required - missing signature",
+			configSetup: func() config.Config {
+				return config.NewConfig().
+					WithSignatureRequired(false).
+					WithAllowedSignatureTypes([]string{"gpg", "ssh"})
+			},
+			signature:    "",
+			expectErrors: false,
+			description:  "Should pass when signature is not required and missing",
+		},
+		{
+			name: "Only SSH allowed - GPG signature provided",
+			configSetup: func() config.Config {
+				return config.NewConfig().
+					WithSignatureRequired(true).
+					WithAllowedSignatureTypes([]string{"ssh"})
+			},
+			signature:    validGPGSignature,
+			expectErrors: true,
+			description:  "Should fail when GPG signature provided but only SSH is allowed",
+		},
+		{
+			name: "Only GPG allowed - SSH signature provided",
+			configSetup: func() config.Config {
+				return config.NewConfig().
+					WithSignatureRequired(true).
+					WithAllowedSignatureTypes([]string{"gpg"})
+			},
+			signature:    validSSHSignature,
+			expectErrors: true,
+			description:  "Should fail when SSH signature provided but only GPG is allowed",
+		},
+		{
+			name: "Invalid signature format",
+			configSetup: func() config.Config {
+				return config.NewConfig().
+					WithSignatureRequired(true).
+					WithAllowedSignatureTypes([]string{"gpg", "ssh"})
+			},
+			signature:    "INVALID-SIGNATURE-FORMAT",
+			expectErrors: true,
+			description:  "Should fail with invalid signature format",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			// Create unified config with test options
+			unifiedConfig := testCase.configSetup()
+
+			// Create rule with unified config
+			rule := rules.NewSignatureRuleWithConfig(unifiedConfig)
+
+			// Create test commit
+			commit := domain.CommitInfo{
+				Hash:      "abc123",
+				Signature: testCase.signature,
+			}
+
+			// Validate and check results
+			errors := rule.Validate(commit)
+
+			if testCase.expectErrors {
+				require.NotEmpty(t, errors, "Expected validation errors but got none")
+
+				// Check rule name in errors
+				if len(errors) > 0 {
+					require.Equal(t, "Signature", errors[0].Rule, "Rule name should be correct in error")
+				}
+			} else {
+				require.Empty(t, errors, "Expected no validation errors but got: %v", errors)
+			}
+
+			// Check rule name
+			require.Equal(t, "Signature", rule.Name(), "Rule name should be 'Signature'")
+		})
+	}
 }

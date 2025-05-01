@@ -2,7 +2,6 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package config provides configuration management for gommitlint.
 package config
 
 import (
@@ -17,8 +16,8 @@ import (
 	"github.com/knadh/koanf/v2"
 )
 
-// Manager is the configuration manager that uses value semantics.
-// It provides a unified interface for all configuration operations.
+// Manager is a configuration manager that uses value semantics with the configuration.
+// It provides a simplified and consistent interface for all configuration operations.
 type Manager struct {
 	// Configuration cache
 	config Config
@@ -28,7 +27,7 @@ type Manager struct {
 	sourcePath string
 }
 
-// New creates a new configuration manager.
+// NewManager creates a new configuration manager.
 // It loads configuration in the following order of precedence:
 // 1. Default values (always loaded)
 // 2. User configuration from $XDG_CONFIG_HOME/gommitlint/gommitlint.yaml (if exists)
@@ -36,9 +35,9 @@ type Manager struct {
 //
 // Each configuration layer overrides values from the previous layers.
 // This is the preferred entry point for creating a configuration service.
-func New() (*Manager, error) {
+func NewManager() (*Manager, error) {
 	manager := &Manager{
-		config: DefaultConfig(), // Always start with defaults
+		config: NewConfig(), // Always start with defaults
 	}
 
 	// Try to load from standard paths
@@ -53,8 +52,6 @@ func New() (*Manager, error) {
 
 // LoadFromStandardPaths tries to load configuration from standard paths.
 // It follows the XDG Base Directory Specification.
-// The function merges configurations in order of precedence, with values from
-// higher precedence files overriding values from lower precedence files.
 func (m *Manager) LoadFromStandardPaths() error {
 	// Get paths in order of priority (project first, then XDG)
 	paths := []string{".gommitlint.yaml"}
@@ -74,7 +71,7 @@ func (m *Manager) LoadFromStandardPaths() error {
 	}
 
 	// Start with default configuration
-	m.config = DefaultConfig()
+	m.config = NewConfig()
 
 	// Load from lowest precedence to highest (reverse the paths)
 	configFound := false
@@ -155,9 +152,6 @@ func (m *Manager) LoadFromFile(path string) error {
 		return fmt.Errorf("failed to parse configuration file: %w", err)
 	}
 
-	// Create a temporary config to unmarshal into
-	var fileConfig Config
-
 	// Parse the file and convert to internal format
 	// By default, all configuration is expected to have a "gommitlint:" prefix
 	var gommitConfig GommitlintConfig
@@ -185,20 +179,10 @@ func (m *Manager) LoadFromFile(path string) error {
 		return fmt.Errorf("failed to unmarshal configuration: %w", err)
 	}
 
-	// Convert to internal representation
-	fileConfig = FromGommitlintConfig(gommitConfig)
-
-	// For test debugging
-	fmt.Printf("Loaded config from file: MaxLength=%d\n", fileConfig.Subject.MaxLength)
-
-	// For tests, hardcode specific values
-	if fileConfig.Subject.MaxLength == 0 {
-		fileConfig.Subject.MaxLength = 60
-	}
+	// Convert from YAML/JSON structure to our internal Config type
+	fileConfig := FromGommitlintConfig(gommitConfig)
 
 	// Apply this configuration on top of existing config
-	// We do this manually instead of overwriting to ensure defaults are preserved
-	// for fields not set in the file
 	m.applyConfig(fileConfig)
 
 	// Update metadata
@@ -208,10 +192,11 @@ func (m *Manager) LoadFromFile(path string) error {
 	return nil
 }
 
-// applyConfig overlays the values from the source config onto the manager's config.
-// For test simplicity, we directly replace all configuration values.
+// applyConfig applies the values from the source config to the manager's config.
+// This is a simple implementation for the migration - in a real implementation,
+// we might want to be more selective about which fields to override.
 func (m *Manager) applyConfig(source Config) {
-	// For tests and simplicity, we directly apply the full config
+	// For simplicity, we directly apply the full config
 	m.config = source
 }
 
@@ -220,12 +205,12 @@ func (m *Manager) GetConfig() Config {
 	return m.config
 }
 
-// GetValidationConfig returns a new validation configuration adapter.
-// This is the preferred way to access configuration for validation.
-// It returns a config adapter that implements all the specific interfaces
-// needed by validation rules.
-func (m *Manager) GetValidationConfig() *ValidationConfigAdapter {
-	return NewValidationConfigAdapter(m.config)
+// UpdateConfig applies the given options to the current configuration.
+// This allows for programmatically updating the configuration.
+func (m *Manager) UpdateConfig(opts ...Option) {
+	for _, opt := range opts {
+		m.config = opt(m.config)
+	}
 }
 
 // WasLoadedFromFile returns whether configuration was loaded from a file.
@@ -244,10 +229,8 @@ func (m *Manager) SetConfig(config Config) {
 	m.config = config
 }
 
-// UpdateConfig applies the given options to the current configuration.
-// This allows for programmatically updating the configuration.
-func (m *Manager) UpdateConfig(opts ...Option) {
-	for _, opt := range opts {
-		m.config = opt(m.config)
-	}
+// GetValidationConfig returns the current configuration for validation.
+// This is a compatibility method for the application/validate package.
+func (m *Manager) GetValidationConfig() Config {
+	return m.config
 }

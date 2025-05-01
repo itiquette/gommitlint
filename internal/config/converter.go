@@ -2,164 +2,158 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package config provides configuration management for gommitlint.
 package config
 
-// FromGommitlintConfig converts the user-facing configuration to the internal representation.
-// This function preserves the external file format while using value semantics internally.
-// For an empty GommitlintConfig, the result should match DefaultConfig().
+// FromGommitlintConfig converts a GommitlintConfig to a Config.
+// This function maps the YAML/JSON configuration structure to our internal Config type.
 func FromGommitlintConfig(cfg GommitlintConfig) Config {
-	// Start with defaults to ensure all fields are properly initialized
-	config := DefaultConfig()
-
-	// Special case for config with only Jira settings
-	hasJiraConfig := cfg.Subject.Jira.Required
-
-	// For empty configs (but not those with Jira settings), just return the defaults
-	if isEmpty(cfg) && !hasJiraConfig {
-		return DefaultConfig()
+	// Start with an empty config, not a default config
+	config := Config{
+		Subject: SubjectConfig{
+			Jira: JiraConfig{
+				Projects: []string{},
+			},
+		},
+		Body: BodyConfig{},
+		Conventional: ConventionalConfig{
+			Scopes: []string{},
+			Types:  []string{},
+		},
+		SpellCheck: SpellCheckConfig{
+			IgnoreWords: []string{},
+			CustomWords: map[string]string{},
+		},
+		Security: SecurityConfig{
+			AllowedSignatureTypes: []string{"gpg", "ssh"},
+			AllowMultipleSignOffs: true,
+			Identity:              IdentityConfig{},
+		},
+		Repository: RepositoryConfig{
+			MaxCommitsAhead: 5,
+		},
+		Rules: RulesConfig{
+			EnabledRules:  []string{},
+			DisabledRules: []string{},
+		},
 	}
 
 	// Subject configuration
-	if cfg.Subject.MaxLength != 0 {
-		config.Subject.MaxLength = cfg.Subject.MaxLength
-	}
-
-	if cfg.Subject.Case != "" {
-		config.Subject.Case = cfg.Subject.Case
-	}
-	// Only update if non-default config has been provided
-	if !isEmpty(cfg) {
-		config.Subject.Imperative = cfg.Subject.Imperative
-	}
-
-	if cfg.Subject.InvalidSuffixes != "" {
-		config.Subject.InvalidSuffixes = cfg.Subject.InvalidSuffixes
-	}
+	config.Subject.MaxLength = cfg.Subject.MaxLength
+	config.Subject.Case = cfg.Subject.Case
+	config.Subject.Imperative = cfg.Subject.Imperative
+	config.Subject.InvalidSuffixes = cfg.Subject.InvalidSuffixes
 
 	// Jira configuration
-	if len(cfg.Subject.Jira.Projects) > 0 {
-		config.Subject.Jira.Projects = cfg.Subject.Jira.Projects
+	if cfg.Subject.Jira.Projects != nil {
+		config.Subject.Jira.Projects = deepCopyStringSlice(cfg.Subject.Jira.Projects)
 	}
 
-	// Always apply the jira required setting, regardless of other settings
 	config.Subject.Jira.Required = cfg.Subject.Jira.Required
-
-	// Apply other Jira settings
-	if !isEmpty(cfg) {
-		config.Subject.Jira.BodyRef = cfg.Subject.Jira.BodyRef
-		config.Subject.Jira.Strict = cfg.Subject.Jira.Strict
-	}
-
-	if cfg.Subject.Jira.Pattern != "" {
-		config.Subject.Jira.Pattern = cfg.Subject.Jira.Pattern
-	}
+	config.Subject.Jira.BodyRef = cfg.Subject.Jira.BodyRef
+	config.Subject.Jira.Pattern = cfg.Subject.Jira.Pattern
+	config.Subject.Jira.Strict = cfg.Subject.Jira.Strict
 
 	// Body configuration
-	if !isEmpty(cfg) {
-		config.Body.Required = cfg.Body.Required
-		config.Body.AllowSignOffOnly = cfg.Body.AllowSignOffOnly
-	}
+	config.Body.Required = cfg.Body.Required
+	config.Body.AllowSignOffOnly = cfg.Body.AllowSignOffOnly
 
 	// Conventional commit configuration
-	if cfg.ConventionalCommit.MaxDescriptionLength != 0 {
-		config.Conventional.MaxDescriptionLength = cfg.ConventionalCommit.MaxDescriptionLength
+	if cfg.ConventionalCommit.Types != nil {
+		config.Conventional.Types = deepCopyStringSlice(cfg.ConventionalCommit.Types)
 	}
 
-	if len(cfg.ConventionalCommit.Scopes) > 0 {
-		config.Conventional.Scopes = cfg.ConventionalCommit.Scopes
+	if cfg.ConventionalCommit.Scopes != nil {
+		config.Conventional.Scopes = deepCopyStringSlice(cfg.ConventionalCommit.Scopes)
 	}
 
-	if len(cfg.ConventionalCommit.Types) > 0 {
-		config.Conventional.Types = cfg.ConventionalCommit.Types
+	config.Conventional.MaxDescriptionLength = cfg.ConventionalCommit.MaxDescriptionLength
+	config.Conventional.Required = cfg.ConventionalCommit.Required
+
+	// SpellCheck configuration
+	config.SpellCheck.Locale = cfg.SpellCheck.Locale
+	config.SpellCheck.Enabled = cfg.SpellCheck.Enabled
+
+	if cfg.SpellCheck.IgnoreWords != nil {
+		config.SpellCheck.IgnoreWords = deepCopyStringSlice(cfg.SpellCheck.IgnoreWords)
 	}
 
-	if !isEmpty(cfg) {
-		config.Conventional.Required = cfg.ConventionalCommit.Required
+	if cfg.SpellCheck.CustomWords != nil {
+		config.SpellCheck.CustomWords = deepCopyStringMap(cfg.SpellCheck.CustomWords)
 	}
 
-	// Spell check configuration
-	if cfg.SpellCheck.Locale != "" {
-		config.SpellCheck.Locale = cfg.SpellCheck.Locale
-	}
-
-	if !isEmpty(cfg) {
-		config.SpellCheck.Enabled = cfg.SpellCheck.Enabled
-	}
-
-	if len(cfg.SpellCheck.IgnoreWords) > 0 {
-		config.SpellCheck.IgnoreWords = cfg.SpellCheck.IgnoreWords
-	}
-
-	if len(cfg.SpellCheck.CustomWords) > 0 {
-		config.SpellCheck.CustomWords = cfg.SpellCheck.CustomWords
-	}
-
-	if cfg.SpellCheck.MaxErrors > 0 {
-		config.SpellCheck.MaxErrors = cfg.SpellCheck.MaxErrors
-	}
+	config.SpellCheck.MaxErrors = cfg.SpellCheck.MaxErrors
 
 	// Security configuration
-	if !isEmpty(cfg) {
-		config.Security.SignatureRequired = cfg.Signature.Required
-		config.Security.SignOffRequired = cfg.SignOffRequired
-	}
-
-	if cfg.Signature.Identity.PublicKeyURI != "" {
-		config.Security.Identity.PublicKeyURI = cfg.Signature.Identity.PublicKeyURI
-	}
+	config.Security.SignatureRequired = cfg.Signature.Required
+	config.Security.Identity.PublicKeyURI = cfg.Signature.Identity.PublicKeyURI
+	config.Security.SignOffRequired = cfg.SignOffRequired
 
 	// Repository configuration
-	if cfg.Reference != "" {
-		config.Repository.Reference = cfg.Reference
-	}
-
-	if !isEmpty(cfg) {
-		config.Repository.IgnoreMergeCommits = cfg.IgnoreMergeCommits
-		config.Repository.CheckCommitsAhead = cfg.NCommitsAhead
-	}
+	config.Repository.Reference = cfg.Reference
+	config.Repository.IgnoreMergeCommits = cfg.IgnoreMergeCommits
+	config.Repository.CheckCommitsAhead = cfg.NCommitsAhead
 
 	return config
 }
 
-// isEmpty checks if the given GommitlintConfig is effectively empty.
-// This helps distinguish between a zero-value struct and an actual configuration.
-func isEmpty(cfg GommitlintConfig) bool {
-	// A very simple check: if subject max length and reference are both empty,
-	// we consider it an empty config
-	return cfg.Subject.MaxLength == 0 &&
-		cfg.Subject.Case == "" &&
-		cfg.Subject.InvalidSuffixes == "" &&
-		cfg.Reference == "" &&
-		len(cfg.Subject.Jira.Projects) == 0 &&
-		len(cfg.ConventionalCommit.Types) == 0 &&
-		len(cfg.ConventionalCommit.Scopes) == 0 &&
-		cfg.ConventionalCommit.MaxDescriptionLength == 0 &&
-		cfg.SpellCheck.Locale == "" &&
-		len(cfg.SpellCheck.IgnoreWords) == 0 &&
-		len(cfg.SpellCheck.CustomWords) == 0 &&
-		cfg.SpellCheck.MaxErrors == 0 &&
-		cfg.Signature.Identity.PublicKeyURI == ""
+// FromOldConfig creates a new Config from the old legacy Config structure.
+// This is a no-op conversion since we've now replaced the entire configuration
+// system with the unified version. It's kept for API compatibility.
+func FromOldConfig(cfg Config) Config {
+	return cfg
 }
 
-// ToGommitlintConfig converts the internal configuration to the user-facing format.
-// This function is used when writing configuration files.
-func ToGommitlintConfig(cfg Config) GommitlintConfig {
-	// Create a new GommitlintConfig from the internal Config
-	gommitCfg := GommitlintConfig{
-		Subject:            cfg.Subject,
-		Body:               cfg.Body,
-		ConventionalCommit: cfg.Conventional,
-		SpellCheck:         cfg.SpellCheck,
-		Signature: SignatureConfig{
-			Required: cfg.Security.SignatureRequired,
-			Identity: cfg.Security.Identity,
-		},
-		SignOffRequired:    cfg.Security.SignOffRequired,
-		Reference:          cfg.Repository.Reference,
-		IgnoreMergeCommits: cfg.Repository.IgnoreMergeCommits,
-		NCommitsAhead:      cfg.Repository.CheckCommitsAhead,
-	}
+// ToOldConfig converts the config to the legacy Config structure.
+// This is a no-op conversion since we've now replaced the entire configuration
+// system with the unified version. It's kept for API compatibility.
+func ToOldConfig(cfg Config) Config {
+	return cfg
+}
+
+// ToGommitlintConfig converts a Config to a GommitlintConfig.
+// This function maps our internal Config type to the YAML/JSON configuration structure.
+func (c Config) ToGommitlintConfig() GommitlintConfig {
+	gommitCfg := GommitlintConfig{}
+
+	// Subject configuration
+	gommitCfg.Subject.MaxLength = c.Subject.MaxLength
+	gommitCfg.Subject.Case = c.Subject.Case
+	gommitCfg.Subject.Imperative = c.Subject.Imperative
+	gommitCfg.Subject.InvalidSuffixes = c.Subject.InvalidSuffixes
+
+	// Jira configuration
+	gommitCfg.Subject.Jira.Projects = deepCopyStringSlice(c.Subject.Jira.Projects)
+	gommitCfg.Subject.Jira.Required = c.Subject.Jira.Required
+	gommitCfg.Subject.Jira.BodyRef = c.Subject.Jira.BodyRef
+	gommitCfg.Subject.Jira.Pattern = c.Subject.Jira.Pattern
+	gommitCfg.Subject.Jira.Strict = c.Subject.Jira.Strict
+
+	// Body configuration
+	gommitCfg.Body.Required = c.Body.Required
+	gommitCfg.Body.AllowSignOffOnly = c.Body.AllowSignOffOnly
+
+	// Conventional commit configuration
+	gommitCfg.ConventionalCommit.Types = deepCopyStringSlice(c.Conventional.Types)
+	gommitCfg.ConventionalCommit.Scopes = deepCopyStringSlice(c.Conventional.Scopes)
+	gommitCfg.ConventionalCommit.MaxDescriptionLength = c.Conventional.MaxDescriptionLength
+	gommitCfg.ConventionalCommit.Required = c.Conventional.Required
+
+	// SpellCheck configuration
+	gommitCfg.SpellCheck.Locale = c.SpellCheck.Locale
+	gommitCfg.SpellCheck.Enabled = c.SpellCheck.Enabled
+	gommitCfg.SpellCheck.IgnoreWords = deepCopyStringSlice(c.SpellCheck.IgnoreWords)
+	gommitCfg.SpellCheck.CustomWords = deepCopyStringMap(c.SpellCheck.CustomWords)
+	gommitCfg.SpellCheck.MaxErrors = c.SpellCheck.MaxErrors
+
+	// Security configuration
+	gommitCfg.Signature.Required = c.Security.SignatureRequired
+	gommitCfg.Signature.Identity.PublicKeyURI = c.Security.Identity.PublicKeyURI
+	gommitCfg.SignOffRequired = c.Security.SignOffRequired
+
+	// Repository configuration
+	gommitCfg.Reference = c.Repository.Reference
+	gommitCfg.IgnoreMergeCommits = c.Repository.IgnoreMergeCommits
+	gommitCfg.NCommitsAhead = c.Repository.CheckCommitsAhead
 
 	return gommitCfg
 }

@@ -8,6 +8,7 @@ package rules_test
 import (
 	"testing"
 
+	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
@@ -315,4 +316,131 @@ func TestSubjectCaseErrors(t *testing.T) {
 	require.NotEmpty(t, errors, "Should have validation errors")
 	require.Equal(t, "SubjectCase", errors[0].Rule, "Rule name should be in error")
 	require.Equal(t, string(appErrors.ErrSubjectCase), errors[0].Code, "Error code should be set")
+}
+
+func TestSubjectCaseRuleWithConfig(t *testing.T) {
+	// This test verifies that our NewSubjectCaseRuleWithConfig properly integrates with Config
+	// Create a series of unified configs and test them
+	tests := []struct {
+		name          string
+		unifiedConfig config.Config
+		subject       string
+		expectValid   bool
+		updateRule    func(rules.SubjectCaseRule) rules.SubjectCaseRule
+	}{
+		{
+			name: "Lower case config with valid commit",
+			unifiedConfig: config.NewConfig().
+				WithSubjectCase("lower"),
+			subject:     "add new feature",
+			expectValid: true,
+			updateRule: func(r rules.SubjectCaseRule) rules.SubjectCaseRule {
+				return rules.WithSubjectCaseCommitFormat(false)(r)
+			},
+		},
+		{
+			name: "Upper case config with valid commit",
+			unifiedConfig: config.NewConfig().
+				WithSubjectCase("upper"),
+			subject:     "Add new feature",
+			expectValid: true,
+			updateRule: func(r rules.SubjectCaseRule) rules.SubjectCaseRule {
+				return rules.WithSubjectCaseCommitFormat(false)(r)
+			},
+		},
+		{
+			name: "Lower case config with invalid commit",
+			unifiedConfig: config.NewConfig().
+				WithSubjectCase("lower"),
+			subject:     "Add new feature", // Uppercase when lowercase required
+			expectValid: false,
+			updateRule: func(r rules.SubjectCaseRule) rules.SubjectCaseRule {
+				return rules.WithSubjectCaseCommitFormat(false)(r)
+			},
+		},
+		{
+			name: "Upper case config with invalid commit",
+			unifiedConfig: config.NewConfig().
+				WithSubjectCase("upper"),
+			subject:     "add new feature", // Lowercase when uppercase required
+			expectValid: false,
+			updateRule: func(r rules.SubjectCaseRule) rules.SubjectCaseRule {
+				return rules.WithSubjectCaseCommitFormat(false)(r)
+			},
+		},
+		{
+			name: "Valid conventional commit with lower case",
+			unifiedConfig: config.NewConfig().
+				WithSubjectCase("lower").
+				WithConventionalRequired(true),
+			subject:     "feat: add new feature",
+			expectValid: true,
+			updateRule: func(r rules.SubjectCaseRule) rules.SubjectCaseRule {
+				return rules.WithSubjectCaseCommitFormat(true)(r)
+			},
+		},
+		{
+			name: "No conventional error for custom test",
+			unifiedConfig: config.NewConfig().
+				WithSubjectCase("lower"),
+			subject:     "not-conventional", // Would be invalid if conventional required
+			expectValid: true,
+			updateRule: func(r rules.SubjectCaseRule) rules.SubjectCaseRule {
+				return rules.WithSubjectCaseCommitFormat(false)(r)
+			},
+		},
+		{
+			name: "Imperative mood allows non-alpha",
+			unifiedConfig: config.NewConfig().
+				WithSubjectCase("lower").
+				WithSubjectImperative(true),
+			subject:     "123 release version", // Starts with number, allowed with imperative
+			expectValid: true,
+			updateRule: func(r rules.SubjectCaseRule) rules.SubjectCaseRule {
+				return rules.WithSubjectCaseCommitFormat(false)(r)
+			},
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			// This tests the direct integration with the unified config
+			// Create rule with options
+			options := []rules.SubjectCaseOption{}
+
+			if caseChoice := testCase.unifiedConfig.SubjectCase(); caseChoice != "" {
+				options = append(options, rules.WithCaseChoice(caseChoice))
+			}
+
+			if testCase.unifiedConfig.ConventionalRequired() {
+				options = append(options, rules.WithSubjectCaseCommitFormat(true))
+			}
+
+			if testCase.unifiedConfig.SubjectRequireImperative() {
+				options = append(options, rules.WithAllowNonAlpha(true))
+			}
+
+			rule := rules.NewSubjectCaseRule(options...)
+
+			// Apply any special test updates
+			if testCase.updateRule != nil {
+				rule = testCase.updateRule(rule)
+			}
+
+			// Create a commit with the test subject
+			commit := domain.CommitInfo{
+				Subject: testCase.subject,
+			}
+
+			// Execute validation
+			errors := rule.Validate(commit)
+
+			// Verify the result matches our expectations
+			if testCase.expectValid {
+				require.Empty(t, errors, "Expected valid commit but got errors: %v", errors)
+			} else {
+				require.NotEmpty(t, errors, "Expected invalid commit but got no errors")
+			}
+		})
+	}
 }

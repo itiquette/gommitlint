@@ -57,6 +57,8 @@ func NewSubjectLengthRuleWithConfig(config domain.SubjectConfigProvider) Subject
 	return NewSubjectLengthRule(WithMaxLength(maxLength))
 }
 
+// NewSubjectLengthRuleWithConfig creates a rule using the unified configuration.
+
 // Name returns the rule name.
 func (r SubjectLengthRule) Name() string {
 	return r.BaseRule.Name()

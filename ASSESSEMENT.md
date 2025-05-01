@@ -26,12 +26,12 @@ This document provides a comprehensive assessment of the Gommitlint codebase arc
 
 ### 3. Simplicity Assessment
 
-- **Strengths**: 
+- **Strengths**:
   - Functions have clear, single responsibilities
   - Explicit dependencies (no hidden global state)
   - Consistent patterns across the codebase
   - Clean interfaces with focused methods
-- **Areas for Improvement**: 
+- **Areas for Improvement**:
   - The migration plan in MIGRATION1.md suggests configuration system could be simplified
   - Multiple small interfaces could be consolidated into a more unified structure
 

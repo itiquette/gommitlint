@@ -273,53 +273,34 @@ func (r ImperativeVerbRule) VerboseResult() string {
 
 		validationErr := errors[0]
 		// Return a more detailed error message based on error code
-		// Use if statements instead of switch to avoid exhaustive linter complaints
 		code := appErrors.ValidationErrorCode(validationErr.Code)
-
+		
 		if code == appErrors.ErrInvalidFormat {
 			if strings.Contains(validationErr.Message, "conventional") {
 				return "Invalid conventional commit format. Must follow 'type(scope): description' pattern."
 			}
-
-			// Return for invalid format case
 			return "Invalid commit format. Commit message should start with an imperative verb."
-		}
-
-		if code == appErrors.ErrEmptyMessage {
+		} else if code == appErrors.ErrEmptyMessage {
 			return "Commit message is empty. Cannot validate imperative verb."
-		}
-
-		if code == appErrors.ErrMissingSubject {
+		} else if code == appErrors.ErrMissingSubject {
 			return "Missing subject after conventional commit type. Nothing to validate."
-		}
-
-		if code == appErrors.ErrNoFirstWord {
+		} else if code == appErrors.ErrNoFirstWord {
 			return "No valid first word found in commit message."
-		}
-
-		if code == appErrors.ErrNonVerb {
+		} else if code == appErrors.ErrNonVerb {
 			return "'" + r.firstWord + "' is a non-verb word (article, pronoun, etc.). Use an action verb instead."
-		}
-
-		if code == appErrors.ErrPastTense {
+		} else if code == appErrors.ErrPastTense {
 			return "'" + r.firstWord + "' is in past tense. Use present imperative form instead (e.g., 'Add' not 'Added')."
-		}
-
-		if code == appErrors.ErrGerund {
+		} else if code == appErrors.ErrGerund {
 			return "'" + r.firstWord + "' is a gerund (-ing form). Use present imperative form instead (e.g., 'Add' not 'Adding')."
-		}
-
-		if code == appErrors.ErrThirdPerson {
+		} else if code == appErrors.ErrThirdPerson {
 			return "'" + r.firstWord + "' is in third person form. Use present imperative form instead (e.g., 'Add' not 'Adds')."
+		} else {
+			// If we have a first word but no specific code match, include it in the error
+			if r.firstWord != "" {
+				return "Word '" + r.firstWord + "' detected: " + validationErr.Error()
+			}
+			return validationErr.Error()
 		}
-
-		// Default case
-		// If we have a first word but no specific code match, include it in the error
-		if r.firstWord != "" {
-			return "Word '" + r.firstWord + "' detected: " + validationErr.Error()
-		}
-
-		return validationErr.Error()
 	}
 
 	return "Commit begins with proper imperative verb '" + r.firstWord + "'"
@@ -333,9 +314,8 @@ func (r ImperativeVerbRule) Help() string {
 	// Check error code
 	errors := r.BaseRule.Errors()
 	if len(errors) > 0 {
-		// Use if statements instead of switch to avoid exhaustive linter complaints
 		code := appErrors.ValidationErrorCode(errors[0].Code)
-
+		
 		if code == appErrors.ErrInvalidFormat {
 			if strings.Contains(errors[0].Message, "conventional") {
 				return `Format your commit message according to the Conventional Commits specification.
@@ -345,23 +325,14 @@ The correct format is: type(scope): subject
 - scope: optional context (in parentheses)
 - subject: description of the change`
 			}
-
 			return "Make sure your commit message starts with an imperative verb (e.g., 'Add', 'Fix', 'Update')."
-		}
-
-		if code == appErrors.ErrEmptyMessage {
+		} else if code == appErrors.ErrEmptyMessage {
 			return "Provide a non-empty commit message with a verb in the imperative mood."
-		}
-
-		if code == appErrors.ErrMissingSubject {
+		} else if code == appErrors.ErrMissingSubject {
 			return "Add a description after the type and colon in your conventional commit message."
-		}
-
-		if code == appErrors.ErrNoFirstWord {
+		} else if code == appErrors.ErrNoFirstWord {
 			return "Start your commit message with a word (letters or numbers). Remove any leading special characters."
-		}
-
-		if code == appErrors.ErrNonVerb {
+		} else if code == appErrors.ErrNonVerb {
 			return `Non-Verb Error: The word "${r.firstWord}" is not a verb.
 
 Git commit messages should start with an imperative verb. You used a non-verb word
@@ -391,9 +362,7 @@ Add       Fix       Update    Remove    Change
 Refactor  Implement Optimize  Improve   Merge
 Create    Delete    Revert    Extract   Move
 Rename    Simplify  Adjust    Configure Test`
-		}
-
-		if code == appErrors.ErrPastTense {
+		} else if code == appErrors.ErrPastTense {
 			return `Past Tense Error: The word "${r.firstWord}" is in past tense.
 
 Git commit messages should use the imperative mood (present tense), not past tense.
@@ -420,9 +389,7 @@ Convert your past tense verb to present imperative form:
 - "Removed" → "Remove"
 
 Simply drop the "-ed" ending in most cases.`
-		}
-
-		if code == appErrors.ErrGerund {
+		} else if code == appErrors.ErrGerund {
 			return `Gerund Error: The word "${r.firstWord}" is a gerund (verb ending in "-ing").
 
 Git commit messages should use the imperative mood, not continuous/gerund forms.
@@ -449,9 +416,7 @@ Convert your gerund verb to present imperative form:
 - "Removing" → "Remove"
 
 Simply drop the "-ing" ending and use the base verb form.`
-		}
-
-		if code == appErrors.ErrThirdPerson {
+		} else if code == appErrors.ErrThirdPerson {
 			return `Third Person Error: The word "${r.firstWord}" is in third person form.
 
 Git commit messages should use the imperative mood, not third-person present tense.

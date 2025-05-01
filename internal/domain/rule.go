@@ -78,6 +78,15 @@ type RuleProvider interface {
 
 	// GetActiveRules returns all active validation rules based on configuration.
 	GetActiveRules() []Rule
+
+	// WithActiveRules returns a new provider with the specified active rules.
+	WithActiveRules(ruleNames []string) RuleProvider
+
+	// WithDisabledRules returns a new provider with the specified rules disabled.
+	WithDisabledRules(ruleNames []string) RuleProvider
+
+	// WithCustomRule returns a new provider with the custom rule added.
+	WithCustomRule(rule Rule) RuleProvider
 }
 
 // Note: ValidationConfigProvider has been removed.

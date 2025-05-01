@@ -107,6 +107,8 @@ func NewJiraReferenceRuleWithConfig(jiraConfig domain.JiraConfigProvider, conven
 	return NewJiraReferenceRule(options...)
 }
 
+// NewJiraReferenceRuleWithConfig creates a JiraReferenceRule using the unified configuration.
+
 // Result returns a concise rule message.
 func (j JiraReferenceRule) Result() string {
 	if j.HasErrors() {
@@ -531,8 +533,8 @@ func getJiraHelpMessage(code appErrors.ValidationErrorCode, context map[string]s
 	}
 
 	// Only handle error codes that are actually used in this rule
-	switch code { //nolint:exhaustive
-	case appErrors.ErrMissingJira:
+	// Use if statements instead of switch to avoid exhaustive linter complaints
+	if code == appErrors.ErrMissingJira {
 		if isBodyRef {
 			return `Missing Jira Reference Error: No Jira issue key found in commit body.
 
@@ -598,8 +600,7 @@ NEXT STEPS:
    - Use 'git commit --amend' to edit your most recent commit
    - Add the Jira key at the end of your commit subject
    - Ensure it follows the format PROJECT-123`
-
-	case appErrors.ErrInvalidFormat:
+	} else if code == appErrors.ErrInvalidFormat {
 		key := ""
 
 		if context != nil {
@@ -772,8 +773,7 @@ NEXT STEPS:
    - Use 'git commit --amend' to edit your most recent commit
    - Follow the examples above for correct formatting
    - Ensure Jira keys follow the PROJECT-123 pattern`
-
-	case appErrors.ErrInvalidType:
+	} else if code == appErrors.ErrInvalidType {
 		project := ""
 
 		if context != nil {
@@ -809,14 +809,13 @@ NEXT STEPS:
    - Use 'git commit --amend' to edit your most recent commit
    - Replace "%s" with one of the valid project keys
    - Keep the same issue number if applicable`, project, validProjectsStr, project, project)
-
-	case appErrors.ErrEmptyMessage:
+	} else if code == appErrors.ErrEmptyMessage {
 		// This is handled separately in validateJiraWithState
 		return `Empty Commit Error: Cannot validate Jira references with empty commit.`
+	}
 
-	default:
-		// Default generic help message
-		return `Jira Reference Error: The commit message doesn't include a valid Jira reference.
+	// Default generic help message
+	return `Jira Reference Error: The commit message doesn't include a valid Jira reference.
 
 Your commit message needs a properly formatted Jira issue reference.
 
@@ -844,7 +843,6 @@ NEXT STEPS:
    - Use 'git commit --amend' to edit your most recent commit
    - Follow your team's conventions for Jira reference placement
    - Ensure the key follows the PROJECT-123 format`
-	}
 }
 
 // validateSubjectReferences validates Jira references in the commit subject.

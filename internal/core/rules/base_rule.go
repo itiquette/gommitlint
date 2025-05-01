@@ -14,17 +14,28 @@ import (
 // It handles error collection and standard result formatting to reduce
 // duplication across rule implementations.
 type BaseRule struct {
-	name      string
-	errors    []errors.ValidationError
-	hasRun    bool
-	verbosity string
+	name       string
+	errors     []errors.ValidationError
+	hasRun     bool
+	verbosity  string
+	IsRequired bool
 }
 
 // NewBaseRule creates a new BaseRule with the given name.
 func NewBaseRule(name string) BaseRule {
 	return BaseRule{
-		name:   name,
-		errors: make([]errors.ValidationError, 0),
+		name:       name,
+		errors:     make([]errors.ValidationError, 0),
+		IsRequired: true, // Default to required
+	}
+}
+
+// NewBaseRuleWithRequired creates a new BaseRule with the given name and isRequired flag.
+func NewBaseRuleWithRequired(name string, isRequired bool) BaseRule {
+	return BaseRule{
+		name:       name,
+		errors:     make([]errors.ValidationError, 0),
+		IsRequired: isRequired,
 	}
 }
 

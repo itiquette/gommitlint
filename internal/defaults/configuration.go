@@ -77,7 +77,21 @@ type DefaultConfig struct {
 
 // NewDefaultConfig creates a new default configuration.
 func NewDefaultConfig() *DefaultConfig {
-	return &DefaultConfig{}
+	return &DefaultConfig{
+		enabledRules: []string{
+			"SubjectLength",
+			"SubjectCase",
+			"SubjectSuffix",
+			"CommitBody",
+			"ConventionalCommit",
+			"ImperativeVerb",
+			"Signature",
+			"SignOff",
+			"Spell",
+			"JiraReference",
+			"CommitsAhead", // Explicitly enable all rules by default
+		},
+	}
 }
 
 // SubjectCase returns the default subject case.

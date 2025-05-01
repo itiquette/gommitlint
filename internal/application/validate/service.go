@@ -132,16 +132,19 @@ func (s ValidationService) GetAvailableRuleNames() []string {
 	return []string{}
 }
 
-// RegisterCustomRule adds a custom rule to the validation engine.
-// Returns an error if the engine doesn't support custom rules.
-// This method maintains backward compatibility by modifying the underlying engine.
-// In a purely functional approach, this would return a new ValidationService with the rule added.
-func (s ValidationService) RegisterCustomRule(rule domain.Rule) error {
-	// Check if the engine itself implements the method directly
-	if customizer, ok := s.engine.(interface{ RegisterCustomRule(rule domain.Rule) }); ok {
-		customizer.RegisterCustomRule(rule)
+// WithCustomRule returns a new ValidationService with the custom rule added to the engine.
+// Returns an error and the original service if the engine doesn't support custom rules.
+func (s ValidationService) WithCustomRule(rule domain.Rule) (ValidationService, error) {
+	// Create a copy to ensure immutability
+	serviceCopy := s
 
-		return nil
+	// Check if the engine itself implements the method directly
+	if customizer, ok := s.engine.(interface {
+		WithCustomRule(rule domain.Rule) ValidationEngine
+	}); ok {
+		serviceCopy.engine = customizer.WithCustomRule(rule)
+
+		return serviceCopy, nil
 	}
 
 	// Check if provider is exposed and supports custom rules
@@ -149,63 +152,26 @@ func (s ValidationService) RegisterCustomRule(rule domain.Rule) error {
 		provider := engineWithProvider.GetProvider()
 
 		// Check if the provider allows registering custom rules
-		if ruleRegistrar, ok := provider.(interface{ RegisterCustomRule(rule domain.Rule) }); ok {
-			ruleRegistrar.RegisterCustomRule(rule)
+		if ruleProvider, ok := provider.(interface {
+			WithCustomRule(ruleToAdd domain.Rule) domain.RuleProvider
+		}); ok {
+			newProvider := ruleProvider.WithCustomRule(rule)
 
-			return nil
+			// Create a new engine with the updated provider
+			if engineWithUpdatedProvider, ok := s.engine.(interface {
+				WithProvider(provider domain.RuleProvider) ValidationEngine
+			}); ok {
+				serviceCopy.engine = engineWithUpdatedProvider.WithProvider(newProvider)
+
+				return serviceCopy, nil
+			}
 		}
 	}
 
-	return errors.New("RegisterCustomRule", errors.ErrInvalidConfig, "rule provider does not support registering custom rules")
+	return s, errors.New("WithCustomRule", errors.ErrInvalidConfig, "rule provider does not support adding custom rules")
 }
 
-// WithCustomRule creates a new ValidationService with the custom rule added to the engine.
-// Returns an error and the original service if the engine doesn't support custom rules.
-func (s ValidationService) WithCustomRule(rule domain.Rule) (ValidationService, error) {
-	// Create a copy to ensure immutability
-	serviceCopy := s
-
-	err := serviceCopy.RegisterCustomRule(rule)
-	if err != nil {
-		return s, err // Return original service on error
-	}
-
-	return serviceCopy, nil
-}
-
-// RegisterCustomRuleFactory registers a factory for creating a custom rule with conditional creation.
-// This provides more flexibility than directly registering a rule instance.
-// Returns an error if the engine doesn't support custom rule factories.
-// This method maintains backward compatibility by modifying the underlying engine.
-func (s ValidationService) RegisterCustomRuleFactory(
-	name string,
-	factory func(config ValidationConfig, analyzer domain.CommitAnalyzer) domain.Rule,
-	requiresAnalyzer bool,
-	condition func(config ValidationConfig) bool,
-) error {
-	// Check if provider is exposed and supports custom rule factories
-	if engineWithProvider, ok := s.engine.(interface{ GetProvider() domain.RuleProvider }); ok {
-		provider := engineWithProvider.GetProvider()
-
-		// Check if the provider allows registering custom rule factories
-		if factoryRegistrar, exists := provider.(interface {
-			RegisterCustomRuleFactory(
-				name string,
-				factory func(config ValidationConfig, analyzer domain.CommitAnalyzer) domain.Rule,
-				requiresAnalyzer bool,
-				condition func(config ValidationConfig) bool,
-			)
-		}); exists {
-			factoryRegistrar.RegisterCustomRuleFactory(name, factory, requiresAnalyzer, condition)
-
-			return nil
-		}
-	}
-
-	return errors.New("RegisterCustomRuleFactory", errors.ErrInvalidConfig, "rule provider does not support registering custom rule factories")
-}
-
-// WithCustomRuleFactory creates a new ValidationService with a custom rule factory added.
+// WithCustomRuleFactory returns a new ValidationService with a custom rule factory added.
 // Returns an error and the original service if the engine doesn't support custom rule factories.
 func (s ValidationService) WithCustomRuleFactory(
 	name string,
@@ -216,116 +182,143 @@ func (s ValidationService) WithCustomRuleFactory(
 	// Create a copy to ensure immutability
 	serviceCopy := s
 
-	err := serviceCopy.RegisterCustomRuleFactory(name, factory, requiresAnalyzer, condition)
-	if err != nil {
-		return s, err // Return original service on error
-	}
-
-	return serviceCopy, nil
-}
-
-// SetActiveRules configures which rules should be active for validation.
-// If an empty list is provided, all rules will be active.
-// Returns an error if the rule provider doesn't support this operation.
-// This method maintains backward compatibility by modifying the underlying engine.
-func (s ValidationService) SetActiveRules(ruleNames []string) error {
 	// Check if the engine itself implements the method directly
-	if setter, ok := s.engine.(interface {
-		SetActiveRules(ruleNames []string) error
-	}); ok {
-		return setter.SetActiveRules(ruleNames)
+	if customizer, hasCustomizer := s.engine.(interface {
+		WithCustomRuleFactory(
+			name string,
+			factory func(config ValidationConfig, analyzer domain.CommitAnalyzer) domain.Rule,
+			requiresAnalyzer bool,
+			condition func(config ValidationConfig) bool,
+		) ValidationEngine
+	}); hasCustomizer {
+		serviceCopy.engine = customizer.WithCustomRuleFactory(name, factory, requiresAnalyzer, condition)
+
+		return serviceCopy, nil
 	}
 
-	// Check if provider is exposed and supports setting active rules
+	// Check if provider is exposed and supports custom rule factories
 	if engineWithProvider, ok := s.engine.(interface{ GetProvider() domain.RuleProvider }); ok {
 		provider := engineWithProvider.GetProvider()
 
-		// Check if the provider has a method to set active rules
-		if activeSetter, ok := provider.(interface{ SetActiveRules(ruleNames []string) }); ok {
-			activeSetter.SetActiveRules(ruleNames)
+		// Check if the provider allows registering custom rule factories
+		if ruleProvider, exists := provider.(interface {
+			WithCustomRuleFactory(
+				name string,
+				factory func(config ValidationConfig, analyzer domain.CommitAnalyzer) domain.Rule,
+				requiresAnalyzer bool,
+				condition func(config ValidationConfig) bool,
+			) domain.RuleProvider
+		}); exists {
+			newProvider := ruleProvider.WithCustomRuleFactory(name, factory, requiresAnalyzer, condition)
 
-			return nil
+			// Create a new engine with the updated provider
+			if engineWithUpdatedProvider, ok := s.engine.(interface {
+				WithProvider(provider domain.RuleProvider) ValidationEngine
+			}); ok {
+				serviceCopy.engine = engineWithUpdatedProvider.WithProvider(newProvider)
+
+				return serviceCopy, nil
+			}
 		}
 	}
 
-	// Use a fallback approach for simpler engines that just have active rule lists
-	if _, ok := s.engine.(interface {
-		GetRules() []domain.Rule
-		GetActiveRules() []domain.Rule
-	}); ok {
-		// This is informational - we've done our best
-		// We could inspect the rules but can't modify the engine
-		return nil
-	}
-
-	return errors.New("SetActiveRules", errors.ErrInvalidConfig, "rule provider does not support setting active rules")
+	return s, errors.New("WithCustomRuleFactory", errors.ErrInvalidConfig, "rule provider does not support registering custom rule factories")
 }
 
 // WithActiveRules creates a new ValidationService with the specified active rules.
+// If an empty list is provided, all rules will be active.
 // Returns an error and the original service if the rule provider doesn't support this operation.
-func (s ValidationService) WithActiveRules(ruleNames []string) (ValidationService, error) {
+// updateRulesHelper is a helper function that handles rule activation/deactivation.
+// It reduces code duplication between WithActiveRules and WithDisabledRules.
+func (s ValidationService) updateRulesHelper(
+	ruleNames []string,
+	operationMethod func(provider domain.RuleProvider) domain.RuleProvider,
+	engineMethod func(ruleNames []string) (ValidationEngine, error),
+	errorOp string,
+	errorMsg string,
+) (ValidationService, error) {
 	// Create a copy to ensure immutability
 	serviceCopy := s
 
-	err := serviceCopy.SetActiveRules(ruleNames)
-	if err != nil {
-		return s, err // Return original service on error
-	}
-
-	return serviceCopy, nil
-}
-
-// DisableRules disables specific rules by name.
-// Returns an error if the rule provider doesn't support this operation.
-// This method maintains backward compatibility by modifying the underlying engine.
-func (s ValidationService) DisableRules(ruleNames []string) error {
-	// Check if the engine itself implements the method directly
-	if disabler, ok := s.engine.(interface {
-		DisableRules(ruleNames []string) error
-	}); ok {
-		return disabler.DisableRules(ruleNames)
-	}
-
-	// Check if provider is exposed and supports disabling rules
+	// First check if we can get the provider from the engine
 	if engineWithProvider, ok := s.engine.(interface{ GetProvider() domain.RuleProvider }); ok {
+		// Get the provider
 		provider := engineWithProvider.GetProvider()
 
-		// Check if the provider has a method to disable rules
-		if ruleSetter, ok := provider.(interface{ DisableRules(ruleNames []string) }); ok {
-			ruleSetter.DisableRules(ruleNames)
+		// Apply the operation on the provider
+		newProvider := operationMethod(provider)
 
-			return nil
+		// Create a new engine with the updated provider
+		if engineWithUpdatedProvider, ok := s.engine.(interface {
+			WithProvider(provider domain.RuleProvider) ValidationEngine
+		}); ok {
+			serviceCopy.engine = engineWithUpdatedProvider.WithProvider(newProvider)
+
+			return serviceCopy, nil
 		}
 	}
 
-	// Use a fallback approach for simple engines - similar to SetActiveRules
-	if _, ok := s.engine.(interface {
-		GetRules() []domain.Rule
-		GetActiveRules() []domain.Rule
+	// As a fallback, check if the engine itself implements the method directly
+	if engineMethod != nil {
+		newEngine, err := engineMethod(ruleNames)
+		if err != nil {
+			return s, err
+		}
+
+		serviceCopy.engine = newEngine
+
+		return serviceCopy, nil
+	}
+
+	return s, errors.New(errorOp, errors.ErrInvalidConfig, errorMsg)
+}
+
+func (s ValidationService) WithActiveRules(ruleNames []string) (ValidationService, error) {
+	// Create closures for the required operations
+	operationMethod := func(provider domain.RuleProvider) domain.RuleProvider {
+		return provider.WithActiveRules(ruleNames)
+	}
+
+	// Get the engine method if it exists
+	var engineMethod func([]string) (ValidationEngine, error)
+	if ruleEngine, ok := s.engine.(interface {
+		WithActiveRules(ruleNames []string) (ValidationEngine, error)
 	}); ok {
-		// Informational only - can't modify the engine directly
-		if len(ruleNames) == 0 {
-			return nil // Nothing to disable
-		}
-
-		return nil
+		engineMethod = ruleEngine.WithActiveRules
 	}
 
-	return errors.New("DisableRules", errors.ErrInvalidConfig, "rule provider does not support disabling rules")
+	return s.updateRulesHelper(
+		ruleNames,
+		operationMethod,
+		engineMethod,
+		"WithActiveRules",
+		"rule provider does not support setting active rules",
+	)
 }
 
 // WithDisabledRules creates a new ValidationService with the specified rules disabled.
 // Returns an error and the original service if the rule provider doesn't support this operation.
 func (s ValidationService) WithDisabledRules(ruleNames []string) (ValidationService, error) {
-	// Create a copy to ensure immutability
-	serviceCopy := s
-
-	err := serviceCopy.DisableRules(ruleNames)
-	if err != nil {
-		return s, err // Return original service on error
+	// Create closures for the required operations
+	operationMethod := func(provider domain.RuleProvider) domain.RuleProvider {
+		return provider.WithDisabledRules(ruleNames)
 	}
 
-	return serviceCopy, nil
+	// Get the engine method if it exists
+	var engineMethod func([]string) (ValidationEngine, error)
+	if ruleEngine, ok := s.engine.(interface {
+		WithDisabledRules(ruleNames []string) (ValidationEngine, error)
+	}); ok {
+		engineMethod = ruleEngine.WithDisabledRules
+	}
+
+	return s.updateRulesHelper(
+		ruleNames,
+		operationMethod,
+		engineMethod,
+		"WithDisabledRules",
+		"rule provider does not support disabling rules",
+	)
 }
 
 // GetActiveRules returns the names of currently active rules.
@@ -519,6 +512,8 @@ type ValidationConfig interface {
 	domain.RuleConfigProvider
 }
 
+// toConfig converts a ValidationConfig to a config.Config.
+
 // CreateValidationServiceWithDependencies creates a ValidationService with explicit dependencies.
 // This is the preferred constructor for better testability and dependency management.
 //
@@ -621,77 +616,190 @@ func (p DomainRuleProvider) copyCustomFactories() map[string]domainRuleFactory {
 var standardDomainRuleFactories = map[string]domainRuleFactory{
 	"SubjectLength": {
 		provider: func(config ValidationConfig, _ domain.CommitAnalyzer) domain.Rule {
-			return rules.NewSubjectLengthRuleWithConfig(config)
+			return rules.NewSubjectLengthRule(
+				rules.WithMaxLength(config.SubjectMaxLength()),
+			)
 		},
 		requiresAnalyzer: false,
 		condition:        func(_ ValidationConfig) bool { return true }, // Always create
 	},
 	"CommitBody": {
 		provider: func(config ValidationConfig, _ domain.CommitAnalyzer) domain.Rule {
-			return rules.NewCommitBodyRuleWithConfig(config)
+			return rules.NewCommitBodyRule(
+				rules.WithRequireBody(config.BodyRequired()),
+				rules.WithAllowSignOffOnly(config.BodyAllowSignOffOnly()),
+			)
 		},
 		requiresAnalyzer: false,
 		condition:        func(_ ValidationConfig) bool { return true }, // Always create
 	},
 	"ConventionalCommit": {
 		provider: func(config ValidationConfig, _ domain.CommitAnalyzer) domain.Rule {
-			return rules.NewConventionalCommitRuleWithConfig(config)
+			options := []rules.ConventionalCommitOption{}
+
+			// Apply the allowed types if provided
+			if types := config.ConventionalTypes(); len(types) > 0 {
+				options = append(options, rules.WithAllowedTypes(types))
+			}
+
+			// Apply the allowed scopes if provided
+			if scopes := config.ConventionalScopes(); len(scopes) > 0 {
+				options = append(options, rules.WithAllowedScopes(scopes))
+			}
+
+			// Apply the max description length if provided
+			if maxLength := config.ConventionalMaxDescriptionLength(); maxLength > 0 {
+				options = append(options, rules.WithMaxDescLength(maxLength))
+			}
+
+			return rules.NewConventionalCommitRule(options...)
 		},
 		requiresAnalyzer: false,
 		condition:        func(_ ValidationConfig) bool { return true }, // Always create
 	},
 	"ImperativeVerb": {
 		provider: func(config ValidationConfig, _ domain.CommitAnalyzer) domain.Rule {
-			return rules.NewImperativeVerbRuleWithConfig(config, config)
+			isConventional := config.ConventionalRequired()
+			options := []rules.ImperativeVerbOption{}
+
+			if isConventional {
+				options = append(options, rules.WithImperativeConventionalCommit(true))
+			}
+
+			return rules.NewImperativeVerbRule(
+				config.SubjectRequireImperative(),
+				options...,
+			)
 		},
 		requiresAnalyzer: false,
 		condition:        func(_ ValidationConfig) bool { return true }, // Always create
 	},
 	"Signature": {
 		provider: func(config ValidationConfig, _ domain.CommitAnalyzer) domain.Rule {
-			return rules.NewSignatureRuleWithConfig(config)
+			options := []rules.SignatureOption{}
+
+			options = append(options, rules.WithRequireSignature(config.SignatureRequired()))
+
+			if types := config.AllowedSignatureTypes(); len(types) > 0 {
+				options = append(options, rules.WithAllowedSignatureTypes(types))
+			}
+
+			return rules.NewSignatureRule(options...)
 		},
 		requiresAnalyzer: false,
 		condition:        func(_ ValidationConfig) bool { return true }, // Always create
 	},
 	"SignOff": {
 		provider: func(config ValidationConfig, _ domain.CommitAnalyzer) domain.Rule {
-			return rules.NewSignOffRuleWithConfig(config)
+			options := []rules.SignOffOption{}
+
+			options = append(options, rules.WithRequireSignOff(config.SignOffRequired()))
+
+			options = append(options, rules.WithAllowMultipleSignOffs(config.AllowMultipleSignOffs()))
+
+			return rules.NewSignOffRule(options...)
 		},
 		requiresAnalyzer: false,
 		condition:        func(_ ValidationConfig) bool { return true }, // Always create
 	},
 	"Spell": {
 		provider: func(config ValidationConfig, _ domain.CommitAnalyzer) domain.Rule {
-			return rules.NewSpellRuleWithConfig(config)
+			options := []rules.SpellRuleOption{}
+
+			if locale := config.SpellLocale(); locale != "" {
+				options = append(options, rules.WithLocale(locale))
+			}
+
+			if maxErrors := config.SpellMaxErrors(); maxErrors > 0 {
+				options = append(options, rules.WithMaxErrors(maxErrors))
+			}
+
+			if ignoreWords := config.SpellIgnoreWords(); len(ignoreWords) > 0 {
+				options = append(options, rules.WithIgnoreWords(ignoreWords))
+			}
+
+			if customWords := config.SpellCustomWords(); len(customWords) > 0 {
+				options = append(options, rules.WithCustomWords(customWords))
+			}
+
+			return rules.NewSpellRule(options...)
 		},
 		requiresAnalyzer: false,
 		condition:        func(config ValidationConfig) bool { return config.SpellEnabled() }, // Only when enabled
 	},
 	"SubjectCase": {
 		provider: func(config ValidationConfig, _ domain.CommitAnalyzer) domain.Rule {
-			return rules.NewSubjectCaseRuleWithConfig(config, config)
+			options := []rules.SubjectCaseOption{}
+
+			if caseChoice := config.SubjectCase(); caseChoice != "" {
+				options = append(options, rules.WithCaseChoice(caseChoice))
+			}
+
+			if config.ConventionalRequired() {
+				options = append(options, rules.WithSubjectCaseCommitFormat(true))
+			}
+
+			if config.SubjectRequireImperative() {
+				options = append(options, rules.WithAllowNonAlpha(true))
+			}
+
+			return rules.NewSubjectCaseRule(options...)
 		},
 		requiresAnalyzer: false,
 		condition:        func(_ ValidationConfig) bool { return true }, // Always create
 	},
 	"SubjectSuffix": {
 		provider: func(config ValidationConfig, _ domain.CommitAnalyzer) domain.Rule {
-			return rules.NewSubjectSuffixRuleWithConfig(config)
+			suffixes := config.SubjectInvalidSuffixes()
+			if suffixes == "" {
+				return rules.NewSubjectSuffixRule()
+			}
+
+			// Just pass the string as is - the rule expects a string
+			return rules.NewSubjectSuffixRule(
+				rules.WithInvalidSuffixes(suffixes),
+			)
 		},
 		requiresAnalyzer: false,
 		condition:        func(_ ValidationConfig) bool { return true }, // Always create
 	},
 	"JiraReference": {
 		provider: func(config ValidationConfig, _ domain.CommitAnalyzer) domain.Rule {
-			return rules.NewJiraReferenceRuleWithConfig(config, config)
+			options := []rules.JiraReferenceOption{}
+
+			// Check if conventional commit format is required
+			if config.ConventionalRequired() {
+				options = append(options, rules.WithConventionalCommit())
+			}
+
+			// Check if body reference checking is enabled
+			if config.JiraBodyRef() {
+				options = append(options, rules.WithBodyRefChecking())
+			}
+
+			// Add valid projects if provided
+			if projects := config.JiraProjects(); len(projects) > 0 {
+				options = append(options, rules.WithValidProjects(projects))
+			}
+
+			return rules.NewJiraReferenceRule(options...)
 		},
 		requiresAnalyzer: false,
 		condition:        func(config ValidationConfig) bool { return config.JiraRequired() }, // Only when Jira is required
 	},
 	"CommitsAhead": {
 		provider: func(config ValidationConfig, analyzer domain.CommitAnalyzer) domain.Rule {
-			return rules.NewCommitsAheadRuleWithConfig(config, analyzer)
+			options := []rules.CommitsAheadOption{}
+
+			options = append(options, rules.WithMaxCommitsAhead(config.MaxCommitsAhead()))
+
+			if analyzer != nil {
+				options = append(options, rules.WithRepositoryGetter(func() domain.CommitAnalyzer {
+					return analyzer
+				}))
+			}
+
+			return rules.NewCommitsAheadRule(options...)
 		},
 		requiresAnalyzer: true,
 		condition:        func(config ValidationConfig) bool { return config.CheckCommitsAhead() }, // Only when enabled
@@ -788,86 +896,8 @@ func (p *DomainRuleProvider) GetAvailableRuleNames() []string {
 	return names
 }
 
-// SetActiveRules sets which rules are active based on a list of rule names.
-// If an empty list is provided, all rules will be active.
-// This method modifies the provider's internal state for backward compatibility.
-func (p *DomainRuleProvider) SetActiveRules(ruleNames []string) {
-	// We need to reinitialize rules with the new settings
-	// Reset the rules so they will be reinitialized
-	p.rules = nil
-	// For immutability, we should return a new DomainRuleProvider, but this
-	// would break backward compatibility with the existing interface.
-	// In a fully functional approach, we would have a WithActiveRules method
-	// that returns a new instance with the rules set.
-
-	// If the config supports setting enabled/disabled rules, use that
-	if configSetter, ok := p.config.(interface {
-		SetEnabledRules(ruleNames []string)
-		SetDisabledRules(ruleNames []string)
-	}); ok {
-		if len(ruleNames) > 0 {
-			// Set specific rules as enabled
-			configSetter.SetEnabledRules(ruleNames)
-			configSetter.SetDisabledRules([]string{}) // Clear disabled rules
-		} else {
-			// Enable all rules
-			configSetter.SetEnabledRules([]string{})
-			configSetter.SetDisabledRules([]string{})
-		}
-	}
-}
-
-// WithActiveRules returns a new DomainRuleProvider with the specified active rules.
-func (p DomainRuleProvider) WithActiveRules(ruleNames []string) DomainRuleProvider {
-	// Create a copy of the provider
-	providerCopy := p
-
-	// If the config supports setting enabled/disabled rules, use that
-	if configSetter, ok := providerCopy.config.(interface {
-		SetEnabledRules(ruleNames []string)
-		SetDisabledRules(ruleNames []string)
-	}); ok {
-		if len(ruleNames) > 0 {
-			// Set specific rules as enabled
-			configSetter.SetEnabledRules(ruleNames)
-			configSetter.SetDisabledRules([]string{}) // Clear disabled rules
-		} else {
-			// Enable all rules
-			configSetter.SetEnabledRules([]string{})
-			configSetter.SetDisabledRules([]string{})
-		}
-	}
-
-	// Reset the rules so they will be reinitialized
-	providerCopy.rules = nil
-
-	return providerCopy
-}
-
-// DisableRules disables specific rules by name.
-// This method modifies the provider's internal state for backward compatibility.
-func (p *DomainRuleProvider) DisableRules(ruleNames []string) {
-	// We need to reinitialize rules with the new settings
-	// Reset the rules so they will be reinitialized
-	p.rules = nil
-	// For immutability, we should return a new DomainRuleProvider, but this
-	// would break backward compatibility with the existing interface.
-	// In a fully functional approach, we would have a WithDisabledRules method
-	// that returns a new instance with the rules disabled.
-
-	// If the config supports setting disabled rules, use that
-	if configSetter, ok := p.config.(interface {
-		SetDisabledRules(ruleNames []string)
-		SetEnabledRules(ruleNames []string)
-	}); ok {
-		// Add to disabled rules but clear enabled rules (to use the disable list)
-		configSetter.SetEnabledRules([]string{})
-		configSetter.SetDisabledRules(ruleNames)
-	}
-}
-
-// WithDisabledRules returns a new DomainRuleProvider with the specified rules disabled.
-func (p DomainRuleProvider) WithDisabledRules(ruleNames []string) DomainRuleProvider {
+// disableRules is a helper function to create a new DomainRuleProvider with the specified rules disabled.
+func (p DomainRuleProvider) disableRules(ruleNames []string) DomainRuleProvider {
 	// Create a copy of the provider
 	providerCopy := p
 
@@ -881,40 +911,42 @@ func (p DomainRuleProvider) WithDisabledRules(ruleNames []string) DomainRuleProv
 		configSetter.SetDisabledRules(ruleNames)
 	}
 
-	// Reset the rules so they will be reinitialized
+	// Reset rules so they'll be reinitialized with the new config
 	providerCopy.rules = nil
 
 	return providerCopy
 }
 
-// RegisterCustomRule adds a custom rule to the provider.
-// This allows for extension with user-defined rules.
-// If a rule with the same name already exists, it will be replaced.
-// This method modifies the provider's internal state for backward compatibility.
-// For immutability, we should return a new DomainRuleProvider, but this
-// would break backward compatibility with the existing interface.
-// In a fully functional approach, we would have a WithCustomRule method
-// that returns a new instance with the rule added.
-func (p *DomainRuleProvider) RegisterCustomRule(rule domain.Rule) {
-	// Reset rules so they'll be reinitialized
-	if p.rules != nil {
-		// Find the rule by name to see if it already exists
-		for i, existingRule := range p.rules {
-			if existingRule.Name() == rule.Name() {
-				// Replace the existing rule
-				p.rules[i] = rule
+// WithDisabledRules implements the domain.RuleProvider interface.
+// It returns a new DomainRuleProvider with the specified rules disabled.
+func (p *DomainRuleProvider) WithDisabledRules(ruleNames []string) domain.RuleProvider {
+	// Create a copy of the provider with the specified rules disabled
+	newProvider := p.disableRules(ruleNames)
 
-				return
-			}
-		}
-
-		// If we didn't find and replace the rule, add it
-		p.rules = append(p.rules, rule)
-	}
+	return &newProvider
 }
 
-// WithCustomRule returns a new DomainRuleProvider with the custom rule added.
-func (p DomainRuleProvider) WithCustomRule(rule domain.Rule) DomainRuleProvider {
+// WithActiveRules implements the domain.RuleProvider interface.
+// It returns a new DomainRuleProvider with the specified active rules.
+func (p *DomainRuleProvider) WithActiveRules(ruleNames []string) domain.RuleProvider {
+	// Create a copy of the provider
+	providerCopy := *p
+
+	// If the config supports setting enabled rules, use that
+	if configSetter, ok := providerCopy.config.(interface {
+		SetEnabledRules(ruleNames []string)
+	}); ok {
+		configSetter.SetEnabledRules(ruleNames)
+	}
+
+	// Reset rules so they'll be reinitialized with the new config
+	providerCopy.rules = nil
+
+	return &providerCopy
+}
+
+// addCustomRule is a helper function to create a new DomainRuleProvider with the custom rule added.
+func (p DomainRuleProvider) addCustomRule(rule domain.Rule) DomainRuleProvider {
 	// Create a copy of the provider
 	providerCopy := p
 
@@ -944,40 +976,12 @@ func (p DomainRuleProvider) WithCustomRule(rule domain.Rule) DomainRuleProvider 
 	return providerCopy
 }
 
-// RegisterCustomRuleFactory registers a factory for creating a custom rule.
-// This allows for more flexible rule creation with conditions.
-// If a factory with the same name already exists, it will be replaced.
-// This method modifies the provider's internal state for backward compatibility.
-func (p *DomainRuleProvider) RegisterCustomRuleFactory(
-	name string,
-	factory func(config ValidationConfig, analyzer domain.CommitAnalyzer) domain.Rule,
-	requiresAnalyzer bool,
-	condition func(config ValidationConfig) bool,
-) {
-	// Create a factory entry
-	customFactory := domainRuleFactory{
-		provider:         factory,
-		requiresAnalyzer: requiresAnalyzer,
-		condition:        condition,
-	}
+// WithCustomRule implements the domain.RuleProvider interface.
+// It returns a new DomainRuleProvider with the custom rule added.
+func (p *DomainRuleProvider) WithCustomRule(rule domain.Rule) domain.RuleProvider {
+	newProvider := p.addCustomRule(rule)
 
-	// Register the factory in a thread-safe way
-	// Since maps are not inherently thread-safe in Go, we make a copy
-	// This is not strictly necessary in single-threaded use, but is good practice
-	// For immutability, we should return a new DomainRuleProvider, but this
-	// would break backward compatibility with the existing interface.
-	// In a fully functional approach, we would have a WithCustomRuleFactory method
-	// that returns a new instance with the factory added.
-	customFactories := make(map[string]domainRuleFactory)
-	for name, factory := range p.customFactories {
-		customFactories[name] = factory
-	}
-
-	customFactories[name] = customFactory
-	p.customFactories = customFactories
-
-	// Reset rules so they'll be reinitialized with the new factory
-	p.rules = nil
+	return &newProvider
 }
 
 // WithCustomRuleFactory returns a new DomainRuleProvider with the custom rule factory added.
@@ -1077,52 +1081,29 @@ func (e DomainValidationEngine) GetProvider() domain.RuleProvider {
 }
 
 // WithProvider returns a new DomainValidationEngine with the provider replaced.
-func (e DomainValidationEngine) WithProvider(provider domain.RuleProvider) DomainValidationEngine {
-	return DomainValidationEngine{
+func (e DomainValidationEngine) WithProvider(provider domain.RuleProvider) ValidationEngine {
+	return &DomainValidationEngine{
 		provider: provider,
-	}
-}
-
-// RegisterCustomRule delegates to the provider if it supports registering custom rules.
-// This method maintains backward compatibility by modifying the underlying provider.
-func (e DomainValidationEngine) RegisterCustomRule(rule domain.Rule) {
-	// Check if provider supports custom rules
-	if customizer, ok := e.provider.(interface{ RegisterCustomRule(rule domain.Rule) }); ok {
-		customizer.RegisterCustomRule(rule)
 	}
 }
 
 // WithCustomRule returns a new DomainValidationEngine with the custom rule registered to the provider.
 // If the provider doesn't support registering custom rules, returns the original engine unchanged.
 func (e DomainValidationEngine) WithCustomRule(rule domain.Rule) DomainValidationEngine {
-	// Create a copy of the engine
-	engineCopy := e
+	// Check if provider supports WithCustomRule
+	if provider, ok := e.provider.(interface {
+		WithCustomRule(ruleToAdd domain.Rule) domain.RuleProvider
+	}); ok {
+		newProvider := provider.WithCustomRule(rule)
 
-	// Register the rule with the provider (this mutates the provider)
-	engineCopy.RegisterCustomRule(rule)
-
-	return engineCopy
-}
-
-// RegisterCustomRuleFactory delegates to the provider if it supports registering custom rule factories.
-// This method maintains backward compatibility by modifying the underlying provider.
-func (e DomainValidationEngine) RegisterCustomRuleFactory(
-	name string,
-	factory func(config ValidationConfig, analyzer domain.CommitAnalyzer) domain.Rule,
-	requiresAnalyzer bool,
-	condition func(config ValidationConfig) bool,
-) {
-	// Check if provider supports custom rule factories
-	if factoryRegistrar, exists := e.provider.(interface {
-		RegisterCustomRuleFactory(
-			name string,
-			factory func(config ValidationConfig, analyzer domain.CommitAnalyzer) domain.Rule,
-			requiresAnalyzer bool,
-			condition func(config ValidationConfig) bool,
-		)
-	}); exists {
-		factoryRegistrar.RegisterCustomRuleFactory(name, factory, requiresAnalyzer, condition)
+		// Use type assertion to convert from interface to concrete type
+		if newEngine, ok := e.WithProvider(newProvider).(*DomainValidationEngine); ok {
+			return *newEngine
+		}
 	}
+
+	// If provider doesn't support the operation, return unchanged
+	return e
 }
 
 // WithCustomRuleFactory returns a new DomainValidationEngine with the custom rule factory registered.
@@ -1133,13 +1114,25 @@ func (e DomainValidationEngine) WithCustomRuleFactory(
 	requiresAnalyzer bool,
 	condition func(config ValidationConfig) bool,
 ) DomainValidationEngine {
-	// Create a copy of the engine
-	engineCopy := e
+	// Check if provider supports WithCustomRuleFactory
+	if provider, hasCustomRuleFactory := e.provider.(interface {
+		WithCustomRuleFactory(
+			name string,
+			factory func(config ValidationConfig, analyzer domain.CommitAnalyzer) domain.Rule,
+			requiresAnalyzer bool,
+			condition func(config ValidationConfig) bool,
+		) domain.RuleProvider
+	}); hasCustomRuleFactory {
+		newProvider := provider.WithCustomRuleFactory(name, factory, requiresAnalyzer, condition)
 
-	// Register the factory with the provider (this mutates the provider)
-	engineCopy.RegisterCustomRuleFactory(name, factory, requiresAnalyzer, condition)
+		// Use type assertion to convert from interface to concrete type
+		if newEngine, ok := e.WithProvider(newProvider).(*DomainValidationEngine); ok {
+			return *newEngine
+		}
+	}
 
-	return engineCopy
+	// If provider doesn't support the operation, return unchanged
+	return e
 }
 
 // GetAvailableRuleNames delegates to the provider if it supports this method.
@@ -1160,62 +1153,40 @@ func (e DomainValidationEngine) GetAvailableRuleNames() []string {
 	return names
 }
 
-// SetActiveRules sets which rules should be active.
-// This delegates to the provider if it supports setting active rules.
-// This method maintains backward compatibility by modifying the underlying provider.
-func (e DomainValidationEngine) SetActiveRules(ruleNames []string) error {
-	// Check if provider supports setting active rules
-	if activeSetter, ok := e.provider.(interface{ SetActiveRules(ruleNames []string) }); ok {
-		activeSetter.SetActiveRules(ruleNames)
-
-		return nil
-	}
-
-	return errors.New("SetActiveRules", errors.ErrInvalidConfig, "rule provider does not support setting active rules")
-}
-
 // WithActiveRules returns a new DomainValidationEngine with the specified active rules.
 // If the provider doesn't support setting active rules, returns an error and the original engine.
 func (e DomainValidationEngine) WithActiveRules(ruleNames []string) (DomainValidationEngine, error) {
-	// Create a copy of the engine
-	engineCopy := e
+	// Check if provider supports WithActiveRules
+	if provider, ok := e.provider.(interface {
+		WithActiveRules(ruleNames []string) domain.RuleProvider
+	}); ok {
+		newProvider := provider.WithActiveRules(ruleNames)
 
-	// Set active rules (this mutates the provider)
-	err := engineCopy.SetActiveRules(ruleNames)
-	if err != nil {
-		return e, err // Return original engine on error
+		// Use type assertion to convert from interface to concrete type
+		if newEngine, ok := e.WithProvider(newProvider).(*DomainValidationEngine); ok {
+			return *newEngine, nil
+		}
 	}
 
-	return engineCopy, nil
-}
-
-// DisableRules disables specific rules.
-// This delegates to the provider if it supports disabling rules.
-// This method maintains backward compatibility by modifying the underlying provider.
-func (e DomainValidationEngine) DisableRules(ruleNames []string) error {
-	// Check if provider supports disabling rules
-	if ruleSetter, ok := e.provider.(interface{ DisableRules(ruleNames []string) }); ok {
-		ruleSetter.DisableRules(ruleNames)
-
-		return nil
-	}
-
-	return errors.New("DisableRules", errors.ErrInvalidConfig, "rule provider does not support disabling rules")
+	return e, errors.New("WithActiveRules", errors.ErrInvalidConfig, "rule provider does not support setting active rules")
 }
 
 // WithDisabledRules returns a new DomainValidationEngine with the specified rules disabled.
 // If the provider doesn't support disabling rules, returns an error and the original engine.
 func (e DomainValidationEngine) WithDisabledRules(ruleNames []string) (DomainValidationEngine, error) {
-	// Create a copy of the engine
-	engineCopy := e
+	// Check if provider supports WithDisabledRules
+	if provider, hasProvider := e.provider.(interface {
+		WithDisabledRules(ruleNames []string) domain.RuleProvider
+	}); hasProvider {
+		newProvider := provider.WithDisabledRules(ruleNames)
 
-	// Disable rules (this mutates the provider)
-	err := engineCopy.DisableRules(ruleNames)
-	if err != nil {
-		return e, err // Return original engine on error
+		// Use type assertion to convert from interface to concrete type
+		if newEngine, ok := e.WithProvider(newProvider).(*DomainValidationEngine); ok {
+			return *newEngine, nil
+		}
 	}
 
-	return engineCopy, nil
+	return e, errors.New("WithDisabledRules", errors.ErrInvalidConfig, "rule provider does not support disabling rules")
 }
 
 // ValidateCommit validates a single commit.

@@ -47,7 +47,7 @@ type ConventionalCommitOption func(ConventionalCommitRule) ConventionalCommitRul
 func WithAllowedTypes(types []string) ConventionalCommitOption {
 	return func(r ConventionalCommitRule) ConventionalCommitRule {
 		newRule := r
-		newRule.allowedTypes = types
+		newRule.allowedTypes = deepCopyStringSlice(types)
 
 		return newRule
 	}
@@ -57,7 +57,7 @@ func WithAllowedTypes(types []string) ConventionalCommitOption {
 func WithAllowedScopes(scopes []string) ConventionalCommitOption {
 	return func(r ConventionalCommitRule) ConventionalCommitRule {
 		newRule := r
-		newRule.allowedScopes = scopes
+		newRule.allowedScopes = deepCopyStringSlice(scopes)
 
 		return newRule
 	}
@@ -724,4 +724,21 @@ Common types:
 - revert: reverts a previous commit
 
 For more information, see https://www.conventionalcommits.org/`
+}
+
+// Helper function for deep copying string slices.
+func deepCopyStringSlice(src []string) []string {
+	if src == nil {
+		return nil
+	}
+
+	dst := make([]string, len(src))
+	copy(dst, src)
+
+	return dst
+}
+
+// ValidateConventionalWithState is the exported version for testing.
+func ValidateConventionalWithState(rule ConventionalCommitRule, commit domain.CommitInfo) ([]appErrors.ValidationError, ConventionalCommitRule) {
+	return validateConventionalWithState(rule, commit)
 }

@@ -26,15 +26,13 @@ func main() {
 
 	// Create dependencies
 	// This is the composition root where all dependencies are wired together
-	configManager, err := config.New()
+
+	// Create config manager
+	configManager, err := config.NewManager()
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to create configuration manager")
 		os.Exit(1)
 	}
-
-	// Previously we had a repository factory function here, but it was removed
-	// in favor of a simpler approach that doesn't require extra dependencies
-	// in the ExecuteWithDependencies function.
 
 	// Execute root command with our dependencies
 	// This approach allows us to replace dependencies for testing

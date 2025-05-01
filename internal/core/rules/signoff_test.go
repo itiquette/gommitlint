@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
@@ -324,4 +325,70 @@ Signed-off-by: Dev Two <dev2@example.com>`
 		require.Equal(t, "missing_signoff", errors[0].Context["original_code"])
 		require.Contains(t, errors[0].Context, "message")
 	})
+}
+
+// TestSignOffRuleWithConfig tests creating the rule using unified configuration.
+func TestSignOffRuleWithConfig(t *testing.T) {
+	tests := []struct {
+		name          string
+		message       string
+		config        config.Config
+		expectedValid bool
+	}{
+		{
+			name: "SignOff required in config",
+			message: `Add feature
+This is a detailed description.`,
+			config: config.NewConfig().
+				WithSignOffRequired(true),
+			expectedValid: false,
+		},
+		{
+			name: "SignOff not required in config",
+			message: `Add feature
+This is a detailed description.`,
+			config: config.NewConfig().
+				WithSignOffRequired(false),
+			expectedValid: true,
+		},
+		{
+			name: "Multiple sign-offs allowed in config",
+			message: `Fix bug
+Signed-off-by: Laval Lion <laval.lion@cavora.org>
+Signed-off-by: Cragger Crocodile <cragger@svamp.org>`,
+			config: config.NewConfig().
+				WithSignOffRequired(true).
+				WithAllowMultipleSignOffs(true),
+			expectedValid: true,
+		},
+		{
+			name: "Multiple sign-offs not allowed in config",
+			message: `Fix bug
+Signed-off-by: Laval Lion <laval.lion@cavora.org>
+Signed-off-by: Cragger Crocodile <cragger@svamp.org>`,
+			config: config.NewConfig().
+				WithSignOffRequired(true).
+				WithAllowMultipleSignOffs(false),
+			expectedValid: false,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			// Create commit info
+			commit := domain.CommitInfo{
+				Body: testCase.message,
+			}
+
+			// Create rule with unified config
+			rule := rules.NewSignOffRuleWithConfig(testCase.config)
+			errors := rule.Validate(commit)
+
+			if testCase.expectedValid {
+				require.Empty(t, errors, "expected no validation errors")
+			} else {
+				require.NotEmpty(t, errors, "expected validation errors")
+			}
+		})
+	}
 }

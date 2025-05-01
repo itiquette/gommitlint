@@ -8,6 +8,7 @@ package validation
 import (
 	"context"
 
+	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/errors"
 )
@@ -22,6 +23,12 @@ func NewEngine(provider domain.RuleProvider) Engine {
 	return Engine{
 		ruleProvider: provider,
 	}
+}
+
+// NewFakeConfigForTesting creates a simple config for testing purposes.
+// This is only used in tests and should not be used in production code.
+func NewFakeConfigForTesting() config.Config {
+	return config.NewConfig()
 }
 
 // ValidateCommit validates a single commit against all active rules.

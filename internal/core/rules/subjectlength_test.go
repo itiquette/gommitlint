@@ -113,13 +113,12 @@ func TestSubjectLengthRule(t *testing.T) {
 }
 
 func TestSubjectLengthRuleWithConfig(t *testing.T) {
-	// Create a mock config provider
-	mockConfig := &mockSubjectConfigProvider{maxLength: 50}
+	// Create a rule with options
+	rule := rules.NewSubjectLengthRule(
+		rules.WithMaxLength(50),
+	)
 
-	// Create rule using config
-	rule := rules.NewSubjectLengthRuleWithConfig(mockConfig)
-
-	// Verify the rule uses the config value
+	// Verify the rule uses the provided value
 	commit := domain.CommitInfo{
 		Subject: strings.Repeat("a", 51), // One character over the limit
 	}
@@ -129,37 +128,10 @@ func TestSubjectLengthRuleWithConfig(t *testing.T) {
 	require.Len(t, errors, 1, "Should have exactly one error")
 	require.Equal(t, string(appErrors.ErrSubjectTooLong), errors[0].Code)
 
-	// Check context values - we now use subject_length instead of actual_length
+	// Check context values
 	require.Equal(t, "51", errors[0].Context["subject_length"])
 	require.Equal(t, "50", errors[0].Context["max_length"])
 }
 
-// mockSubjectConfigProvider is a test helper that implements domain.SubjectConfigProvider.
-type mockSubjectConfigProvider struct {
-	maxLength       int
-	invalidSuffixes string
-}
-
-func (m *mockSubjectConfigProvider) SubjectMaxLength() int {
-	return m.maxLength
-}
-
-func (m *mockSubjectConfigProvider) SubjectCase() string {
-	return "lower" // Not used in this test
-}
-
-func (m *mockSubjectConfigProvider) SubjectRequireImperative() bool {
-	return false // Not used in this test
-}
-
-func (m *mockSubjectConfigProvider) SubjectAllowTrailingPeriod() bool {
-	return false // Not used in this test
-}
-
-func (m *mockSubjectConfigProvider) SubjectInvalidSuffixes() string {
-	if m.invalidSuffixes == "" {
-		return "." // Default value if not set
-	}
-
-	return m.invalidSuffixes
-}
+// Note: Mock provider implementation has been removed as it's not used in the tests
+// The tests use functional options pattern (rules.WithMaxLength) instead of configuration providers

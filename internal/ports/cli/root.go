@@ -24,7 +24,7 @@ const (
 // It uses domain interfaces instead of concrete implementations to follow
 // the Dependency Inversion Principle.
 type AppDependencies struct {
-	// ConfigManager provides configuration values
+	// ConfigManager provides configuration
 	ConfigManager *config.Manager
 }
 
@@ -46,8 +46,10 @@ func newRootCommand(ctx context.Context, versionString string, deps *AppDependen
 		},
 	}
 
+	// Create validate command
 	validateCmd := newValidateCmd()
 
+	// Add the validate command
 	rootCmd.AddCommand(validateCmd)
 	rootCmd.AddCommand(newInstallHookCmd())
 	rootCmd.AddCommand(newRemoveHookCmd())
@@ -58,8 +60,8 @@ func newRootCommand(ctx context.Context, versionString string, deps *AppDependen
 func Execute(version, commitSHA, buildDate string) {
 	ctx := context.Background()
 
-	// Create default dependencies
-	configManager, err := config.New()
+	// Create config manager
+	configManager, err := config.NewManager()
 	if err != nil {
 		zerolog.Ctx(ctx).Error().Err(err).Msg("Failed to create configuration manager")
 		os.Exit(1)

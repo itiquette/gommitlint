@@ -85,6 +85,13 @@ func (r MockRule) Errors() []errors.ValidationError {
 }
 
 // MockRuleProvider is a mock implementation of the RuleProvider interface for testing.
+// MockAnalyzer is a mock implementation of the CommitAnalyzer interface for testing.
+type MockAnalyzer struct{}
+
+func (m *MockAnalyzer) GetCommitsAhead(_ context.Context, _ string) (int, error) {
+	return 0, nil
+}
+
 type MockRuleProvider struct {
 	rules []domain.Rule
 }
@@ -103,6 +110,21 @@ func (p *MockRuleProvider) GetActiveRules() []domain.Rule {
 	return p.rules
 }
 
+func (p *MockRuleProvider) WithActiveRules(_ []string) domain.RuleProvider {
+	// Simplified implementation for testing - just returns self
+	return p
+}
+
+func (p *MockRuleProvider) WithDisabledRules(_ []string) domain.RuleProvider {
+	// Simplified implementation for testing - just returns self
+	return p
+}
+
+func (p *MockRuleProvider) WithCustomRule(_ domain.Rule) domain.RuleProvider {
+	// Simplified implementation for testing - just returns self
+	return p
+}
+
 // TestValidationEngine_ValidateCommit tests the validation of a single commit.
 func TestValidationEngine_ValidateCommit(t *testing.T) {
 	// Create mock rules
@@ -112,7 +134,10 @@ func TestValidationEngine_ValidateCommit(t *testing.T) {
 	// Create mock rule provider
 	provider := NewMockRuleProvider([]domain.Rule{passingRule, failingRule})
 
-	// Create validation engine
+	// No longer needed as we're using NewEngine directly
+	_ = &MockAnalyzer{}
+
+	// Create validation engine with custom rule provider
 	engine := validation.NewEngine(provider)
 
 	// Create test commit
@@ -166,7 +191,10 @@ func TestValidationEngine_ValidateCommits(t *testing.T) {
 	// Create mock rule provider
 	provider := NewMockRuleProvider([]domain.Rule{passingRule, conditionalRule})
 
-	// Create validation engine
+	// No longer needed as we're using NewEngine directly
+	_ = &MockAnalyzer{}
+
+	// Create validation engine with custom rule provider
 	engine := validation.NewEngine(provider)
 
 	// Create test commits
@@ -241,7 +269,10 @@ func TestValidationEngine_Timeout(t *testing.T) {
 	// Create mock rule provider
 	provider := NewMockRuleProvider([]domain.Rule{slowRule})
 
-	// Create validation engine
+	// No longer needed as we're using NewEngine directly
+	_ = &MockAnalyzer{}
+
+	// Create validation engine with custom rule provider
 	engine := validation.NewEngine(provider)
 
 	// Create test commit

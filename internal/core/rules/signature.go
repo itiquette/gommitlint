@@ -698,3 +698,5 @@ func signatureSafeMin(a, b int) int {
 
 	return b
 }
+
+// NewSignatureRuleWithConfig creates a SignatureRule using the unified configuration.

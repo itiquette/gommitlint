@@ -16,7 +16,39 @@ func TestFromGommitlintConfig(t *testing.T) {
 		config := FromGommitlintConfig(gommitCfg)
 
 		// Should contain default values
-		require.Equal(t, DefaultConfig(), config)
+		// Create a default config with empty values, since FromGommitlintConfig
+		// converts an empty GommitlintConfig to Config with empty values
+		// and only later adds defaults in manager.go
+		emptyConfig := Config{
+			Subject: SubjectConfig{
+				Jira: JiraConfig{
+					Projects: []string{},
+				},
+			},
+			Body: BodyConfig{},
+			Conventional: ConventionalConfig{
+				Scopes: []string{},
+				Types:  []string{},
+			},
+			SpellCheck: SpellCheckConfig{
+				IgnoreWords: []string{},
+				CustomWords: map[string]string{},
+			},
+			Security: SecurityConfig{
+				AllowedSignatureTypes: []string{"gpg", "ssh"},
+				AllowMultipleSignOffs: true,
+				Identity:              IdentityConfig{},
+			},
+			Repository: RepositoryConfig{
+				MaxCommitsAhead: 5,
+			},
+			Rules: RulesConfig{
+				EnabledRules:  []string{},
+				DisabledRules: []string{},
+			},
+		}
+
+		require.Equal(t, emptyConfig, config)
 	})
 
 	t.Run("full config", func(t *testing.T) {
@@ -159,7 +191,7 @@ func TestToGommitlintConfig(t *testing.T) {
 		}
 
 		// Convert to gommitlint config
-		gommitCfg := ToGommitlintConfig(config)
+		gommitCfg := config.ToGommitlintConfig()
 
 		// Verify conversion
 		require.Equal(t, "upper", gommitCfg.Subject.Case)

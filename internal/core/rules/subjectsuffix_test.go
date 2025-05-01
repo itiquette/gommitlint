@@ -6,36 +6,15 @@ package rules_test
 import (
 	"testing"
 
+	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 	"github.com/stretchr/testify/require"
 )
 
-// mockSuffixConfigProvider implements domain.SubjectConfigProvider for testing.
-type mockSuffixConfigProvider struct {
-	invalidSuffixes string
-}
-
-// SubjectMaxLength returns the maximum length of the commit subject.
-func (m *mockSuffixConfigProvider) SubjectMaxLength() int {
-	return 72 // Default value, not used for this test
-}
-
-// SubjectCase returns the case that the first word of the description must have.
-func (m *mockSuffixConfigProvider) SubjectCase() string {
-	return "lowercase" // Default value, not used for this test
-}
-
-// SubjectRequireImperative returns whether imperative verbs are enforced.
-func (m *mockSuffixConfigProvider) SubjectRequireImperative() bool {
-	return false // Default value, not used for this test
-}
-
-// SubjectInvalidSuffixes returns characters that cannot be used at the end of the subject.
-func (m *mockSuffixConfigProvider) SubjectInvalidSuffixes() string {
-	return m.invalidSuffixes
-}
+// Note: Mock provider implementation has been removed as it's not used in the tests
+// The tests use functional options pattern (rules.WithInvalidSuffixes) and config.Config instead
 
 func TestSubjectSuffixRule(t *testing.T) {
 	testCases := []struct {
@@ -273,12 +252,11 @@ func TestSubjectSuffixOptions(t *testing.T) {
 	})
 }
 
-func TestSubjectSuffixRuleWithConfig(t *testing.T) {
-	// Create a mock config provider
-	mockConfig := &mockSuffixConfigProvider{invalidSuffixes: "!@#"}
-
-	// Create rule using config
-	rule := rules.NewSubjectSuffixRuleWithConfig(mockConfig)
+func TestSubjectSuffixRuleWithCustomOptions(t *testing.T) {
+	// Create rule with options
+	rule := rules.NewSubjectSuffixRule(
+		rules.WithInvalidSuffixes("!@#"),
+	)
 
 	// Verify the rule uses the config value
 	commit := domain.CommitInfo{
@@ -293,4 +271,106 @@ func TestSubjectSuffixRuleWithConfig(t *testing.T) {
 	// Check context values
 	require.Equal(t, "!", errors[0].Context["last_char"])
 	require.Equal(t, "!@#", errors[0].Context["invalid_suffixes"])
+}
+
+func TestSubjectSuffixRuleWithConfig(t *testing.T) {
+	tests := []struct {
+		name         string
+		configSetup  func() config.Config
+		subject      string
+		expectErrors bool
+		description  string
+	}{
+		{
+			name: "Default invalid suffixes - valid subject",
+			configSetup: func() config.Config {
+				return config.NewConfig() // Use default suffixes
+			},
+			subject:      "Add new feature",
+			expectErrors: false,
+			description:  "Should pass with default suffixes and valid subject",
+		},
+		{
+			name: "Default invalid suffixes - invalid subject",
+			configSetup: func() config.Config {
+				return config.NewConfig() // Use default suffixes
+			},
+			subject:      "Add new feature.",
+			expectErrors: true,
+			description:  "Should fail with default suffixes and subject ending with period",
+		},
+		{
+			name: "Custom invalid suffixes - valid with default invalid suffix",
+			configSetup: func() config.Config {
+				return config.NewConfig().
+					WithSubjectInvalidSuffixes("!?") // Only ! and ? are invalid
+			},
+			subject:      "Add new feature.", // Period is allowed with custom config
+			expectErrors: false,
+			description:  "Should pass when period is not in custom invalid suffixes",
+		},
+		{
+			name: "Custom invalid suffixes - invalid with custom suffix",
+			configSetup: func() config.Config {
+				return config.NewConfig().
+					WithSubjectInvalidSuffixes("!?") // Only ! and ? are invalid
+			},
+			subject:      "Add new feature!", // Exclamation mark is not allowed
+			expectErrors: true,
+			description:  "Should fail when ending with a character in custom invalid suffixes",
+		},
+		{
+			name: "Empty subject",
+			configSetup: func() config.Config {
+				return config.NewConfig()
+			},
+			subject:      "",
+			expectErrors: true,
+			description:  "Should fail with empty subject",
+		},
+		{
+			name: "Unicode invalid suffixes",
+			configSetup: func() config.Config {
+				return config.NewConfig().
+					WithSubjectInvalidSuffixes("😊😀") // Only emojis are invalid
+			},
+			subject:      "Add new emoji😊",
+			expectErrors: true,
+			description:  "Should fail with Unicode invalid suffixes",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			// Create unified config with test options
+			unifiedConfig := testCase.configSetup()
+
+			// Create rule with unified config
+			rule := rules.NewSubjectSuffixRuleWithConfig(unifiedConfig)
+
+			// Create test commit
+			commit := domain.CommitInfo{
+				Hash:    "abc123",
+				Subject: testCase.subject,
+				Message: testCase.subject,
+			}
+
+			// Validate and check results
+			errors := rule.Validate(commit)
+
+			if testCase.expectErrors {
+				require.NotEmpty(t, errors, "Expected validation errors but got none")
+
+				// Check rule name in errors
+				if len(errors) > 0 {
+					require.Equal(t, "SubjectSuffix", errors[0].Rule, "Rule name should be correct in error")
+				}
+			} else {
+				require.Empty(t, errors, "Expected no validation errors but got: %v", errors)
+			}
+
+			// Check rule name
+			require.Equal(t, "SubjectSuffix", rule.Name(), "Rule name should be 'SubjectSuffix'")
+		})
+	}
 }

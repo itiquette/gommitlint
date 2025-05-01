@@ -25,7 +25,8 @@ func Example_customRule() {
 	var service validate.ValidationService // This would be properly initialized in real code
 
 	// Register the rule with the validation service
-	_ = service.RegisterCustomRule(customRule)
+	// Note: In real code, you would check the error and use the updated service
+	_, _ = service.WithCustomRule(customRule)
 
 	// Now when validating commits, the custom rule will be included
 	fmt.Println("Custom rule registered successfully")
@@ -39,7 +40,8 @@ func Example_customRuleFactory() {
 	var service validate.ValidationService // This would be properly initialized in real code
 
 	// Register a factory for creating the rule conditionally
-	_ = service.RegisterCustomRuleFactory(
+	// Note: In real code, you would check the error and use the updated service
+	_, _ = service.WithCustomRuleFactory(
 		"ConditionalJiraRule",
 		// Factory function to create the rule
 		func(config validate.ValidationConfig, _ domain.CommitAnalyzer) domain.Rule {

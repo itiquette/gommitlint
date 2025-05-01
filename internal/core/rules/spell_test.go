@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/golangci/misspell"
+	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
@@ -356,6 +357,133 @@ func TestSpellRule(t *testing.T) {
 
 			// Validate the rule methods
 			validateRuleMethods(t, testCase, rule, errors)
+		})
+	}
+}
+
+// TestSpellRuleWithConfig tests the spell rule with unified config integration.
+func TestSpellRuleWithConfig(t *testing.T) {
+	tests := []struct {
+		name          string
+		subject       string
+		body          string
+		config        config.Config
+		expectedValid bool
+	}{
+		{
+			name:    "SpellCheck disabled",
+			subject: "This contains a definately misspelled word", //nolint
+			body:    "This is a test body",
+			config: config.NewConfig().
+				WithSpellEnabled(false),
+			expectedValid: true,
+		},
+		{
+			name:    "SpellCheck enabled with misspelling",
+			subject: "Add new receive",
+			body:    "This is a properly spelled commit message.",
+			config: config.NewConfig().
+				WithSpellEnabled(true),
+			expectedValid: false,
+		},
+		{
+			name:    "SpellCheck with ignore words",
+			subject: "Add new receive",
+			body:    "This is a properly spelled commit message.",
+			config: config.NewConfig().
+				WithSpellEnabled(true).
+				WithSpellIgnoreWords([]string{"receive"}),
+			expectedValid: true,
+		},
+		{
+			name:    "SpellCheck with custom words",
+			subject: "Add new customterm",
+			body:    "This is a properly spelled commit message.",
+			config: config.NewConfig().
+				WithSpellEnabled(true).
+				WithSpellCustomWords(map[string]string{"customterm": "CustomTerm"}),
+			expectedValid: false,
+		},
+		{
+			name:    "SpellCheck with invalid locale",
+			subject: "This is a proper sentence",
+			body:    "This is a test body",
+			config: config.NewConfig().
+				WithSpellEnabled(true).
+				WithSpellLocale("INVALID"),
+			expectedValid: false,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			// Create commit info
+			commit := domain.CommitInfo{
+				Subject: testCase.subject,
+				Body:    testCase.body,
+			}
+
+			// Create rule with unified config
+			// Create rule with options
+			options := []rules.SpellRuleOption{}
+
+			if locale := testCase.config.SpellLocale(); locale != "" {
+				options = append(options, rules.WithLocale(locale))
+			}
+
+			if maxErrors := testCase.config.SpellMaxErrors(); maxErrors > 0 {
+				options = append(options, rules.WithMaxErrors(maxErrors))
+			}
+
+			if ignoreWords := testCase.config.SpellIgnoreWords(); len(ignoreWords) > 0 {
+				options = append(options, rules.WithIgnoreWords(ignoreWords))
+			}
+
+			if customWords := testCase.config.SpellCustomWords(); len(customWords) > 0 {
+				options = append(options, rules.WithCustomWords(customWords))
+			}
+
+			// If spell checking is disabled, the validation should return no errors
+			if !testCase.config.SpellEnabled() {
+				options = append(options, rules.WithTestingDisabled(true))
+			}
+
+			rule := rules.NewSpellRule(options...)
+			errors := rule.Validate(commit)
+
+			if testCase.expectedValid {
+				require.Empty(t, errors, "expected no validation errors")
+			} else {
+				require.NotEmpty(t, errors, "expected validation errors")
+			}
+
+			// If we got errors, update the rule with them for testing methods
+			if len(errors) > 0 {
+				// Create some diffs based on the errors found
+				diffs := []misspell.Diff{}
+
+				for _, err := range errors {
+					if original, ok := err.Context["original"]; ok {
+						if corrected, ok := err.Context["corrected"]; ok {
+							diffs = append(diffs, misspell.Diff{
+								Original:  original,
+								Corrected: corrected,
+							})
+						}
+					}
+				}
+
+				rule = rule.SetErrors(errors, diffs)
+			}
+
+			// Test helpers
+			require.Equal(t, "Spell", rule.Name(), "Rule name should be 'Spell'")
+			require.NotEmpty(t, rule.Help(), "Help text should not be empty")
+			require.NotEmpty(t, rule.VerboseResult(), "Verbose result should not be empty")
+
+			// Verify HasErrors matches our expected validity
+			require.Equal(t, !testCase.expectedValid, rule.HasErrors(),
+				"HasErrors should match our validity expectation")
 		})
 	}
 }

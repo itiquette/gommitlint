@@ -9,25 +9,33 @@ import "github.com/itiquette/gommitlint/internal/domain"
 
 // Ensure Config implements all the config provider interfaces.
 var (
-	_ domain.SubjectConfigProvider      = (*Config)(nil)
-	_ domain.JiraConfigProvider         = (*Config)(nil)
-	_ domain.BodyConfigProvider         = (*Config)(nil)
-	_ domain.ConventionalConfigProvider = (*Config)(nil)
-	_ domain.SecurityConfigProvider     = (*Config)(nil)
-	_ domain.SpellCheckConfigProvider   = (*Config)(nil)
-	_ domain.RepositoryConfigProvider   = (*Config)(nil)
-	_ domain.RuleConfigProvider         = (*Config)(nil)
+	_ domain.SubjectConfigProvider      = Config{}
+	_ domain.JiraConfigProvider         = Config{}
+	_ domain.BodyConfigProvider         = Config{}
+	_ domain.ConventionalConfigProvider = Config{}
+	_ domain.SecurityConfigProvider     = Config{}
+	_ domain.SpellCheckConfigProvider   = Config{}
+	_ domain.RepositoryConfigProvider   = Config{}
+	_ domain.RuleConfigProvider         = Config{}
 )
 
 // Implementation for SubjectConfigProvider.
 
 // SubjectMaxLength returns the maximum length allowed for commit subjects.
 func (c Config) SubjectMaxLength() int {
+	if c.Subject.MaxLength <= 0 {
+		return DefaultSubjectConfig().MaxLength
+	}
+
 	return c.Subject.MaxLength
 }
 
 // SubjectCase returns the case style required for commit subjects.
 func (c Config) SubjectCase() string {
+	if c.Subject.Case == "" {
+		return DefaultSubjectConfig().Case
+	}
+
 	return c.Subject.Case
 }
 
@@ -45,7 +53,7 @@ func (c Config) SubjectInvalidSuffixes() string {
 
 // JiraProjects returns the list of JIRA project keys that can be referenced in commits.
 func (c Config) JiraProjects() []string {
-	return c.Subject.Jira.Projects
+	return deepCopyStringSlice(c.Subject.Jira.Projects)
 }
 
 // JiraBodyRef returns whether JIRA references are allowed in the commit body.
@@ -84,12 +92,12 @@ func (c Config) BodyAllowSignOffOnly() bool {
 
 // ConventionalTypes returns the allowed types for conventional commits.
 func (c Config) ConventionalTypes() []string {
-	return c.Conventional.Types
+	return deepCopyStringSlice(c.Conventional.Types)
 }
 
 // ConventionalScopes returns the allowed scopes for conventional commits.
 func (c Config) ConventionalScopes() []string {
-	return c.Conventional.Scopes
+	return deepCopyStringSlice(c.Conventional.Scopes)
 }
 
 // ConventionalMaxDescriptionLength returns the maximum length allowed for conventional commit descriptions.
@@ -111,7 +119,7 @@ func (c Config) SignatureRequired() bool {
 
 // AllowedSignatureTypes returns the signature types that are allowed for commit verification.
 func (c Config) AllowedSignatureTypes() []string {
-	return c.Security.AllowedSignatureTypes
+	return deepCopyStringSlice(c.Security.AllowedSignatureTypes)
 }
 
 // SignOffRequired returns whether commit sign-offs are required.
@@ -143,12 +151,12 @@ func (c Config) SpellEnabled() bool {
 
 // SpellIgnoreWords returns the list of words to ignore during spell checking.
 func (c Config) SpellIgnoreWords() []string {
-	return c.SpellCheck.IgnoreWords
+	return deepCopyStringSlice(c.SpellCheck.IgnoreWords)
 }
 
 // SpellCustomWords returns the custom word replacements for spell checking.
 func (c Config) SpellCustomWords() map[string]string {
-	return c.SpellCheck.CustomWords
+	return deepCopyStringMap(c.SpellCheck.CustomWords)
 }
 
 // SpellMaxErrors returns the maximum number of spelling errors allowed.
@@ -182,12 +190,12 @@ func (c Config) CheckCommitsAhead() bool {
 
 // EnabledRules returns the list of enabled validation rules.
 func (c Config) EnabledRules() []string {
-	return c.Rules.EnabledRules
+	return deepCopyStringSlice(c.Rules.EnabledRules)
 }
 
 // DisabledRules returns the list of disabled validation rules.
 func (c Config) DisabledRules() []string {
-	return c.Rules.DisabledRules
+	return deepCopyStringSlice(c.Rules.DisabledRules)
 }
 
 // GetAvailableRules returns a list of all available rule names.
@@ -215,7 +223,7 @@ func (c Config) GetActiveRules() []string {
 
 	// If specific rules are enabled, return those
 	if len(c.Rules.EnabledRules) > 0 {
-		return c.Rules.EnabledRules
+		return deepCopyStringSlice(c.Rules.EnabledRules)
 	}
 
 	// Otherwise, return all available except disabled

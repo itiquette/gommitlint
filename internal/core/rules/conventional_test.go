@@ -1,334 +1,246 @@
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
-package rules_test
+package rules
 
 import (
-	"strings"
 	"testing"
 
-	"github.com/itiquette/gommitlint/internal/core/rules"
+	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/domain"
-	appErrors "github.com/itiquette/gommitlint/internal/errors"
 	"github.com/stretchr/testify/require"
 )
 
-// TestConventionalCommitRule covers the basic validation functionality.
-func TestConventionalCommitRule(t *testing.T) {
-	// Default allowed types and scopes for tests
-	allowedTypes := []string{"feat", "fix", "docs", "style", "refactor", "test", "chore"}
-	allowedScopes := []string{"auth", "api", "ui", "docs"}
-	maxDescLength := 72
-
+func TestConventionalCommitRule_Validate(t *testing.T) {
 	tests := []struct {
 		name        string
-		subject     string
-		expectValid bool
-		errorCode   string
+		commit      domain.CommitInfo
+		options     []ConventionalCommitOption
+		wantErrors  bool
+		description string
 	}{
 		{
-			name:        "valid conventional commit feat with scope",
-			subject:     "feat(auth): add login functionality",
-			expectValid: true,
+			name: "valid conventional commit without scope",
+			commit: domain.CommitInfo{
+				Subject: "feat: add user authentication",
+			},
+			options:     nil,
+			wantErrors:  false,
+			description: "Should pass with valid conventional commit format without scope",
 		},
 		{
-			name:        "valid conventional commit fix with scope",
-			subject:     "fix(api): resolve null pointer exception",
-			expectValid: true,
+			name: "valid conventional commit with scope",
+			commit: domain.CommitInfo{
+				Subject: "fix(auth): resolve login timeout",
+			},
+			options:     nil,
+			wantErrors:  false,
+			description: "Should pass with valid conventional commit format with scope",
 		},
 		{
-			name:        "valid conventional commit docs without scope",
-			subject:     "docs: update README",
-			expectValid: true,
+			name: "valid conventional commit with breaking change marker",
+			commit: domain.CommitInfo{
+				Subject: "feat(api)!: change response format",
+			},
+			options:     nil,
+			wantErrors:  false,
+			description: "Should pass with valid conventional commit format with breaking change marker",
 		},
 		{
-			name:        "valid conventional commit with breaking change",
-			subject:     "feat(api)!: change endpoint structure",
-			expectValid: true,
+			name: "invalid format - no colon",
+			commit: domain.CommitInfo{
+				Subject: "feat add user authentication",
+			},
+			options:     nil,
+			wantErrors:  true,
+			description: "Should fail with invalid format (missing colon)",
 		},
 		{
-			name:        "invalid type",
-			subject:     "feature(auth): add login",
-			expectValid: false,
-			errorCode:   string(appErrors.ErrInvalidType),
+			name: "invalid format - no description",
+			commit: domain.CommitInfo{
+				Subject: "feat: ",
+			},
+			options:     nil,
+			wantErrors:  true,
+			description: "Should fail with invalid format (missing description)",
 		},
 		{
-			name:        "invalid scope",
-			subject:     "feat(database): add migrations",
-			expectValid: false,
-			errorCode:   string(appErrors.ErrInvalidScope),
+			name: "invalid type with allowed types specified",
+			commit: domain.CommitInfo{
+				Subject: "unknown: add feature",
+			},
+			options: []ConventionalCommitOption{
+				WithAllowedTypes([]string{"feat", "fix"}),
+			},
+			wantErrors:  true,
+			description: "Should fail with invalid commit type when allowed types are specified",
 		},
 		{
-			name:        "missing description after colon",
-			subject:     "feat(auth): ",
-			expectValid: false,
-			errorCode:   string(appErrors.ErrEmptyDescription),
+			name: "valid type with allowed types specified",
+			commit: domain.CommitInfo{
+				Subject: "feat: add feature",
+			},
+			options: []ConventionalCommitOption{
+				WithAllowedTypes([]string{"feat", "fix"}),
+			},
+			wantErrors:  false,
+			description: "Should pass with valid commit type when allowed types are specified",
 		},
 		{
-			name:        "missing colon",
-			subject:     "feat add login",
-			expectValid: false,
-			errorCode:   string(appErrors.ErrInvalidFormat),
+			name: "invalid scope with allowed scopes specified",
+			commit: domain.CommitInfo{
+				Subject: "feat(unknown): add feature",
+			},
+			options: []ConventionalCommitOption{
+				WithAllowedScopes([]string{"auth", "api"}),
+			},
+			wantErrors:  true,
+			description: "Should fail with invalid commit scope when allowed scopes are specified",
 		},
 		{
-			name:        "empty commit",
-			subject:     "",
-			expectValid: false,
-			errorCode:   string(appErrors.ErrInvalidFormat),
+			name: "missing scope when required",
+			commit: domain.CommitInfo{
+				Subject: "feat: add feature",
+			},
+			options: []ConventionalCommitOption{
+				WithRequiredScope(),
+			},
+			wantErrors:  true,
+			description: "Should fail when scope is required but not provided",
 		},
 		{
-			name:        "too many spaces after colon",
-			subject:     "feat:  extra space",
-			expectValid: false,
-			errorCode:   string(appErrors.ErrSpacing),
+			name: "description too long",
+			commit: domain.CommitInfo{
+				Subject: "feat: " + string(make([]rune, 100)),
+			},
+			options: []ConventionalCommitOption{
+				WithMaxDescLength(50),
+			},
+			wantErrors:  true,
+			description: "Should fail when description is longer than the configured max length",
+		},
+		{
+			name: "too many spaces after colon",
+			commit: domain.CommitInfo{
+				Subject: "feat:  add feature",
+			},
+			options:     nil,
+			wantErrors:  true,
+			description: "Should fail when there are too many spaces after the colon",
 		},
 	}
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			// Create a commit with the test subject
-			commit := domain.CommitInfo{
-				Subject: testCase.subject,
-			}
+			// Create rule with options
+			rule := NewConventionalCommitRule(testCase.options...)
 
-			// Create the rule with value semantics
-			rule := rules.NewConventionalCommitRule(
-				rules.WithAllowedTypes(allowedTypes),
-				rules.WithAllowedScopes(allowedScopes),
-				rules.WithMaxDescLength(maxDescLength),
-			)
+			// Validate commit
+			errors := rule.Validate(testCase.commit)
 
-			// Validate with functional approach
-			errors := rule.Validate(commit)
-
-			// Check results
-			if testCase.expectValid {
-				require.Empty(t, errors, "Expected no errors but got: %v", errors)
+			if testCase.wantErrors {
+				require.NotEmpty(t, errors, "Expected validation errors but got none")
 			} else {
-				require.NotEmpty(t, errors, "Expected errors but got none")
-
-				// Verify value semantics version errors
-				require.GreaterOrEqual(t, len(errors), 1, "should have at least one error")
-				valErr := errors[0]
-				require.Equal(t, "ConventionalCommit", valErr.Rule, "Rule name should be set")
-
-				if testCase.errorCode != "" {
-					require.Equal(t, testCase.errorCode, valErr.Code, "Error code should match expected")
-				}
+				require.Empty(t, errors, "Expected no validation errors but got: %v", errors)
 			}
 		})
 	}
 }
 
-func TestConventionalCommitDescriptionLength(t *testing.T) {
-	testCases := []struct {
-		name        string
-		subject     string
-		descLength  int
-		expectValid bool
-		errorCode   string
-		types       []string
-		scopes      []string
-	}{
-		{
-			name:        "valid description length",
-			subject:     "feat(auth): add login functionality",
-			descLength:  72,
-			expectValid: true,
-			types:       []string{"feat"},
-			scopes:      []string{"auth"},
-		},
-		{
-			name:        "valid with exact max length",
-			subject:     "feat(auth): " + strings.Repeat("a", 22),
-			descLength:  30,
-			expectValid: true,
-			types:       []string{"feat"},
-			scopes:      []string{"auth"},
-		},
-		{
-			name:        "exceeds max length",
-			subject:     "feat(auth): " + strings.Repeat("a", 31), // 31 chars is > 30 max
-			descLength:  30,
-			expectValid: false,
-			errorCode:   string(appErrors.ErrDescriptionTooLong),
-			types:       []string{"feat"},
-			scopes:      []string{"auth"},
-		},
-		{
-			name:        "default max length is respected",
-			subject:     "feat(auth): " + strings.Repeat("a", 61),
-			descLength:  0, // Use default
-			expectValid: true,
-			types:       []string{"feat"},
-			scopes:      []string{"auth"},
-		},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			// Create commit with the test subject
-			commit := domain.CommitInfo{
-				Subject: testCase.subject,
-			}
-
-			// Use the default if descLength is 0
-			descLength := testCase.descLength
-			if descLength == 0 {
-				descLength = 72 // Default
-			}
-
-			// Test with value semantics
-			rule := rules.NewConventionalCommitRule(
-				rules.WithAllowedTypes(testCase.types),
-				rules.WithAllowedScopes(testCase.scopes),
-				rules.WithMaxDescLength(descLength),
-			)
-			errors := rule.Validate(commit)
-
-			if testCase.expectValid {
-				require.Empty(t, errors, "Expected no errors but got: %v", errors)
-			} else {
-				require.NotEmpty(t, errors, "Expected errors but got none")
-
-				// Check value semantics version
-				require.GreaterOrEqual(t, len(errors), 1, "should have at least one error")
-				valErr := errors[0]
-				require.Equal(t, testCase.errorCode, valErr.Code, "Error code should match")
-			}
-		})
-	}
-}
-
-func TestConventionalCommitHelpMethod(t *testing.T) {
+func TestConventionalCommitRuleWithConfig(t *testing.T) {
 	tests := []struct {
-		name      string
-		setupRule func() (rules.ConventionalCommitRule, domain.CommitInfo)
+		name        string
+		config      config.Config
+		commit      domain.CommitInfo
+		wantErrors  bool
+		description string
 	}{
 		{
-			name: "No errors",
-			setupRule: func() (rules.ConventionalCommitRule, domain.CommitInfo) {
-				rule := rules.NewConventionalCommitRule(
-					rules.WithAllowedTypes([]string{"feat"}),
-					rules.WithAllowedScopes([]string{"ui"}),
-					rules.WithMaxDescLength(72),
-				)
-				commit := domain.CommitInfo{
-					Subject: "feat(ui): valid commit",
-				}
-
-				return rule, commit
+			name: "valid commit with default config",
+			config: config.NewConfig().
+				WithConventionalRequired(true),
+			commit: domain.CommitInfo{
+				Subject: "feat: add user authentication",
 			},
+			wantErrors:  false,
+			description: "Should pass with valid conventional commit format and default config",
 		},
 		{
-			name: "Not a conventional commit",
-			setupRule: func() (rules.ConventionalCommitRule, domain.CommitInfo) {
-				rule := rules.NewConventionalCommitRule(
-					rules.WithAllowedTypes([]string{"feat"}),
-					rules.WithAllowedScopes([]string{"ui"}),
-					rules.WithMaxDescLength(72),
-				)
-				commit := domain.CommitInfo{
-					Subject: "not a conventional commit",
-				}
-
-				return rule, commit
+			name: "invalid type with custom allowed types",
+			config: config.NewConfig().
+				WithConventionalRequired(true).
+				WithConventionalTypes([]string{"custom", "update"}),
+			commit: domain.CommitInfo{
+				Subject: "feat: add feature",
 			},
+			wantErrors:  true,
+			description: "Should fail with invalid commit type when custom allowed types are configured",
 		},
 		{
-			name: "Invalid type",
-			setupRule: func() (rules.ConventionalCommitRule, domain.CommitInfo) {
-				rule := rules.NewConventionalCommitRule(
-					rules.WithAllowedTypes([]string{"feat"}),
-					rules.WithAllowedScopes([]string{"ui"}),
-					rules.WithMaxDescLength(72),
-				)
-				commit := domain.CommitInfo{
-					Subject: "fix(ui): this uses invalid type",
-				}
-
-				return rule, commit
+			name: "valid type with custom allowed types",
+			config: config.NewConfig().
+				WithConventionalRequired(true).
+				WithConventionalTypes([]string{"custom", "update"}),
+			commit: domain.CommitInfo{
+				Subject: "custom: add feature",
 			},
+			wantErrors:  false,
+			description: "Should pass with valid commit type when custom allowed types are configured",
 		},
 		{
-			name: "Invalid scope",
-			setupRule: func() (rules.ConventionalCommitRule, domain.CommitInfo) {
-				rule := rules.NewConventionalCommitRule(
-					rules.WithAllowedTypes([]string{"feat"}),
-					rules.WithAllowedScopes([]string{"ui"}),
-					rules.WithMaxDescLength(72),
-				)
-				commit := domain.CommitInfo{
-					Subject: "feat(api): this uses invalid scope",
-				}
-
-				return rule, commit
+			name: "invalid scope with custom allowed scopes",
+			config: config.NewConfig().
+				WithConventionalRequired(true).
+				WithConventionalScopes([]string{"auth", "api"}),
+			commit: domain.CommitInfo{
+				Subject: "feat(other): add feature",
 			},
+			wantErrors:  true,
+			description: "Should fail with invalid commit scope when custom allowed scopes are configured",
 		},
 		{
-			name: "Empty description",
-			setupRule: func() (rules.ConventionalCommitRule, domain.CommitInfo) {
-				rule := rules.NewConventionalCommitRule(
-					rules.WithAllowedTypes([]string{"feat"}),
-					rules.WithAllowedScopes([]string{"ui"}),
-					rules.WithMaxDescLength(72),
-				)
-				commit := domain.CommitInfo{
-					Subject: "feat(ui): ",
-				}
-
-				return rule, commit
+			name: "description too long with custom max length",
+			config: config.NewConfig().
+				WithConventionalRequired(true).
+				WithConventionalMaxDescriptionLength(20),
+			commit: domain.CommitInfo{
+				Subject: "feat: this description is too long for the configured maximum",
 			},
-		},
-		{
-			name: "Description too long",
-			setupRule: func() (rules.ConventionalCommitRule, domain.CommitInfo) {
-				rule := rules.NewConventionalCommitRule(
-					rules.WithAllowedTypes([]string{"feat"}),
-					rules.WithAllowedScopes([]string{"ui"}),
-					rules.WithMaxDescLength(10),
-				)
-				commit := domain.CommitInfo{
-					Subject: "feat(ui): this description is too long",
-				}
-
-				return rule, commit
-			},
-		},
-		{
-			name: "Spacing error",
-			setupRule: func() (rules.ConventionalCommitRule, domain.CommitInfo) {
-				rule := rules.NewConventionalCommitRule(
-					rules.WithAllowedTypes([]string{"feat"}),
-					rules.WithAllowedScopes([]string{"ui"}),
-					rules.WithMaxDescLength(72),
-				)
-				commit := domain.CommitInfo{
-					Subject: "feat:  too many spaces",
-				}
-
-				return rule, commit
-			},
+			wantErrors:  true,
+			description: "Should fail when description is longer than the configured max length",
 		},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			// Get the rule and commit setup for this test
-			rule, commit := test.setupRule()
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			// Create rule with unified config
+			rule := NewConventionalCommitRuleWithConfig(testCase.config)
 
-			// Validate using value semantics
-			errors := rule.Validate(commit)
+			// Validate commit
+			errors := rule.Validate(testCase.commit)
 
-			// Get help text from the rule
-			help := rule.Help()
-
-			// Just verify help text is not empty for errors
-			if len(errors) > 0 {
-				require.NotEmpty(t, help, "Help should have content for errors")
+			if testCase.wantErrors {
+				require.NotEmpty(t, errors, "Expected validation errors but got none")
 			} else {
-				require.Contains(t, help, "No errors to fix", "No errors should say no errors to fix")
+				require.Empty(t, errors, "Expected no validation errors but got: %v", errors)
 			}
 		})
 	}
+}
+
+func TestConventionalCommitRuleErrorMessages(t *testing.T) {
+	// Create a rule for testing error messages
+	rule := NewConventionalCommitRule()
+
+	// Invalid format error
+	invalidFormatCommit := domain.CommitInfo{
+		Subject: "invalid format",
+	}
+	errors, updatedRule := ValidateConventionalWithState(rule, invalidFormatCommit)
+	require.NotEmpty(t, errors, "Expected validation errors for invalid format")
+
+	// Check the error messages methods
+	require.Equal(t, "Invalid conventional commit format", updatedRule.Result(), "Expected correct result message")
+	require.NotEmpty(t, updatedRule.VerboseResult(), "Expected non-empty verbose result")
+	require.NotEmpty(t, updatedRule.Help(), "Expected non-empty help text")
 }

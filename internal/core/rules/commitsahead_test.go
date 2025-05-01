@@ -5,8 +5,10 @@ package rules_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
+	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
@@ -265,4 +267,120 @@ func TestCommitsAheadResultMessage(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestCommitsAheadRuleWithConfig(t *testing.T) {
+	tests := []struct {
+		name        string
+		configSetup func() config.Config
+		analyzer    domain.CommitAnalyzer
+		wantErrors  bool
+		description string
+	}{
+		{
+			name: "commits ahead check enabled, within limit",
+			configSetup: func() config.Config {
+				return config.NewConfig().
+					WithCheckCommitsAhead(true).
+					WithMaxCommitsAhead(5).
+					WithReferenceBranch("main")
+			},
+			analyzer: &mockCommitAnalyzer{
+				commitsAhead: 3,
+				err:          nil,
+			},
+			wantErrors:  false,
+			description: "Should pass when number of commits ahead is within the limit",
+		},
+		{
+			name: "commits ahead check enabled, exceeds limit",
+			configSetup: func() config.Config {
+				return config.NewConfig().
+					WithCheckCommitsAhead(true).
+					WithMaxCommitsAhead(5).
+					WithReferenceBranch("main")
+			},
+			analyzer: &mockCommitAnalyzer{
+				commitsAhead: 8,
+				err:          nil,
+			},
+			wantErrors:  true,
+			description: "Should fail when number of commits ahead exceeds the limit",
+		},
+		{
+			name: "commits ahead check disabled",
+			configSetup: func() config.Config {
+				return config.NewConfig().
+					WithCheckCommitsAhead(false).
+					WithMaxCommitsAhead(5).
+					WithReferenceBranch("main")
+			},
+			analyzer: &mockCommitAnalyzer{
+				commitsAhead: 10, // This would normally fail
+				err:          nil,
+			},
+			wantErrors:  false,
+			description: "Should not validate when commits ahead check is disabled",
+		},
+		{
+			name: "commits ahead check enabled, analyzer error",
+			configSetup: func() config.Config {
+				return config.NewConfig().
+					WithCheckCommitsAhead(true).
+					WithMaxCommitsAhead(5).
+					WithReferenceBranch("main")
+			},
+			analyzer: &mockCommitAnalyzer{
+				commitsAhead: 0,
+				err:          errors.New("git error"),
+			},
+			wantErrors:  true,
+			description: "Should fail when the analyzer returns an error",
+		},
+		{
+			name: "custom reference branch",
+			configSetup: func() config.Config {
+				return config.NewConfig().
+					WithCheckCommitsAhead(true).
+					WithMaxCommitsAhead(5).
+					WithReferenceBranch("develop")
+			},
+			analyzer: &mockCommitAnalyzer{
+				commitsAhead: 3,
+				err:          nil,
+			},
+			wantErrors:  false,
+			description: "Should use the custom reference branch from config",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			// Create the config using the setup function
+			unifiedConfig := testCase.configSetup()
+
+			// Create rule with unified config
+			rule := rules.NewCommitsAheadRuleWithConfig(unifiedConfig, testCase.analyzer)
+
+			// Skip validation on disabled check case
+			if !unifiedConfig.CheckCommitsAhead() {
+				return
+			}
+
+			// Create empty commit info as this rule doesn't validate the commit itself
+			commit := domain.CommitInfo{
+				Subject: "Test commit",
+				Body:    "",
+			}
+
+			// Validate commit
+			errors := rule.Validate(commit)
+
+			if testCase.wantErrors {
+				require.NotEmpty(t, errors, "Expected validation errors but got none")
+			} else {
+				require.Empty(t, errors, "Expected no validation errors but got: %v", errors)
+			}
+		})
+	}
 }

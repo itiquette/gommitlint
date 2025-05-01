@@ -6,6 +6,7 @@ package rules_test
 import (
 	"testing"
 
+	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
@@ -254,4 +255,118 @@ func TestCommitBodyHelpMethod(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestCommitBodyRuleWithConfig(t *testing.T) {
+	tests := []struct {
+		name           string
+		message        string
+		configSetup    func() config.Config
+		expectError    bool
+		errorCode      string
+		expectedResult string
+	}{
+		{
+			name:    "body required and missing",
+			message: "Just a subject line",
+			configSetup: func() config.Config {
+				return config.NewConfig().
+					WithBodyRequired(true).
+					WithBodyAllowSignOffOnly(false)
+			},
+			expectError:    true,
+			errorCode:      string(appErrors.ErrInvalidBody),
+			expectedResult: "Invalid commit body",
+		},
+		{
+			name:    "body not required and missing",
+			message: "Just a subject line",
+			configSetup: func() config.Config {
+				return config.NewConfig().
+					WithBodyRequired(false).
+					WithBodyAllowSignOffOnly(false)
+			},
+			expectError:    false,
+			expectedResult: "Valid commit body",
+		},
+		{
+			name: "body with only sign-off not allowed",
+			message: `Update config
+
+Signed-off-by: Example User <user@example.com>`,
+			configSetup: func() config.Config {
+				return config.NewConfig().
+					WithBodyRequired(true).
+					WithBodyAllowSignOffOnly(false)
+			},
+			expectError:    true,
+			errorCode:      string(appErrors.ErrInvalidBody),
+			expectedResult: "Invalid commit body",
+		},
+		{
+			name: "body with only sign-off allowed",
+			message: `Update config
+
+Signed-off-by: Example User <user@example.com>`,
+			configSetup: func() config.Config {
+				return config.NewConfig().
+					WithBodyRequired(true).
+					WithBodyAllowSignOffOnly(true)
+			},
+			expectError:    false,
+			expectedResult: "Valid commit body",
+		},
+		{
+			name: "valid commit with body",
+			message: `Add new feature
+
+This commit adds a new feature to the project.
+It includes both implementation and tests.`,
+			configSetup: func() config.Config {
+				return config.NewConfig().
+					WithBodyRequired(true).
+					WithBodyAllowSignOffOnly(false)
+			},
+			expectError:    false,
+			expectedResult: "Valid commit body",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			// Create commit info object
+			commit := domain.CommitInfo{
+				Message: testCase.message,
+			}
+
+			// Create the config using the setup function
+			unifiedConfig := testCase.configSetup()
+
+			// Create rule with unified config
+			// Create rule with options
+			options := []rules.CommitBodyOption{}
+
+			// Apply options based on config
+			options = append(options,
+				rules.WithRequireBody(unifiedConfig.BodyRequired()),
+				rules.WithAllowSignOffOnly(unifiedConfig.BodyAllowSignOffOnly()),
+			)
+
+			rule := rules.NewCommitBodyRule(options...)
+			errors := rule.Validate(commit)
+
+			// Verify rule name
+			require.Equal(t, "CommitBody", rule.Name(), "Rule name should be 'CommitBody'")
+
+			if testCase.expectError {
+				require.NotEmpty(t, errors, "expected errors but got none")
+				require.GreaterOrEqual(t, len(errors), 1, "should have at least one error")
+				valErr := errors[0]
+				require.Equal(t, testCase.errorCode, valErr.Code, "unexpected error code")
+				require.Equal(t, "CommitBody", valErr.Rule, "rule name should be set")
+			} else {
+				require.Empty(t, errors, "unexpected errors: %v", errors)
+			}
+		})
+	}
 }
