@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/config"
+	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/infrastructure/git"
 )
@@ -221,9 +222,6 @@ func CreateService(config config.Config, repoPath string) (Service, error) {
 		return Service{}, fmt.Errorf("failed to create repository adapter: %w", err)
 	}
 
-	// Create rule provider - not used directly as we use CreateEngine instead
-	_ = CreateRuleProvider(config, repoAdapter)
-
 	// Create engine using rule provider
 	engine := CreateEngine(config, repoAdapter)
 
@@ -305,48 +303,50 @@ func (p *RulesManager) getActiveRules() []domain.Rule {
 	// Create rules from the rule factories
 	var rules []domain.Rule
 
-	// Get all rule names
-	ruleNames := GetRuleNames()
-
-	// If specific rules are enabled, only use those
-	enabledRules := p.config.EnabledRules()
-	if len(enabledRules) > 0 {
-		// Filter to only enabled rules
-		filteredNames := make([]string, 0)
-
-		for _, name := range ruleNames {
-			for _, enabled := range enabledRules {
-				if name == enabled {
-					filteredNames = append(filteredNames, name)
-
-					break
-				}
-			}
-		}
-
-		ruleNames = filteredNames
-	} else if len(p.config.DisabledRules()) > 0 {
-		// Remove disabled rules
-		disabledMap := make(map[string]bool)
-		for _, name := range p.config.DisabledRules() {
-			disabledMap[name] = true
-		}
-
-		// Filter out disabled rules
-		filteredNames := make([]string, 0)
-
-		for _, name := range ruleNames {
-			if !disabledMap[name] {
-				filteredNames = append(filteredNames, name)
-			}
-		}
-
-		ruleNames = filteredNames
+	// Get standard rule names
+	// This is a hardcoded list of available rules
+	standardRuleNames := []string{
+		"SubjectLength", "ConventionalCommit", "ImperativeVerb",
+		"SubjectCase", "SubjectSuffix", "CommitBody",
+		"SignOff", "Signature", "JiraReference",
+		"Spell", "CommitsAhead", "SignedIdentity",
 	}
 
-	// Create rules from factories
+	// Apply rule filtering based on configuration
+	ruleNames := p.filterRuleNames(standardRuleNames)
+
+	// Create rules directly based on rule names
 	for _, name := range ruleNames {
-		rule := CreateRuleWithConfig(name, p.config, p.analyzer)
+		// Create rule based on name
+		var rule domain.Rule
+
+		switch name {
+		case "SubjectLength":
+			rule = createSubjectLengthRule(p.config)
+		case "ConventionalCommit":
+			rule = createConventionalCommitRule(p.config)
+		case "ImperativeVerb":
+			rule = createImperativeVerbRule(p.config)
+		case "SubjectCase":
+			rule = createSubjectCaseRule(p.config)
+		case "SubjectSuffix":
+			rule = createSubjectSuffixRule(p.config)
+		case "CommitBody":
+			rule = createCommitBodyRule(p.config)
+		case "SignOff":
+			rule = createSignOffRule(p.config)
+		case "Signature":
+			rule = createSignatureRule(p.config)
+		case "JiraReference":
+			rule = createJiraReferenceRule(p.config)
+		case "Spell":
+			rule = createSpellRule(p.config)
+		case "CommitsAhead":
+			rule = createCommitsAheadRule(p.config, p.analyzer)
+		case "SignedIdentity":
+			rule = createSignedIdentityRule(p.config)
+		}
+
 		if rule != nil {
 			rules = append(rules, rule)
 		}
@@ -357,10 +357,137 @@ func (p *RulesManager) getActiveRules() []domain.Rule {
 
 // All validation logic is now handled by the standard Engine with our custom RulesManager.
 
+// filterRuleNames applies configuration-based filtering to a list of rule names.
+func (p *RulesManager) filterRuleNames(allRuleNames []string) []string {
+	enabledRules := p.config.EnabledRules()
+	disabledRules := p.config.DisabledRules()
+
+	// If specific rules are enabled, only use those
+	if len(enabledRules) > 0 {
+		// Filter to only enabled rules
+		filteredNames := make([]string, 0)
+
+		for _, name := range allRuleNames {
+			for _, enabled := range enabledRules {
+				if name == enabled {
+					filteredNames = append(filteredNames, name)
+
+					break
+				}
+			}
+		}
+
+		return filteredNames
+	}
+
+	// If some rules are disabled, exclude them
+	if len(disabledRules) > 0 {
+		// Remove disabled rules
+		disabledMap := make(map[string]bool)
+		for _, name := range disabledRules {
+			disabledMap[name] = true
+		}
+
+		// Filter out disabled rules
+		filteredNames := make([]string, 0)
+
+		for _, name := range allRuleNames {
+			if !disabledMap[name] {
+				filteredNames = append(filteredNames, name)
+			}
+		}
+
+		return filteredNames
+	}
+
+	// If no specific filters, return all rules
+	return allRuleNames
+}
+
 // CreateRuleProvider creates a rule provider for the configuration.
 func CreateRuleProvider(config config.Config, analyzer domain.CommitAnalyzer) domain.RuleProvider {
 	return &RulesManager{
 		config:   config,
 		analyzer: analyzer,
 	}
+}
+
+// Helper functions to create various rule types
+
+func createSubjectLengthRule(config config.Config) domain.Rule {
+	rule := rules.NewSubjectLengthRuleWithConfig(config)
+
+	return rule
+}
+
+func createConventionalCommitRule(config config.Config) domain.Rule {
+	rule := rules.NewConventionalCommitRuleWithConfig(config)
+
+	return rule
+}
+
+func createImperativeVerbRule(config config.Config) domain.Rule {
+	return rules.NewImperativeVerbRuleWithConfig(config, config)
+}
+
+func createSubjectCaseRule(config config.Config) domain.Rule {
+	return rules.NewSubjectCaseRuleWithConfig(config, config)
+}
+
+func createSubjectSuffixRule(config config.Config) domain.Rule {
+	rule := rules.NewSubjectSuffixRuleWithConfig(config)
+
+	return rule
+}
+
+func createCommitBodyRule(config config.Config) domain.Rule {
+	// CommitBodyRule uses the options pattern directly, building from configuration
+	options := []rules.CommitBodyOption{}
+
+	// Add body requirement option
+	options = append(options, rules.WithRequireBody(config.Body.Required))
+
+	// Add sign-off only option if configured
+	options = append(options, rules.WithAllowSignOffOnly(config.Body.AllowSignOffOnly))
+
+	return rules.NewCommitBodyRule(options...)
+}
+
+func createSignOffRule(config config.Config) domain.Rule {
+	rule := rules.NewSignOffRuleWithConfig(config)
+
+	return rule
+}
+
+func createSignatureRule(config config.Config) domain.Rule {
+	rule := rules.NewSignatureRuleWithConfig(config)
+
+	return rule
+}
+
+func createJiraReferenceRule(config config.Config) domain.Rule {
+	return rules.NewJiraReferenceRuleWithConfig(config, config)
+}
+
+func createSpellRule(config config.Config) domain.Rule {
+	rule := rules.NewSpellRuleWithConfig(config)
+
+	return rule
+}
+
+func createCommitsAheadRule(config config.Config, analyzer domain.CommitAnalyzer) domain.Rule {
+	rule := rules.NewCommitsAheadRuleWithConfig(config, analyzer)
+
+	return rule
+}
+
+func createSignedIdentityRule(config config.Config) domain.Rule {
+	options := []rules.SignedIdentityOption{}
+
+	// Set key directory if configured
+	if keyURI := config.Security.Identity.PublicKeyURI; keyURI != "" {
+		options = append(options, rules.WithKeyDirectory(keyURI))
+	}
+
+	return rules.NewSignedIdentityRule(options...)
 }

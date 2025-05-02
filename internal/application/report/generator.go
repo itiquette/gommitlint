@@ -57,9 +57,8 @@ func (g Generator) Options() Options {
 	return copyOptions(g.options)
 }
 
-// Ensure Generator implements both domain.ReportGenerator and domain.FunctionalReportGenerator.
+// Ensure Generator implements domain.ReportGenerator.
 var _ domain.ReportGenerator = Generator{}
-var _ domain.FunctionalReportGenerator = Generator{}
 
 // NewGenerator creates a new report generator.
 func NewGenerator(options Options, formatter domain.ResultFormatter) Generator {
@@ -107,17 +106,7 @@ func handleFailure(results domain.ValidationResults, writer io.Writer) error {
 	return nil
 }
 
-// WithVerbose returns a new Generator with verbose setting updated.
-// This implements the domain.FunctionalReportGenerator interface.
-func (g Generator) WithVerbose(verbose bool) domain.FunctionalReportGenerator {
-	newOptions := copyOptions(g.options)
-	newOptions.Verbose = verbose
-
-	return Generator{
-		options:   newOptions,
-		formatter: g.formatter,
-	}
-}
+//
 
 // copyOptions creates a deep copy of Options to ensure immutability.
 func copyOptions(opts Options) Options {
@@ -131,17 +120,19 @@ func copyOptions(opts Options) Options {
 	}
 }
 
-// SetVerbose enables or disables verbose output in reports.
-// This implements the domain.ReportGenerator interface for backward compatibility.
-// Using underscore parameter name to indicate deliberately unused parameter.
-func (g Generator) SetVerbose(_ bool) {
-	// Do nothing - this is maintained for interface compatibility only
-	// Use WithVerbose instead for functional style
+// WithVerbose returns a new Generator with verbose setting updated.
+func (g Generator) WithVerbose(verbose bool) domain.ReportGenerator {
+	newOptions := copyOptions(g.options)
+	newOptions.Verbose = verbose
+
+	return Generator{
+		options:   newOptions,
+		formatter: g.formatter,
+	}
 }
 
 // WithShowHelp returns a new Generator with showHelp setting updated.
-// This implements the domain.FunctionalReportGenerator interface.
-func (g Generator) WithShowHelp(showHelp bool) domain.FunctionalReportGenerator {
+func (g Generator) WithShowHelp(showHelp bool) domain.ReportGenerator {
 	newOptions := copyOptions(g.options)
 	newOptions.ShowHelp = showHelp
 
@@ -151,17 +142,8 @@ func (g Generator) WithShowHelp(showHelp bool) domain.FunctionalReportGenerator 
 	}
 }
 
-// SetShowHelp enables or disables showing help messages in reports.
-// This implements the domain.ReportGenerator interface for backward compatibility.
-// Using underscore parameter name to indicate deliberately unused parameter.
-func (g Generator) SetShowHelp(_ bool) {
-	// Do nothing - this is maintained for interface compatibility only
-	// Use WithShowHelp instead for functional style
-}
-
 // WithRuleToShowHelp returns a new Generator with ruleToShowHelp setting updated.
-// This implements the domain.FunctionalReportGenerator interface.
-func (g Generator) WithRuleToShowHelp(ruleName string) domain.FunctionalReportGenerator {
+func (g Generator) WithRuleToShowHelp(ruleName string) domain.ReportGenerator {
 	newOptions := copyOptions(g.options)
 	newOptions.RuleToShowHelp = ruleName
 
@@ -169,14 +151,6 @@ func (g Generator) WithRuleToShowHelp(ruleName string) domain.FunctionalReportGe
 		options:   newOptions,
 		formatter: g.formatter,
 	}
-}
-
-// SetRuleToShowHelp sets a specific rule to show help for.
-// This implements the domain.ReportGenerator interface for backward compatibility.
-// Using underscore parameter name to indicate deliberately unused parameter.
-func (g Generator) SetRuleToShowHelp(_ string) {
-	// Do nothing - this is maintained for interface compatibility only
-	// Use WithRuleToShowHelp instead for functional style
 }
 
 // GenerateSummary generates a brief summary report.

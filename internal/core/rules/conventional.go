@@ -4,6 +4,7 @@
 package rules
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -199,49 +200,48 @@ func validateConventionalWithState(rule ConventionalCommitRule, commit domain.Co
 	// Check if the subject follows the pattern
 	matches := regex.FindStringSubmatch(subject)
 	if len(matches) == 0 {
-		// Create error context with rich information
-		ctx := appErrors.NewContext().WithCommit(
-			commit.Hash,    // commit hash
-			commit.Message, // full commit message
-			commit.Subject, // subject line
-			commit.Body,    // body text
-		)
+		// Generate a rich help message with examples
+		helpMessage := `Format Error: Commit message doesn't follow conventional format.
 
-		// Create a rich error
-		err := appErrors.CreateRichError(
-			updatedRule.Name(),
-			appErrors.ErrInvalidFormat,
-			"commit message doesn't follow conventional format: type(scope)!: description",
-			`Your commit message doesn't follow the conventional format: type(scope)!: description
+Your commit message doesn't follow the conventional commit format required by this project.
 
-The Conventional Commits specification is a lightweight convention for creating commit messages.
-This format makes commits readable and machine-parsable, allowing automated tools to generate changelogs.
-
-Required format:
+✅ CORRECT FORMAT:
 <type>[optional scope][optional !]: <description>
 
-Examples of valid conventional commits:
+Examples:
 - feat: add user authentication
 - fix(auth): resolve login timeout issue
 - docs: update installation instructions
 - perf(api): optimize database queries
 - feat(user)!: change user API response format
 
-Common types:
-- feat: a new feature
-- fix: a bug fix
-- docs: documentation changes
-- style: changes that don't affect code meaning (whitespace, formatting)
-- refactor: code change that neither fixes a bug nor adds a feature
-- perf: code change that improves performance
-- test: adding or correcting tests
-- build: changes to build system or dependencies
-- ci: changes to CI configuration
-- chore: other changes that don't modify src or test files
-- revert: reverts a previous commit
+❌ INCORRECT FORMAT:
+- ` + subject + `
 
-The format is strict and requires the specific characters shown above.`,
-			ctx,
+WHY THIS MATTERS:
+- Conventional commits provide a structured commit history
+- They enable automated tools to generate changelogs
+- They make it easier to understand the purpose of each commit
+- They help categorize changes by type (feature, bugfix, etc.)
+
+NEXT STEPS:
+1. Rewrite your commit message following the conventional format
+   - Choose an appropriate type from: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
+   - Add optional scope in parentheses if relevant (e.g., (auth), (api))
+   - Add optional breaking change marker (!) if needed
+   - Add colon and a single space
+   - Write a clear, concise description in imperative mood
+
+2. Use 'git commit --amend' to edit your most recent commit`
+
+		// Create an enhanced validation error using the helper function
+		errorMessage := "commit message doesn't follow conventional format: type(scope)!: description"
+
+		err := appErrors.FormatError(
+			updatedRule.Name(),
+			errorMessage,
+			helpMessage,
+			subject,
 		)
 
 		updatedRule = updatedRule.addError(err)
@@ -251,27 +251,47 @@ The format is strict and requires the specific characters shown above.`,
 
 	// Check for spacing issues
 	if strings.Contains(subject, ":  ") {
-		// Create error context
-		ctx := appErrors.NewContext().WithCommit(
-			commit.Hash,    // commit hash
-			commit.Message, // full commit message
-			commit.Subject, // subject line
-			commit.Body,    // body text
+		// Create a suggested correction with proper spacing
+		suggestionPattern := `:\s+`
+		suggestedForm := regexp.MustCompile(suggestionPattern).ReplaceAllString(subject, ": ")
+
+		helpMessage := fmt.Sprintf(`Spacing Error: Too many spaces after colon in commit message.
+
+Your commit message has too many spaces after the colon. Conventional commits require exactly one space.
+
+✅ CORRECT FORMAT:
+- feat: add user authentication
+- fix(auth): resolve login timeout issue
+- docs: update installation instructions
+
+✅ SUGGESTED CORRECTION:
+%s
+
+❌ INCORRECT FORMAT:
+- feat:  add user authentication (two spaces after colon)
+- fix(auth):   resolve login issue (multiple spaces after colon)
+
+WHY THIS MATTERS:
+- Consistent spacing ensures proper parsing by tools
+- It maintains readability and uniformity in commit history
+- Many automation tools rely on exact spacing in conventional commits
+- It helps maintain a professional and organized commit history
+
+NEXT STEPS:
+1. Edit your commit message to use exactly one space after the colon
+2. Use 'git commit --amend' to modify your most recent commit
+3. Check for and remove any extra spaces before saving`, suggestedForm)
+
+		// Create an enhanced validation error using the helper function
+		err := appErrors.FormatError(
+			updatedRule.Name(),
+			"commit message has too many spaces after colon (should be exactly one)",
+			helpMessage,
+			subject,
 		)
 
-		// Create a rich error
-		err := appErrors.CreateRichError(
-			updatedRule.Name(),
-			appErrors.ErrSpacing,
-			"commit message has too many spaces after colon (should be exactly one)",
-			`Use exactly one space after the colon in commit messages.
-Correct:
-feat: add new feature
-Incorrect:
-feat:  add new feature
-The conventional commit format requires exactly one space between the colon and the description.`,
-			ctx,
-		)
+		// Add suggested correction to the error context
+		err = err.WithContext("suggested_form", suggestedForm)
 
 		updatedRule = updatedRule.addError(err)
 
@@ -290,16 +310,53 @@ The conventional commit format requires exactly one space between the colon and 
 		updatedRule.commitType = commitType
 
 		if !updatedRule.isValidType(commitType) {
-			allowedTypes := strings.Join(updatedRule.allowedTypes, ",")
-			err := appErrors.New(
+			allowedTypes := strings.Join(updatedRule.allowedTypes, ", ")
+			helpMessage := fmt.Sprintf(`Invalid Commit Type Error: "%s" is not an allowed type.
+
+✅ CORRECT TYPES: %s
+
+❌ INCORRECT TYPE: %s
+
+WHY THIS MATTERS:
+- Conventional commits require specific, standardized types
+- Each type has a specific meaning (feat for features, fix for bugfixes, etc.)
+- Consistent types enable automated changelog generation
+- They help categorize changes for better organization
+
+NEXT STEPS:
+1. Choose an appropriate type from the allowed list
+2. Update your commit message with a valid type
+3. Use 'git commit --amend' to modify your most recent commit`,
+				commitType, allowedTypes, commitType)
+
+			// Use FormatError with the appropriate context
+			err := appErrors.FormatError(
 				updatedRule.Name(),
-				appErrors.ErrInvalidType,
 				"invalid commit type: "+commitType,
-				appErrors.WithContextMap(map[string]string{
-					"type":          commitType,
-					"allowed_types": allowedTypes,
-				}),
+				helpMessage,
+				subject,
 			)
+
+			// Find the closest valid type for suggestion
+			closestType := findClosestType(commitType, updatedRule.allowedTypes)
+
+			// Create a suggested correction if we found a close match
+			if closestType != "" {
+				// Replace only the type part while keeping the rest intact
+				suggestedForm := strings.Replace(subject, commitType, closestType, 1)
+
+				// Add suggestion to the context
+				err = err.WithContext("suggested_type", closestType)
+				err = err.WithContext("suggested_form", suggestedForm)
+
+				// Update help message with suggestion
+				helpText := fmt.Sprintf("Did you mean '%s' instead of '%s'?", closestType, commitType)
+				err = err.WithContext("suggestion_text", helpText)
+			}
+
+			// Add additional context
+			err = err.WithContext("type", commitType)
+			err = err.WithContext("allowed_types", allowedTypes)
 
 			updatedRule = updatedRule.addError(err)
 
@@ -313,16 +370,36 @@ The conventional commit format requires exactly one space between the colon and 
 		updatedRule.scope = scope
 
 		if scope != "" && !updatedRule.isValidScope(scope) {
-			allowedScopes := strings.Join(updatedRule.allowedScopes, ",")
-			err := appErrors.New(
+			allowedScopes := strings.Join(updatedRule.allowedScopes, ", ")
+			helpMessage := fmt.Sprintf(`Invalid Scope Error: "%s" is not an allowed scope.
+
+✅ CORRECT SCOPES: %s
+
+❌ INCORRECT SCOPE: %s
+
+WHY THIS MATTERS:
+- Scopes indicate which part of the project is affected by changes
+- Consistent scopes improve organization and searchability
+- They help reviewers understand the affected components
+- They provide useful categorization for changelog generation
+
+NEXT STEPS:
+1. Choose an appropriate scope from the allowed list
+2. Update your commit message with a valid scope
+3. Use 'git commit --amend' to modify your most recent commit`,
+				scope, allowedScopes, scope)
+
+			// Use FormatError with the appropriate context
+			err := appErrors.FormatError(
 				updatedRule.Name(),
-				appErrors.ErrInvalidScope,
 				"invalid commit scope: "+scope,
-				appErrors.WithContextMap(map[string]string{
-					"scope":          scope,
-					"allowed_scopes": allowedScopes,
-				}),
+				helpMessage,
+				subject,
 			)
+
+			// Add additional context
+			err = err.WithContext("scope", scope)
+			err = err.WithContext("allowed_scopes", allowedScopes)
 
 			updatedRule = updatedRule.addError(err)
 
@@ -332,11 +409,36 @@ The conventional commit format requires exactly one space between the colon and 
 
 	// Check if scope is required but missing
 	if updatedRule.requireScope && (scopeIdx < 0 || scopeIdx >= len(matches) || matches[scopeIdx] == "") {
-		err := appErrors.New(
+		helpMessage := `Missing Scope Error: Commit scope is required.
+
+Your commit message is missing a required scope. Scopes must be included in parentheses after the type.
+
+✅ CORRECT FORMAT:
+- feat(auth): add user authentication
+- fix(api): resolve timeout issue
+- docs(readme): update installation instructions
+
+❌ INCORRECT FORMAT:
+- feat: add user authentication (missing scope)
+- fix: resolve timeout issue (missing scope)
+
+WHY THIS MATTERS:
+- Scopes indicate which part of the project is affected by changes
+- Required scopes help with organization and categorization
+- They provide critical context for code reviewers
+- They improve searchability and filtering of commits
+
+NEXT STEPS:
+1. Add an appropriate scope in parentheses after the commit type
+2. The scope should indicate which component or module is affected
+3. Use 'git commit --amend' to modify your most recent commit`
+
+		// Use FormatError with the appropriate context
+		err := appErrors.FormatError(
 			updatedRule.Name(),
-			appErrors.ErrInvalidScope,
 			"commit scope is required but not provided",
-			appErrors.WithContextMap(map[string]string{}),
+			helpMessage,
+			subject,
 		)
 
 		updatedRule = updatedRule.addError(err)
@@ -353,11 +455,38 @@ The conventional commit format requires exactly one space between the colon and 
 	if descIdx >= 0 && descIdx < len(matches) {
 		description := matches[descIdx]
 		if strings.TrimSpace(description) == "" {
-			err := appErrors.New(
+			helpMessage := `Empty Description Error: Commit message has no description.
+
+Your commit message is missing a description after the type and scope.
+
+✅ CORRECT FORMAT:
+- feat(auth): add user authentication system
+- fix(api): resolve timeout issue
+- docs: update installation instructions
+
+❌ INCORRECT FORMAT:
+- feat(auth): 
+- fix: 
+- docs(readme): 
+
+WHY THIS MATTERS:
+- The description explains what changes were made
+- Without a description, the purpose of the commit is unclear
+- It's a required part of the conventional commit format
+- Clear descriptions improve commit history readability
+
+NEXT STEPS:
+1. Add a clear, concise description after the colon
+2. Use imperative mood (e.g., "add feature" not "added feature")
+3. Keep it under 72 characters if possible
+4. Use 'git commit --amend' to modify your most recent commit`
+
+			// Use FormatError with the appropriate context
+			err := appErrors.FormatError(
 				updatedRule.Name(),
-				appErrors.ErrEmptyDescription,
 				"commit description cannot be empty",
-				appErrors.WithContextMap(map[string]string{}),
+				helpMessage,
+				subject,
 			)
 
 			updatedRule = updatedRule.addError(err)
@@ -370,15 +499,43 @@ The conventional commit format requires exactly one space between the colon and 
 
 		// Check description length
 		if updatedRule.maxDescLength > 0 && descriptionLength > updatedRule.maxDescLength {
-			err := appErrors.New(
+			helpMessage := fmt.Sprintf(`Description Too Long Error: Commit description exceeds maximum length.
+
+Your commit description is %d characters long, but the maximum allowed is %d characters.
+
+✅ CORRECT FORMAT:
+- Keep descriptions concise and under %d characters
+- Put additional details in the commit body
+
+❌ INCORRECT FORMAT:
+- Your description: "%s" (%d characters)
+
+WHY THIS MATTERS:
+- Short descriptions improve readability in git logs
+- Many tools truncate longer descriptions
+- Concise descriptions force focus on the core change
+- Details can be added to the commit body
+
+NEXT STEPS:
+1. Shorten your description to be more concise
+2. Move details to the commit body (after a blank line)
+3. Focus on what changed rather than how or why
+4. Use 'git commit --amend' to modify your most recent commit`,
+				descriptionLength, updatedRule.maxDescLength, updatedRule.maxDescLength,
+				description, descriptionLength)
+
+			// Use FormatError with the appropriate context
+			err := appErrors.FormatError(
 				updatedRule.Name(),
-				appErrors.ErrDescriptionTooLong,
-				fmt.Sprintf("commit description is too long (%d chars, max is %d)", descriptionLength, updatedRule.maxDescLength),
-				appErrors.WithContextMap(map[string]string{
-					"length":     strconv.Itoa(descriptionLength),
-					"max_length": strconv.Itoa(updatedRule.maxDescLength),
-				}),
+				fmt.Sprintf("commit description is too long (%d chars, max is %d)",
+					descriptionLength, updatedRule.maxDescLength),
+				helpMessage,
+				subject,
 			)
+
+			// Add additional context
+			err = err.WithContext("length", strconv.Itoa(descriptionLength))
+			err = err.WithContext("max_length", strconv.Itoa(updatedRule.maxDescLength))
 
 			updatedRule = updatedRule.addError(err)
 
@@ -391,7 +548,7 @@ The conventional commit format requires exactly one space between the colon and 
 
 // Validate validates a commit against the conventional commit rules.
 // This method follows functional programming principles and does not modify the rule's state.
-func (r ConventionalCommitRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
+func (r ConventionalCommitRule) Validate(_ context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
 	// Use the pure functional approach
 	errors, _ := validateConventionalWithState(r, commit)
 
@@ -468,6 +625,108 @@ func (r ConventionalCommitRule) VerboseResult() string {
 }
 
 // Help returns guidance on how to fix the rule violation.
+// findClosestType finds the closest matching valid type from the allowed types list
+// using Levenshtein distance. Returns an empty string if no good match is found.
+func findClosestType(inputType string, allowedTypes []string) string {
+	if len(allowedTypes) == 0 {
+		return ""
+	}
+
+	// If the allowedTypes list is empty or has only one type, no need to find closest
+	if len(allowedTypes) == 0 {
+		return ""
+	}
+
+	inputType = strings.ToLower(inputType)
+	bestMatch := ""
+	minDistance := 3 // Maximum edit distance to consider a good match
+
+	for _, validType := range allowedTypes {
+		// Skip if the valid type is much longer or shorter than input
+		if abs(len(validType)-len(inputType)) > 2 {
+			continue
+		}
+
+		// Calculate Levenshtein distance
+		distance := levenshteinDistance(inputType, validType)
+
+		// Update best match if this has smaller distance
+		if distance < minDistance {
+			minDistance = distance
+			bestMatch = validType
+		}
+	}
+
+	return bestMatch
+}
+
+// abs returns the absolute value of x.
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+
+	return x
+}
+
+// levenshteinDistance calculates the Levenshtein (edit) distance between two strings.
+func levenshteinDistance(str1, str2 string) int {
+	if len(str1) == 0 {
+		return len(str2)
+	}
+
+	if len(str2) == 0 {
+		return len(str1)
+	}
+
+	// Create matrix
+	matrix := make([][]int, len(str1)+1)
+	for rowIdx := range matrix {
+		matrix[rowIdx] = make([]int, len(str2)+1)
+		matrix[rowIdx][0] = rowIdx // Initialize first column
+	}
+
+	for colIdx := range matrix[0] {
+		matrix[0][colIdx] = colIdx // Initialize first row
+	}
+
+	// Fill in the matrix
+	for rowIdx := 1; rowIdx <= len(str1); rowIdx++ {
+		for colIdx := 1; colIdx <= len(str2); colIdx++ {
+			cost := 1
+			if str1[rowIdx-1] == str2[colIdx-1] {
+				cost = 0
+			}
+
+			// Calculate the minimum of three operations
+			matrix[rowIdx][colIdx] = min3(
+				matrix[rowIdx-1][colIdx]+1,      // deletion
+				matrix[rowIdx][colIdx-1]+1,      // insertion
+				matrix[rowIdx-1][colIdx-1]+cost, // substitution
+			)
+		}
+	}
+
+	return matrix[len(str1)][len(str2)]
+}
+
+// min3 returns the minimum of three integers.
+func min3(first, second, third int) int {
+	if first < second {
+		if first < third {
+			return first
+		}
+
+		return third
+	}
+
+	if second < third {
+		return second
+	}
+
+	return third
+}
+
 func (r ConventionalCommitRule) Help() string {
 	if !r.HasErrors() {
 		return "No errors to fix. This rule checks that commits follow the conventional commit format with proper type, structure, and description (e.g., feat: add new login feature, fix(auth): resolve timeout issue)."

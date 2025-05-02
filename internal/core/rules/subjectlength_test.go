@@ -4,6 +4,7 @@
 package rules_test
 
 import (
+	"context"
 	"strconv"
 	"strings"
 	"testing"
@@ -66,8 +67,9 @@ func TestSubjectLengthRule(t *testing.T) {
 				rule = rules.NewSubjectLengthRule() // Use default
 			}
 
+			ctx := context.Background()
 			// Validate using the stateless method
-			errors := rule.Validate(commit)
+			errors := rule.Validate(ctx, commit)
 
 			// Check result
 			if testCase.expectError {
@@ -76,12 +78,12 @@ func TestSubjectLengthRule(t *testing.T) {
 				// Check error details
 				err := errors[0]
 				require.Equal(t, "SubjectLength", err.Rule, "Rule name should be set in ValidationError")
-				require.Equal(t, string(appErrors.ErrSubjectTooLong), err.Code, "Error code should match expected")
+				require.Equal(t, string(appErrors.ErrMaxLengthExceeded), err.Code, "Error code should match expected")
 
-				// Check context - we now use subject_length instead of actual_length
-				require.Contains(t, err.Context, "subject_length", "Context should contain subject length")
+				// Check context - we now use actual_length instead of subject_length
+				require.Contains(t, err.Context, "actual_length", "Context should contain subject length")
 				require.Contains(t, err.Context, "max_length", "Context should contain maximum length")
-				require.Equal(t, strconv.Itoa(actualLength), err.Context["subject_length"],
+				require.Equal(t, strconv.Itoa(actualLength), err.Context["actual_length"],
 					"Subject length in context should match expected length")
 
 				// Test pure function implementation explicitly
@@ -123,13 +125,14 @@ func TestSubjectLengthRuleWithConfig(t *testing.T) {
 		Subject: strings.Repeat("a", 51), // One character over the limit
 	}
 
+	ctx := context.Background()
 	// Validate and check for error
-	errors := rule.Validate(commit)
+	errors := rule.Validate(ctx, commit)
 	require.Len(t, errors, 1, "Should have exactly one error")
-	require.Equal(t, string(appErrors.ErrSubjectTooLong), errors[0].Code)
+	require.Equal(t, string(appErrors.ErrMaxLengthExceeded), errors[0].Code)
 
 	// Check context values
-	require.Equal(t, "51", errors[0].Context["subject_length"])
+	require.Equal(t, "51", errors[0].Context["actual_length"])
 	require.Equal(t, "50", errors[0].Context["max_length"])
 }
 

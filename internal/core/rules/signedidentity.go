@@ -5,6 +5,7 @@
 package rules
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -191,11 +192,17 @@ func (r SignedIdentityRule) Help() string {
 	if !r.HasErrors() {
 		return "No errors to fix"
 	}
-	// Then check for specific error codes
+
+	// Check if there's a help message in the error context
 	if r.ErrorCount() > 0 {
-		// Get the first error
 		firstErr := r.Errors()[0]
-		// firstErr is already a ValidationError, so no need for type assertion
+
+		helpMsg := firstErr.GetHelp()
+		if helpMsg != "" {
+			return helpMsg
+		}
+
+		// Fallback to the original logic if no help is available
 		validationErr := firstErr
 
 		code := validationErr.Code
@@ -259,8 +266,9 @@ func (r SignedIdentityRule) ValidateWithIdentity(commit *domain.CommitInfo) ([]a
 
 	// Validate commit
 	if commit == nil {
-		// Create error context with rich information
-		errorCtx := appErrors.NewContext()
+		context := map[string]string{
+			"error_type": "commit_nil",
+		}
 
 		helpMessage := `Invalid Commit Error: The commit object is nil.
 
@@ -284,13 +292,15 @@ NEXT STEPS:
 2. If you're a developer: Check how commit objects are being passed to validation
 3. Verify that the Git repository is accessible and not corrupted`
 
-		err := appErrors.CreateRichError(
+		err := appErrors.SignatureError(
 			r.Name(),
-			appErrors.ErrCommitNil,
 			"commit cannot be nil",
 			helpMessage,
-			errorCtx,
+			context,
 		)
+
+		// Override the error code to match the original
+		err.Code = string(appErrors.ErrCommitNil)
 
 		errors = append(errors, err)
 
@@ -302,8 +312,9 @@ NEXT STEPS:
 
 	// Check for empty signature
 	if signature == "" || len(strings.TrimSpace(signature)) == 0 {
-		// Create error context with rich information
-		errorCtx := appErrors.NewContext()
+		context := map[string]string{
+			"error_type": "missing_signature",
+		}
 
 		helpMessage := `Missing Signature Error: No cryptographic signature found for this commit.
 
@@ -336,13 +347,15 @@ WHY THIS MATTERS:
 
 For more information, visit: https://git-scm.com/book/en/v2/Git-Tools-Signing-Your-Work`
 
-		err := appErrors.CreateRichError(
+		err := appErrors.SignatureError(
 			r.Name(),
-			appErrors.ErrMissingSignature,
 			"no signature provided",
 			helpMessage,
-			errorCtx,
+			context,
 		)
+
+		// Override the error code to match the original
+		err.Code = string(appErrors.ErrMissingSignature)
 
 		errors = append(errors, err)
 
@@ -354,8 +367,11 @@ For more information, visit: https://git-scm.com/book/en/v2/Git-Tools-Signing-Yo
 		// Sanitize keyDir to prevent path traversal
 		_, err := sigverify.SanitizePath(r.KeyDir)
 		if err != nil {
-			// Create error context with rich information
-			errorCtx := appErrors.NewContext()
+			context := map[string]string{
+				"key_dir":    r.KeyDir,
+				"error":      err.Error(),
+				"error_type": "invalid_key_dir",
+			}
 
 			helpMessage := fmt.Sprintf(`Invalid Key Directory Error: The trusted keys directory is invalid.
 
@@ -385,17 +401,15 @@ The error occurred while trying to access: %s
 Error message: %s`,
 				err, r.KeyDir, r.KeyDir, r.KeyDir, err)
 
-			err2 := appErrors.CreateRichError(
+			err2 := appErrors.SignatureError(
 				r.Name(),
-				appErrors.ErrInvalidKeyDir,
 				fmt.Sprintf("invalid key directory: %s", err),
 				helpMessage,
-				errorCtx,
+				context,
 			)
 
-			// Add additional context
-			err2 = err2.WithContext("key_dir", r.KeyDir)
-			err2 = err2.WithContext("error", err.Error())
+			// Override the error code to match the original
+			err2.Code = string(appErrors.ErrInvalidKeyDir)
 
 			errors = append(errors, err2)
 
@@ -413,8 +427,10 @@ Error message: %s`,
 			// For now, we'll just simulate a verification
 			if !strings.Contains(signature, "-----BEGIN PGP SIGNATURE-----") ||
 				!strings.Contains(signature, "-----END PGP SIGNATURE-----") {
-				// Create error context with rich information
-				errorCtx := appErrors.NewContext()
+				context := map[string]string{
+					"signature_type": GPG,
+					"error_type":     "invalid_format",
+				}
 
 				helpMessage := `Invalid GPG Signature Format Error: The GPG signature is incomplete or malformed.
 
@@ -447,16 +463,15 @@ TECHNICAL DETAILS:
 - And must end with "-----END PGP SIGNATURE-----"
 - Your signature appears to be missing one or both of these markers`
 
-				err := appErrors.CreateRichError(
+				err := appErrors.SignatureError(
 					r.Name(),
-					appErrors.ErrInvalidSignatureFormat,
 					"incomplete GPG signature (missing begin/end markers)",
 					helpMessage,
-					errorCtx,
+					context,
 				)
 
-				// Add additional context
-				err = err.WithContext("signature_type", GPG)
+				// Override the error code to match the original
+				err.Code = string(appErrors.ErrInvalidSignatureFormat)
 
 				errors = append(errors, err)
 
@@ -468,8 +483,10 @@ TECHNICAL DETAILS:
 			// For now, we'll just simulate a verification
 			if strings.Contains(signature, "-----BEGIN SSH SIGNATURE-----") &&
 				!strings.Contains(signature, "-----END SSH SIGNATURE-----") {
-				// Create error context with rich information
-				errorCtx := appErrors.NewContext()
+				context := map[string]string{
+					"signature_type": SSH,
+					"error_type":     "invalid_format",
+				}
 
 				helpMessage := `Invalid SSH Signature Format Error: The SSH signature is incomplete.
 
@@ -502,16 +519,15 @@ TECHNICAL DETAILS:
 - And must end with "-----END SSH SIGNATURE-----"
 - Your signature has the begin marker but is missing the end marker`
 
-				err := appErrors.CreateRichError(
+				err := appErrors.SignatureError(
 					r.Name(),
-					appErrors.ErrInvalidSignatureFormat,
 					"incomplete SSH signature (missing end marker)",
 					helpMessage,
-					errorCtx,
+					context,
 				)
 
-				// Add additional context
-				err = err.WithContext("signature_type", SSH)
+				// Override the error code to match the original
+				err.Code = string(appErrors.ErrInvalidSignatureFormat)
 
 				errors = append(errors, err)
 
@@ -520,11 +536,13 @@ TECHNICAL DETAILS:
 
 			identity = "SSH Signature Format Verified"
 		default:
-			// Create error context with rich information
-			errorCtx := appErrors.NewContext()
-
 			// Get a safe prefix of the signature for display
 			sigPrefix := signature[:safeMin(len(signature), 20)]
+
+			context := map[string]string{
+				"signature_prefix": sigPrefix,
+				"error_type":       "unknown_format",
+			}
 
 			helpMessage := fmt.Sprintf(`Unknown Signature Type Error: Cannot recognize the signature format.
 
@@ -559,16 +577,15 @@ TECHNICAL DETAILS:
 - SSH signatures start with "-----BEGIN SSH SIGNATURE-----"
 - Your signature format doesn't match either pattern`, sigPrefix)
 
-			err := appErrors.CreateRichError(
+			err := appErrors.SignatureError(
 				r.Name(),
-				appErrors.ErrUnknownSigFormat,
 				"unknown signature type",
 				helpMessage,
-				errorCtx,
+				context,
 			)
 
-			// Add additional context
-			err = err.WithContext("signature", sigPrefix)
+			// Override the error code to match the original
+			err.Code = string(appErrors.ErrUnknownSigFormat)
 
 			errors = append(errors, err)
 
@@ -597,8 +614,8 @@ func ValidateSignedIdentityWithState(rule SignedIdentityRule, commit domain.Comm
 	return validateSignedIdentityWithState(rule, commit)
 }
 
-// Validate is a compatibility method that calls validateSignedIdentityWithState but only returns errors.
-func (r SignedIdentityRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
+// Validate implements the Rule interface by calling validateSignedIdentityWithState and returning only the errors.
+func (r SignedIdentityRule) Validate(_ context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
 	errors, _ := validateSignedIdentityWithState(r, commit)
 
 	return errors

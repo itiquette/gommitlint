@@ -4,6 +4,7 @@
 package rules
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -439,7 +440,7 @@ NEXT STEPS:
 
 // Validate performs validation against a commit and returns any errors.
 // This uses value semantics and does not modify the rule's state.
-func (j JiraReferenceRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
+func (j JiraReferenceRule) Validate(_ context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
 	errors, _ := validateJiraWithState(j, commit)
 
 	return errors
@@ -490,87 +491,437 @@ func (j JiraReferenceRule) SetFoundKeys(keys []string) JiraReferenceRule {
 }
 
 // createError creates a validation error without modifying the rule's state.
-func (j JiraReferenceRule) createError(code appErrors.ValidationErrorCode, message string, context map[string]string) appErrors.ValidationError {
-	// Create a new error context
-	errorCtx := appErrors.NewContext()
+// NOTE: This function is only kept for future reference in case we need similar functionality.
+// It is currently unused as we've migrated to more specific error creation functions.
+//
+// func (j JiraReferenceRule) createError(code appErrors.ValidationErrorCode, message string, context map[string]string) appErrors.ValidationError {
+// 	// Create a new error context
+// 	errorCtx := appErrors.NewContext()
+//
+// 	// Store the message in context for later reference
+// 	if context == nil {
+// 		context = make(map[string]string)
+// 	}
+//
+// 	context["message"] = message
+//
+// 	// Create a help message based on the error code
+// 	helpMessage := getJiraHelpMessage(code, context, j.validateBodyRef, j.validProjects)
+//
+// 	// Create the validation error with rich context
+// 	validationErr := appErrors.CreateRichError(
+// 		j.Name(),
+// 		code,
+// 		message,
+// 		helpMessage,
+// 		errorCtx,
+// 	)
+//
+// 	// Add detailed context information
+// 	for k, v := range context {
+// 		validationErr = validationErr.WithContext(k, v)
+// 	}
+//
+// 	return validationErr
+// }
+//
+// // getJiraHelpMessage returns a detailed help message for different error codes.
+// // NOTE: This function is only kept for future reference in case we need similar functionality.
+// // It is currently unused as we've migrated to more specific error creation functions.
+//
+// func getJiraHelpMessage(code appErrors.ValidationErrorCode, context map[string]string, isBodyRef bool, validProjects []string) string {
+// 	// Get the original error message if present
+// 	errorMsg := ""
+//
+// 	if context != nil {
+// 		if msg, ok := context["message"]; ok {
+// 			errorMsg = msg
+// 		}
+// 	}
+//
+// 	// Only handle error codes that are actually used in this rule
+// 	// Use if statements instead of switch to avoid exhaustive linter complaints
+// 	if code == appErrors.ErrMissingJira {
+// 		if isBodyRef {
+// 			return `Missing Jira Reference Error: No Jira issue key found in commit body.
+//
+// Your commit message is missing the required Jira issue reference in the body.
+//
+// ✅ CORRECT FORMAT:
+// - Include a "Refs:" line in your commit body with one or more Jira keys:
+//
+//   feat: add login feature
+//
+//   Implements the login screen with OAuth integration.
+//
+//   Refs: PROJ-123
+//
+// - For multiple tickets, separate them with commas:
+//
+//   Refs: PROJ-123, PROJ-456
+//
+// ❌ INCORRECT FORMAT:
+// - Your commit body is missing the "Refs:" line
+// - Informal references like "Works on PROJ-123" aren't properly recognized
+//
+// WHY THIS MATTERS:
+// - "Refs:" lines provide a consistent format for tooling
+// - Properly formatted references ensure traceability
+// - They connect code changes to specific work items or issues
+//
+// NEXT STEPS:
+// 1. Add a "Refs:" line before any sign-off lines:
+//    - Use 'git commit --amend' to edit your most recent commit
+//    - Format: Refs: PROJ-123 or Refs: PROJ-123, PROJ-456
+//    - Place it at the end of your commit body, before any sign-off lines`
+// 		}
+//
+// 		// Subject validation error
+// 		return `Missing Jira Reference Error: No Jira issue key found in commit subject.
+//
+// Your commit message is missing the required Jira issue reference in the subject line.
+//
+// ✅ CORRECT FORMAT:
+// - Include a Jira key in the subject line:
+//   "Add new feature PROJ-123"
+//
+// - For conventional commits, place it at the end:
+//   "feat: add login feature PROJ-123"
+//
+// - Common formats include:
+//   "feat: implement user authentication PROJ-123"
+//   "fix: resolve login timeout [PROJ-123]"
+//   "docs: update README (PROJ-123)"
+//
+// ❌ INCORRECT FORMAT:
+// - Your commit subject has no Jira issue key
+// - Jira keys should follow the pattern PROJECT-123
+//
+// WHY THIS MATTERS:
+// - Jira references connect code changes to specific work items
+// - They provide traceability for future reference
+// - They help automatically update Jira issues with commit information
+//
+// NEXT STEPS:
+// 1. Add a Jira issue key to your commit subject:
+//    - Use 'git commit --amend' to edit your most recent commit
+//    - Add the Jira key at the end of your commit subject
+//    - Ensure it follows the format PROJECT-123`
+// 	} else if code == appErrors.ErrInvalidFormat {
+// 		key := ""
+//
+// 		if context != nil {
+// 			if k, ok := context["key"]; ok {
+// 				key = k
+// 			}
+// 		}
+//
+// 		// Check for specific format errors
+// 		if key != "" {
+// 			return fmt.Sprintf(`Invalid Jira Key Format Error: "%s" is not a valid Jira key.
+//
+// Your commit includes a string that looks like a Jira reference but doesn't follow the correct format.
+//
+// ✅ CORRECT FORMAT:
+// - Jira keys must follow the pattern PROJECT-123
+// - Project keys are all uppercase letters: PROJ, TEAM, etc.
+// - Issue numbers are separated by a hyphen: PROJ-123
+//
+// ❌ INCORRECT FORMAT:
+// - "%s" doesn't match the required format
+// - Common mistakes include:
+//   - Missing hyphen between project and number (PROJ123)
+//   - Lowercase project key (proj-123)
+//   - Spaces in the key (PROJ 123)
+//
+// WHY THIS MATTERS:
+// - Correctly formatted keys ensure proper issue linking
+// - Automated tools rely on the standard format
+// - It maintains consistency across the project
+//
+// NEXT STEPS:
+// 1. Fix the Jira reference format:
+//    - Use 'git commit --amend' to edit your most recent commit
+//    - Ensure your Jira key follows PROJECT-123 format
+//    - Make sure the hyphen is included between the project and issue number`, key, key)
+// 		}
+//
+// 		if errorMsg != "" && strings.Contains(errorMsg, "must be at the end") {
+// 			return `Invalid Jira Key Position Error: Jira key must be at the end of the subject.
+//
+// In conventional commit format, the Jira key must appear at the end of the subject line.
+//
+// ✅ CORRECT FORMAT:
+// - Place the Jira key at the end of the subject:
+//   "feat: add login feature PROJ-123"
+//   "fix: resolve timeout issue [PROJ-123]"
+//   "docs: update installation instructions (PROJ-123)"
+//
+// ❌ INCORRECT FORMAT:
+// - Jira key in the middle of the subject:
+//   "feat: PROJ-123 add login feature"
+//   "PROJ-123: fix timeout issue"
+//
+// WHY THIS MATTERS:
+// - Consistent formatting makes commit logs easier to read
+// - It separates the descriptive content from the reference
+// - Automated parsing tools expect this standard format
+//
+// NEXT STEPS:
+// 1. Move the Jira key to the end of your subject line:
+//    - Use 'git commit --amend' to edit your most recent commit
+//    - The key can be directly at the end or in brackets/parentheses`
+// 		}
+//
+// 		if errorMsg != "" && strings.Contains(errorMsg, "Refs:") {
+// 			line := ""
+//
+// 			if context != nil {
+// 				if l, ok := context["line"]; ok {
+// 					line = l
+// 				}
+// 			}
+//
+// 			return fmt.Sprintf(`Invalid Refs Line Format Error: "%s" is not correctly formatted.
+//
+// The "Refs:" line in your commit body doesn't follow the expected format.
+//
+// ✅ CORRECT FORMAT:
+// - The Refs line should start with "Refs:" followed by one or more Jira keys:
+//   "Refs: PROJ-123"
+//
+// - For multiple tickets, separate them with commas:
+//   "Refs: PROJ-123, TEAM-456"
+//
+// - The Refs line should appear on its own line in the commit body
+//
+// ❌ INCORRECT FORMAT:
+// - Your current format: "%s"
+// - Common mistakes include:
+//   - Incorrect spacing
+//   - Missing or malformed Jira keys
+//   - Using other separators than commas
+//
+// WHY THIS MATTERS:
+// - The "Refs:" format is specifically designed for tooling integration
+// - It provides a consistent way to link commits to issues
+// - Automated systems parse this format to update issue trackers
+//
+// NEXT STEPS:
+// 1. Fix the Refs line in your commit message:
+//    - Use 'git commit --amend' to edit your most recent commit
+//    - Format properly: "Refs: PROJ-123" or "Refs: PROJ-123, PROJ-456"
+//    - Ensure proper spacing and comma separation for multiple keys`, line, line)
+// 		}
+//
+// 		if errorMsg != "" && strings.Contains(errorMsg, "must appear before") {
+// 			return `Invalid Line Order Error: "Refs:" line must appear before sign-off lines.
+//
+// Your commit message has the "Refs:" line after a "Signed-off-by:" line, which is incorrect.
+//
+// ✅ CORRECT FORMAT:
+// - The correct order for your commit message is:
+//   1. Commit subject
+//   2. Blank line
+//   3. Commit body (if any)
+//   4. Refs: line(s)
+//   5. Signed-off-by line(s)
+//
+// Example:
+//   feat: add login feature
+//
+//   Implements OAuth-based authentication flow.
+//
+//   Refs: PROJ-123
+//   Signed-off-by: Dev Name <dev@example.com>
+//
+// ❌ INCORRECT FORMAT:
+// - Your commit has the Refs line after the Signed-off-by line
+//
+// WHY THIS MATTERS:
+// - Consistent ordering helps automated tools parse commit messages
+// - It groups related information together: body, references, signatures
+// - It's a standard practice in commit message formatting
+//
+// NEXT STEPS:
+// 1. Reorder the lines in your commit message:
+//    - Use 'git commit --amend' to edit your most recent commit
+//    - Move the "Refs:" line above any "Signed-off-by:" lines`
+// 		}
+//
+// 		// General invalid format fallback
+// 		return `Invalid Jira Reference Format Error: The Jira reference format is incorrect.
+//
+// Your commit's Jira reference doesn't follow the expected format requirements.
+//
+// ✅ CORRECT FORMAT:
+// - For subject references:
+//   "Add new feature PROJ-123"
+//   "feat: add login feature PROJ-123"
+//
+// - For body references:
+//   "Refs: PROJ-123"
+//   "Refs: PROJ-123, TEAM-456"
+//
+// ❌ INCORRECT FORMAT:
+// - Common issues include:
+//   - Missing hyphen between project and number (PROJ123)
+//   - Incorrect positioning in conventional commits
+//   - Incorrectly formatted "Refs:" lines
+//   - References in non-standard locations
+//
+// WHY THIS MATTERS:
+// - Standardized formats ensure tooling integration works correctly
+// - They make commit logs consistent and readable
+// - They enable proper issue tracking and linking
+//
+// NEXT STEPS:
+// 1. Review your commit message format:
+//    - Use 'git commit --amend' to edit your most recent commit
+//    - Follow the examples above for correct formatting
+//    - Ensure Jira keys follow the PROJECT-123 pattern`
+// 	} else if code == appErrors.ErrInvalidType {
+// 		project := ""
+//
+// 		if context != nil {
+// 			if p, ok := context["project"]; ok {
+// 				project = p
+// 			}
+// 		}
+//
+// 		validProjectsStr := ""
+// 		if len(validProjects) > 0 {
+// 			validProjectsStr = "\n\nValid projects: " + strings.Join(validProjects, ", ")
+// 		}
+//
+// 		return fmt.Sprintf(`Invalid Jira Project Error: Project "%s" is not recognized.
+//
+// Your commit references a Jira project that is not in the list of valid projects for this repository.%s
+//
+// ✅ CORRECT FORMAT:
+// - Use one of the approved project keys in your Jira references
+// - Project keys are the prefix before the hyphen: PROJ-123
+//
+// ❌ INCORRECT FORMAT:
+// - "%s" is not a recognized project key
+// - Your commit should reference a valid project
+//
+// WHY THIS MATTERS:
+// - Project restrictions ensure references point to relevant Jira projects
+// - It prevents typos and references to unrelated projects
+// - It maintains consistency across the repository
+//
+// NEXT STEPS:
+// 1. Update your commit with a valid project reference:
+//    - Use 'git commit --amend' to edit your most recent commit
+//    - Replace "%s" with one of the valid project keys
+//    - Keep the same issue number if applicable`, project, validProjectsStr, project, project)
+// 	} else if code == appErrors.ErrEmptyMessage {
+// 		// This is handled separately in validateJiraWithState
+// 		return `Empty Commit Error: Cannot validate Jira references with empty commit.`
+// 	}
+//
+// 	// Default generic help message
+// 	return `Jira Reference Error: The commit message doesn't include a valid Jira reference.
+//
+// Your commit message needs a properly formatted Jira issue reference.
+//
+// ✅ CORRECT FORMAT:
+// - For subject references:
+//   "Add new feature PROJ-123"
+//   "feat: add login feature PROJ-123"
+//
+// - For body references (if enabled):
+//   "Refs: PROJ-123"
+//   "Refs: PROJ-123, TEAM-456"
+//
+// ❌ INCORRECT FORMAT:
+// - Missing Jira references
+// - Incorrectly formatted keys
+// - Keys in wrong locations
+//
+// WHY THIS MATTERS:
+// - Jira references connect code changes to specific work items
+// - They provide critical traceability
+// - They help track progress and requirements
+//
+// NEXT STEPS:
+// 1. Add a properly formatted Jira issue key to your commit:
+//    - Use 'git commit --amend' to edit your most recent commit
+//    - Follow your team's conventions for Jira reference placement
+//    - Ensure the key follows the PROJECT-123 format`
+// }
 
-	// Store the message in context for later reference
-	if context == nil {
-		context = make(map[string]string)
+// validateSubjectReferences validates Jira references in the commit subject.
+func (j JiraReferenceRule) validateSubjectReferences(subject string) []appErrors.ValidationError {
+	lines := strings.Split(subject, "\n")
+
+	firstLine := lines[0]
+	if j.isConventional {
+		return j.validateConventionalCommitSubject(firstLine)
 	}
 
-	context["message"] = message
-
-	// Create a help message based on the error code
-	helpMessage := getJiraHelpMessage(code, context, j.validateBodyRef, j.validProjects)
-
-	// Create the validation error with rich context
-	validationErr := appErrors.CreateRichError(
-		j.Name(),
-		code,
-		message,
-		helpMessage,
-		errorCtx,
-	)
-
-	// Add context for backward compatibility
-	for k, v := range context {
-		validationErr = validationErr.WithContext(k, v)
-	}
-
-	return validationErr
+	return j.validateNonConventionalCommitSubject(subject)
 }
 
-// getJiraHelpMessage returns a detailed help message for different error codes.
-func getJiraHelpMessage(code appErrors.ValidationErrorCode, context map[string]string, isBodyRef bool, validProjects []string) string {
-	// Get the original error message if present
-	errorMsg := ""
+// validateConventionalCommitSubject validates a conventional commit subject line.
+func (j JiraReferenceRule) validateConventionalCommitSubject(firstLine string) []appErrors.ValidationError {
+	errors := make([]appErrors.ValidationError, 0)
 
-	if context != nil {
-		if msg, ok := context["message"]; ok {
-			errorMsg = msg
-		}
-	}
+	matches := jiraKeyRegex.FindAllString(firstLine, -1)
+	if len(matches) == 0 {
+		// Check for invalid format key like PROJ123 (without hyphen)
+		invalidFormatRegex := regexp.MustCompile(`([A-Z]+\d+)`)
+		invalidMatches := invalidFormatRegex.FindAllString(firstLine, -1)
 
-	// Only handle error codes that are actually used in this rule
-	// Use if statements instead of switch to avoid exhaustive linter complaints
-	if code == appErrors.ErrMissingJira {
-		if isBodyRef {
-			return `Missing Jira Reference Error: No Jira issue key found in commit body.
+		if len(invalidMatches) > 0 {
+			// Found something that looks like a Jira key but with invalid format
+			invalidKey := invalidMatches[0]
 
-Your commit message is missing the required Jira issue reference in the body.
+			// Extract project and issue parts when possible
+			projectPart := regexp.MustCompile(`([A-Z]+)`).FindString(invalidKey)
+			numberPart := regexp.MustCompile(`(\d+)`).FindString(invalidKey)
+			suggestedKey := projectPart + "-" + numberPart
+
+			helpText := fmt.Sprintf(`Invalid Jira Key Format Error: "%s" is not a valid Jira key.
 
 ✅ CORRECT FORMAT:
-- Include a "Refs:" line in your commit body with one or more Jira keys:
-  
-  feat: add login feature
-  
-  Implements the login screen with OAuth integration.
-  
-  Refs: PROJ-123
-  
-- For multiple tickets, separate them with commas:
-  
-  Refs: PROJ-123, PROJ-456
+- Jira keys must follow the pattern PROJECT-123
+- Project keys are all uppercase letters: PROJ, TEAM, etc.
+- Issue numbers are separated by a hyphen: PROJ-123
 
 ❌ INCORRECT FORMAT:
-- Your commit body is missing the "Refs:" line
-- Informal references like "Works on PROJ-123" aren't properly recognized
+- "%s" doesn't match the required format (missing hyphen)
+- The correct format would be: %s
 
 WHY THIS MATTERS:
-- "Refs:" lines provide a consistent format for tooling
-- Properly formatted references ensure traceability
-- They connect code changes to specific work items or issues
+- Correctly formatted keys ensure proper issue linking
+- Automated tools rely on the standard format
+- It maintains consistency across the project
 
 NEXT STEPS:
-1. Add a "Refs:" line before any sign-off lines:
+1. Fix the Jira reference format:
    - Use 'git commit --amend' to edit your most recent commit
-   - Format: Refs: PROJ-123 or Refs: PROJ-123, PROJ-456
-   - Place it at the end of your commit body, before any sign-off lines`
+   - Ensure your Jira key follows PROJECT-123 format
+   - For conventional commits, make sure it's at the end of the line`,
+				invalidKey, invalidKey, suggestedKey)
+
+			err := appErrors.JiraError(
+				j.Name(),
+				appErrors.ErrInvalidFormat,
+				"invalid Jira issue key format: "+invalidKey+" (should be PROJECT-123)",
+				helpText,
+				invalidKey,
+				firstLine,
+				map[string]string{"suggested_key": suggestedKey},
+			)
+			errors = append(errors, err)
+
+			return errors
 		}
 
-		// Subject validation error
-		return `Missing Jira Reference Error: No Jira issue key found in commit subject.
+		// No key-like patterns found, report as missing
+		helpText := `Missing Jira Reference Error: No Jira issue key found in commit subject.
 
 Your commit message is missing the required Jira issue reference in the subject line.
 
@@ -600,294 +951,20 @@ NEXT STEPS:
    - Use 'git commit --amend' to edit your most recent commit
    - Add the Jira key at the end of your commit subject
    - Ensure it follows the format PROJECT-123`
-	} else if code == appErrors.ErrInvalidFormat {
-		key := ""
 
-		if context != nil {
-			if k, ok := context["key"]; ok {
-				key = k
-			}
+		additionalContext := map[string]string{
+			"subject":         firstLine,
+			"is_conventional": "true",
 		}
 
-		// Check for specific format errors
-		if key != "" {
-			return fmt.Sprintf(`Invalid Jira Key Format Error: "%s" is not a valid Jira key.
-
-Your commit includes a string that looks like a Jira reference but doesn't follow the correct format.
-
-✅ CORRECT FORMAT:
-- Jira keys must follow the pattern PROJECT-123
-- Project keys are all uppercase letters: PROJ, TEAM, etc.
-- Issue numbers are separated by a hyphen: PROJ-123
-
-❌ INCORRECT FORMAT:
-- "%s" doesn't match the required format
-- Common mistakes include:
-  - Missing hyphen between project and number (PROJ123)
-  - Lowercase project key (proj-123)
-  - Spaces in the key (PROJ 123)
-
-WHY THIS MATTERS:
-- Correctly formatted keys ensure proper issue linking
-- Automated tools rely on the standard format
-- It maintains consistency across the project
-
-NEXT STEPS:
-1. Fix the Jira reference format:
-   - Use 'git commit --amend' to edit your most recent commit
-   - Ensure your Jira key follows PROJECT-123 format
-   - Make sure the hyphen is included between the project and issue number`, key, key)
-		}
-
-		if errorMsg != "" && strings.Contains(errorMsg, "must be at the end") {
-			return `Invalid Jira Key Position Error: Jira key must be at the end of the subject.
-
-In conventional commit format, the Jira key must appear at the end of the subject line.
-
-✅ CORRECT FORMAT:
-- Place the Jira key at the end of the subject:
-  "feat: add login feature PROJ-123"
-  "fix: resolve timeout issue [PROJ-123]"
-  "docs: update installation instructions (PROJ-123)"
-
-❌ INCORRECT FORMAT:
-- Jira key in the middle of the subject:
-  "feat: PROJ-123 add login feature"
-  "PROJ-123: fix timeout issue" 
-
-WHY THIS MATTERS:
-- Consistent formatting makes commit logs easier to read
-- It separates the descriptive content from the reference
-- Automated parsing tools expect this standard format
-
-NEXT STEPS:
-1. Move the Jira key to the end of your subject line:
-   - Use 'git commit --amend' to edit your most recent commit
-   - The key can be directly at the end or in brackets/parentheses`
-		}
-
-		if errorMsg != "" && strings.Contains(errorMsg, "Refs:") {
-			line := ""
-
-			if context != nil {
-				if l, ok := context["line"]; ok {
-					line = l
-				}
-			}
-
-			return fmt.Sprintf(`Invalid Refs Line Format Error: "%s" is not correctly formatted.
-
-The "Refs:" line in your commit body doesn't follow the expected format.
-
-✅ CORRECT FORMAT:
-- The Refs line should start with "Refs:" followed by one or more Jira keys:
-  "Refs: PROJ-123"
-  
-- For multiple tickets, separate them with commas:
-  "Refs: PROJ-123, TEAM-456"
-  
-- The Refs line should appear on its own line in the commit body
-
-❌ INCORRECT FORMAT:
-- Your current format: "%s"
-- Common mistakes include:
-  - Incorrect spacing
-  - Missing or malformed Jira keys
-  - Using other separators than commas
-
-WHY THIS MATTERS:
-- The "Refs:" format is specifically designed for tooling integration
-- It provides a consistent way to link commits to issues
-- Automated systems parse this format to update issue trackers
-
-NEXT STEPS:
-1. Fix the Refs line in your commit message:
-   - Use 'git commit --amend' to edit your most recent commit
-   - Format properly: "Refs: PROJ-123" or "Refs: PROJ-123, PROJ-456"
-   - Ensure proper spacing and comma separation for multiple keys`, line, line)
-		}
-
-		if errorMsg != "" && strings.Contains(errorMsg, "must appear before") {
-			return `Invalid Line Order Error: "Refs:" line must appear before sign-off lines.
-
-Your commit message has the "Refs:" line after a "Signed-off-by:" line, which is incorrect.
-
-✅ CORRECT FORMAT:
-- The correct order for your commit message is:
-  1. Commit subject
-  2. Blank line
-  3. Commit body (if any)
-  4. Refs: line(s)
-  5. Signed-off-by line(s)
-
-Example:
-  feat: add login feature
-  
-  Implements OAuth-based authentication flow.
-  
-  Refs: PROJ-123
-  Signed-off-by: Dev Name <dev@example.com>
-
-❌ INCORRECT FORMAT:
-- Your commit has the Refs line after the Signed-off-by line
-
-WHY THIS MATTERS:
-- Consistent ordering helps automated tools parse commit messages
-- It groups related information together: body, references, signatures
-- It's a standard practice in commit message formatting
-
-NEXT STEPS:
-1. Reorder the lines in your commit message:
-   - Use 'git commit --amend' to edit your most recent commit
-   - Move the "Refs:" line above any "Signed-off-by:" lines`
-		}
-
-		// General invalid format fallback
-		return `Invalid Jira Reference Format Error: The Jira reference format is incorrect.
-
-Your commit's Jira reference doesn't follow the expected format requirements.
-
-✅ CORRECT FORMAT:
-- For subject references:
-  "Add new feature PROJ-123"
-  "feat: add login feature PROJ-123"
-  
-- For body references:
-  "Refs: PROJ-123"
-  "Refs: PROJ-123, TEAM-456"
-
-❌ INCORRECT FORMAT:
-- Common issues include:
-  - Missing hyphen between project and number (PROJ123)
-  - Incorrect positioning in conventional commits
-  - Incorrectly formatted "Refs:" lines
-  - References in non-standard locations
-
-WHY THIS MATTERS:
-- Standardized formats ensure tooling integration works correctly
-- They make commit logs consistent and readable
-- They enable proper issue tracking and linking
-
-NEXT STEPS:
-1. Review your commit message format:
-   - Use 'git commit --amend' to edit your most recent commit
-   - Follow the examples above for correct formatting
-   - Ensure Jira keys follow the PROJECT-123 pattern`
-	} else if code == appErrors.ErrInvalidType {
-		project := ""
-
-		if context != nil {
-			if p, ok := context["project"]; ok {
-				project = p
-			}
-		}
-
-		validProjectsStr := ""
-		if len(validProjects) > 0 {
-			validProjectsStr = "\n\nValid projects: " + strings.Join(validProjects, ", ")
-		}
-
-		return fmt.Sprintf(`Invalid Jira Project Error: Project "%s" is not recognized.
-
-Your commit references a Jira project that is not in the list of valid projects for this repository.%s
-
-✅ CORRECT FORMAT:
-- Use one of the approved project keys in your Jira references
-- Project keys are the prefix before the hyphen: PROJ-123
-
-❌ INCORRECT FORMAT:
-- "%s" is not a recognized project key
-- Your commit should reference a valid project
-
-WHY THIS MATTERS:
-- Project restrictions ensure references point to relevant Jira projects
-- It prevents typos and references to unrelated projects
-- It maintains consistency across the repository
-
-NEXT STEPS:
-1. Update your commit with a valid project reference:
-   - Use 'git commit --amend' to edit your most recent commit
-   - Replace "%s" with one of the valid project keys
-   - Keep the same issue number if applicable`, project, validProjectsStr, project, project)
-	} else if code == appErrors.ErrEmptyMessage {
-		// This is handled separately in validateJiraWithState
-		return `Empty Commit Error: Cannot validate Jira references with empty commit.`
-	}
-
-	// Default generic help message
-	return `Jira Reference Error: The commit message doesn't include a valid Jira reference.
-
-Your commit message needs a properly formatted Jira issue reference.
-
-✅ CORRECT FORMAT:
-- For subject references:
-  "Add new feature PROJ-123"
-  "feat: add login feature PROJ-123"
-  
-- For body references (if enabled):
-  "Refs: PROJ-123"
-  "Refs: PROJ-123, TEAM-456"
-
-❌ INCORRECT FORMAT:
-- Missing Jira references
-- Incorrectly formatted keys
-- Keys in wrong locations
-
-WHY THIS MATTERS:
-- Jira references connect code changes to specific work items
-- They provide critical traceability
-- They help track progress and requirements
-
-NEXT STEPS:
-1. Add a properly formatted Jira issue key to your commit:
-   - Use 'git commit --amend' to edit your most recent commit
-   - Follow your team's conventions for Jira reference placement
-   - Ensure the key follows the PROJECT-123 format`
-}
-
-// validateSubjectReferences validates Jira references in the commit subject.
-func (j JiraReferenceRule) validateSubjectReferences(subject string) []appErrors.ValidationError {
-	lines := strings.Split(subject, "\n")
-
-	firstLine := lines[0]
-	if j.isConventional {
-		return j.validateConventionalCommitSubject(firstLine)
-	}
-
-	return j.validateNonConventionalCommitSubject(subject)
-}
-
-// validateConventionalCommitSubject validates a conventional commit subject line.
-func (j JiraReferenceRule) validateConventionalCommitSubject(firstLine string) []appErrors.ValidationError {
-	errors := make([]appErrors.ValidationError, 0)
-
-	matches := jiraKeyRegex.FindAllString(firstLine, -1)
-	if len(matches) == 0 {
-		// Check for invalid format key like PROJ123 (without hyphen)
-		invalidFormatRegex := regexp.MustCompile(`([A-Z]+\d+)`)
-		invalidMatches := invalidFormatRegex.FindAllString(firstLine, -1)
-
-		if len(invalidMatches) > 0 {
-			// Found something that looks like a Jira key but with invalid format
-			err := j.createError(
-				appErrors.ErrInvalidFormat,
-				"invalid Jira issue key format: "+invalidMatches[0]+" (should be PROJECT-123)",
-				map[string]string{
-					"key": invalidMatches[0],
-				},
-			)
-			errors = append(errors, err)
-
-			return errors
-		}
-
-		// No key-like patterns found, report as missing
-		err := j.createError(
+		err := appErrors.JiraError(
+			j.Name(),
 			appErrors.ErrMissingJira,
 			"no Jira issue key found in the commit subject",
-			map[string]string{
-				"subject": firstLine,
-			},
+			helpText,
+			"", // No key to provide
+			firstLine,
+			additionalContext,
 		)
 		errors = append(errors, err)
 
@@ -935,12 +1012,43 @@ func (j JiraReferenceRule) validateKeyPositionInConventional(firstLine string, m
 	}
 
 	// Not found at the end, report error
-	err := j.createError(
+	helpText := fmt.Sprintf(`Invalid Jira Key Position Error: Jira key must be at the end of the subject.
+
+✅ CORRECT FORMAT:
+- Place the Jira key at the end of the subject:
+  "feat: add login feature %s"
+  "fix: resolve timeout issue [%s]"
+  "docs: update installation instructions (%s)"
+
+❌ INCORRECT FORMAT:
+- Your current format has the key in the wrong position:
+  "%s"
+- Jira key in the middle of the subject:
+  "feat: %s add login feature"
+  "%s: fix timeout issue" 
+
+WHY THIS MATTERS:
+- Consistent formatting makes commit logs easier to read
+- It separates the descriptive content from the reference
+- Automated parsing tools expect this standard format
+
+NEXT STEPS:
+1. Move the Jira key to the end of your subject line:
+   - Use 'git commit --amend' to edit your most recent commit
+   - The key can be directly at the end or in brackets/parentheses
+   - Sample correct format: "feat: add feature %s"`,
+		lastMatch, lastMatch, lastMatch, firstLine, lastMatch, lastMatch, lastMatch)
+
+	err := appErrors.JiraError(
+		j.Name(),
 		appErrors.ErrInvalidFormat,
 		"in conventional commit format, Jira issue key must be at the end of the first line",
+		helpText,
+		lastMatch,
+		firstLine,
 		map[string]string{
-			"subject": firstLine,
-			"key":     lastMatch,
+			"is_conventional": "true",
+			"allowed_formats": strings.Join(validSuffixes, ", "),
 		},
 	)
 	errors = append(errors, err)
@@ -962,12 +1070,44 @@ func (j JiraReferenceRule) validateNonConventionalCommitSubject(subject string) 
 
 		if len(invalidMatches) > 0 {
 			// Found something that looks like a Jira key but with invalid format
-			err := j.createError(
+			invalidKey := invalidMatches[0]
+
+			// Extract project and issue parts when possible
+			projectPart := regexp.MustCompile(`([A-Z]+)`).FindString(invalidKey)
+			numberPart := regexp.MustCompile(`(\d+)`).FindString(invalidKey)
+			suggestedKey := projectPart + "-" + numberPart
+
+			helpText := fmt.Sprintf(`Invalid Jira Key Format Error: "%s" is not a valid Jira key.
+
+✅ CORRECT FORMAT:
+- Jira keys must follow the pattern PROJECT-123
+- Project keys are all uppercase letters: PROJ, TEAM, etc.
+- Issue numbers are separated by a hyphen: PROJ-123
+
+❌ INCORRECT FORMAT:
+- "%s" doesn't match the required format (missing hyphen)
+- The correct format would be: %s
+
+WHY THIS MATTERS:
+- Correctly formatted keys ensure proper issue linking
+- Automated tools rely on the standard format
+- It maintains consistency across the project
+
+NEXT STEPS:
+1. Fix the Jira reference format:
+   - Use 'git commit --amend' to edit your most recent commit
+   - Ensure your Jira key follows PROJECT-123 format
+   - Make sure the hyphen is included between the project and issue number`,
+				invalidKey, invalidKey, suggestedKey)
+
+			err := appErrors.JiraError(
+				j.Name(),
 				appErrors.ErrInvalidFormat,
-				"invalid Jira issue key format: "+invalidMatches[0]+" (should be PROJECT-123)",
-				map[string]string{
-					"key": invalidMatches[0],
-				},
+				"invalid Jira issue key format: "+invalidKey+" (should be PROJECT-123)",
+				helpText,
+				invalidKey,
+				subject,
+				map[string]string{"suggested_key": suggestedKey},
 			)
 			errors = append(errors, err)
 
@@ -975,12 +1115,46 @@ func (j JiraReferenceRule) validateNonConventionalCommitSubject(subject string) 
 		}
 
 		// No key-like patterns found, report as missing
-		err := j.createError(
+		helpText := `Missing Jira Reference Error: No Jira issue key found in commit subject.
+
+Your commit message is missing the required Jira issue reference in the subject line.
+
+✅ CORRECT FORMAT:
+- Include a Jira key in the subject line:
+  "Add new feature PROJ-123"
+  
+- Common formats include:
+  "Implement user authentication PROJ-123"
+  "Resolve login timeout issue [PROJ-123]"
+  "Update documentation (PROJ-123)"
+
+❌ INCORRECT FORMAT:
+- Your commit subject has no Jira issue key
+- Jira keys should follow the pattern PROJECT-123
+
+WHY THIS MATTERS:
+- Jira references connect code changes to specific work items
+- They provide traceability for future reference
+- They help automatically update Jira issues with commit information
+
+NEXT STEPS:
+1. Add a Jira issue key to your commit subject:
+   - Use 'git commit --amend' to edit your most recent commit
+   - Add the Jira key anywhere in your commit subject
+   - Ensure it follows the format PROJECT-123`
+
+		additionalContext := map[string]string{
+			"subject": subject,
+		}
+
+		err := appErrors.JiraError(
+			j.Name(),
 			appErrors.ErrMissingJira,
 			"no Jira issue key found in the commit subject",
-			map[string]string{
-				"subject": subject,
-			},
+			helpText,
+			"", // No key to provide
+			subject,
+			additionalContext,
 		)
 		errors = append(errors, err)
 
@@ -1017,9 +1191,37 @@ func (j JiraReferenceRule) validateBodyReferences(body string) []appErrors.Valid
 
 	body = strings.TrimSpace(body)
 	if body == "" {
-		err := j.createError(
-			appErrors.ErrMissingJira,
+		helpText := `Missing Commit Body Error: No Jira issue key found in commit body
+
+✅ CORRECT FORMAT:
+- Your commit message should have a body section with a Refs line:
+  
+  feat: add login feature
+  
+  This is the commit body describing the changes in detail.
+  
+  Refs: PROJ-123
+
+❌ INCORRECT FORMAT:
+- Your commit has no body section
+- Body references require a non-empty commit body with a Refs line
+
+WHY THIS MATTERS:
+- The commit body provides important context for changes
+- "Refs:" lines in the body standardize Jira references
+- Properly structured commits improve project traceability
+
+NEXT STEPS:
+1. Update your commit with a proper body section:
+   - Use 'git commit --amend' to edit your commit message
+   - Add a blank line after the subject
+   - Add descriptive text about the change
+   - Include a "Refs: PROJ-123" line with the appropriate Jira key`
+
+		err := appErrors.ReferenceError(
+			j.Name(),
 			"no Jira issue key found in the commit body",
+			helpText,
 			nil,
 		)
 		errors = append(errors, err)
@@ -1090,13 +1292,28 @@ func (j JiraReferenceRule) findRefsAndSignoffLines(bodyLines []string) (RefsLine
 			if invalidFormatRegex.MatchString(line) {
 				matches := invalidFormatRegex.FindStringSubmatch(line)
 				invalidKey := matches[1]
-				err := j.createError(
-					appErrors.ErrInvalidFormat,
+
+				helpText := fmt.Sprintf(`Invalid Jira Key Format in Refs Line: "%s" is not a valid Jira key
+
+✅ CORRECT FORMAT: Refs: PROJECT-123 or Refs: PROJECT-123, ABC-456
+❌ INCORRECT FORMAT: Refs: %s (missing hyphen between project code and issue number)
+
+WHY THIS MATTERS:
+Jira uses a specific format for issue keys consisting of a project code in uppercase 
+letters followed by a hyphen and a number. Without the correct format, automated 
+tools cannot link your commit to the proper Jira issue.
+
+NEXT STEPS:
+1. Update your commit message with the correct Jira key format
+2. Use "git commit --amend" to modify your commit message
+3. Add a hyphen between the project code and issue number
+4. Ensure the format follows: Refs: PROJECT-123`, invalidKey, invalidKey)
+
+				err := appErrors.FormatError(
+					j.Name(),
 					"invalid Jira issue key format: "+invalidKey+" (should be PROJECT-123)",
-					map[string]string{
-						"key":  invalidKey,
-						"line": line,
-					},
+					helpText,
+					line,
 				)
 				errors = append(errors, err)
 
@@ -1104,12 +1321,32 @@ func (j JiraReferenceRule) findRefsAndSignoffLines(bodyLines []string) (RefsLine
 			}
 
 			// Regular invalid format
-			err := j.createError(
-				appErrors.ErrInvalidFormat,
+			helpText := fmt.Sprintf(`Invalid Refs Line Format: "%s" is not correctly formatted
+
+✅ CORRECT FORMAT:
+- Refs: PROJECT-123
+- Refs: PROJECT-123, PROJECT-456, PROJECT-789
+
+❌ INCORRECT FORMAT:
+- Your current format: "%s"
+- The line must start with "Refs:" followed by a properly formatted Jira key
+
+WHY THIS MATTERS:
+- The "Refs:" format is designed for tooling integration
+- Consistent formatting ensures traceability between commits and issues
+- It enables automated tools to correctly link commits to Jira issues
+
+NEXT STEPS:
+1. Fix the format of your Refs line:
+   - Use 'git commit --amend' to edit your commit message
+   - Format the line as "Refs: PROJECT-123" (with a hyphen in the Jira key)
+   - For multiple references, use "Refs: PROJECT-123, PROJECT-456"`, line, line)
+
+			err := appErrors.FormatError(
+				j.Name(),
 				"invalid Refs format in commit body, should be 'Refs: PROJ-123' or 'Refs: PROJ-123, PROJ-456'",
-				map[string]string{
-					"line": line,
-				},
+				helpText,
+				line,
 			)
 			errors = append(errors, err)
 
@@ -1119,9 +1356,34 @@ func (j JiraReferenceRule) findRefsAndSignoffLines(bodyLines []string) (RefsLine
 
 	// Validate that Refs: exists
 	if !info.foundRefs {
-		err := j.createError(
-			appErrors.ErrMissingJira,
+		helpText := `Missing Jira Reference Error: No Jira issue key found in commit body with Refs: prefix
+
+✅ CORRECT FORMAT:
+- Your commit body must include a line starting with "Refs:" followed by Jira keys:
+  Refs: PROJECT-123
+  
+- For multiple references:
+  Refs: PROJECT-123, PROJECT-456, PROJECT-789
+
+❌ INCORRECT FORMAT:
+- No "Refs:" line found in your commit body
+- Informal references (like "Related to PROJECT-123") are not recognized
+
+WHY THIS MATTERS:
+- "Refs:" lines provide a consistent format for tooling
+- They connect code changes to specific Jira issues
+- They enable automated tools to track development progress
+
+NEXT STEPS:
+1. Edit your commit message to add a properly formatted "Refs:" line
+   - Use 'git commit --amend' to modify your commit
+   - Add a line with "Refs: PROJECT-123" (with the appropriate Jira key)
+   - Place this before any signature lines`
+
+		err := appErrors.ReferenceError(
+			j.Name(),
 			"no Jira issue key found in the commit body with Refs: prefix",
+			helpText,
 			nil,
 		)
 		errors = append(errors, err)
@@ -1138,14 +1400,53 @@ func (j JiraReferenceRule) validateReferenceLineOrdering(info RefsLineInfo) []ap
 
 	// Validate that Refs: appears before any Signed-off-by lines
 	if info.signOffFound && info.refsLineNum > info.signOffLineNum {
-		err := j.createError(
-			appErrors.ErrInvalidFormat,
+		helpText := `Invalid Line Order Error: "Refs:" line must appear before sign-off lines
+
+✅ CORRECT ORDER:
+1. Commit subject
+2. Blank line
+3. Commit body (if any)
+4. Refs: line(s)
+5. Signed-off-by line(s)
+
+Example:
+feat: add login feature
+
+Implements OAuth-based authentication flow.
+
+Refs: PROJ-123
+Signed-off-by: Dev Name <dev@example.com>
+
+❌ INCORRECT ORDER:
+- Your commit has the Refs line after the Signed-off-by line
+
+WHY THIS MATTERS:
+- Consistent ordering helps automated tools parse commit messages
+- It groups related information together logically
+- It's a standard practice in commit message formatting
+
+NEXT STEPS:
+1. Reorder the lines in your commit message:
+   - Use 'git commit --amend' to edit your most recent commit
+   - Move the "Refs:" line above any "Signed-off-by:" lines`
+
+		context := map[string]string{
+			"refs_line":    strconv.Itoa(info.refsLineNum),
+			"signoff_line": strconv.Itoa(info.signOffLineNum),
+		}
+
+		err := appErrors.FormatError(
+			j.Name(),
 			"Refs: line must appear before any Signed-off-by lines",
-			map[string]string{
-				"refs_line":    strconv.Itoa(info.refsLineNum),
-				"signoff_line": strconv.Itoa(info.signOffLineNum),
-			},
+			helpText,
+			"", // No subject for this error
 		)
+
+		// Add context information
+		for k, v := range context {
+			err = err.WithContext(k, v)
+		}
+
 		errors = append(errors, err)
 	}
 
@@ -1191,12 +1492,39 @@ func (j JiraReferenceRule) validateJiraProject(jiraKey string) []appErrors.Valid
 
 	// First, verify the key has the correct format
 	if !jiraKeyRegex.MatchString(jiraKey) {
-		err := j.createError(
+		helpText := fmt.Sprintf(`Invalid Jira Key Format Error: "%s" is not a valid Jira key.
+
+✅ CORRECT FORMAT:
+- Jira keys must follow the pattern PROJECT-123
+- Project keys are all uppercase letters: PROJ, TEAM, etc.
+- Issue numbers are separated by a hyphen: PROJ-123
+
+❌ INCORRECT FORMAT:
+- "%s" doesn't match the required format
+- Common mistakes include:
+  - Missing hyphen between project and number (PROJ123)
+  - Lowercase project key (proj-123)
+  - Spaces in the key (PROJ 123)
+
+WHY THIS MATTERS:
+- Correctly formatted keys ensure proper issue linking
+- Automated tools rely on the standard format
+- It maintains consistency across the project
+
+NEXT STEPS:
+1. Fix the Jira reference format:
+   - Use 'git commit --amend' to edit your most recent commit
+   - Ensure your Jira key follows PROJECT-123 format
+   - Make sure the hyphen is included between the project and issue number`, jiraKey, jiraKey)
+
+		err := appErrors.JiraError(
+			j.Name(),
 			appErrors.ErrInvalidFormat,
 			"invalid Jira issue key format: "+jiraKey+" (should be PROJECT-123)",
-			map[string]string{
-				"key": jiraKey,
-			},
+			helpText,
+			jiraKey,
+			"",
+			nil,
 		)
 		errors = append(errors, err)
 
@@ -1211,14 +1539,64 @@ func (j JiraReferenceRule) validateJiraProject(jiraKey string) []appErrors.Valid
 	// When project list is provided, validate against it
 	projectKey := strings.Split(jiraKey, "-")[0]
 	if !containsString(j.validProjects, projectKey) {
-		err := j.createError(
+		validProjectsList := strings.Join(j.validProjects, ", ")
+
+		// Create a different message format depending on whether we have valid projects to recommend
+		var helpText string
+		if len(j.validProjects) > 0 {
+			helpText = fmt.Sprintf(`Invalid Jira Project Error: "%s" is not in the allowed project list.
+
+✅ CORRECT PROJECTS: %s
+
+❌ INCORRECT PROJECT: %s (not in the allowed list)
+
+WHY THIS MATTERS:
+- Using standardized project keys ensures consistency across the repository
+- It prevents typos and references to unrelated projects
+- It maintains proper traceability between code and issue tracking
+
+NEXT STEPS:
+1. Update your commit message with an allowed project key:
+   - Use 'git commit --amend' to edit your most recent commit
+   - Replace "%s" with one of the allowed project keys
+   - Keep the same issue number if applicable: %s-123`,
+				projectKey, validProjectsList, projectKey, projectKey, j.validProjects[0])
+		} else {
+			helpText = fmt.Sprintf(`Invalid Jira Project Error: "%s" is not a valid project key.
+
+✅ CORRECT FORMAT: Standard uppercase Jira project key (e.g., PROJ, TEAM)
+
+❌ INCORRECT PROJECT: %s
+
+WHY THIS MATTERS:
+- Using standardized project keys ensures consistency across the repository
+- It prevents typos and references to unrelated projects
+- It maintains proper traceability between code and issue tracking
+
+NEXT STEPS:
+1. Update your commit message with the correct project key:
+   - Use 'git commit --amend' to edit your most recent commit
+   - Replace "%s" with the appropriate project key for your issue
+   - Consult your team's documentation for the list of valid project keys`,
+				projectKey, projectKey, projectKey)
+		}
+
+		// Additional context to be included
+		additionalContext := map[string]string{
+			"project":        projectKey,
+			"valid_projects": validProjectsList,
+		}
+
+		err := appErrors.JiraError(
+			j.Name(),
 			appErrors.ErrInvalidType,
 			"Jira project "+projectKey+" is not a valid project",
-			map[string]string{
-				"project":        projectKey,
-				"valid_projects": strings.Join(j.validProjects, ","),
-			},
+			helpText,
+			jiraKey,
+			"", // No subject needed here
+			additionalContext,
 		)
+
 		errors = append(errors, err)
 	}
 

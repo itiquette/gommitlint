@@ -5,12 +5,13 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/go-git/go-git/v5"
 	"github.com/spf13/cobra"
 )
 
@@ -103,32 +104,93 @@ func (p HookInstallationParameters) WithRepoPath(repoPath string) HookInstallati
 }
 
 // FindHookPath determines the hook file path based on the parameters.
+// Implements security best practices for safe path handling.
 func (p HookInstallationParameters) FindHookPath() (string, error) {
+	// Clean the repository path to prevent path traversal
+	repoPath := filepath.Clean(p.RepoPath)
+
 	// Find Git root directory
-	gitDir, err := findGitDirectory(p.RepoPath)
+	gitDir, err := findGitDirectory(repoPath)
 	if err != nil {
 		return "", fmt.Errorf("could not find Git directory: %w", err)
 	}
 
+	// Validate hook type to prevent command injection
+	hookType := p.HookType
+	if !isValidHookType(hookType) {
+		return "", fmt.Errorf("invalid hook type: %s", hookType)
+	}
+
 	// Hooks directory path
-	hooksDir := filepath.Join(gitDir, "hooks")
+	hooksDir := filepath.Clean(filepath.Join(gitDir, "hooks"))
 
 	// Path to the hook file
-	hookPath := filepath.Join(hooksDir, p.HookType)
+	hookPath := filepath.Clean(filepath.Join(hooksDir, hookType))
+
+	// Verify the hook path is within the git directory to prevent path traversal
+	if !strings.HasPrefix(hookPath, gitDir) {
+		return "", errors.New("invalid hook path: path traversal detected")
+	}
 
 	return hookPath, nil
 }
 
+// isValidHookType checks if a hook type is valid to prevent command injection.
+func isValidHookType(hookType string) bool {
+	validHooks := map[string]bool{
+		"commit-msg":         true,
+		"pre-commit":         true,
+		"pre-push":           true,
+		"pre-receive":        true,
+		"update":             true,
+		"post-update":        true,
+		"post-receive":       true,
+		"post-checkout":      true,
+		"post-merge":         true,
+		"pre-applypatch":     true,
+		"post-applypatch":    true,
+		"pre-rebase":         true,
+		"prepare-commit-msg": true,
+	}
+
+	return validHooks[hookType]
+}
+
 // EnsureHooksDirectory ensures the hooks directory exists.
+// Implements security best practices for safe path handling.
 func (p HookInstallationParameters) EnsureHooksDirectory() error {
+	// Clean the repository path to prevent path traversal
+	repoPath := filepath.Clean(p.RepoPath)
+
 	// Find Git root directory
-	gitDir, err := findGitDirectory(p.RepoPath)
+	gitDir, err := findGitDirectory(repoPath)
 	if err != nil {
 		return fmt.Errorf("could not find Git directory: %w", err)
 	}
 
-	// Create hooks directory if it doesn't exist
-	hooksDir := filepath.Join(gitDir, "hooks")
+	// Create a safe hooks directory path
+	hooksDir := filepath.Clean(filepath.Join(gitDir, "hooks"))
+
+	// Verify the hooks directory is within the git directory
+	if !strings.HasPrefix(hooksDir, gitDir) {
+		return errors.New("invalid hooks directory: path traversal detected")
+	}
+
+	// Ensure the directory doesn't already exist or is a directory
+	fi, err := os.Stat(hooksDir)
+	if err == nil {
+		// Path exists - verify it's a directory
+		if !fi.IsDir() {
+			return fmt.Errorf("hooks path exists but is not a directory: %s", hooksDir)
+		}
+		// Directory exists, no need to create it
+		return nil
+	} else if !os.IsNotExist(err) {
+		// Some error other than "not exists"
+		return fmt.Errorf("could not check hooks directory: %w", err)
+	}
+
+	// Create hooks directory with secure permissions
 	if err := os.MkdirAll(hooksDir, 0755); err != nil {
 		return fmt.Errorf("could not create hooks directory: %w", err)
 	}
@@ -158,10 +220,15 @@ func (p HookInstallationParameters) CanInstallHook() error {
 }
 
 // installHook installs a Git commit-msg hook in the specified repository.
-// This implementation follows functional programming patterns with immutable parameters.
 func installHook(force bool, repoPath string) error {
+	// Validate and normalize the repository path
+	validatedPath, err := validateRepositoryPath(repoPath)
+	if err != nil {
+		return fmt.Errorf("invalid repository path: %w", err)
+	}
+
 	// Create parameters with defaults
-	params := NewHookInstallationParameters(force, repoPath)
+	params := NewHookInstallationParameters(force, validatedPath)
 
 	// Ensure hooks directory exists
 	if err := params.EnsureHooksDirectory(); err != nil {
@@ -182,32 +249,115 @@ func installHook(force bool, repoPath string) error {
 	// Get the hook content
 	hookContent := params.GetHookContent()
 
-	// Write the hook file
+	// Write the hook file with safe permissions (read/write for owner only)
 	if err := os.WriteFile(hookPath, []byte(hookContent), 0600); err != nil {
 		return fmt.Errorf("could not write hook file: %w", err)
+	}
+
+	// Make the hook executable
+	if err := os.Chmod(hookPath, 0700); err != nil {
+		return fmt.Errorf("could not make hook file executable: %w", err)
 	}
 
 	return nil
 }
 
 // findGitDirectory finds the .git directory for a repository.
+// Implements security best practices for path handling using go-git library.
 func findGitDirectory(repoPath string) (string, error) {
-	// Try to find .git directory
-	cmd := exec.Command("git", "-C", repoPath, "rev-parse", "--git-dir")
-
-	output, err := cmd.Output()
+	// Use our enhanced validation function for repository path validation
+	validatedPath, err := validateRepositoryPath(repoPath)
 	if err != nil {
-		return "", fmt.Errorf("could not find Git repository: %w", err)
+		return "", err
 	}
 
-	gitDir := strings.TrimSpace(string(output))
+	// Set a reasonable limit to prevent excessive traversal
+	const maxLevels = 20
 
-	// If it's a relative path, join with repo path
-	if !filepath.IsAbs(gitDir) {
-		gitDir = filepath.Join(repoPath, gitDir)
+	level := 0
+	current := validatedPath
+
+	// Find the git directory by traversing up the directory tree
+	for level < maxLevels {
+		// Check if the current directory is a git repository
+		repo, err := git.PlainOpen(current)
+		if err == nil {
+			// We found the repository
+			// Get the worktree to find the root directory (we don't actually use it,
+			// but this verifies it's a valid repository)
+			_, err := repo.Worktree()
+			if err != nil {
+				return "", fmt.Errorf("found git repository but could not access worktree: %w", err)
+			}
+
+			// Return the .git directory path
+			gitDir := filepath.Join(current, ".git")
+
+			// Verify the directory exists and is a valid git directory
+			gitDirInfo, err := os.Lstat(gitDir) // Use Lstat to avoid following symlinks
+			if err != nil {
+				return "", fmt.Errorf("invalid git directory: %w", err)
+			}
+
+			// Check if it's a symlink and reject if it is - prevents symlink attacks
+			if gitDirInfo.Mode()&os.ModeSymlink != 0 {
+				return "", errors.New("git directory is a symlink which is not supported for security reasons")
+			}
+
+			if !gitDirInfo.IsDir() {
+				// Git submodules can have a file instead of a directory
+				// Read it to ensure it's a valid git reference
+				content, err := os.ReadFile(gitDir)
+				if err != nil {
+					return "", fmt.Errorf("could not read git directory file: %w", err)
+				}
+
+				if !strings.HasPrefix(string(content), "gitdir:") {
+					return "", errors.New("invalid git directory structure")
+				}
+
+				// Extract the actual gitdir path from the file for submodules
+				parts := strings.SplitN(string(content), ":", 2)
+				if len(parts) != 2 {
+					return "", errors.New("invalid git directory reference format")
+				}
+
+				submoduleGitDir := strings.TrimSpace(parts[1])
+
+				// Convert to absolute path if needed
+				if !filepath.IsAbs(submoduleGitDir) {
+					submoduleGitDir = filepath.Clean(filepath.Join(filepath.Dir(gitDir), submoduleGitDir))
+				}
+
+				// Verify submodule path exists and is a directory
+				subInfo, err := os.Lstat(submoduleGitDir) // Use Lstat to avoid following symlinks
+				if err != nil {
+					return "", fmt.Errorf("invalid submodule git directory: %w", err)
+				}
+
+				if !subInfo.IsDir() {
+					return "", errors.New("submodule gitdir path is not a directory")
+				}
+
+				// Return the actual gitdir path for submodules
+				return submoduleGitDir, nil
+			}
+
+			return gitDir, nil
+		}
+
+		// Go up one level
+		parent := filepath.Dir(current)
+		if parent == current {
+			// Reached the root directory, .git not found
+			return "", fmt.Errorf("git repository not found in %s or any parent directory", repoPath)
+		}
+
+		current = parent
+		level++
 	}
 
-	return gitDir, nil
+	return "", fmt.Errorf("exceeded maximum directory traversal levels (%d) without finding git repository", maxLevels)
 }
 
 // generateCommitMsgHook generates content for the commit-msg hook.

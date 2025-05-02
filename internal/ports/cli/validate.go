@@ -6,9 +6,13 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
 
 	"github.com/itiquette/gommitlint/internal/application/report"
 	"github.com/itiquette/gommitlint/internal/application/validate"
@@ -143,10 +147,95 @@ func NewValidationParameters(cmd *cobra.Command) ValidationParameters {
 	}
 }
 
-// We don't store context in the struct anymore, so we don't need these methods
+// Maximum allowed values for CLI parameters.
+const (
+	MaxCommitCount = 1000 // Maximum reasonable number of commits to validate
+	MaxPathLength  = 4096 // Maximum path length
+	MaxRefLength   = 256  // Maximum Git reference length
+)
+
+// validateParameterLength checks if a parameter value exceeds the maximum safe length.
+func validateParameterLength(name, value string, maxLength int) error {
+	if len(value) > maxLength {
+		return fmt.Errorf("%s exceeds maximum allowed length (%d)", name, maxLength)
+	}
+
+	return nil
+}
+
+// validateGitReference checks if a Git reference value is safe.
+func validateGitReference(ref string) error {
+	if ref == "" {
+		return nil
+	}
+
+	// Check length
+	if err := validateParameterLength("Git reference", ref, MaxRefLength); err != nil {
+		return err
+	}
+
+	// Validate git reference format - allowing common git reference formats
+	validPattern := regexp.MustCompile(`^[a-zA-Z0-9_\-./~^{}[\]@]+$`)
+	if !validPattern.MatchString(ref) {
+		return errors.New("git reference contains invalid characters")
+	}
+
+	return nil
+}
+
+// validateFilePath checks if a file path is safe.
+func validateFilePath(path string) error {
+	if path == "" {
+		return nil
+	}
+
+	// Check length
+	if err := validateParameterLength("File path", path, MaxPathLength); err != nil {
+		return err
+	}
+
+	// Validate basic path safety
+	// This doesn't check if the path exists, just if it's a valid path format
+	path = filepath.Clean(path)
+	if strings.Contains(path, "..") {
+		return errors.New("path traversal detected in file path")
+	}
+
+	return nil
+}
+
+// validateCommitCount checks if a commit count is reasonable.
+func validateCommitCount(count int) error {
+	if count < 0 {
+		return errors.New("commit count cannot be negative")
+	}
+
+	if count > MaxCommitCount {
+		return fmt.Errorf("commit count exceeds maximum allowed value (%d)", MaxCommitCount)
+	}
+
+	return nil
+}
 
 // ToValidationOptions converts ValidationParameters to validate.ValidationOptions.
 func (p ValidationParameters) ToValidationOptions() (validate.ValidationOptions, error) {
+	// Validate all input parameters for security
+	if err := validateFilePath(p.MessageFile); err != nil {
+		return validate.ValidationOptions{}, fmt.Errorf("invalid message file: %w", err)
+	}
+
+	if err := validateGitReference(p.GitReference); err != nil {
+		return validate.ValidationOptions{}, fmt.Errorf("invalid git reference: %w", err)
+	}
+
+	if err := validateGitReference(p.BaseBranch); err != nil {
+		return validate.ValidationOptions{}, fmt.Errorf("invalid base branch: %w", err)
+	}
+
+	if err := validateCommitCount(p.CommitCount); err != nil {
+		return validate.ValidationOptions{}, fmt.Errorf("invalid commit count: %w", err)
+	}
+
 	// Process validation flags with precedence
 	opts := validate.ValidationOptions{
 		SkipMergeCommits: p.SkipMergeCommits,
@@ -161,16 +250,30 @@ func (p ValidationParameters) ToValidationOptions() (validate.ValidationOptions,
 	// Apply validation source with precedence order
 	if p.MessageFile != "" {
 		// 1. Message from file (highest priority)
-		opts.MessageFile = p.MessageFile
+		opts.MessageFile = filepath.Clean(p.MessageFile)
 	} else if p.BaseBranch != "" {
 		// 2. Base branch comparison
 		opts.FromHash = p.BaseBranch
 		opts.ToHash = "HEAD"
 	} else if p.RevisionRange != "" {
 		// 3. Revision range
+		// Validate revision range
+		if err := validateParameterLength("Revision range", p.RevisionRange, MaxRefLength); err != nil {
+			return validate.ValidationOptions{}, err
+		}
+
 		// Parse revision range (format: from..to)
 		parts := parseRevisionRange(p.RevisionRange)
 		if len(parts) == 2 {
+			// Validate both parts
+			if err := validateGitReference(parts[0]); err != nil {
+				return validate.ValidationOptions{}, fmt.Errorf("invalid revision range start: %w", err)
+			}
+
+			if err := validateGitReference(parts[1]); err != nil {
+				return validate.ValidationOptions{}, fmt.Errorf("invalid revision range end: %w", err)
+			}
+
 			opts.FromHash = parts[0]
 			opts.ToHash = parts[1]
 		} else {
@@ -226,17 +329,23 @@ func (p ValidationParameters) CreateFormatter() domain.ResultFormatter {
 
 // CreateValidationService creates a validation service based on parameters.
 func (p ValidationParameters) CreateValidationService() (validate.ValidationService, error) {
+	// Validate repository path
+	if err := validateFilePath(p.RepoPath); err != nil {
+		return validate.ValidationService{}, fmt.Errorf("invalid repository path: %w", err)
+	}
+
 	if p.Dependencies != nil {
+		fmt.Println("AAAAA")
 		// Create validation service with injected dependencies
 		return createValidationServiceWithDeps(p.Dependencies, p.RepoPath)
 	}
 
+	fmt.Println("BBBBB")
 	// Fall back to default service creation
 	return validate.CreateDefaultValidationService(p.RepoPath)
 }
 
 // runNewValidation handles the core validation logic and returns an exit code.
-// This implementation uses the functional approach with immutable parameters.
 func runNewValidation(cmd *cobra.Command) (int, error) {
 	// Create parameters object to encapsulate all inputs
 	params := NewValidationParameters(cmd)
@@ -550,13 +659,11 @@ func createValidationServiceWithDeps(deps *AppDependencies, repoPath string) (va
 		return validate.ValidationService{}, fmt.Errorf("failed to create repository adapter: %w", err)
 	}
 
-	// Create the validation service with explicit dependencies
-	service := validate.CreateValidationServiceWithDependencies(
+	// Return the validation service with dependencies
+	return validate.CreateValidationServiceWithDependencies(
 		validationConfig,
 		repoAdapter, // GitCommitService
 		repoAdapter, // RepositoryInfoProvider
 		repoAdapter, // CommitAnalyzer
-	)
-
-	return service, nil
+	), nil
 }

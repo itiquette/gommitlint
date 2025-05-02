@@ -4,6 +4,7 @@
 package rules_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/itiquette/gommitlint/internal/config"
@@ -116,8 +117,9 @@ func TestSubjectSuffixRule(t *testing.T) {
 				Subject: testCase.subject,
 			}
 
+			ctx := context.Background()
 			// Validate using the stateless method
-			errors := rule.Validate(commit)
+			errors := rule.Validate(ctx, commit)
 
 			// Check results
 			if testCase.expectedValid {
@@ -189,7 +191,8 @@ func TestSubjectSuffixOptions(t *testing.T) {
 			Subject: "This is valid",
 		}
 
-		errors := rule.Validate(commit)
+		ctx := context.Background()
+		errors := rule.Validate(ctx, commit)
 
 		require.Empty(t, errors, "Default config should accept valid subject")
 
@@ -198,7 +201,7 @@ func TestSubjectSuffixOptions(t *testing.T) {
 			Subject: "This ends with period.",
 		}
 
-		errors = rule.Validate(invalidCommit)
+		errors = rule.Validate(ctx, invalidCommit)
 
 		require.NotEmpty(t, errors, "Default config should reject subject ending with period")
 		validationErr := errors[0]
@@ -214,7 +217,8 @@ func TestSubjectSuffixOptions(t *testing.T) {
 			Subject: "This ends with exclamation!",
 		}
 
-		errors := rule.Validate(commit)
+		ctx := context.Background()
+		errors := rule.Validate(ctx, commit)
 
 		require.NotEmpty(t, errors, "Should reject subject with configured invalid suffix")
 		validationErr := errors[0]
@@ -229,7 +233,7 @@ func TestSubjectSuffixOptions(t *testing.T) {
 			Subject: "This ends with period.",
 		}
 
-		errors = rule.Validate(validCommit)
+		errors = rule.Validate(ctx, validCommit)
 
 		require.Empty(t, errors, "Should accept subject ending with period when not in invalid set")
 	})
@@ -243,7 +247,8 @@ func TestSubjectSuffixOptions(t *testing.T) {
 			Subject: "This ends with question mark?",
 		}
 
-		errors := rule.Validate(commit)
+		ctx := context.Background()
+		errors := rule.Validate(ctx, commit)
 
 		require.NotEmpty(t, errors, "Should reject subject with default invalid suffix")
 		validationErr := errors[0]
@@ -263,8 +268,9 @@ func TestSubjectSuffixRuleWithCustomOptions(t *testing.T) {
 		Subject: "Test with exclamation!",
 	}
 
+	ctx := context.Background()
 	// Validate and check for error
-	errors := rule.Validate(commit)
+	errors := rule.Validate(ctx, commit)
 	require.Len(t, errors, 1, "Should have exactly one error")
 	require.Equal(t, string(appErrors.ErrSubjectSuffix), errors[0].Code)
 
@@ -355,8 +361,9 @@ func TestSubjectSuffixRuleWithConfig(t *testing.T) {
 				Message: testCase.subject,
 			}
 
+			ctx := context.Background()
 			// Validate and check results
-			errors := rule.Validate(commit)
+			errors := rule.Validate(ctx, commit)
 
 			if testCase.expectErrors {
 				require.NotEmpty(t, errors, "Expected validation errors but got none")

@@ -26,7 +26,7 @@ func (m mockGitCommitService) GetCommit(_ context.Context, hash string) (domain.
 		return commit, nil
 	}
 
-	return domain.CommitInfo{}, appErrors.New("MockService", appErrors.ErrCommitNotFound, "commit not found")
+	return domain.CommitInfo{}, appErrors.CreateBasicError("MockService", appErrors.ErrCommitNotFound, "commit not found")
 }
 func (m mockGitCommitService) GetHeadCommits(_ context.Context, count int) ([]domain.CommitInfo, error) {
 	if count <= 0 {
@@ -48,7 +48,7 @@ func (m mockGitCommitService) GetCommitRange(_ context.Context, fromHash, toHash
 		}
 	}
 
-	return nil, appErrors.New("MockService", appErrors.ErrRangeNotFound, "range not found")
+	return nil, appErrors.CreateBasicError("MockService", appErrors.ErrRangeNotFound, "range not found")
 }
 
 // mockInfoProvider implements the domain.RepositoryInfoProvider interface for testing.
@@ -502,7 +502,7 @@ func (r *CustomRule) Name() string {
 }
 
 // Validate checks a commit for compliance.
-func (r *CustomRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
+func (r *CustomRule) Validate(_ context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
 	r.violations = nil
 
 	// Example validation: require certain text in the commit message

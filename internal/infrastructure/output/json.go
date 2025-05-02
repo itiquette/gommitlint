@@ -13,11 +13,9 @@ import (
 
 // JSONFormatter formats validation results as JSON.
 // It implements the domain.ResultFormatter interface.
-// This implementation uses value semantics throughout.
 type JSONFormatter struct{}
 
 // NewJSONFormatter creates a new JSON formatter.
-// This implementation returns a value rather than a pointer.
 func NewJSONFormatter() JSONFormatter {
 	return JSONFormatter{}
 }
@@ -68,7 +66,6 @@ type ValidationResultsOutput struct {
 }
 
 // Format formats validation results as JSON.
-// This implementation follows functional programming patterns.
 func (f JSONFormatter) Format(results domain.ValidationResults) string {
 	// Create the initial report structure with proper initialization
 	report := ValidationResultsOutput{

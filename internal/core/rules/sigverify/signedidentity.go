@@ -246,9 +246,13 @@ func handleVerificationError(err error, sigType string) appErrors.ValidationErro
 func createError(code appErrors.ValidationErrorCode, message string, context map[string]string) appErrors.ValidationError {
 	ruleName := "SignedIdentity"
 
-	if context == nil {
-		return appErrors.New(ruleName, code, message)
+	// Create a basic error
+	err := appErrors.CreateBasicError(ruleName, code, message)
+
+	// Add context if provided
+	for key, value := range context {
+		err = err.WithContext(key, value)
 	}
 
-	return appErrors.New(ruleName, code, message, appErrors.WithContextMap(context))
+	return err
 }

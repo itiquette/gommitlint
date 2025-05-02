@@ -4,6 +4,7 @@
 package rules_test
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -394,8 +395,9 @@ FxlS+hzWnbOPMrRKuSfJ+H8mF6t1V3qUYtxHNQvHtcCvG0gx4auPSoxp7qVCVQ==
 				Signature: testCase.signature,
 			}
 
+			ctx := context.Background()
 			// Validate and check results
-			errors := rule.Validate(commit)
+			errors := rule.Validate(ctx, commit)
 
 			if testCase.expectErrors {
 				require.NotEmpty(t, errors, "Expected validation errors but got none")

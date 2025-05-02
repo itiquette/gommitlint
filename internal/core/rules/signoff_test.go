@@ -4,6 +4,7 @@
 package rules_test
 
 import (
+	"context"
 	"regexp"
 	"strings"
 	"testing"
@@ -179,8 +180,9 @@ This is a detailed description.`,
 				Body: testCase.message,
 			}
 
+			ctx := context.Background()
 			// Execute validation
-			errors := rule.Validate(commit)
+			errors := rule.Validate(ctx, commit)
 
 			// Determine what the found sign-off should be for testing
 			var foundSignOff string
@@ -290,7 +292,8 @@ Signed-off-by: Dev Two <dev2@example.com>`
 			Body: multiSignoffMessage,
 		}
 
-		errors := rule.Validate(commit)
+		ctx := context.Background()
+		errors := rule.Validate(ctx, commit)
 
 		// Determine if there was an attempted sign-off
 		hasAttemptedSignOff := true // There is a sign-off attempt
@@ -311,7 +314,7 @@ Signed-off-by: Dev Two <dev2@example.com>`
 			Body: missingSignoffMessage,
 		}
 
-		errors = rule.Validate(commit)
+		errors = rule.Validate(ctx, commit)
 
 		// Determine if there was an attempted sign-off
 		hasAttemptedSignOff = false // No sign-off attempt
@@ -382,7 +385,8 @@ Signed-off-by: Cragger Crocodile <cragger@svamp.org>`,
 
 			// Create rule with unified config
 			rule := rules.NewSignOffRuleWithConfig(testCase.config)
-			errors := rule.Validate(commit)
+			ctx := context.Background()
+			errors := rule.Validate(ctx, commit)
 
 			if testCase.expectedValid {
 				require.Empty(t, errors, "expected no validation errors")

@@ -12,7 +12,7 @@ import (
 )
 
 func TestEnhanceValidationError(t *testing.T) {
-	err := New("TestRule", ErrInvalidFormat, "Test message")
+	err := CreateBasicError("TestRule", ErrInvalidFormat, "Test message")
 
 	// Enhance with help
 	enhanced := EnhanceValidationError(err, "This is a help message")
@@ -24,7 +24,7 @@ func TestEnhanceValidationError(t *testing.T) {
 }
 
 func TestWithCommitSHA(t *testing.T) {
-	err := New("TestRule", ErrInvalidFormat, "Test message")
+	err := CreateBasicError("TestRule", ErrInvalidFormat, "Test message")
 
 	// Add commit SHA
 	withSHA := err.WithCommitSHA("abc123")
@@ -37,7 +37,7 @@ func TestWithCommitSHA(t *testing.T) {
 
 func TestGetHelp(t *testing.T) {
 	// Error without help
-	err1 := New("TestRule", ErrInvalidFormat, "Test message")
+	err1 := CreateBasicError("TestRule", ErrInvalidFormat, "Test message")
 	require.Equal(t, "", err1.GetHelp())
 
 	// Error with help
@@ -46,7 +46,7 @@ func TestGetHelp(t *testing.T) {
 }
 
 func TestFormatAsText(t *testing.T) {
-	err := New("TestRule", ErrInvalidFormat, "Test message")
+	err := CreateBasicError("TestRule", ErrInvalidFormat, "Test message")
 	err = err.WithContext("key1", "value1")
 	err = err.WithContext("help", "This is a help message")
 
@@ -68,7 +68,7 @@ func TestFormatAsText(t *testing.T) {
 }
 
 func TestFormatAsJSON(t *testing.T) {
-	err := New("TestRule", ErrInvalidFormat, "Test message")
+	err := CreateBasicError("TestRule", ErrInvalidFormat, "Test message")
 	err = err.WithContext("key1", "value1")
 	err = err.WithContext("help", "This is a help message")
 
@@ -96,7 +96,7 @@ func TestFormatAsJSON(t *testing.T) {
 }
 
 func TestFormatAsMarkdown(t *testing.T) {
-	err := New("TestRule", ErrInvalidFormat, "Test message")
+	err := CreateBasicError("TestRule", ErrInvalidFormat, "Test message")
 	err = err.WithContext("key1", "value1")
 	err = err.WithContext("help", "This is a help message")
 
@@ -146,7 +146,7 @@ func TestCreateRichError(t *testing.T) {
 }
 
 func TestFormatterInterface(t *testing.T) {
-	err := New("TestRule", ErrInvalidFormat, "Test message")
+	err := CreateBasicError("TestRule", ErrInvalidFormat, "Test message")
 	err = err.WithContext("key1", "value1")
 	err = err.WithContext("help", "This is a help message")
 

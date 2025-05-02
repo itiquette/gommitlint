@@ -58,7 +58,6 @@ func NewRepositoryAdapter(path string) (RepositoryAdapter, error) {
 }
 
 // GetCommit returns a commit by its hash.
-// This implementation applies functional patterns consistently and uses enhanced error handling.
 func (g RepositoryAdapter) GetCommit(ctx context.Context, hash string) (domain.CommitInfo, error) {
 	// Check for context cancellation
 	if ctx.Err() != nil {
@@ -349,7 +348,6 @@ func (g RepositoryAdapter) ensureFromCommitIncluded(
 }
 
 // GetHeadCommits returns the specified number of commits from HEAD.
-// This implementation uses functional patterns without state mutation.
 func (g RepositoryAdapter) GetHeadCommits(ctx context.Context, count int) ([]domain.CommitInfo, error) {
 	// Check for context cancellation
 	if ctx.Err() != nil {
@@ -529,7 +527,6 @@ func (g RepositoryAdapter) IsValid(_ context.Context) bool {
 }
 
 // GetCommitsAhead returns the number of commits ahead of the given reference.
-// This implementation uses functional patterns without state mutation.
 func (g RepositoryAdapter) GetCommitsAhead(ctx context.Context, reference string) (int, error) {
 	// Check for context cancellation
 	if ctx.Err() != nil {

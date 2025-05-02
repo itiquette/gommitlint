@@ -96,20 +96,6 @@ func FromGommitlintConfig(cfg GommitlintConfig) Config {
 	return config
 }
 
-// FromOldConfig creates a new Config from the old legacy Config structure.
-// This is a no-op conversion since we've now replaced the entire configuration
-// system with the unified version. It's kept for API compatibility.
-func FromOldConfig(cfg Config) Config {
-	return cfg
-}
-
-// ToOldConfig converts the config to the legacy Config structure.
-// This is a no-op conversion since we've now replaced the entire configuration
-// system with the unified version. It's kept for API compatibility.
-func ToOldConfig(cfg Config) Config {
-	return cfg
-}
-
 // ToGommitlintConfig converts a Config to a GommitlintConfig.
 // This function maps our internal Config type to the YAML/JSON configuration structure.
 func (c Config) ToGommitlintConfig() GommitlintConfig {

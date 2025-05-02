@@ -5,6 +5,7 @@
 package rules
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"regexp"
@@ -112,8 +113,6 @@ func NewSubjectCaseRuleWithConfig(config domain.SubjectConfigProvider, conventio
 	return NewSubjectCaseRule(options...)
 }
 
-// NewSubjectCaseRuleWithConfig creates a SubjectCaseRule using unified configuration.
-
 // Name returns the rule identifier.
 func (r SubjectCaseRule) Name() string {
 	return r.BaseRule.Name()
@@ -125,7 +124,6 @@ func (r SubjectCaseRule) CaseChoice() string {
 }
 
 // SetErrors sets the validation errors for this rule.
-// This method supports value semantics by returning a new instance.
 func (r SubjectCaseRule) SetErrors(errors []appErrors.ValidationError) SubjectCaseRule {
 	rule := r
 	rule.BaseRule.errors = errors
@@ -134,7 +132,6 @@ func (r SubjectCaseRule) SetErrors(errors []appErrors.ValidationError) SubjectCa
 }
 
 // ClearErrors removes all existing validation errors.
-// This method supports value semantics by returning a new instance.
 func (r SubjectCaseRule) ClearErrors() SubjectCaseRule {
 	rule := r
 	rule.BaseRule = rule.BaseRule.WithClearedErrors()
@@ -143,7 +140,6 @@ func (r SubjectCaseRule) ClearErrors() SubjectCaseRule {
 }
 
 // AddError adds a structured validation error.
-// This method supports value semantics by returning a new instance.
 func (r SubjectCaseRule) AddError(err appErrors.ValidationError) SubjectCaseRule {
 	rule := r
 	rule.BaseRule = rule.BaseRule.WithError(err)
@@ -152,19 +148,42 @@ func (r SubjectCaseRule) AddError(err appErrors.ValidationError) SubjectCaseRule
 }
 
 // AddErrorWithCode adds a validation error with the specified code and message.
-// This method supports value semantics by returning a new instance.
 func (r SubjectCaseRule) AddErrorWithCode(code appErrors.ValidationErrorCode, message string) SubjectCaseRule {
 	rule := r
-	rule.BaseRule = rule.BaseRule.WithErrorWithCode(code, message)
+
+	// Create a rich error with the code and message
+	err := appErrors.CreateRichError(
+		r.Name(),
+		code,
+		message,
+		message, // Use message as help text
+		appErrors.NewContext(),
+	)
+
+	rule.BaseRule = rule.BaseRule.WithError(err)
 
 	return rule
 }
 
 // AddErrorWithContext adds a validation error with context information.
-// This method supports value semantics by returning a new instance.
 func (r SubjectCaseRule) AddErrorWithContext(code appErrors.ValidationErrorCode, message string, context map[string]string) SubjectCaseRule {
 	rule := r
-	rule.BaseRule = rule.BaseRule.WithErrorWithContext(code, message, context)
+
+	// Create a rich error with the code and message
+	err := appErrors.CreateRichError(
+		r.Name(),
+		code,
+		message,
+		message, // Use message as help text
+		appErrors.NewContext(),
+	)
+
+	// Add each context item
+	for k, v := range context {
+		err = err.WithContext(k, v)
+	}
+
+	rule.BaseRule = rule.BaseRule.WithError(err)
 
 	return rule
 }
@@ -200,9 +219,6 @@ func ValidateWithState(rule SubjectCaseRule, commit domain.CommitInfo) ([]appErr
 
 	// Check for empty message first
 	if subject == "" {
-		// Create error context with rich information
-		errorCtx := appErrors.NewContext()
-
 		// Determine example subject based on rule configuration
 		var exampleSubject string
 
@@ -255,13 +271,11 @@ NEXT STEPS:
 			exampleSubject,
 			rule.caseChoice)
 
-		// Create the error
-		err := appErrors.CreateRichError(
+		// Create the error using our helper function
+		err := appErrors.EmptyError(
 			rule.Name(),
-			appErrors.ErrEmptyDescription,
 			"subject is empty",
 			helpMessage,
-			errorCtx,
 		)
 		errors = append(errors, err)
 
@@ -272,26 +286,12 @@ NEXT STEPS:
 	// Extract first word
 	firstWord, err := extractSubjectCaseFirstWord(rule.isConventional, subject)
 	if err != nil {
-		// Determine the specific error type
-		var errorCode appErrors.ValidationErrorCode
-
-		if rule.isConventional {
-			if strings.Contains(err.Error(), "missing subject after type") {
-				errorCode = appErrors.ErrMissingSubject
-			} else {
-				errorCode = appErrors.ErrInvalidFormat
-			}
-		} else {
-			errorCode = appErrors.ErrInvalidFormat
-		}
-
+		// Note: We no longer need to set the specific error code here
+		// as the FormatError helper handles this correctly
 		context := map[string]string{
 			"subject":         subject,
 			"is_conventional": strconv.FormatBool(rule.isConventional),
 		}
-
-		// Create error context with rich information
-		errorCtx := appErrors.NewContext()
 
 		var helpMessage string
 
@@ -410,18 +410,19 @@ NEXT STEPS:
 				rule.caseChoice)
 		}
 
-		// Create the error
-		validationErr := appErrors.CreateRichError(
+		// Create the error using our helper function
+		validationErr := appErrors.FormatError(
 			rule.Name(),
-			errorCode,
 			err.Error(),
 			helpMessage,
-			errorCtx,
+			subject,
 		)
 
-		// Store context for backward compatibility
+		// Add additional context information
 		for k, v := range context {
-			validationErr = validationErr.WithContext(k, v)
+			if k != "subject" { // Subject is already added by FormatError
+				validationErr = validationErr.WithContext(k, v)
+			}
 		}
 
 		errors = append(errors, validationErr)
@@ -441,14 +442,33 @@ NEXT STEPS:
 	updatedRule.firstLetter = first
 
 	if first == utf8.RuneError && size == 0 {
-		// Create the error
-		validationErr := appErrors.New(
+		helpMessage := `UTF-8 Encoding Error: Subject does not start with valid UTF-8 text.
+
+Your commit subject contains invalid UTF-8 characters at the beginning, which prevents proper case validation.
+
+✅ CORRECT FORMAT:
+- Commit messages should use valid UTF-8 encoded text
+- Make sure your editor is configured to use UTF-8 encoding
+
+❌ INCORRECT FORMAT:
+- Your subject contains invalid UTF-8 characters
+
+WHY THIS MATTERS:
+- UTF-8 is the standard encoding for text in Git
+- Invalid characters can cause display problems and tool failures
+- They make your commit history less readable
+
+NEXT STEPS:
+1. Edit your commit message with a UTF-8 compatible editor
+2. Remove or replace any non-standard characters
+3. Use 'git commit --amend' to update your commit`
+
+		// Create the error using our helper function
+		validationErr := appErrors.UTF8Error(
 			rule.Name(),
-			appErrors.ErrUnknown,
 			"subject does not start with valid UTF-8 text",
-			appErrors.WithContextMap(map[string]string{
-				"subject": subject,
-			}),
+			helpMessage,
+			subject,
 		)
 		errors = append(errors, validationErr)
 
@@ -463,8 +483,6 @@ NEXT STEPS:
 	// Validate case
 	var valid bool
 
-	var errorCode = appErrors.ErrSubjectCase
-
 	// Use if statements instead of switch for case validation
 	if rule.caseChoice == "upper" {
 		valid = unicode.IsUpper(first)
@@ -477,8 +495,6 @@ NEXT STEPS:
 	}
 
 	if !valid {
-		// Create error context with rich information
-		errorCtx := appErrors.NewContext()
 		actualCase := map[bool]string{true: "upper", false: "lower"}[unicode.IsUpper(first)]
 
 		// Create correct example
@@ -575,20 +591,16 @@ NEXT STEPS:
 			suggestionExample,
 			caseExample)
 
-		// Create the error
-		validationErr := appErrors.CreateRichError(
+		// Create the error using our helper function
+		validationErr := appErrors.CaseError(
 			rule.Name(),
-			errorCode,
 			"commit subject case is not "+rule.caseChoice,
 			helpMessage,
-			errorCtx,
+			rule.caseChoice,
+			actualCase,
+			firstWord,
+			subject,
 		)
-
-		// Store context for backward compatibility
-		validationErr = validationErr.WithContext("expected_case", rule.caseChoice)
-		validationErr = validationErr.WithContext("actual_case", actualCase)
-		validationErr = validationErr.WithContext("first_word", firstWord)
-		validationErr = validationErr.WithContext("subject", subject)
 
 		errors = append(errors, validationErr)
 	}
@@ -597,7 +609,7 @@ NEXT STEPS:
 }
 
 // Validate validates the commit subject case.
-func (r SubjectCaseRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
+func (r SubjectCaseRule) Validate(_ context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
 	// Use the pure function approach
 	errors, _ := ValidateWithState(r, commit)
 

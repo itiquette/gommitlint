@@ -5,6 +5,7 @@
 package rules
 
 import (
+	"context"
 	"errors"
 	"regexp"
 	"strings"
@@ -241,8 +242,7 @@ Please write a descriptive commit message to help others understand your changes
 }
 
 // Validate performs validation against a commit and returns any errors.
-// This uses value semantics and does not modify the rule's state.
-func (r ImperativeVerbRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
+func (r ImperativeVerbRule) Validate(_ context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
 	errors, _ := validateImperativeWithState(r, commit)
 
 	return errors
@@ -974,14 +974,48 @@ func validateWithSimpleRules(rule ImperativeVerbRule, wordLower, originalWord st
 
 	// Simple pattern checks for non-imperative forms
 	if strings.HasSuffix(wordLower, "ed") && !isBaseFormWithEDEnding(updatedRule, wordLower) {
-		err := appErrors.New(
+		// Create suggested form by removing "ed"
+		suggestedForm := strings.TrimSuffix(wordLower, "ed")
+		// Handle special cases like "used" -> "use" (not "us")
+		if len(suggestedForm) > 2 && !strings.HasSuffix(suggestedForm, "e") &&
+			(suggestedForm[len(suggestedForm)-1] == 's' ||
+				suggestedForm[len(suggestedForm)-1] == 'v' ||
+				suggestedForm[len(suggestedForm)-1] == 'c') {
+			suggestedForm += "e"
+		}
+
+		// Detailed help message for past tense
+		helpMessage := `Past Tense Error: The word "${word}" is in past tense.
+
+Git commit messages should use the imperative mood (present tense), not past tense.
+You used a past tense verb like "Added", "Updated", or "Fixed".
+
+✅ CORRECT (imperative mood):       ❌ INCORRECT (past tense):
+- Add feature                       - Added feature
+- Fix bug                           - Fixed bug
+- Update documentation              - Updated documentation
+- Implement authentication          - Implemented authentication
+- Remove deprecated code            - Removed deprecated code
+
+WHY THIS MATTERS:
+Using imperative mood creates consistency across the commit history and
+follows Git's own conventions. It completes the sentence:
+"If applied, this commit will [your commit message]"
+
+HOW TO FIX:
+Convert your past tense verb to present imperative form:
+- "${word}" → "${suggestedForm}" or another present imperative form
+
+Simply drop the "-ed" ending in most cases.`
+
+		err := appErrors.ImperativeError(
 			updatedRule.Name(),
 			appErrors.ErrPastTense,
 			"first word of commit must be an imperative verb: \""+originalWord+"\" appears to be past tense",
-			appErrors.WithContextMap(map[string]string{
-				"word": originalWord,
-				"type": "past_tense",
-			}),
+			helpMessage,
+			originalWord,
+			"past_tense",
+			suggestedForm,
 		)
 
 		updatedRule.BaseRule = updatedRule.BaseRule.WithError(err)
@@ -991,14 +1025,48 @@ func validateWithSimpleRules(rule ImperativeVerbRule, wordLower, originalWord st
 	}
 
 	if strings.HasSuffix(wordLower, "ing") && len(wordLower) > 4 {
-		err := appErrors.New(
+		// Suggested base form (strip "ing" and optionally add "e" if needed)
+		suggestedForm := strings.TrimSuffix(wordLower, "ing")
+		// Handle special cases like "writing" -> "write" (not "writ")
+		if len(suggestedForm) > 2 && !strings.HasSuffix(suggestedForm, "e") &&
+			(suggestedForm[len(suggestedForm)-1] == 't' ||
+				suggestedForm[len(suggestedForm)-1] == 'v' ||
+				suggestedForm[len(suggestedForm)-1] == 'd') {
+			suggestedForm += "e"
+		}
+
+		// Detailed help message for gerund
+		helpMessage := `Gerund Error: The word "${word}" is a gerund (verb ending in "-ing").
+
+Git commit messages should use the imperative mood, not continuous/gerund forms.
+You used a gerund verb form like "Adding", "Fixing", or "Updating".
+
+✅ CORRECT (imperative mood):       ❌ INCORRECT (gerund form):
+- Add feature                       - Adding feature
+- Fix bug                           - Fixing bug
+- Update documentation              - Updating documentation
+- Implement authentication          - Implementing authentication
+- Remove deprecated code            - Removing deprecated code
+
+WHY THIS MATTERS:
+Using imperative mood creates consistency across the commit history and
+follows Git's own conventions. It completes the sentence:
+"If applied, this commit will [your commit message]"
+
+HOW TO FIX:
+Convert your gerund verb to present imperative form:
+- "${word}" → "${suggestedForm}" or another present imperative form
+
+Simply drop the "-ing" ending and use the base verb form.`
+
+		err := appErrors.ImperativeError(
 			updatedRule.Name(),
 			appErrors.ErrGerund,
 			"first word of commit must be an imperative verb: \""+originalWord+"\" appears to be a gerund",
-			appErrors.WithContextMap(map[string]string{
-				"word": originalWord,
-				"type": "gerund",
-			}),
+			helpMessage,
+			originalWord,
+			"gerund",
+			suggestedForm,
 		)
 
 		updatedRule.BaseRule = updatedRule.BaseRule.WithError(err)
@@ -1008,14 +1076,41 @@ func validateWithSimpleRules(rule ImperativeVerbRule, wordLower, originalWord st
 	}
 
 	if strings.HasSuffix(wordLower, "s") && !isBaseFormWithSEnding(updatedRule, wordLower) && len(wordLower) > 2 {
-		err := appErrors.New(
+		// Create suggested form by removing "s"
+		suggestedForm := strings.TrimSuffix(wordLower, "s")
+
+		// Detailed help message for third person
+		helpMessage := `Third Person Error: The word "${word}" is in third person form.
+
+Git commit messages should use the imperative mood, not third-person present tense.
+You used a third-person verb form like "Adds", "Fixes", or "Updates".
+
+✅ CORRECT (imperative mood):       ❌ INCORRECT (third person):
+- Add feature                       - Adds feature
+- Fix bug                           - Fixes bug
+- Update documentation              - Updates documentation
+- Implement authentication          - Implements authentication
+- Remove deprecated code            - Removes deprecated code
+
+WHY THIS MATTERS:
+Using imperative mood creates consistency across the commit history and
+follows Git's own conventions. It completes the sentence:
+"If applied, this commit will [your commit message]"
+
+HOW TO FIX:
+Convert your third-person verb to present imperative form:
+- "${word}" → "${suggestedForm}" or another present imperative form
+
+Simply drop the "-s" ending to get the imperative form.`
+
+		err := appErrors.ImperativeError(
 			updatedRule.Name(),
 			appErrors.ErrThirdPerson,
 			"first word of commit must be an imperative verb: \""+originalWord+"\" appears to be 3rd person present",
-			appErrors.WithContextMap(map[string]string{
-				"word": originalWord,
-				"type": "third_person",
-			}),
+			helpMessage,
+			originalWord,
+			"third_person",
+			suggestedForm,
 		)
 
 		updatedRule.BaseRule = updatedRule.BaseRule.WithError(err)

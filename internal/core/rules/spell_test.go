@@ -4,6 +4,7 @@
 package rules_test
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -327,8 +328,9 @@ func TestSpellRule(t *testing.T) {
 			// Setup the rule and commit
 			rule, commit := setupSpellRule(testCase)
 
+			ctx := context.Background()
 			// Execute validation
-			errors := rule.Validate(commit)
+			errors := rule.Validate(ctx, commit)
 
 			// Create some diffs based on the errors found
 			diffs := []misspell.Diff{}
@@ -449,7 +451,8 @@ func TestSpellRuleWithConfig(t *testing.T) {
 			}
 
 			rule := rules.NewSpellRule(options...)
-			errors := rule.Validate(commit)
+			ctx := context.Background()
+			errors := rule.Validate(ctx, commit)
 
 			if testCase.expectedValid {
 				require.Empty(t, errors, "expected no validation errors")

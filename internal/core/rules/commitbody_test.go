@@ -4,6 +4,7 @@
 package rules_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/itiquette/gommitlint/internal/config"
@@ -119,6 +120,8 @@ Fixed the typo in API documentation.`,
 		},
 	}
 	for _, testCase := range tests {
+		ctx := context.Background()
+
 		t.Run(testCase.name, func(t *testing.T) {
 			// Create commit info object
 			commit := domain.CommitInfo{
@@ -130,7 +133,7 @@ Fixed the typo in API documentation.`,
 
 			// Test using value semantics
 			rule := rules.NewCommitBodyRule(options...)
-			errors := rule.Validate(commit)
+			errors := rule.Validate(ctx, commit)
 
 			// Verify name is correct
 			require.Equal(t, "CommitBody", rule.Name(), "Rule name should be 'CommitBody'")
@@ -190,13 +193,14 @@ func TestCommitBodyVerboseResult(t *testing.T) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			// Create commit info
+			ctx := context.Background()
 			commit := domain.CommitInfo{
 				Message: testCase.message,
 			}
 
 			// Use value semantics
 			rule := rules.NewCommitBodyRule(rules.WithRequireBody(true))
-			errors := rule.Validate(commit)
+			errors := rule.Validate(ctx, commit)
 
 			if testCase.expectError {
 				require.NotEmpty(t, errors, "expected validation errors for invalid commit")
@@ -239,13 +243,14 @@ func TestCommitBodyHelpMethod(t *testing.T) {
 		for _, testCase := range testCases {
 			t.Run(testCase.name, func(t *testing.T) {
 				// Create commit info
+				ctx := context.Background()
 				commit := domain.CommitInfo{
 					Message: testCase.message,
 				}
 
 				// Create rule with value semantics and validate
 				rule := rules.NewCommitBodyRule(rules.WithRequireBody(true))
-				errors := rule.Validate(commit)
+				errors := rule.Validate(ctx, commit)
 
 				if testCase.expectError {
 					require.NotEmpty(t, errors, "expected validation errors")
@@ -333,6 +338,8 @@ It includes both implementation and tests.`,
 	}
 
 	for _, testCase := range tests {
+		ctx := context.Background()
+
 		t.Run(testCase.name, func(t *testing.T) {
 			// Create commit info object
 			commit := domain.CommitInfo{
@@ -353,7 +360,7 @@ It includes both implementation and tests.`,
 			)
 
 			rule := rules.NewCommitBodyRule(options...)
-			errors := rule.Validate(commit)
+			errors := rule.Validate(ctx, commit)
 
 			// Verify rule name
 			require.Equal(t, "CommitBody", rule.Name(), "Rule name should be 'CommitBody'")

@@ -10,7 +10,6 @@ import (
 
 // FormatterAdapter adapts various output formatters to the domain.ResultFormatter interface.
 // It serves as a factory for creating appropriate formatters based on format type.
-// This implementation uses value semantics throughout.
 type FormatterAdapter struct {
 	format     string
 	verbose    bool
@@ -20,7 +19,6 @@ type FormatterAdapter struct {
 }
 
 // NewFormatterAdapter creates a new formatter adapter.
-// This implementation returns a value rather than a pointer.
 func NewFormatterAdapter(format string, options ...FormatterOption) FormatterAdapter {
 	adapter := FormatterAdapter{
 		format:     format,
@@ -39,7 +37,6 @@ func NewFormatterAdapter(format string, options ...FormatterOption) FormatterAda
 }
 
 // FormatterOption is a function that configures a FormatterAdapter.
-// This implementation returns a new FormatterAdapter instead of modifying the existing one.
 type FormatterOption func(FormatterAdapter) FormatterAdapter
 
 // WithVerbose sets the verbose flag.

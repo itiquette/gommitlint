@@ -5,6 +5,7 @@
 package rules
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"unicode/utf8"
@@ -76,50 +77,52 @@ func validateSubjectLengthWithState(rule SubjectLengthRule, commit domain.Commit
 
 	// Check if subject is too long
 	if subjectLength > rule.maxLength {
-		// Create error context with rich information
-		ctx := appErrors.NewContext().WithCommit(
-			commit.Hash,    // commit hash
-			commit.Message, // full commit message
-			commit.Subject, // subject line
-			commit.Body,    // body text
-		)
-
-		// Create an enhanced validation error
-		errorMessage := fmt.Sprintf("Subject length (%d) exceeds maximum allowed (%d)", subjectLength, rule.maxLength)
-
 		// Generate a rich help message with examples
-		helpMessage := fmt.Sprintf(`Subject line is too long (%d characters). It should be at most %d characters.
+		helpMessage := fmt.Sprintf(`Subject Length Error: Subject line is too long.
 
-Why this matters:
-- Shorter subjects are more readable in Git logs and UIs 
-- Many Git tools truncate subjects longer than 50-72 characters
-- Short subjects force you to be concise and descriptive
+Your commit subject is %d characters long, which exceeds the maximum limit of %d characters.
 
-Examples of good subject lines:
+✅ CORRECT FORMAT:
 - Add user authentication feature (%d chars)
 - Fix timeout issue in API requests (%d chars)
 - Update documentation for deployment process (%d chars)
 
-How to fix:
-1. Remove unnecessary details (save them for the body)
-2. Use more concise wording
-3. Focus on the core change, not implementation details`,
+❌ INCORRECT FORMAT:
+- %s (%d chars)
+
+WHY THIS MATTERS:
+- Shorter subjects are more readable in Git logs and UIs
+- Many Git tools truncate subjects longer than 50-72 characters
+- Short subjects force you to be concise and clearly describe the change
+- Long subjects may indicate you're trying to include too many changes in one commit
+
+NEXT STEPS:
+1. Reduce the length of your subject line by:
+   - Removing unnecessary details (save them for the body)
+   - Using more concise wording
+   - Focusing on the core change, not implementation details
+   
+2. If your subject is too complex to shorten, consider splitting 
+   the commit into multiple smaller, focused commits
+
+3. Use 'git commit --amend' to modify your most recent commit`,
 			subjectLength, rule.maxLength,
 			len("Add user authentication feature"),
 			len("Fix timeout issue in API requests"),
-			len("Update documentation for deployment process"))
+			len("Update documentation for deployment process"),
+			commit.Subject, subjectLength)
 
-		validationErr := appErrors.CreateRichError(
+		// Create an enhanced validation error using the helper function
+		errorMessage := fmt.Sprintf("Subject length (%d) exceeds maximum allowed (%d)", subjectLength, rule.maxLength)
+
+		validationErr := appErrors.LengthError(
 			rule.Name(),
-			appErrors.ErrSubjectTooLong,
 			errorMessage,
 			helpMessage,
-			ctx,
+			subjectLength,
+			rule.maxLength,
+			commit.Subject,
 		)
-
-		// Add additional context specific to this rule
-		validationErr = validationErr.WithContext("subject_length", strconv.Itoa(subjectLength))
-		validationErr = validationErr.WithContext("max_length", strconv.Itoa(rule.maxLength))
 
 		// Update rule with error using value semantics
 		updatedRule.BaseRule = updatedRule.BaseRule.WithError(validationErr)
@@ -130,7 +133,7 @@ How to fix:
 
 // Validate validates the commit subject length.
 // This uses value semantics and returns the errors.
-func (r SubjectLengthRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
+func (r SubjectLengthRule) Validate(_ context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
 	// Call the pure function implementation
 	errors, _ := validateSubjectLengthWithState(r, commit)
 

@@ -4,6 +4,7 @@
 package rules
 
 import (
+	"context"
 	"testing"
 
 	"github.com/itiquette/gommitlint/internal/config"
@@ -100,12 +101,14 @@ func TestJiraReferenceRule_Validate(t *testing.T) {
 	}
 
 	for _, testCase := range tests {
+		ctx := context.Background()
+
 		t.Run(testCase.name, func(t *testing.T) {
 			// Create rule with options
 			rule := NewJiraReferenceRule(testCase.options...)
 
 			// Validate commit
-			errors := rule.Validate(testCase.commit)
+			errors := rule.Validate(ctx, testCase.commit)
 
 			if testCase.wantErrors {
 				require.NotEmpty(t, errors, "Expected validation errors but got none")
@@ -209,7 +212,8 @@ func TestJiraReferenceRuleWithConfig(t *testing.T) {
 			rule := NewJiraReferenceRule(options...)
 
 			// Validate commit
-			errors := rule.Validate(testCase.commit)
+			ctx := context.Background()
+			errors := rule.Validate(ctx, testCase.commit)
 
 			if testCase.wantErrors {
 				require.NotEmpty(t, errors, "Expected validation errors but got none")

@@ -31,7 +31,7 @@ func (c ValidationErrorContext) WithCommit(commitHash, message, subject, body st
 
 // CreateRichError creates an enhanced validation error from a context.
 func CreateRichError(rule string, code ValidationErrorCode, message string, help string, ctx ValidationErrorContext) ValidationError {
-	err := New(rule, code, message)
+	err := CreateBasicError(rule, code, message)
 
 	// Add help
 	err = err.WithContext("help", help)

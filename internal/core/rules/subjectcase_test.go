@@ -6,6 +6,7 @@
 package rules_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/itiquette/gommitlint/internal/config"
@@ -432,8 +433,9 @@ func TestSubjectCaseRuleWithConfig(t *testing.T) {
 				Subject: testCase.subject,
 			}
 
+			ctx := context.Background()
 			// Execute validation
-			errors := rule.Validate(commit)
+			errors := rule.Validate(ctx, commit)
 
 			// Verify the result matches our expectations
 			if testCase.expectValid {

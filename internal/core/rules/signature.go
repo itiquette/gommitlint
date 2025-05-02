@@ -5,6 +5,7 @@ package rules
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -107,8 +108,10 @@ func validateSignatureWithState(rule SignatureRule, commit domain.CommitInfo) ([
 	if signature == "" {
 		// If signature is required, add error
 		if rule.requireSignature {
-			// Create error context with rich information
-			errorCtx := appErrors.NewContext()
+			// Create context map for the SignatureError helper
+			context := map[string]string{
+				"signature_required": "true",
+			}
 
 			helpMessage := `Missing Signature Error: Your commit lacks a cryptographic signature.
 
@@ -141,13 +144,15 @@ WHY THIS MATTERS:
 
 For more information, visit: https://git-scm.com/book/en/v2/Git-Tools-Signing-Your-Work`
 
-			err := appErrors.CreateRichError(
+			err := appErrors.SignatureError(
 				rule.Name(),
-				appErrors.ErrMissingSignature,
 				"commit does not have a SSH/GPG signature",
 				helpMessage,
-				errorCtx,
+				context,
 			)
+
+			// Override the error code to match the original
+			err.Code = string(appErrors.ErrMissingSignature)
 
 			errors = append(errors, err)
 			rule = rule.setErrors(errors)
@@ -165,10 +170,11 @@ For more information, visit: https://git-scm.com/book/en/v2/Git-Tools-Signing-Yo
 	if strings.HasPrefix(signature, "-----BEGIN PGP SIGNATURE-----") {
 		// Verify if GPG signatures are allowed
 		if !rule.isSignatureTypeAllowed("gpg") {
-			// Create error context with rich information
-			errorCtx := appErrors.NewContext()
-
 			allowedTypes := strings.Join(rule.allowedSigTypes, ", ")
+			context := map[string]string{
+				"signature_type": "gpg",
+				"allowed_types":  allowedTypes,
+			}
 
 			helpMessage := fmt.Sprintf(`Disallowed Signature Type Error: GPG signatures are not allowed.
 
@@ -196,17 +202,15 @@ WHY THIS MATTERS:
 - Some environments may only support specific verification methods`,
 				allowedTypes, allowedTypes)
 
-			err := appErrors.CreateRichError(
+			err := appErrors.SignatureError(
 				rule.Name(),
-				appErrors.ErrDisallowedSigType,
 				"GPG signatures are not allowed with current configuration",
 				helpMessage,
-				errorCtx,
+				context,
 			)
 
-			// Add additional context after creating the error
-			err = err.WithContext("signature_type", "gpg")
-			err = err.WithContext("allowed_types", allowedTypes)
+			// Override the error code to match the original
+			err.Code = string(appErrors.ErrDisallowedSigType)
 
 			errors = append(errors, err)
 			rule = rule.setErrors(errors)
@@ -222,11 +226,46 @@ WHY THIS MATTERS:
 				"error_details":  err.Error(),
 			}
 
-			rule = rule.addErrorWithContext(
-				appErrors.ErrInvalidGPGFormat,
+			helpMessage := fmt.Sprintf(`Invalid GPG Signature Format Error: Your GPG signature is malformed.
+
+The signature parsing failed with the following error:
+%s
+
+✅ RECOMMENDED ACTIONS:
+
+1. Check your GPG installation:
+   gpg --version
+
+2. Verify your GPG key setup:
+   gpg --list-keys
+   git config --global user.signingkey
+
+3. Try creating a new signed commit:
+   git commit -S -m "Test commit with signature"
+
+4. If issues persist, consider:
+   - Regenerating your GPG key
+   - Updating your GPG software
+   - Checking for corruption in your keyring
+
+WHY THIS MATTERS:
+- Malformed signatures can't be verified by Git or other tools
+- Invalid signatures undermine the security benefits of signing
+- Proper signature format is essential for validation
+- Corrupted signatures might indicate deeper issues with your setup`,
+				err.Error())
+
+			signErr := appErrors.SignatureError(
+				rule.Name(),
 				"invalid GPG signature format: "+err.Error(),
+				helpMessage,
 				context,
 			)
+
+			// Override the error code to match the original
+			signErr.Code = string(appErrors.ErrInvalidGPGFormat)
+
+			rule = rule.addError(signErr)
 
 			return rule.Errors(), rule
 		}
@@ -237,11 +276,46 @@ WHY THIS MATTERS:
 				"block_type":     block.Type,
 			}
 
-			rule = rule.addErrorWithContext(
-				appErrors.ErrInvalidGPGFormat,
+			helpMessage := fmt.Sprintf(`Invalid GPG Block Type Error: Your GPG signature has an incorrect block type.
+
+Expected block type: "PGP SIGNATURE"
+Actual block type: "%s"
+
+✅ RECOMMENDED ACTIONS:
+
+1. Verify you're using standard Git signing tools:
+   git config --list | grep gpg
+
+2. Check your GPG configuration:
+   gpg --version
+   gpg --list-keys
+
+3. Try creating a new properly signed commit:
+   git commit -S -m "Test commit with correct signature"
+
+4. If issues persist, consider:
+   - Checking for non-standard Git plugins affecting signatures
+   - Verifying your Git and GPG versions are compatible
+   - Regenerating your GPG keys
+
+WHY THIS MATTERS:
+- PGP signatures must use standard block types to be valid
+- Non-standard block types prevent verification
+- This issue often indicates a configuration problem
+- Standard formats ensure cross-tool compatibility`,
+				block.Type)
+
+			signErr := appErrors.SignatureError(
+				rule.Name(),
 				"invalid GPG armor block type: "+block.Type,
+				helpMessage,
 				context,
 			)
+
+			// Override the error code to match the original
+			signErr.Code = string(appErrors.ErrInvalidGPGFormat)
+
+			rule = rule.addError(signErr)
 
 			return rule.Errors(), rule
 		}
@@ -256,11 +330,43 @@ WHY THIS MATTERS:
 				"error_details":  err.Error(),
 			}
 
-			rule = rule.addErrorWithContext(
-				appErrors.ErrInvalidGPGFormat,
+			helpMessage := fmt.Sprintf(`GPG Signature Packet Error: Your GPG signature contains invalid packet data.
+
+The packet parsing failed with the following error:
+%s
+
+✅ RECOMMENDED ACTIONS:
+
+1. Verify your GPG key integrity:
+   gpg --check-signatures YOUR_KEY_ID
+
+2. Check for GPG configuration issues:
+   gpg --list-packets < signed-file.txt
+
+3. Try regenerating your GPG key:
+   gpg --gen-key
+
+4. Ensure you're using compatible GPG versions:
+   gpg --version
+
+WHY THIS MATTERS:
+- GPG signatures consist of structured binary packets
+- Invalid packets prevent signature verification
+- Packet errors often indicate data corruption
+- Proper packet structure is required for cryptographic validation`,
+				err.Error())
+
+			signErr := appErrors.SignatureError(
+				rule.Name(),
 				"cannot parse GPG signature packet: "+err.Error(),
+				helpMessage,
 				context,
 			)
+
+			// Override the error code to match the original
+			signErr.Code = string(appErrors.ErrInvalidGPGFormat)
+
+			rule = rule.addError(signErr)
 
 			return rule.Errors(), rule
 		}
@@ -272,11 +378,44 @@ WHY THIS MATTERS:
 				"error_details":  "incomplete GPG signature",
 			}
 
-			rule = rule.addErrorWithContext(
-				appErrors.ErrIncompleteGPGSig,
+			helpMessage := `Incomplete GPG Signature Error: Your GPG signature is missing the end marker.
+
+A complete GPG signature must have both begin and end markers:
+- "-----BEGIN PGP SIGNATURE-----"
+- "-----END PGP SIGNATURE-----"
+
+Your signature has the begin marker but is missing the end marker.
+
+✅ RECOMMENDED ACTIONS:
+
+1. Check for truncation issues:
+   - Verify your Git configuration isn't truncating commit data
+   - Check for disk space or filesystem issues
+
+2. Try creating a new signed commit:
+   git commit -S -m "Test commit with complete signature"
+
+3. Verify your GPG setup:
+   gpg --version
+   git config --list | grep gpg
+
+WHY THIS MATTERS:
+- Incomplete signatures can't be cryptographically verified
+- Missing end markers indicate data truncation or corruption
+- PGP format requires proper framing with begin/end markers
+- This issue prevents any signature validation`
+
+			signErr := appErrors.SignatureError(
+				rule.Name(),
 				"incomplete GPG signature (missing end marker)",
+				helpMessage,
 				context,
 			)
+
+			// Override the error code to match the original
+			signErr.Code = string(appErrors.ErrIncompleteGPGSig)
+
+			rule = rule.addError(signErr)
 
 			return rule.Errors(), rule
 		}
@@ -289,10 +428,11 @@ WHY THIS MATTERS:
 	if strings.HasPrefix(signature, "-----BEGIN SSH SIGNATURE-----") {
 		// Verify if SSH signatures are allowed
 		if !rule.isSignatureTypeAllowed("ssh") {
-			// Create error context with rich information
-			errorCtx := appErrors.NewContext()
-
 			allowedTypes := strings.Join(rule.allowedSigTypes, ", ")
+			context := map[string]string{
+				"signature_type": "ssh",
+				"allowed_types":  allowedTypes,
+			}
 
 			helpMessage := fmt.Sprintf(`Disallowed Signature Type Error: SSH signatures are not allowed.
 
@@ -323,17 +463,15 @@ WHY THIS MATTERS:
 - Some environments may only support specific verification methods`,
 				allowedTypes, allowedTypes)
 
-			err := appErrors.CreateRichError(
+			err := appErrors.SignatureError(
 				rule.Name(),
-				appErrors.ErrDisallowedSigType,
 				"SSH signatures are not allowed with current configuration",
 				helpMessage,
-				errorCtx,
+				context,
 			)
 
-			// Add additional context after creating the error
-			err = err.WithContext("signature_type", "ssh")
-			err = err.WithContext("allowed_types", allowedTypes)
+			// Override the error code to match the original
+			err.Code = string(appErrors.ErrDisallowedSigType)
 
 			errors = append(errors, err)
 			rule = rule.setErrors(errors)
@@ -342,25 +480,58 @@ WHY THIS MATTERS:
 		}
 
 		// Use SSH-specific validation
-		err := verifySSHSignatureFormat(signature)
-		if err != nil {
+		validationErr := verifySSHSignatureFormat(signature)
+		if validationErr != nil {
 			errorCode := appErrors.ErrInvalidSSHFormat
-			if strings.Contains(err.Error(), "incomplete SSH signature") {
+			if strings.Contains(validationErr.Error(), "incomplete SSH signature") {
 				errorCode = appErrors.ErrIncompleteSSHSig
-			} else if strings.Contains(err.Error(), "malformed SSH signature") {
+			} else if strings.Contains(validationErr.Error(), "malformed SSH signature") {
 				errorCode = appErrors.ErrInvalidSSHFormat
 			}
 
 			context := map[string]string{
 				"signature_type": "ssh",
-				"error_details":  err.Error(),
+				"error_details":  validationErr.Error(),
 			}
 
-			rule = rule.addErrorWithContext(
-				errorCode,
-				err.Error(),
+			helpMessage := fmt.Sprintf(`SSH Signature Format Error: Your SSH signature has formatting issues.
+
+The signature validation failed with the following error:
+%s
+
+✅ RECOMMENDED ACTIONS:
+
+1. Verify your SSH key setup:
+   ssh-keygen -l -f ~/.ssh/id_ed25519.pub
+
+2. Check your Git SSH signing configuration:
+   git config --list | grep gpg
+   git config --list | grep ssh
+
+3. Ensure you're using a recent Git version (2.34.0+):
+   git --version
+
+4. Try creating a new signed commit:
+   git commit -S -m "Test commit with SSH signature"
+
+WHY THIS MATTERS:
+- SSH signatures must follow a specific format to be valid
+- Malformed signatures can't be cryptographically verified
+- SSH signing is a newer Git feature requiring specific versions
+- Format errors often indicate configuration or compatibility issues`,
+				validationErr.Error())
+
+			signErr := appErrors.SignatureError(
+				rule.Name(),
+				validationErr.Error(),
+				helpMessage,
 				context,
 			)
+
+			// Override the error code to match the original
+			signErr.Code = string(errorCode)
+
+			rule = rule.addError(signErr)
 
 			return rule.Errors(), rule
 		}
@@ -370,9 +541,10 @@ WHY THIS MATTERS:
 	}
 
 	// Not a recognized signature format
-	// Create error context with rich information
-	errorCtx := appErrors.NewContext()
 	sigPrefix := signature[:signatureSafeMin(len(signature), 20)]
+	context := map[string]string{
+		"signature_prefix": sigPrefix,
+	}
 
 	helpMessage := fmt.Sprintf(`Unknown Signature Format Error: Your commit signature format is not recognized.
 
@@ -403,16 +575,15 @@ WHY THIS MATTERS:
 - Git only supports GPG and SSH signatures natively`,
 		sigPrefix)
 
-	err := appErrors.CreateRichError(
+	err := appErrors.SignatureError(
 		rule.Name(),
-		appErrors.ErrUnknownSigFormat,
 		"unrecognized signature format (must be GPG or SSH)",
 		helpMessage,
-		errorCtx,
+		context,
 	)
 
-	// Add additional context after creating the error
-	err = err.WithContext("signature_prefix", sigPrefix)
+	// Override the error code to match the original
+	err.Code = string(appErrors.ErrUnknownSigFormat)
 
 	errors = append(errors, err)
 	rule = rule.setErrors(errors)
@@ -421,7 +592,7 @@ WHY THIS MATTERS:
 }
 
 // Validate validates a commit against the rule and returns any errors.
-func (r SignatureRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
+func (r SignatureRule) Validate(_ context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
 	errors, _ := validateSignatureWithState(r, commit)
 
 	return errors
@@ -511,7 +682,13 @@ func (r SignatureRule) Help() string {
 			return "No errors to fix"
 		}
 
-		// errors[0] is already a ValidationError, so no need for type assertion
+		// Get help text from the enhanced error
+		helpText := errors[0].GetHelp()
+		if helpText != "" {
+			return helpText
+		}
+
+		// Fallback to the original logic if no help text is available
 		validationErr := errors[0]
 		// We're deliberately not handling all possible validation error codes here,
 		// just the ones that can be generated by this specific rule.
@@ -630,12 +807,12 @@ func (r SignatureRule) setErrors(errors []appErrors.ValidationError) SignatureRu
 	return result
 }
 
-// addErrorWithContext adds a validation error with context information.
-func (r SignatureRule) addErrorWithContext(code appErrors.ValidationErrorCode, message string, context map[string]string) SignatureRule {
-	rule := r
-	rule.BaseRule = rule.BaseRule.WithErrorWithContext(code, message, context)
+// addError adds a validation error to the rule.
+func (r SignatureRule) addError(err appErrors.ValidationError) SignatureRule {
+	result := r
+	result.BaseRule = r.BaseRule.WithError(err)
 
-	return rule
+	return result
 }
 
 // HasErrors returns true if the rule has validation errors.
@@ -698,5 +875,3 @@ func signatureSafeMin(a, b int) int {
 
 	return b
 }
-
-// NewSignatureRuleWithConfig creates a SignatureRule using the unified configuration.

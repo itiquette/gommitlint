@@ -168,7 +168,7 @@ func (s ValidationService) WithCustomRule(rule domain.Rule) (ValidationService, 
 		}
 	}
 
-	return s, errors.New("WithCustomRule", errors.ErrInvalidConfig, "rule provider does not support adding custom rules")
+	return s, errors.CreateBasicError("WithCustomRule", errors.ErrInvalidConfig, "rule provider does not support adding custom rules")
 }
 
 // WithCustomRuleFactory returns a new ValidationService with a custom rule factory added.
@@ -222,7 +222,7 @@ func (s ValidationService) WithCustomRuleFactory(
 		}
 	}
 
-	return s, errors.New("WithCustomRuleFactory", errors.ErrInvalidConfig, "rule provider does not support registering custom rule factories")
+	return s, errors.CreateBasicError("WithCustomRuleFactory", errors.ErrInvalidConfig, "rule provider does not support registering custom rule factories")
 }
 
 // WithActiveRules creates a new ValidationService with the specified active rules.
@@ -270,7 +270,7 @@ func (s ValidationService) updateRulesHelper(
 		return serviceCopy, nil
 	}
 
-	return s, errors.New(errorOp, errors.ErrInvalidConfig, errorMsg)
+	return s, errors.CreateBasicError(errorOp, errors.ErrInvalidConfig, errorMsg)
 }
 
 func (s ValidationService) WithActiveRules(ruleNames []string) (ValidationService, error) {
@@ -491,9 +491,8 @@ func CreateDefaultValidationService(repoPath string) (ValidationService, error) 
 	), nil
 }
 
-// Note: The previous CreateValidationService function was replaced by
-// CreateValidationServiceWithDependencies to better support dependency injection
-// and the hexagonal architecture pattern.
+// CreateValidationServiceWithDependencies provides dependency injection
+// in accordance with hexagonal architecture principles.
 
 // ValidationConfig represents a composition of all the domain configuration interfaces
 // needed for validation. This follows the Interface Segregation Principle by composing
@@ -802,7 +801,7 @@ var standardDomainRuleFactories = map[string]domainRuleFactory{
 			return rules.NewCommitsAheadRule(options...)
 		},
 		requiresAnalyzer: true,
-		condition:        func(config ValidationConfig) bool { return config.CheckCommitsAhead() }, // Only when enabled
+		condition:        func(_ ValidationConfig) bool { return true }, // Always create
 	},
 }
 
@@ -1017,11 +1016,8 @@ func (p DomainRuleProvider) WithCustomRuleFactory(
 	return providerCopy
 }
 
-// initializeRules creates all the validation rules using factories.
+// initializeRules creates all the validation rules using factories and returns the updated provider.
 func (p *DomainRuleProvider) initializeRules() {
-	// This is a functional method that should create and return a new
-	// DomainRuleProvider with initialized rules. However, for backward compatibility
-	// we need to maintain the method signature without return values.
 	// Create a slice with initial capacity to avoid reallocations
 	totalFactories := len(standardDomainRuleFactories) + len(p.customFactories)
 	rules := make([]domain.Rule, 0, totalFactories)
@@ -1056,15 +1052,7 @@ func (p *DomainRuleProvider) initializeRules() {
 		}
 	}
 
-	// In functional programming, we would return a new provider:
-	// return DomainRuleProvider{
-	//     config:          p.config,
-	//     analyzer:        p.analyzer,
-	//     rules:           rules,
-	//     customFactories: p.copyCustomFactories(),
-	// }
-
-	// But instead, we're modifying the existing instance (for backward compatibility)
+	// Set the computed rules
 	p.rules = rules
 }
 
@@ -1168,7 +1156,7 @@ func (e DomainValidationEngine) WithActiveRules(ruleNames []string) (DomainValid
 		}
 	}
 
-	return e, errors.New("WithActiveRules", errors.ErrInvalidConfig, "rule provider does not support setting active rules")
+	return e, errors.CreateBasicError("WithActiveRules", errors.ErrInvalidConfig, "rule provider does not support setting active rules")
 }
 
 // WithDisabledRules returns a new DomainValidationEngine with the specified rules disabled.
@@ -1186,7 +1174,7 @@ func (e DomainValidationEngine) WithDisabledRules(ruleNames []string) (DomainVal
 		}
 	}
 
-	return e, errors.New("WithDisabledRules", errors.ErrInvalidConfig, "rule provider does not support disabling rules")
+	return e, errors.CreateBasicError("WithDisabledRules", errors.ErrInvalidConfig, "rule provider does not support disabling rules")
 }
 
 // ValidateCommit validates a single commit.
@@ -1242,14 +1230,7 @@ func validateWithRules(ctx context.Context, commit domain.CommitInfo, rules []do
 // validateWithRule runs a single rule against a commit.
 func validateWithRule(ctx context.Context, commit domain.CommitInfo, rule domain.Rule) domain.RuleResult {
 	// Check if the rule supports context
-	var ruleErrors []errors.ValidationError
-	if contextualRule, ok := rule.(domain.ContextualRule); ok {
-		// Use the context-aware validation method
-		ruleErrors = contextualRule.ValidateWithContext(ctx, commit)
-	} else {
-		// Fall back to the regular validation method
-		ruleErrors = rule.Validate(commit)
-	}
+	var ruleErrors = rule.Validate(ctx, commit)
 
 	// Create rule result
 	ruleResult := domain.RuleResult{

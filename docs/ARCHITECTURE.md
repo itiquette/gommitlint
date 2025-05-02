@@ -19,7 +19,7 @@ This architectural approach provides several benefits:
 - Flexibility to change implementation details without affecting core business logic
 - Concurrency safety through value semantics and immutability
 
-```javascript
+```ascii
 ┌───────────────────────────────────────────────────────────────┐
 │                      Infrastructure Layer                      │
 │                                                               │
@@ -54,6 +54,24 @@ This architectural approach provides several benefits:
 │    - Functional Output Formatters                             │
 │                                                               │
 └───────────────────────────────────────────────────────────────┘
+```
+
+## Dependency Flow
+
+In the functional architecture, dependencies flow inward with explicit passing:
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  Domain Layer   │ ◄── │ Application     │ ◄── │ Ports Layer     │
+│                 │     │ Layer           │     │                 │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+                                                        ▲
+                                                        │
+                                                        │
+                                                ┌───────────────┐
+                                                │Infrastructure │
+                                                │Layer          │
+                                                └───────────────┘
 ```
 
 ## Project Structure
@@ -300,7 +318,7 @@ Validation in rules follows a functional pattern where state is transformed rath
 
 ```go
 // Validation with pure functions and value semantics
-func (r SubjectCaseRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
+func (r SubjectCaseRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
     // Validate and return errors without modifying state
     if !meetsCase(commit.Subject) {
         return []appErrors.ValidationError{

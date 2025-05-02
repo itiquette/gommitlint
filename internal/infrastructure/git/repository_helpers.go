@@ -17,7 +17,11 @@ import (
 )
 
 // findGitDir finds the Git directory from a starting path.
+// Implements security best practices for safe path handling.
 func findGitDir(start string) (string, error) {
+	// Normalize the path to prevent path traversal issues
+	start = filepath.Clean(start)
+
 	// Check if the directory exists
 	info, err := os.Stat(start)
 	if err != nil {
@@ -29,14 +33,34 @@ func findGitDir(start string) (string, error) {
 		start = filepath.Dir(start)
 	}
 
+	// Check for absolute path and convert if needed
+	if !filepath.IsAbs(start) {
+		absPath, err := filepath.Abs(start)
+		if err != nil {
+			return "", fmt.Errorf("failed to get absolute path for %s: %w", start, err)
+		}
+
+		start = absPath
+	}
+
 	// Try to find .git directory by traversing up the directory tree
 	current := start
 
-	for {
+	// Set a reasonable limit to prevent excessive traversal (e.g., 20 levels up)
+	const maxLevels = 20
+
+	level := 0
+
+	for level < maxLevels {
 		// Check if .git directory exists
 		gitDir := filepath.Join(current, ".git")
-		if _, err := os.Stat(gitDir); err == nil {
-			return current, nil // Found .git directory
+
+		// Use Lstat instead of Stat to avoid following symlinks
+		if fi, err := os.Lstat(gitDir); err == nil {
+			// Verify it's either a directory or a file (Git submodules use a file)
+			if fi.IsDir() || fi.Mode().IsRegular() {
+				return current, nil // Found .git directory
+			}
 		}
 
 		// Go up one level
@@ -47,7 +71,10 @@ func findGitDir(start string) (string, error) {
 		}
 
 		current = parent
+		level++
 	}
+
+	return "", fmt.Errorf("exceeded maximum directory traversal levels (%d) without finding git repository", maxLevels)
 }
 
 // resolveRevision resolves a revision to a hash.

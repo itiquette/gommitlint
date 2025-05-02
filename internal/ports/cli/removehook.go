@@ -99,18 +99,36 @@ func (p HookRemovalParameters) WithSkipConfirm(skipConfirm bool) HookRemovalPara
 }
 
 // FindHookPath determines the hook file path based on the parameters.
+// Applies security best practices for safe path handling.
 func (p HookRemovalParameters) FindHookPath() (string, error) {
+	// Clean the repository path to prevent path traversal attacks
+	repoPath := filepath.Clean(p.RepoPath)
+
 	// Find Git root directory
-	gitDir, err := findGitDirectory(p.RepoPath)
+	gitDir, err := findGitDirectory(repoPath)
 	if err != nil {
 		return "", fmt.Errorf("could not find Git directory: %w", err)
 	}
 
-	// Path to the hook file
-	hookPath := filepath.Join(gitDir, "hooks", p.HookType)
+	// Validate hook type to prevent injection attacks
+	hookType := p.HookType
+	if !isValidHookType(hookType) {
+		return "", fmt.Errorf("invalid hook type: %s", hookType)
+	}
+
+	// Path to the hook file - using filepath.Clean for additional safety
+	hookPath := filepath.Clean(filepath.Join(gitDir, "hooks", hookType))
+
+	// Confirm the path is within the git directory to prevent path traversal
+	if !strings.HasPrefix(hookPath, gitDir) {
+		return "", errors.New("invalid hook path: path traversal detected")
+	}
 
 	return hookPath, nil
 }
+
+// isValidHookType is now defined in installhook.go to avoid duplication
+// It validates hook types to prevent command injection attacks
 
 // VerifyHookExists checks if the hook file exists.
 func (p HookRemovalParameters) VerifyHookExists() error {
@@ -182,10 +200,15 @@ func (p HookRemovalParameters) RemoveHookFile() error {
 }
 
 // removeHook removes a Git hook from the specified repository.
-// This implementation follows functional programming patterns with immutable parameters.
 func removeHook(cmd *cobra.Command, repoPath string, skipConfirm bool) error {
+	// Validate and normalize the repository path
+	validatedPath, err := validateRepositoryPath(repoPath)
+	if err != nil {
+		return fmt.Errorf("invalid repository path: %w", err)
+	}
+
 	// Create parameters with defaults
-	params := NewHookRemovalParameters(cmd, repoPath, skipConfirm)
+	params := NewHookRemovalParameters(cmd, validatedPath, skipConfirm)
 
 	// Verify the hook exists
 	if err := params.VerifyHookExists(); err != nil {

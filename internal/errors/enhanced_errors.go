@@ -7,6 +7,7 @@ package errors
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -130,4 +131,269 @@ func (e ValidationError) FormatAsMarkdown() string {
 	}
 
 	return builder.String()
+}
+
+// ===== Common Validation Error Helpers =====
+
+// FormatError creates a rich error for format validation failures.
+func FormatError(ruleName string, message string, helpText string, subject string) ValidationError {
+	ctx := NewContext()
+	err := CreateRichError(
+		ruleName,
+		ErrInvalidFormat,
+		message,
+		helpText,
+		ctx,
+	)
+
+	return err.WithContext("subject", subject)
+}
+
+// EmptyError creates a rich error for empty content validation failures.
+func EmptyError(ruleName string, message string, helpText string) ValidationError {
+	ctx := NewContext()
+
+	return CreateRichError(
+		ruleName,
+		ErrEmptyDescription,
+		message,
+		helpText,
+		ctx,
+	)
+}
+
+// CaseError creates a rich error for case validation failures.
+func CaseError(ruleName string, message string, helpText string,
+	expectedCase string, actualCase string, firstWord string, subject string) ValidationError {
+	ctx := NewContext()
+	err := CreateRichError(
+		ruleName,
+		ErrSubjectCase,
+		message,
+		helpText,
+		ctx,
+	)
+
+	// Add standardized context information
+	err = err.WithContext("expected_case", expectedCase)
+	err = err.WithContext("actual_case", actualCase)
+	err = err.WithContext("first_word", firstWord)
+	err = err.WithContext("subject", subject)
+
+	return err
+}
+
+// ReferenceError creates a rich error for reference validation failures (like JIRA issues).
+func ReferenceError(ruleName string, message string, helpText string, context map[string]string) ValidationError {
+	errorCtx := NewContext()
+	err := CreateRichError(
+		ruleName,
+		ErrInvalidReference,
+		message,
+		helpText,
+		errorCtx,
+	)
+
+	// Add detailed context information
+	for k, v := range context {
+		err = err.WithContext(k, v)
+	}
+
+	return err
+}
+
+// LengthError creates a rich error for length validation failures.
+func LengthError(ruleName string, message string, helpText string,
+	actualLength int, maxLength int, subject string) ValidationError {
+	ctx := NewContext()
+	err := CreateRichError(
+		ruleName,
+		ErrMaxLengthExceeded,
+		message,
+		helpText,
+		ctx,
+	)
+
+	// Add standardized context information
+	err = err.WithContext("actual_length", strconv.Itoa(actualLength))
+	err = err.WithContext("max_length", strconv.Itoa(maxLength))
+	err = err.WithContext("subject", subject)
+
+	return err
+}
+
+// SignatureError creates a rich error for signature validation failures.
+func SignatureError(ruleName string, message string, helpText string, context map[string]string) ValidationError {
+	errorCtx := NewContext()
+	err := CreateRichError(
+		ruleName,
+		ErrInvalidSignature,
+		message,
+		helpText,
+		errorCtx,
+	)
+
+	// Add detailed context information
+	for k, v := range context {
+		err = err.WithContext(k, v)
+	}
+
+	return err
+}
+
+// UTF8Error creates a rich error for invalid UTF-8 encoding validation failures.
+func UTF8Error(ruleName string, message string, helpText string, subject string) ValidationError {
+	ctx := NewContext()
+	err := CreateRichError(
+		ruleName,
+		ErrInvalidFormat,
+		message,
+		helpText,
+		ctx,
+	)
+
+	return err.WithContext("subject", subject)
+}
+
+// BodyError creates a rich error for commit body validation failures.
+func BodyError(ruleName string, message string, helpText string, context map[string]string) ValidationError {
+	errorCtx := NewContext()
+	err := CreateRichError(
+		ruleName,
+		ErrInvalidBody,
+		message,
+		helpText,
+		errorCtx,
+	)
+
+	// Add detailed context information
+	for k, v := range context {
+		err = err.WithContext(k, v)
+	}
+
+	return err
+}
+
+// SpellError creates a rich error for spelling validation failures.
+func SpellError(ruleName string, message string, helpText string,
+	originalWord string, correctedWord string, additionalContext map[string]string) ValidationError {
+	errorCtx := NewContext()
+	err := CreateRichError(
+		ruleName,
+		ErrSpelling,
+		message,
+		helpText,
+		errorCtx,
+	)
+
+	// Add standardized context information
+	err = err.WithContext("original", originalWord)
+	err = err.WithContext("corrected", correctedWord)
+
+	// Add additional context if provided
+	for k, v := range additionalContext {
+		err = err.WithContext(k, v)
+	}
+
+	return err
+}
+
+// ConfigError creates a rich error for configuration validation failures.
+func ConfigError(ruleName string, message string, helpText string, context map[string]string) ValidationError {
+	errorCtx := NewContext()
+	err := CreateRichError(
+		ruleName,
+		ErrInvalidConfig,
+		message,
+		helpText,
+		errorCtx,
+	)
+
+	// Add detailed context information
+	for k, v := range context {
+		err = err.WithContext(k, v)
+	}
+
+	return err
+}
+
+// ImperativeError creates a rich error for imperative verb validation failures.
+func ImperativeError(ruleName string, errorCode ValidationErrorCode, message string, helpText string,
+	word string, verbType string, suggestedForm string) ValidationError {
+	errorCtx := NewContext()
+	err := CreateRichError(
+		ruleName,
+		errorCode,
+		message,
+		helpText,
+		errorCtx,
+	)
+
+	// Add standardized context information
+	err = err.WithContext("word", word)
+	err = err.WithContext("type", verbType)
+
+	// Add suggested form if provided
+	if suggestedForm != "" {
+		err = err.WithContext("suggested_form", suggestedForm)
+	}
+
+	return err
+}
+
+// SignOffError creates a rich error for sign-off validation failures.
+func SignOffError(ruleName string, errorCode ValidationErrorCode, message string, helpText string,
+	errorType string, body string, additionalContext map[string]string) ValidationError {
+	errorCtx := NewContext()
+	err := CreateRichError(
+		ruleName,
+		errorCode,
+		message,
+		helpText,
+		errorCtx,
+	)
+
+	// Add standardized context information
+	err = err.WithContext("original_code", errorType)
+	err = err.WithContext("message", body)
+
+	// Add additional context if provided
+	for k, v := range additionalContext {
+		if k != "original_code" && k != "message" { // Don't overwrite standardized context
+			err = err.WithContext(k, v)
+		}
+	}
+
+	return err
+}
+
+// JiraError creates a rich error for Jira reference validation failures.
+func JiraError(ruleName string, errorCode ValidationErrorCode, message string, helpText string,
+	jiraKey string, subject string, additionalContext map[string]string) ValidationError {
+	errorCtx := NewContext()
+	err := CreateRichError(
+		ruleName,
+		errorCode,
+		message,
+		helpText,
+		errorCtx,
+	)
+
+	// Add standardized context information
+	if jiraKey != "" {
+		err = err.WithContext("key", jiraKey)
+	}
+
+	if subject != "" {
+		err = err.WithContext("subject", subject)
+	}
+
+	// Add additional context if provided
+	for k, v := range additionalContext {
+		if k != "key" && k != "subject" { // Don't overwrite standardized context
+			err = err.WithContext(k, v)
+		}
+	}
+
+	return err
 }

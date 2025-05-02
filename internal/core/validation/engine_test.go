@@ -6,6 +6,7 @@ package validation_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/itiquette/gommitlint/internal/core/validation"
@@ -31,7 +32,7 @@ func NewMockRule(name string, shouldPass bool) MockRule {
 
 	if !shouldPass {
 		// Create a simple error
-		rule.errors = append(rule.errors, errors.New(name, errors.ErrUnknown, "Mock error message"))
+		rule.errors = append(rule.errors, errors.CreateBasicError(name, errors.ErrUnknown, "Mock error message"))
 	}
 
 	return rule
@@ -52,7 +53,7 @@ func (r MockRule) Name() string {
 	return r.name
 }
 
-func (r MockRule) Validate(commit domain.CommitInfo) []errors.ValidationError {
+func (r MockRule) Validate(_ context.Context, commit domain.CommitInfo) []errors.ValidationError {
 	if r.validationFn != nil {
 		return r.validationFn(commit)
 	}
@@ -180,7 +181,7 @@ func TestValidationEngine_ValidateCommits(t *testing.T) {
 		validationFn: func(commit domain.CommitInfo) []errors.ValidationError {
 			if commit.Hash == "failing" {
 				return []errors.ValidationError{
-					errors.New("ConditionalRule", errors.ErrUnknown, "Failed for specific commit"),
+					errors.CreateBasicError("ConditionalRule", errors.ErrUnknown, "Failed for specific commit"),
 				}
 			}
 
@@ -261,7 +262,7 @@ func TestValidationEngine_Timeout(t *testing.T) {
 			// In a real test we would use time.Sleep,
 			// but for a unit test we'll avoid actual waiting
 			return []errors.ValidationError{
-				errors.New("SlowRule", errors.ErrUnknown, "Slow rule completed"),
+				errors.CreateBasicError("SlowRule", errors.ErrUnknown, "Slow rule completed"),
 			}
 		},
 	}
@@ -293,4 +294,150 @@ func TestValidationEngine_Timeout(t *testing.T) {
 	// Assert result
 	require.False(t, result.Passed, "Commit should not pass validation")
 	require.Len(t, result.RuleResults, 1, "Should have results for all rules")
+}
+
+// MockCommitsAheadRule is a mock implementation of the CommitsAhead rule for testing message generation.
+type MockCommitsAheadRule struct {
+	name         string
+	ahead        int
+	maxAhead     int
+	ref          string
+	shouldFailFn func(int) bool
+}
+
+func NewMockCommitsAheadRule(name string, ahead, maxAhead int, ref string) *MockCommitsAheadRule {
+	return &MockCommitsAheadRule{
+		name:     name,
+		ahead:    ahead,
+		maxAhead: maxAhead,
+		ref:      ref,
+		shouldFailFn: func(ahead int) bool {
+			return ahead > maxAhead
+		},
+	}
+}
+
+func (r *MockCommitsAheadRule) Name() string {
+	return r.name
+}
+
+func (r *MockCommitsAheadRule) Validate(_ context.Context, _ domain.CommitInfo) []errors.ValidationError {
+	if r.shouldFailFn(r.ahead) {
+		return []errors.ValidationError{
+			errors.CreateBasicError(r.name, errors.ErrTooManyCommits,
+				fmt.Sprintf("HEAD is %d commits ahead of %s (maximum allowed: %d)",
+					r.ahead, r.ref, r.maxAhead)),
+		}
+	}
+
+	return nil
+}
+
+func (r *MockCommitsAheadRule) Result() string {
+	// This should only be called after validation
+	if r.ahead > r.maxAhead {
+		return fmt.Sprintf("HEAD is %d commits ahead of %s (exceeds limit of %d)",
+			r.ahead, r.ref, r.maxAhead)
+	} else if r.ahead == 0 {
+		return "HEAD is at same commit as " + r.ref
+	}
+
+	return fmt.Sprintf("HEAD is %d commit(s) ahead of %s (within limit)", r.ahead, r.ref)
+}
+
+func (r *MockCommitsAheadRule) VerboseResult() string {
+	if r.ahead > r.maxAhead {
+		return fmt.Sprintf(
+			"HEAD is currently %d commit(s) ahead of %s (maximum allowed: %d). Consider merging or rebasing with %s.",
+			r.ahead, r.ref, r.maxAhead, r.ref)
+	}
+
+	return "Verbose result: " + r.Result()
+}
+
+func (r *MockCommitsAheadRule) Help() string {
+	return "Mock help message"
+}
+
+func (r *MockCommitsAheadRule) Errors() []errors.ValidationError {
+	ctx := context.Background()
+
+	return r.Validate(ctx, domain.CommitInfo{})
+}
+
+// TestValidationEngine_CommitsAheadMessages tests that the message from the CommitsAhead rule matches the validation state.
+func TestValidationEngine_CommitsAheadMessages(t *testing.T) {
+	tests := []struct {
+		name           string
+		ahead          int
+		maxAhead       int
+		expectedStatus domain.ValidationStatus
+		expectedMsg    string
+	}{
+		{
+			name:           "no commits ahead",
+			ahead:          0,
+			maxAhead:       5,
+			expectedStatus: domain.StatusPassed,
+			expectedMsg:    "HEAD is at same commit as main",
+		},
+		{
+			name:           "within limit",
+			ahead:          3,
+			maxAhead:       5,
+			expectedStatus: domain.StatusPassed,
+			expectedMsg:    "HEAD is 3 commit(s) ahead of main (within limit)",
+		},
+		{
+			name:           "exceeds limit",
+			ahead:          20,
+			maxAhead:       5,
+			expectedStatus: domain.StatusFailed,
+			expectedMsg:    "HEAD is 20 commits ahead of main (exceeds limit of 5)",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			// Create the mock rule
+			rule := NewMockCommitsAheadRule("CommitsAhead", testCase.ahead, testCase.maxAhead, "main")
+
+			// Create a rule provider with just this rule
+			provider := NewMockRuleProvider([]domain.Rule{rule})
+
+			// Create the engine
+			engine := validation.NewEngine(provider)
+
+			// Create a dummy commit
+			commit := domain.CommitInfo{
+				Hash:    "testcommit",
+				Subject: "Test commit",
+				Message: "This is a test commit",
+			}
+
+			// Validate
+			result := engine.ValidateCommit(context.Background(), commit)
+
+			// Get the rule result
+			require.Len(t, result.RuleResults, 1, "Should have one rule result")
+			ruleResult := result.RuleResults[0]
+
+			// Check the message
+			require.Equal(t, testCase.expectedMsg, ruleResult.Message,
+				"Result message should match the expected message for the commits ahead state")
+
+			// Check the status
+			require.Equal(t, testCase.expectedStatus, ruleResult.Status,
+				"Rule status should match expected status")
+
+			// For failing cases, verify we have errors
+			if testCase.expectedStatus == domain.StatusFailed {
+				require.False(t, result.Passed, "Result should not pass")
+				require.NotEmpty(t, ruleResult.Errors, "Should have validation errors")
+			} else {
+				require.True(t, result.Passed, "Result should pass")
+				require.Empty(t, ruleResult.Errors, "Should not have validation errors")
+			}
+		})
+	}
 }

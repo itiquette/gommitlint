@@ -31,3 +31,5 @@ generated
 /gommitlint
 
 #CLAUDE.md
+
+**/.claude/settings.local.json

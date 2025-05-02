@@ -5,25 +5,20 @@
 // Package config provides configuration loading and access.
 package config
 
-import (
 // No imports needed for now.
-)
 
 // Provider provides access to configuration.
-// This implementation uses value semantics throughout.
 type Provider struct {
 	config Config
 }
 
 // Config is the main configuration structure.
-// This uses value semantics instead of pointer semantics.
 type Config struct {
 	// GommitConf is the configuration for gommitlint.
 	GommitConf GommitLintConfig
 }
 
 // GommitLintConfig defines the configuration for commit validation.
-// This uses value semantics instead of pointer semantics.
 type GommitLintConfig struct {
 	// Subject is the configuration for commit subject validation.
 	Subject SubjectConfig
@@ -56,7 +51,6 @@ type ConventionalConfig struct {
 }
 
 // NewProvider creates a new configuration provider.
-// This implementation returns a value rather than a pointer.
 func NewProvider() (Provider, error) {
 	// Create a default configuration with value semantics
 	// Initialize all nested structures without pointers

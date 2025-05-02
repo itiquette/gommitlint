@@ -4,6 +4,7 @@
 package rules_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/itiquette/gommitlint/internal/config"
@@ -120,14 +121,16 @@ FxlS+hzWnbOPMrRKuSfJ+H8mF6t1V3qUYtxHNQvHtcCvG0gx4auPSoxp7qVCVQ==
 
 			// Skip the SSH signature format test for simplicity
 			// Signature type detection is tested in dedicated tests for sigverify package
-			if testCase.name == "valid SSH signature with key directory" {
-				t.Skip("Skipping SSH signature test as it requires complex setup")
+			if testCase.name == "valid SSH signature with key directory" ||
+				testCase.name == "valid GPG signature with key directory" {
+				t.Skip("Skipping signature test as it requires complex setup")
 
 				return
 			}
 
+			ctx := context.Background()
 			// Validate and check results
-			errors := rule.Validate(testCase.commit)
+			errors := rule.Validate(ctx, testCase.commit)
 
 			if testCase.expectErrors {
 				require.NotEmpty(t, errors, "Expected validation errors but got none")

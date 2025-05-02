@@ -56,59 +56,6 @@ func (r BaseRule) WithError(err errors.ValidationError) BaseRule {
 	return result
 }
 
-// WithErrorWithCode creates and adds a new error with the given code and message,
-// returning a new BaseRule.
-func (r BaseRule) WithErrorWithCode(code errors.ValidationErrorCode, message string) BaseRule {
-	err := errors.New(r.name, code, message)
-
-	return r.WithError(err)
-}
-
-// WithErrorWithFormatf creates and adds an error with formatted message,
-// returning a new BaseRule.
-func (r BaseRule) WithErrorWithFormatf(code errors.ValidationErrorCode, format string, args ...interface{}) BaseRule {
-	err := errors.NewWithFormat(r.name, code, format, args...)
-
-	return r.WithError(err)
-}
-
-// WithErrorWithContext creates and adds an error with the given context,
-// returning a new BaseRule.
-func (r BaseRule) WithErrorWithContext(code errors.ValidationErrorCode, message string, context map[string]string) BaseRule {
-	err := errors.New(r.name, code, message, errors.WithContextMap(context))
-
-	return r.WithError(err)
-}
-
-// WithErrorWithFormatAndContextf creates an error with formatted message and context,
-// returning a new BaseRule.
-func (r BaseRule) WithErrorWithFormatAndContextf(code errors.ValidationErrorCode, context map[string]string, format string, args ...interface{}) BaseRule {
-	err := errors.New(
-		r.name,
-		code,
-		fmt.Sprintf(format, args...),
-		errors.WithContextMap(context),
-	)
-
-	return r.WithError(err)
-}
-
-// WithErrorWithHelp creates an error with a help message,
-// returning a new BaseRule.
-func (r BaseRule) WithErrorWithHelp(code errors.ValidationErrorCode, message string, help string) BaseRule {
-	err := errors.New(r.name, code, message, errors.WithHelp(help))
-
-	return r.WithError(err)
-}
-
-// WithAppError creates and adds a new error with just code and message (no context),
-// returning a new BaseRule. This is a convenience method for the common case of simple errors.
-func (r BaseRule) WithAppError(code errors.ValidationErrorCode, message string) BaseRule {
-	err := errors.New(r.name, code, message)
-
-	return r.WithError(err)
-}
-
 // Errors returns all validation errors found by this rule.
 func (r BaseRule) Errors() []errors.ValidationError {
 	return r.errors

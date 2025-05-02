@@ -4,6 +4,7 @@
 package rules
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"unicode/utf8"
@@ -80,7 +81,7 @@ func (r SubjectSuffixRule) Name() string {
 }
 
 // validateSubjectSuffixWithState validates the commit and returns an updated rule state and errors.
-// The function is purposely named with a unique name to avoid conflicts with other rules.
+// This version uses standardized error helper functions.
 func validateSubjectSuffixWithState(rule SubjectSuffixRule, commit domain.CommitInfo) ([]appErrors.ValidationError, SubjectSuffixRule) {
 	// Start with a clean slate by creating a new rule with cleared errors
 	updatedRule := rule
@@ -88,9 +89,6 @@ func validateSubjectSuffixWithState(rule SubjectSuffixRule, commit domain.Commit
 
 	subject := commit.Subject
 	if subject == "" {
-		// Create error context with rich information
-		errorCtx := appErrors.NewContext()
-
 		helpMessage := `Empty Subject Error: Cannot validate suffixes on an empty subject.
 
 Your commit message has an empty subject line, so suffix validation cannot be performed.
@@ -118,24 +116,18 @@ NEXT STEPS:
 2. If using conventional commits, remember the format:
    type(scope): subject`
 
-		// Create the context map for backwards compatibility
-		context := map[string]string{
-			"subject": subject,
-		}
-
-		// Create the error with rich context
+		// Create custom error with the expected error code
+		errorCtx := appErrors.NewContext()
 		validationErr := appErrors.CreateRichError(
 			updatedRule.Name(),
-			appErrors.ErrMissingSubject,
+			appErrors.ErrMissingSubject, // Use the expected error code
 			"subject is empty",
 			helpMessage,
 			errorCtx,
 		)
 
-		// Add context for backward compatibility
-		for k, v := range context {
-			validationErr = validationErr.WithContext(k, v)
-		}
+		// Need to add empty subject to context for tests
+		validationErr = validationErr.WithContext("subject", "")
 
 		updatedRule.BaseRule = updatedRule.BaseRule.WithError(validationErr)
 
@@ -146,9 +138,6 @@ NEXT STEPS:
 
 	// Check for invalid UTF-8
 	if lastChar == utf8.RuneError && size == 0 {
-		// Create error context with rich information
-		errorCtx := appErrors.NewContext()
-
 		helpMessage := `UTF-8 Encoding Error: Subject contains invalid Unicode characters.
 
 Your commit subject contains invalid UTF-8 encoded text, which prevents suffix validation.
@@ -175,24 +164,13 @@ NEXT STEPS:
    - Ensure they are properly encoded as UTF-8
    - Consider using Unicode escape sequences for rare characters`
 
-		// Create the context map for backwards compatibility
-		context := map[string]string{
-			"subject": subject,
-		}
-
-		// Create the error with rich context
-		validationErr := appErrors.CreateRichError(
+		// Use the standardized UTF8Error helper function
+		validationErr := appErrors.UTF8Error(
 			updatedRule.Name(),
-			appErrors.ErrInvalidFormat,
 			"subject does not end with valid UTF-8 text",
 			helpMessage,
-			errorCtx,
+			subject,
 		)
-
-		// Add context for backward compatibility
-		for k, v := range context {
-			validationErr = validationErr.WithContext(k, v)
-		}
 
 		updatedRule.BaseRule = updatedRule.BaseRule.WithError(validationErr)
 
@@ -201,9 +179,6 @@ NEXT STEPS:
 
 	// Check if the last character is in the invalid suffix set
 	if strings.ContainsRune(rule.invalidSuffixes, lastChar) {
-		// Create error context with rich information
-		errorCtx := appErrors.NewContext()
-
 		// Build example string that shows what the subject would look like without the invalid suffix
 		exampleSubject := strings.TrimRightFunc(subject, func(r rune) bool {
 			return strings.ContainsRune(rule.invalidSuffixes, r)
@@ -242,24 +217,28 @@ INVALID SUFFIXES IN THIS PROJECT:
 			string(lastChar),
 			rule.invalidSuffixes)
 
-		// Create the context map for backwards compatibility
-		context := map[string]string{
-			"subject":          subject,
+		// Create the context map with detailed information for FormatError
+		additionalContext := map[string]string{
 			"last_char":        string(lastChar),
 			"invalid_suffixes": rule.invalidSuffixes,
+			"corrected":        exampleSubject,
 		}
 
-		// Create the error with rich context
+		// We need to create a custom error with the correct error code
+		errorCtx := appErrors.NewContext()
 		validationErr := appErrors.CreateRichError(
 			updatedRule.Name(),
-			appErrors.ErrSubjectSuffix,
+			appErrors.ErrSubjectSuffix, // Use the expected error code
 			fmt.Sprintf("subject has invalid suffix %q (invalid suffixes: %q)", string(lastChar), rule.invalidSuffixes),
 			helpMessage,
 			errorCtx,
 		)
 
-		// Add context for backward compatibility
-		for k, v := range context {
+		// Add subject context
+		validationErr = validationErr.WithContext("subject", subject)
+
+		// Add additional context
+		for k, v := range additionalContext {
 			validationErr = validationErr.WithContext(k, v)
 		}
 
@@ -271,7 +250,7 @@ INVALID SUFFIXES IN THIS PROJECT:
 
 // Validate validates that the subject doesn't end with invalid characters.
 // This method follows functional programming principles and does not modify the rule's state.
-func (r SubjectSuffixRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
+func (r SubjectSuffixRule) Validate(_ context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
 	errors, _ := validateSubjectSuffixWithState(r, commit)
 
 	return errors
@@ -295,7 +274,7 @@ func (r SubjectSuffixRule) VerboseResult() string {
 	// If we have an error, provide details based on the error type
 	if r.ErrorCount() > 0 {
 		code := r.Errors()[0].Code
-		if code == string(appErrors.ErrMissingSubject) {
+		if code == string(appErrors.ErrEmptyDescription) || code == string(appErrors.ErrMissingSubject) {
 			return "Subject is empty"
 		}
 
@@ -323,7 +302,7 @@ func (r SubjectSuffixRule) Help() string {
 	if r.ErrorCount() > 0 {
 		code := r.Errors()[0].Code
 		// Check for missing subject errors
-		if code == string(appErrors.ErrMissingSubject) {
+		if code == string(appErrors.ErrEmptyDescription) || code == string(appErrors.ErrMissingSubject) {
 			return "Provide a non-empty subject line for your commit message"
 		}
 		// Check for invalid UTF-8 errors
@@ -355,6 +334,11 @@ func (r SubjectSuffixRule) Errors() []appErrors.ValidationError {
 // HasErrors returns true if the rule has found any errors.
 func (r SubjectSuffixRule) HasErrors() bool {
 	return len(r.Errors()) > 0
+}
+
+// ErrorCount returns the number of validation errors.
+func (r SubjectSuffixRule) ErrorCount() int {
+	return len(r.Errors())
 }
 
 // ValidateSubjectSuffixWithState is the exported version of validateSubjectSuffixWithState.

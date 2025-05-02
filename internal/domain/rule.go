@@ -39,16 +39,13 @@ type RuleMetadata struct {
 	Severity SeverityLevel
 }
 
-// Note: All validation error handling has been moved to the errors package.
-// Use errors.ValidationErrorCode and errors.ValidationError instead.
-
 // Rule defines the interface for all validation rules.
 type Rule interface {
 	// Name returns the rule's name.
 	Name() string
 
 	// Validate performs validation against a commit.
-	Validate(commit CommitInfo) []errors.ValidationError
+	Validate(ctx context.Context, commit CommitInfo) []errors.ValidationError
 
 	// Result returns a concise result message.
 	Result() string
@@ -61,14 +58,6 @@ type Rule interface {
 
 	// Errors returns all validation errors found by this rule.
 	Errors() []errors.ValidationError
-}
-
-// ContextualRule extends Rule with context-aware methods.
-type ContextualRule interface {
-	Rule
-
-	// ValidateWithContext performs validation with context.
-	ValidateWithContext(ctx context.Context, commit CommitInfo) []errors.ValidationError
 }
 
 // RuleProvider defines an interface for retrieving validation rules.
@@ -88,14 +77,3 @@ type RuleProvider interface {
 	// WithCustomRule returns a new provider with the custom rule added.
 	WithCustomRule(rule Rule) RuleProvider
 }
-
-// Note: ValidationConfigProvider has been removed.
-// Use the specific interfaces in config_interfaces.go instead:
-// - SubjectConfigProvider
-// - JiraConfigProvider
-// - BodyConfigProvider
-// - ConventionalConfigProvider
-// - SecurityConfigProvider
-// - SpellCheckConfigProvider
-// - RepositoryConfigProvider
-// - RuleConfigProvider

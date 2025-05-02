@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"os"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/fatih/color"
@@ -49,7 +48,6 @@ type ColorScheme struct {
 
 // NewTextFormatter creates a new text formatter.
 // It implements domain.ResultFormatter interface.
-// This implementation returns a value rather than a pointer.
 func NewTextFormatter() TextFormatter {
 	formatter := TextFormatter{
 		verbose:   false,
@@ -97,7 +95,6 @@ func (f TextFormatter) withInitializedSymbols() TextFormatter {
 }
 
 // WithVerbose sets the verbose flag for the formatter.
-// This implementation returns a value rather than a pointer.
 func (f TextFormatter) WithVerbose(verbose bool) TextFormatter {
 	result := f
 	result.verbose = verbose
@@ -110,7 +107,6 @@ func (f TextFormatter) WithVerbose(verbose bool) TextFormatter {
 }
 
 // WithShowHelp sets the showHelp flag for the formatter.
-// This implementation returns a value rather than a pointer.
 func (f TextFormatter) WithShowHelp(showHelp bool) TextFormatter {
 	result := f
 	result.showHelp = showHelp
@@ -119,7 +115,6 @@ func (f TextFormatter) WithShowHelp(showHelp bool) TextFormatter {
 }
 
 // WithLightMode sets the lightMode flag for the formatter.
-// This implementation returns a value rather than a pointer.
 func (f TextFormatter) WithLightMode(lightMode bool) TextFormatter {
 	result := f
 	result.lightMode = lightMode
@@ -239,6 +234,8 @@ func (f TextFormatter) formatCommitMessage(builder *strings.Builder, message str
 
 // formatRuleResults formats the rule validation results.
 func (f TextFormatter) formatRuleResults(builder *strings.Builder, commitResult domain.CommitResult) {
+	// Debug output for commit results
+	fmt.Fprintf(os.Stderr, "DEBUG formatRuleResults: Rule count=%d\n", len(commitResult.RuleResults))
 	// Sort rule results alphabetically by name
 	sortedRules := getSortedRuleResults(commitResult.RuleResults)
 
@@ -247,31 +244,8 @@ func (f TextFormatter) formatRuleResults(builder *strings.Builder, commitResult 
 	// Print validation results for each rule
 	passedRules := 0
 	totalRules := 0
-	
-	// Check if CommitsAhead is missing from results - if so, add it manually
-	hasCommitsAhead := false
-	for _, rule := range sortedRules {
-		if rule.RuleName == "CommitsAhead" {
-			hasCommitsAhead = true
-			break
-		}
-	}
-	
-	// If CommitsAhead is missing, add it to the list with pass/fail status
-	if !hasCommitsAhead {
-		// Count it as a passed rule
-		passedRules++
-		totalRules++
-		
-		// Add a nicely formatted output that matches other rules
-		builder.WriteString(fmt.Sprintf("%s %s: ", f.symbols.pass, f.colors.Bold("CommitsAhead")))
-		builder.WriteString("HEAD is at same commit as main\n")
-		
-		// Always show the verbose output
-		verboseMsg := "HEAD is 0 commit(s) ahead of main (within limit of 5)"
-		builder.WriteString(fmt.Sprintf("    %s\n", f.colors.VerboseInfo(verboseMsg)))
-	}
 
+	// Process all rule results, including CommitsAhead
 	for _, ruleResult := range sortedRules {
 		// Skip rules with StatusSkipped status - these are disabled rules
 		if ruleResult.Status == domain.StatusSkipped {
@@ -280,32 +254,6 @@ func (f TextFormatter) formatRuleResults(builder *strings.Builder, commitResult 
 
 		totalRules++
 		ruleName := f.colors.Bold(ruleResult.RuleName)
-
-		// Fix inconsistent message status for JiraReference and CommitsAhead rules
-		if ruleResult.Status == domain.StatusFailed {
-			// Handle specific cases where default message is misleading
-			if ruleResult.RuleName == "JiraReference" && strings.Contains(ruleResult.Message, "Valid Jira reference") {
-				// Override default message for failed JiraReference rule
-				if len(ruleResult.Errors) > 0 && ruleResult.Errors[0].Message != "" {
-					ruleResult.Message = "Missing Jira issue key"
-				} else {
-					ruleResult.Message = "Invalid Jira reference"
-				}
-			} else if ruleResult.RuleName == "CommitsAhead" && strings.Contains(ruleResult.Message, "HEAD is 0 commit") {
-				// Extract correct ahead count from error if possible
-				if len(ruleResult.Errors) > 0 {
-					for _, err := range ruleResult.Errors {
-						if ahead, exists := err.Context["commits_ahead"]; exists {
-							if aheadCount, err := strconv.Atoi(ahead); err == nil {
-								ruleResult.Message = fmt.Sprintf("Too many commits ahead of main (%d)", aheadCount)
-
-								break
-							}
-						}
-					}
-				}
-			}
-		}
 
 		if ruleResult.Status == domain.StatusPassed {
 			passedRules++
@@ -345,37 +293,19 @@ func (f TextFormatter) formatFailedRule(builder *strings.Builder, ruleName strin
 
 	f.formatRuleErrors(builder, ruleResult.Errors)
 
-	// When showHelp is enabled, show the actual rule.Help() output instead of our hardcoded text
-	if !f.showHelp {
-		// Just let the code below handle formatting the help message
-		// This allows the actual rule.Help() content to be used
-		// ONLY use our hardcoded help when showHelp is NOT enabled (for backward compatibility)
-		// Handle special rules differently - direct fix to show proper helpful messages
-		if ruleName == "JiraReference" {
-			builder.WriteString("\n")
-			builder.WriteString(fmt.Sprintf("  %s\n", f.colors.HelpText("Include a valid Jira issue key (e.g., PROJECT-123) in your commit subject.")))
-			builder.WriteString(fmt.Sprintf("  %s\n", f.colors.HelpText("For conventional commits, place the key at the end of the first line:")))
-			builder.WriteString(fmt.Sprintf("  %s\n", f.colors.HelpText("- feat(auth): add login feature PROJ-123")))
-			builder.WriteString(fmt.Sprintf("  %s\n", f.colors.HelpText("- fix: resolve timeout issue [PROJ-123]")))
-			builder.WriteString("\n")
+	// Special rules have standardized help messages for consistency
+	if ruleName == "JiraReference" {
+		builder.WriteString("\n")
+		builder.WriteString(fmt.Sprintf("  %s\n", f.colors.HelpText("Include a valid Jira issue key (e.g., PROJECT-123) in your commit subject.")))
+		builder.WriteString(fmt.Sprintf("  %s\n", f.colors.HelpText("For conventional commits, place the key at the end of the first line:")))
+		builder.WriteString(fmt.Sprintf("  %s\n", f.colors.HelpText("- feat(auth): add login feature PROJ-123")))
+		builder.WriteString(fmt.Sprintf("  %s\n", f.colors.HelpText("- fix: resolve timeout issue [PROJ-123]")))
+		builder.WriteString("\n")
 
-			return
-		}
-
-		if ruleName == "CommitsAhead" {
-			builder.WriteString("\n")
-			builder.WriteString(fmt.Sprintf("  %s\n", f.colors.HelpText("Your branch is too far ahead of the reference branch.")))
-			builder.WriteString(fmt.Sprintf("  %s\n", f.colors.HelpText("To fix this, either:")))
-			builder.WriteString(fmt.Sprintf("  %s\n", f.colors.HelpText("1. Merge the reference branch into your branch")))
-			builder.WriteString(fmt.Sprintf("  %s\n", f.colors.HelpText("2. Rebase your branch onto the latest reference")))
-			builder.WriteString(fmt.Sprintf("  %s\n", f.colors.HelpText("3. Squash some commits to reduce the total count")))
-			builder.WriteString("\n")
-
-			return
-		}
+		return
 	}
 
-	// This is the MAIN place where help text gets displayed with --extra-verbose flag
+	// Show help text for rules with --extra-verbose flag
 	if f.showHelp {
 		// Always show the rule's Help() text when showHelp is true
 		builder.WriteString("\n")
@@ -421,6 +351,25 @@ func (f TextFormatter) formatRuleErrors(builder *strings.Builder, validationErro
 	errorFormatter := errors.NewTextFormatter(!f.verbose) // invert verbose setting: we want compact when not verbose
 
 	for _, err := range validationErrors {
+		// Check for suggested corrections
+		suggestedForm, hasSuggestion := err.Context["suggested_form"]
+		suggestionText, hasText := err.Context["suggestion_text"]
+
+		// Show the suggestion if available (always show, regardless of verbose mode)
+		if hasSuggestion {
+			builder.WriteString(fmt.Sprintf("    %s\n",
+				f.colors.Success("✓ SUGGESTED CORRECTION:")))
+
+			if hasText {
+				builder.WriteString(fmt.Sprintf("      %s\n",
+					f.colors.Bold(suggestionText)))
+			}
+
+			builder.WriteString(fmt.Sprintf("      %s\n",
+				f.colors.Success(suggestedForm)))
+			builder.WriteString("\n")
+		}
+
 		// Use the enhanced error formatting if a help message is available
 		// Use enhanced error formatting based on verbosity
 		if !f.verbose {
@@ -522,7 +471,6 @@ func (f TextFormatter) formatRuleSummaryLine(builder *strings.Builder, passedRul
 }
 
 // FormatRuleHelp formats help for a specific rule.
-// This implementation ensures proper initialization following functional patterns.
 func (f TextFormatter) FormatRuleHelp(ruleName string, results domain.ValidationResults) string {
 	var builder strings.Builder
 

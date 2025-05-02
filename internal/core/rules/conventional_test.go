@@ -4,6 +4,7 @@
 package rules
 
 import (
+	"context"
 	"testing"
 
 	"github.com/itiquette/gommitlint/internal/config"
@@ -135,8 +136,9 @@ func TestConventionalCommitRule_Validate(t *testing.T) {
 			// Create rule with options
 			rule := NewConventionalCommitRule(testCase.options...)
 
+			ctx := context.Background()
 			// Validate commit
-			errors := rule.Validate(testCase.commit)
+			errors := rule.Validate(ctx, testCase.commit)
 
 			if testCase.wantErrors {
 				require.NotEmpty(t, errors, "Expected validation errors but got none")
@@ -212,12 +214,14 @@ func TestConventionalCommitRuleWithConfig(t *testing.T) {
 	}
 
 	for _, testCase := range tests {
+		ctx := context.Background()
+
 		t.Run(testCase.name, func(t *testing.T) {
 			// Create rule with unified config
 			rule := NewConventionalCommitRuleWithConfig(testCase.config)
 
 			// Validate commit
-			errors := rule.Validate(testCase.commit)
+			errors := rule.Validate(ctx, testCase.commit)
 
 			if testCase.wantErrors {
 				require.NotEmpty(t, errors, "Expected validation errors but got none")

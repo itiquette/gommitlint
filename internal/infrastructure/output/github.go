@@ -22,7 +22,6 @@ var _ domain.ResultFormatter = GitHubActionsFormatter{}
 
 // NewGitHubFormatter creates a new GitHub Actions formatter.
 // It implements domain.ResultFormatter interface.
-// This implementation returns a value rather than a pointer.
 func NewGitHubFormatter() GitHubActionsFormatter {
 	return GitHubActionsFormatter{
 		verbose:  false,
@@ -31,7 +30,6 @@ func NewGitHubFormatter() GitHubActionsFormatter {
 }
 
 // WithVerbose sets the verbose flag for the formatter.
-// This implementation returns a value rather than a pointer.
 func (f GitHubActionsFormatter) WithVerbose(verbose bool) GitHubActionsFormatter {
 	result := f
 	result.verbose = verbose
@@ -40,7 +38,6 @@ func (f GitHubActionsFormatter) WithVerbose(verbose bool) GitHubActionsFormatter
 }
 
 // WithShowHelp sets the showHelp flag for the formatter.
-// This implementation returns a value rather than a pointer.
 func (f GitHubActionsFormatter) WithShowHelp(showHelp bool) GitHubActionsFormatter {
 	result := f
 	result.showHelp = showHelp
@@ -127,7 +124,6 @@ func (f GitHubActionsFormatter) Format(results domain.ValidationResults) string 
 }
 
 // FormatRuleHelp formats help text for a specific rule.
-// This implementation correctly uses a value instead of a pointer for the results parameter.
 func (f GitHubActionsFormatter) FormatRuleHelp(ruleName string, results domain.ValidationResults) string {
 	var builder strings.Builder
 

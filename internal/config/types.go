@@ -4,10 +4,6 @@
 
 package config
 
-import (
-	stderrors "errors"
-)
-
 // GommitlintConfig is the root configuration structure for the application.
 // This preserves the exact original YAML format while using value semantics.
 type GommitlintConfig struct {
@@ -203,26 +199,7 @@ func NewConfig() Config {
 
 // Validate returns validation errors for the configuration.
 func (c Config) Validate() []error {
-	var errors []error
-
-	// Validate subject configuration
-	if c.Subject.MaxLength < 0 {
-		errors = append(errors, stderrors.New("subject max length cannot be negative"))
-	}
-
-	// Validate conventional configuration
-	if c.Conventional.MaxDescriptionLength < 0 {
-		errors = append(errors, stderrors.New("conventional max description length cannot be negative"))
-	}
-
-	// Validate repository configuration
-	if c.Repository.MaxCommitsAhead < 0 {
-		errors = append(errors, stderrors.New("maximum commits ahead cannot be negative"))
-	}
-
-	// More validation rules can be added here
-
-	return errors
+	return ValidateConfig(c)
 }
 
 // IsValid returns whether the configuration is valid.

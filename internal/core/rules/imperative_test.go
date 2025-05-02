@@ -6,6 +6,7 @@
 package rules_test
 
 import (
+	"context"
 	"regexp"
 	"strings"
 	"testing"
@@ -174,8 +175,9 @@ func TestImperativeVerbRule(t *testing.T) {
 
 			rule := rules.NewImperativeVerbRule(true, options...)
 
+			ctx := context.Background()
 			// Validate and get errors
-			errors := rule.Validate(commitInfo)
+			errors := rule.Validate(ctx, commitInfo)
 
 			// Special handling for functional style: Create validatedRule that we would get
 			// after validation in a truly functional approach
@@ -234,6 +236,8 @@ func TestImperativeVerbRule(t *testing.T) {
 }
 
 func TestImperativeVerbRuleOptions(t *testing.T) {
+	ctx := context.Background()
+
 	t.Run("Custom non-imperative starters", func(t *testing.T) {
 		// Create a custom rule with non-imperative starters
 		customWords := map[string]bool{"commit": true}
@@ -242,7 +246,7 @@ func TestImperativeVerbRuleOptions(t *testing.T) {
 
 		// Test with a message that would normally be valid
 		commit := domain.CommitInfo{Subject: "Commit changes"}
-		errors := rule.Validate(commit)
+		errors := rule.Validate(ctx, commit)
 
 		// Should be marked as non-verb due to our custom setting
 		require.NotEmpty(t, errors, "Should reject custom non-verb")
@@ -257,14 +261,14 @@ func TestImperativeVerbRuleOptions(t *testing.T) {
 
 		// Test with custom word
 		commit := domain.CommitInfo{Subject: "Crated package"}
-		errors := rule.Validate(commit)
+		errors := rule.Validate(ctx, commit)
 
 		// Should accept our custom word
 		require.Empty(t, errors, "Should accept custom ED form")
 
 		// Test default behavior for comparison
 		defaultRule := rules.NewImperativeVerbRule(true)
-		defaultErrors := defaultRule.Validate(commit)
+		defaultErrors := defaultRule.Validate(ctx, commit) //nolint
 		require.NotEmpty(t, defaultErrors, "Default should reject 'crated'")
 	})
 
@@ -277,12 +281,13 @@ func TestImperativeVerbRuleOptions(t *testing.T) {
 
 		// Test with valid conventional commit using a word that's custom allowed
 		commit := domain.CommitInfo{Subject: "feat(ui): Canvas button"}
-		errors := rule.Validate(commit)
+		errors := rule.Validate(ctx, commit)
 		require.Empty(t, errors, "Should pass with multiple options")
 
+		ctx := context.Background()
 		// Test with a word we've marked as non-verb
 		badCommit := domain.CommitInfo{Subject: "feat(api): Execute function"}
-		badErrors := rule.Validate(badCommit)
+		badErrors := rule.Validate(ctx, badCommit) //nolint
 		require.NotEmpty(t, badErrors, "Should fail with custom non-verb")
 		require.Equal(t, string(appErrors.ErrNonVerb), badErrors[0].Code, "Should have correct error code")
 	})
@@ -303,10 +308,12 @@ func TestDifficultVerbCases(t *testing.T) {
 	}
 
 	for _, message := range validCases {
+		ctx := context.Background()
+
 		t.Run("Valid: "+message, func(t *testing.T) {
 			rule := rules.NewImperativeVerbRule(true)
 			commit := domain.CommitInfo{Subject: message}
-			errors := rule.Validate(commit)
+			errors := rule.Validate(ctx, commit)
 			require.Empty(t, errors, "Should accept valid imperative verb: "+message)
 		})
 	}
@@ -319,10 +326,12 @@ func TestDifficultVerbCases(t *testing.T) {
 	}
 
 	for _, message := range invalidCases {
+		ctx := context.Background()
+
 		t.Run("Invalid: "+message, func(t *testing.T) {
 			rule := rules.NewImperativeVerbRule(true)
 			commit := domain.CommitInfo{Subject: message}
-			errors := rule.Validate(commit)
+			errors := rule.Validate(ctx, commit)
 			require.NotEmpty(t, errors, "Should reject non-imperative form: "+message)
 		})
 	}
@@ -392,6 +401,7 @@ func TestImperativeVerbRuleWithConfig(t *testing.T) {
 				options = append(options, rules.WithImperativeConventionalCommit(true))
 			}
 
+			ctx := context.Background()
 			rule := rules.NewImperativeVerbRule(
 				unifiedConfig.SubjectRequireImperative(),
 				options...)
@@ -404,7 +414,7 @@ func TestImperativeVerbRuleWithConfig(t *testing.T) {
 			}
 
 			// Validate the commit
-			errors := rule.Validate(commit)
+			errors := rule.Validate(ctx, commit)
 
 			if testCase.expectErrors {
 				require.NotEmpty(t, errors, "Expected validation errors but got none")

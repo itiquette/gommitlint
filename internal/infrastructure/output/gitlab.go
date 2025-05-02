@@ -22,7 +22,6 @@ var _ domain.ResultFormatter = GitLabCIFormatter{}
 
 // NewGitLabFormatter creates a new GitLab CI formatter.
 // It implements domain.ResultFormatter interface.
-// This implementation returns a value rather than a pointer.
 func NewGitLabFormatter() GitLabCIFormatter {
 	return GitLabCIFormatter{
 		verbose:  false,
@@ -31,7 +30,6 @@ func NewGitLabFormatter() GitLabCIFormatter {
 }
 
 // WithVerbose sets the verbose flag for the formatter.
-// This implementation returns a value rather than a pointer.
 func (f GitLabCIFormatter) WithVerbose(verbose bool) GitLabCIFormatter {
 	result := f
 	result.verbose = verbose
@@ -40,7 +38,6 @@ func (f GitLabCIFormatter) WithVerbose(verbose bool) GitLabCIFormatter {
 }
 
 // WithShowHelp sets the showHelp flag for the formatter.
-// This implementation returns a value rather than a pointer.
 func (f GitLabCIFormatter) WithShowHelp(showHelp bool) GitLabCIFormatter {
 	result := f
 	result.showHelp = showHelp
@@ -122,7 +119,6 @@ func (f GitLabCIFormatter) Format(results domain.ValidationResults) string {
 }
 
 // FormatRuleHelp formats help text for a specific rule.
-// This implementation correctly uses a value instead of a pointer for the results parameter.
 func (f GitLabCIFormatter) FormatRuleHelp(ruleName string, results domain.ValidationResults) string {
 	var builder strings.Builder
 

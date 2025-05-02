@@ -10,7 +10,7 @@ import (
 )
 
 // ValidationConfigAdapter adapts the Config to implement all the domain interfaces.
-// This is a bridge to ensure backward compatibility during the migration.
+// This enables decoupling between the configuration system and the domain layer.
 type ValidationConfigAdapter struct {
 	config Config
 }

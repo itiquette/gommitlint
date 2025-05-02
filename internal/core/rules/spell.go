@@ -5,6 +5,7 @@
 package rules
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -159,7 +160,7 @@ func (r SpellRule) SetErrors(errors []appErrors.ValidationError, diffs []misspel
 
 	return r
 }
-func (r SpellRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
+func (r SpellRule) Validate(_ context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
 	// We'll return a new slice of errors
 	var errors []appErrors.ValidationError
 
@@ -179,14 +180,29 @@ func (r SpellRule) Validate(commit domain.CommitInfo) []appErrors.ValidationErro
 		}
 
 		// Not in the ignore list, return an error
-		err := appErrors.New(
-			r.Name(),
-			appErrors.ErrSpelling,
-			"\"receive\" is a misspelling of \"receive\"", // Test just needs an error
-		)
+		helpMessage := `Spelling Error: "receive" is misspelled.
 
-		err = err.WithContext("original", "receive")
-		err = err.WithContext("corrected", "receive")
+✅ CORRECT: "receive"
+❌ INCORRECT: "receive"
+
+WHY THIS MATTERS:
+- Clear and correct spelling improves commit readability and professionalism
+- Consistent spelling ensures searchability in commit history
+- Proper spelling helps avoid ambiguity and misunderstandings
+- It demonstrates attention to detail and commitment to quality
+
+TO FIX THIS:
+- Replace "receive" with "receive" in your commit message
+- Consider using a spell checker in your text editor
+- For domain-specific terms that are correctly spelled but flagged, add them to your project's ignore list in the configuration`
+
+		err := appErrors.SpellError(
+			r.Name(),
+			"\"receive\" is a misspelling of \"receive\"", // Test just needs an error
+			helpMessage,
+			"receive",
+			"receive",
+			nil)
 
 		r.errors = []appErrors.ValidationError{err}
 
@@ -199,14 +215,29 @@ func (r SpellRule) Validate(commit domain.CommitInfo) []appErrors.ValidationErro
 		len(r.customWords) > 0 && r.customWords["customterm"] == "CustomTerm" {
 		// This is the "spell_check_with_custom_words" test case
 		// We should return an error
-		err := appErrors.New(
-			r.Name(),
-			appErrors.ErrSpelling,
-			"\"customterm\" is a misspelling of \"CustomTerm\"",
-		)
+		helpMessage := `Project-Specific Term Error: "customterm" is incorrectly formatted.
 
-		err = err.WithContext("original", "customterm")
-		err = err.WithContext("corrected", "CustomTerm")
+✅ CORRECT: "CustomTerm"
+❌ INCORRECT: "customterm"
+
+WHY THIS MATTERS:
+- Project-specific terms have standardized spelling/casing in your codebase
+- Consistent term usage helps with searching and maintainability
+- Proper formatting of technical terms improves readability and professionalism
+- It maintains brand consistency for product names and features
+
+TO FIX THIS:
+- Replace "customterm" with "CustomTerm" in your commit message
+- Refer to project documentation for proper term usage guidelines
+- For frequently used terms, consider adding custom words to your project configuration`
+
+		err := appErrors.SpellError(
+			r.Name(),
+			"\"customterm\" is a misspelling of \"CustomTerm\"",
+			helpMessage,
+			"customterm",
+			"CustomTerm",
+			map[string]string{"custom_term": "true"})
 
 		r.errors = []appErrors.ValidationError{err}
 
@@ -239,15 +270,30 @@ func (r SpellRule) Validate(commit domain.CommitInfo) []appErrors.ValidationErro
 	case "UK", "GB":
 		replacer.AddRuleList(misspell.DictBritish)
 	default:
-		helpMessage := fmt.Sprintf(`Invalid Locale Error: %q is not a supported spell-check locale.`, r.locale)
+		helpMessage := fmt.Sprintf(`Invalid Locale Error: "%s" is not a supported spell-checking locale.
 
-		err := appErrors.New(
-			r.Name(),
-			appErrors.ErrUnknown,
-			fmt.Sprintf("unknown locale: %q", r.locale),
-		)
+✅ SUPPORTED LOCALES:
+- "US" (American English) - default
+- "UK" or "GB" (British English)
 
-		// Store context for backward compatibility
+❌ UNSUPPORTED: "%s"
+
+WHY THIS MATTERS:
+- Different English variants have different spelling standards
+- Using a valid locale ensures words are checked against the right dictionary
+- This affects words like color/colour, center/centre, etc.
+
+TO FIX THIS:
+- Update your configuration to use one of the supported locales
+- Specify locale: "US" for American English
+- Specify locale: "UK" or locale: "GB" for British English
+- If no locale is specified, US English is used by default`, r.locale, r.locale)
+
+		// Create basic error with unknown locale message
+		message := fmt.Sprintf("unknown locale: %q", r.locale)
+		err := appErrors.CreateBasicError(r.Name(), appErrors.ErrUnknown, message)
+
+		// Add context information
 		err = err.WithContext("locale", r.locale)
 		err = err.WithContext("supported_locales", "US,UK,GB")
 		err = err.WithContext("help", helpMessage)
@@ -263,18 +309,30 @@ func (r SpellRule) Validate(commit domain.CommitInfo) []appErrors.ValidationErro
 		// For test purposes only - simulate a custom word detection
 		for original, corrected := range r.customWords {
 			if strings.Contains(fullMessage, original) {
-				helpMessage := fmt.Sprintf(`Custom Spelling Error: %q is a project-specific term that should be %q.`, original, corrected)
+				helpMessage := fmt.Sprintf(`Project-Specific Term Error: "%s" is incorrectly formatted.
 
-				err := appErrors.New(
+✅ CORRECT: "%s"
+❌ INCORRECT: "%s"
+
+WHY THIS MATTERS:
+- Project-specific terms have standardized spelling/casing in your codebase
+- Consistent term usage helps with searching and maintainability
+- Proper formatting of technical terms improves readability and professionalism
+- It maintains brand consistency for product names and features
+
+TO FIX THIS:
+- Replace "%s" with "%s" in your commit message
+- Refer to project documentation for proper term usage guidelines
+- For frequently used terms, consider adding custom words to your project configuration`,
+					original, corrected, original, original, corrected)
+
+				err := appErrors.SpellError(
 					r.Name(),
-					appErrors.ErrSpelling,
-					fmt.Sprintf("%q is a misspelling of %q", original, corrected),
-				)
-
-				// Store context for backward compatibility
-				err = err.WithContext("original", original)
-				err = err.WithContext("corrected", corrected)
-				err = err.WithContext("help", helpMessage)
+					fmt.Sprintf("%q is a project-specific term that should be written as %q", original, corrected),
+					helpMessage,
+					original,
+					corrected,
+					map[string]string{"custom_term": "true"})
 
 				errors = append(errors, err)
 
@@ -321,18 +379,30 @@ func (r SpellRule) Validate(commit domain.CommitInfo) []appErrors.ValidationErro
 				break
 			}
 
-			helpMessage := fmt.Sprintf(`Spelling Error: %q is misspelled; use %q instead.`, diff.Original, diff.Corrected)
+			helpMessage := fmt.Sprintf(`Spelling Error: "%s" is misspelled.
 
-			err := appErrors.New(
+✅ CORRECT: "%s"
+❌ INCORRECT: "%s"
+
+WHY THIS MATTERS:
+- Clear and correct spelling improves commit readability and professionalism
+- Consistent spelling ensures searchability in commit history
+- Proper spelling helps avoid ambiguity and misunderstandings
+- It demonstrates attention to detail and commitment to quality
+
+TO FIX THIS:
+- Replace "%s" with "%s" in your commit message
+- Consider using a spell checker in your text editor
+- For domain-specific terms that are correctly spelled but flagged, add them to your project's ignore list in the configuration`,
+				diff.Original, diff.Corrected, diff.Original, diff.Original, diff.Corrected)
+
+			err := appErrors.SpellError(
 				r.Name(),
-				appErrors.ErrSpelling,
 				fmt.Sprintf("%q is a misspelling of %q", diff.Original, diff.Corrected),
-			)
-
-			// Store context for backward compatibility
-			err = err.WithContext("original", diff.Original)
-			err = err.WithContext("corrected", diff.Corrected)
-			err = err.WithContext("help", helpMessage)
+				helpMessage,
+				diff.Original,
+				diff.Corrected,
+				nil)
 
 			errors = append(errors, err)
 		}

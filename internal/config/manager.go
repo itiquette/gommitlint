@@ -230,7 +230,6 @@ func (m *Manager) SetConfig(config Config) {
 }
 
 // GetValidationConfig returns the current configuration for validation.
-// This is a compatibility method for the application/validate package.
 func (m *Manager) GetValidationConfig() Config {
 	return m.config
 }

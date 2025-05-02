@@ -4,6 +4,9 @@
 package rules
 
 import (
+	"context"
+	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/domain"
@@ -69,7 +72,7 @@ func NewCommitBodyRule(options ...CommitBodyOption) CommitBodyRule {
 
 // Validate validates the commit body.
 // It implements the domain.Rule interface.
-func (r CommitBodyRule) Validate(commit domain.CommitInfo) []appErrors.ValidationError {
+func (r CommitBodyRule) Validate(_ context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
 	// Create a new rule with validation results
 	updatedRule := r.validateCommit(commit)
 
@@ -92,10 +95,42 @@ func (r CommitBodyRule) validateCommit(commit domain.CommitInfo) CommitBodyRule 
 			// Check if the second line is empty (if there's a second line)
 			if len(lines) >= 2 && strings.TrimSpace(lines[1]) != "" {
 				// Missing empty line between subject and body
-				result.baseRule = result.baseRule.WithErrorWithCode(
-					appErrors.ErrInvalidBody,
+				helpText := `Missing Empty Line Error: No blank line between subject and body.
+
+Your commit message doesn't have an empty line separating the subject and body.
+
+✅ CORRECT FORMAT:
+This is the subject line
+
+This is the body text that should be separated from the subject
+with a blank line. This makes the commit message more readable
+and allows tools to properly parse the subject line.
+
+❌ INCORRECT FORMAT:
+This is the subject line
+This is the body without a blank line after the subject.
+
+WHY THIS MATTERS:
+- The empty line helps separate the summary from the detailed description
+- Many Git tools rely on this format to display commit messages properly
+- It improves readability in commit logs and history
+
+NEXT STEPS:
+1. Edit your commit message to add a blank line after the subject
+2. Use 'git commit --amend' to modify your most recent commit`
+
+				contextMap := map[string]string{
+					"message": commit.Message,
+				}
+
+				err := appErrors.BodyError(
+					result.baseRule.Name(),
 					"commit message is missing empty line between subject and body",
+					helpText,
+					contextMap,
 				)
+
+				result.baseRule = result.baseRule.WithError(err)
 			}
 		}
 	}
@@ -115,10 +150,46 @@ func (r CommitBodyRule) validateCommit(commit domain.CommitInfo) CommitBodyRule 
 		}
 
 		// Non-merge commits must have a body if required
-		result.baseRule = result.baseRule.WithErrorWithCode(
-			appErrors.ErrInvalidBody,
+		helpText := `Missing Body Error: Commit message body is required.
+
+Your commit is missing a descriptive body section.
+
+✅ CORRECT FORMAT:
+This is the subject line
+
+This is the body with a detailed explanation of the changes.
+It provides context about what and why the changes were made.
+
+❌ INCORRECT FORMAT:
+This is the subject line with no body
+
+WHY THIS MATTERS:
+- A descriptive body provides context and explains the reasoning behind changes
+- It helps reviewers and future contributors understand your changes
+- It documents important decisions for future reference
+
+NEXT STEPS:
+1. Edit your commit to add a detailed body explaining:
+   - Why the change was needed
+   - What approach you took
+   - Any important implementation details
+   - Any limitations or follow-up work needed
+   
+2. Use 'git commit --amend' to modify your most recent commit`
+
+		contextMap := map[string]string{
+			"commit_sha": commit.Hash,
+			"subject":    commit.Subject,
+		}
+
+		err := appErrors.BodyError(
+			result.baseRule.Name(),
 			"commit message body is required",
+			helpText,
+			contextMap,
 		)
+
+		result.baseRule = result.baseRule.WithError(err)
 
 		return result
 	}
@@ -130,20 +201,104 @@ func (r CommitBodyRule) validateCommit(commit domain.CommitInfo) CommitBodyRule 
 
 	// Check if the body is just sign-off lines and whether that's allowed
 	if IsSignOffOnly(body) && !r.allowSignOffOnly {
-		result.baseRule = result.baseRule.WithErrorWithCode(
-			appErrors.ErrInvalidBody,
+		helpText := `Sign-off Only Error: Commit message body contains only sign-off information.
+
+Your commit body only contains sign-off lines without any substantive content.
+
+✅ CORRECT FORMAT:
+This is the subject line
+
+This is the body with a detailed explanation of the changes.
+It provides context and reasoning for the changes.
+
+Signed-off-by: Your Name <your.email@example.com>
+
+❌ INCORRECT FORMAT:
+This is the subject line
+
+Signed-off-by: Your Name <your.email@example.com>
+
+WHY THIS MATTERS:
+- Sign-off lines alone don't explain the purpose or impact of changes
+- A descriptive body provides context and reasoning for reviewers
+- Future maintainers need to understand why changes were made
+
+NEXT STEPS:
+1. Edit your commit to add meaningful content to the body:
+   - Explain the purpose of the changes
+   - Describe your approach or implementation details
+   - Note any relevant context or considerations
+   
+2. Keep the sign-off line(s) at the end of the body
+3. Use 'git commit --amend' to update your commit message`
+
+		contextMap := map[string]string{
+			"commit_sha": commit.Hash,
+			"subject":    commit.Subject,
+			"body":       body,
+		}
+
+		err := appErrors.BodyError(
+			result.baseRule.Name(),
 			"commit message body contains only sign-off information, substantive content is required",
+			helpText,
+			contextMap,
 		)
+
+		result.baseRule = result.baseRule.WithError(err)
 	}
 
 	// Check minimum lines
 	lines := CountBodyLines(body)
 	if lines < r.minimumLines {
-		result.baseRule = result.baseRule.WithErrorWithFormatf(
-			appErrors.ErrInvalidBody,
-			"commit message body has insufficient lines (has %d, needs %d)",
-			lines, r.minimumLines,
+		helpText := `Insufficient Body Content Error: Commit message body is too short.
+
+Your commit body doesn't have enough content lines to meet the minimum requirement.
+
+✅ CORRECT FORMAT:
+This is the subject line
+
+This is a body with sufficient content.
+It should contain enough information to explain the changes.
+Including the context, approach, and any important details.
+
+❌ INCORRECT FORMAT:
+This is the subject line
+
+Too short.
+
+WHY THIS MATTERS:
+- A thorough commit message helps others understand your changes
+- Short messages often lack necessary context and details
+- Proper documentation in commits reduces the need for external explanations
+
+NEXT STEPS:
+1. Edit your commit message to expand the body:
+   - Include more detail about what changes were made
+   - Explain why the changes were necessary
+   - Describe the approach or implementation details
+   - Note any limitations or future work
+   
+2. Aim for at least %d substantive lines in your commit message body
+3. Use 'git commit --amend' to update your commit message`
+
+		contextMap := map[string]string{
+			"commit_sha":    commit.Hash,
+			"subject":       commit.Subject,
+			"body":          body,
+			"actual_lines":  strconv.Itoa(lines),
+			"minimum_lines": strconv.Itoa(r.minimumLines),
+		}
+
+		err := appErrors.BodyError(
+			result.baseRule.Name(),
+			fmt.Sprintf("commit message body has insufficient lines (has %d, needs %d)",
+				lines, r.minimumLines),
+			fmt.Sprintf(helpText, r.minimumLines),
+			contextMap,
 		)
+
+		result.baseRule = result.baseRule.WithError(err)
 	}
 
 	return result

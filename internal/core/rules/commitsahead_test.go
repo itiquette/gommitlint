@@ -162,7 +162,7 @@ func TestCommitsAheadHelpMessage(t *testing.T) {
 		)
 
 		// Create a custom error
-		err := appErrors.New(
+		err := appErrors.CreateBasicError(
 			"CommitsAhead",
 			appErrors.ErrTooManyCommits,
 			"HEAD is 10 commits ahead of main (maximum allowed: 5)",
@@ -227,7 +227,7 @@ func TestCommitsAheadResultMessage(t *testing.T) {
 
 				// Set up errors if needed
 				if testCase.hasErrors {
-					err := appErrors.New(
+					err := appErrors.CreateBasicError(
 						"CommitsAhead",
 						testCase.errorCode,
 						testCase.errorMessage,
@@ -373,8 +373,9 @@ func TestCommitsAheadRuleWithConfig(t *testing.T) {
 				Body:    "",
 			}
 
+			ctx := context.Background()
 			// Validate commit
-			errors := rule.Validate(commit)
+			errors := rule.Validate(ctx, commit)
 
 			if testCase.wantErrors {
 				require.NotEmpty(t, errors, "Expected validation errors but got none")
