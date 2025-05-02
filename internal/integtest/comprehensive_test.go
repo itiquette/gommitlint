@@ -111,7 +111,7 @@ func TestSimpleValidation(t *testing.T) {
 			configObj = configObj.WithEnabledRules([]string{testCase.ruleToCheck})
 
 			// Create a new validation service with this modified config
-			validationService := validate.CreateValidationServiceWithDependencies(
+			validationService := validate.CreateValidationService(
 				configObj,
 				commitService,
 				infoProvider,
@@ -179,7 +179,7 @@ gommitlint:
 	analyzer := repoFactory.CreateCommitAnalyzer()
 
 	// Create validation service with dependencies
-	validationService := validate.CreateValidationServiceWithDependencies(
+	validationService := validate.CreateValidationService(
 		configManager.GetValidationConfig(),
 		commitService,
 		infoProvider,
@@ -195,7 +195,7 @@ gommitlint:
 	configObj = configObj.WithEnabledRules([]string{})
 
 	// Create a new validation service with this modified config
-	validationService = validate.CreateValidationServiceWithDependencies(
+	validationService = validate.CreateValidationService(
 		configObj,
 		commitService,
 		infoProvider,
@@ -213,7 +213,7 @@ gommitlint:
 	configObj = configObj.WithEnabledRules([]string{standardRuleName})
 
 	// Create a new validation service with this modified config
-	validationService = validate.CreateValidationServiceWithDependencies(
+	validationService = validate.CreateValidationService(
 		configObj,
 		commitService,
 		infoProvider,

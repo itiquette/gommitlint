@@ -127,14 +127,14 @@ func TestSubjectSuffixRule(t *testing.T) {
 
 				// Test pure function implementation explicitly
 				_, updatedRule := rules.ValidateSubjectSuffixWithState(rule, commit)
-				require.Equal(t, "Valid subject suffix", updatedRule.Result(), "Result message should indicate valid suffix")
+				require.Equal(t, "Valid subject suffix", updatedRule.Result(errors), "Result message should indicate valid suffix")
 				require.False(t, updatedRule.HasErrors(), "HasErrors should return false for valid subjects")
 			} else {
 				require.NotEmpty(t, errors, "Expected validation errors")
 
 				// Test pure function implementation explicitly
 				_, updatedRule := rules.ValidateSubjectSuffixWithState(rule, commit)
-				require.Equal(t, "Invalid subject suffix", updatedRule.Result(), "Result message should indicate invalid suffix")
+				require.Equal(t, "Invalid subject suffix", updatedRule.Result(errors), "Result message should indicate invalid suffix")
 				require.True(t, updatedRule.HasErrors(), "HasErrors should return true for invalid subjects")
 
 				// Access validation error directly
@@ -157,14 +157,14 @@ func TestSubjectSuffixRule(t *testing.T) {
 			_, ruleWithState := rules.ValidateSubjectSuffixWithState(rule, commit)
 
 			// Check verbose result
-			require.NotEmpty(t, ruleWithState.VerboseResult(), "VerboseResult should not be empty")
+			require.NotEmpty(t, ruleWithState.VerboseResult(errors), "VerboseResult should not be empty")
 
 			// Check help message
-			require.NotEmpty(t, ruleWithState.Help(), "Help should not be empty")
+			require.NotEmpty(t, ruleWithState.Help(errors), "Help should not be empty")
 
 			// Verify help text is appropriate for the error
 			if !testCase.expectedValid {
-				helpText := ruleWithState.Help()
+				helpText := ruleWithState.Help(errors)
 
 				switch testCase.expectedCode {
 				case string(appErrors.ErrMissingSubject):
@@ -175,7 +175,7 @@ func TestSubjectSuffixRule(t *testing.T) {
 					require.Contains(t, helpText, "valid UTF-8")
 				}
 			} else {
-				require.Contains(t, ruleWithState.Help(), "No errors to fix")
+				require.Contains(t, ruleWithState.Help(errors), "No errors to fix")
 			}
 		})
 	}

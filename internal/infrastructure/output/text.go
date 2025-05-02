@@ -307,7 +307,7 @@ func (f TextFormatter) formatFailedRule(builder *strings.Builder, ruleName strin
 
 	// Show help text for rules with --extra-verbose flag
 	if f.showHelp {
-		// Always show the rule's Help() text when showHelp is true
+		// Always show the rule's Help(errors []errors.ValidationError) text when showHelp is true
 		builder.WriteString("\n")
 
 		// Always use the full HelpMessage content from the rule

@@ -648,7 +648,7 @@ func resultImpl(rule SubjectCaseRule) string {
 }
 
 // Result returns a concise result message.
-func (r SubjectCaseRule) Result() string {
+func (r SubjectCaseRule) Result(errors []appErrors.ValidationError) string {
 	result := resultImpl(r)
 	// If there are errors, make sure we reflect the case choice in the message
 	if r.HasErrors() && r.caseChoice == "lower" {
@@ -741,7 +741,7 @@ func verboseResultImpl(rule SubjectCaseRule) string {
 }
 
 // VerboseResult returns a more detailed explanation for verbose mode.
-func (r SubjectCaseRule) VerboseResult() string {
+func (r SubjectCaseRule) VerboseResult(errors []appErrors.ValidationError) string {
 	return verboseResultImpl(r)
 }
 
@@ -806,7 +806,7 @@ func helpImpl(rule SubjectCaseRule) string {
 }
 
 // Help returns a description of how to fix the rule violation.
-func (r SubjectCaseRule) Help() string {
+func (r SubjectCaseRule) Help(errors []appErrors.ValidationError) string {
 	return helpImpl(r)
 }
 

@@ -61,7 +61,7 @@ func (r MockRule) Validate(_ context.Context, commit domain.CommitInfo) []errors
 	return r.errors
 }
 
-func (r MockRule) Result() string {
+func (r MockRule) Result(errors []errors.ValidationError) string {
 	if r.shouldPass {
 		return "Passed"
 	}
@@ -69,7 +69,7 @@ func (r MockRule) Result() string {
 	return "Failed"
 }
 
-func (r MockRule) VerboseResult() string {
+func (r MockRule) VerboseResult(errors []errors.ValidationError) string {
 	if r.shouldPass {
 		return "Mock rule passed"
 	}
@@ -77,7 +77,7 @@ func (r MockRule) VerboseResult() string {
 	return "Mock rule failed"
 }
 
-func (r MockRule) Help() string {
+func (r MockRule) Help(errors []errors.ValidationError) string {
 	return "This is a mock rule for testing"
 }
 
@@ -333,7 +333,7 @@ func (r *MockCommitsAheadRule) Validate(_ context.Context, _ domain.CommitInfo) 
 	return nil
 }
 
-func (r *MockCommitsAheadRule) Result() string {
+func (r *MockCommitsAheadRule) Result(errors []errors.ValidationError) string {
 	// This should only be called after validation
 	if r.ahead > r.maxAhead {
 		return fmt.Sprintf("HEAD is %d commits ahead of %s (exceeds limit of %d)",
@@ -345,17 +345,17 @@ func (r *MockCommitsAheadRule) Result() string {
 	return fmt.Sprintf("HEAD is %d commit(s) ahead of %s (within limit)", r.ahead, r.ref)
 }
 
-func (r *MockCommitsAheadRule) VerboseResult() string {
+func (r *MockCommitsAheadRule) VerboseResult(errors []errors.ValidationError) string {
 	if r.ahead > r.maxAhead {
 		return fmt.Sprintf(
 			"HEAD is currently %d commit(s) ahead of %s (maximum allowed: %d). Consider merging or rebasing with %s.",
 			r.ahead, r.ref, r.maxAhead, r.ref)
 	}
 
-	return "Verbose result: " + r.Result()
+	return "Verbose result: " + r.Result(errors)
 }
 
-func (r *MockCommitsAheadRule) Help() string {
+func (r *MockCommitsAheadRule) Help(errors []errors.ValidationError) string {
 	return "Mock help message"
 }
 

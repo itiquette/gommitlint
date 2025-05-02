@@ -13,10 +13,8 @@ import (
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/core/rules"
-	"github.com/itiquette/gommitlint/internal/defaults"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/errors"
-	"github.com/itiquette/gommitlint/internal/infrastructure/git"
 )
 
 // Note: Using domain package interfaces instead of a local interface definition
@@ -427,9 +425,6 @@ func (s ValidationService) ValidateMessageFile(ctx context.Context, filePath str
 
 // ValidateWithOptions validates commits according to the provided options.
 func (s ValidationService) ValidateWithOptions(ctx context.Context, opts ValidationOptions) (domain.ValidationResults, error) {
-	// Create validation results
-	results := domain.NewValidationResults()
-
 	// Validate commit message file
 	if opts.MessageFile != "" {
 		return s.ValidateMessageFile(ctx, opts.MessageFile)
@@ -439,13 +434,15 @@ func (s ValidationService) ValidateWithOptions(ctx context.Context, opts Validat
 	if opts.CommitHash != "" {
 		result, err := s.ValidateCommit(ctx, opts.CommitHash)
 		if err != nil {
-			return results, err
+			return domain.ValidationResults{}, err
 		}
 
 		// Create validation results
 		results := domain.NewValidationResults()
 		results.AddCommitResult(result)
 
+		// fmt.Println("HEre i am")
+		// fmt.Println(result.RuleResults[0])
 		return results, nil
 	}
 
@@ -456,39 +453,24 @@ func (s ValidationService) ValidateWithOptions(ctx context.Context, opts Validat
 
 	// Validate head commits
 	if opts.CommitCount > 0 {
-		return s.ValidateHeadCommits(ctx, opts.CommitCount, opts.SkipMergeCommits)
+		fmt.Println("HEre i am")
+
+		result, _ := s.ValidateHeadCommits(ctx, opts.CommitCount, opts.SkipMergeCommits)
+
+		fmt.Printf("%+v", result)
 	}
 
 	// Default to validating the HEAD commit
 	result, err := s.ValidateCommit(ctx, "HEAD")
 	if err != nil {
-		return results, err
+		return domain.ValidationResults{}, err
 	}
 
+	// Create validation results
+	results := domain.NewValidationResults()
 	results.AddCommitResult(result)
 
 	return results, nil
-}
-
-// CreateDefaultValidationService creates a validation service with the given repository path.
-// This is a convenience function that handles creating all the necessary dependencies.
-func CreateDefaultValidationService(repoPath string) (ValidationService, error) {
-	// Create the repository adapter
-	repoAdapter, err := git.NewRepositoryAdapter(repoPath)
-	if err != nil {
-		return ValidationService{}, fmt.Errorf("failed to create repository adapter: %w", err)
-	}
-
-	// Get config from the default configuration
-	config := defaults.NewDefaultConfig()
-
-	// Return the validation service with dependencies
-	return CreateValidationServiceWithDependencies(
-		config,
-		repoAdapter,
-		repoAdapter,
-		repoAdapter,
-	), nil
 }
 
 // CreateValidationServiceWithDependencies provides dependency injection
@@ -511,10 +493,7 @@ type ValidationConfig interface {
 	domain.RuleConfigProvider
 }
 
-// toConfig converts a ValidationConfig to a config.Config.
-
-// CreateValidationServiceWithDependencies creates a ValidationService with explicit dependencies.
-// This is the preferred constructor for better testability and dependency management.
+// CreateValidationService creates a ValidationService with explicit dependencies.
 //
 // Parameters:
 // - config: Provides validation configuration parameters
@@ -525,7 +504,7 @@ type ValidationConfig interface {
 // The validation service uses a rule factory approach where rules are created
 // conditionally based on configuration. Rules can be enabled or disabled via
 // configuration, and each rule has specific conditions for when it should be applied.
-func CreateValidationServiceWithDependencies(
+func CreateValidationService(
 	config ValidationConfig,
 	commitService domain.GitCommitService,
 	infoProvider domain.RepositoryInfoProvider,
@@ -550,7 +529,6 @@ func CreateValidationServiceWithDependencies(
 
 // DomainRuleProvider provides rules using domain interfaces.
 // It manages both built-in and custom rule factories.
-// It is designed with value semantics for functional programming patterns.
 type DomainRuleProvider struct {
 	config          ValidationConfig
 	analyzer        domain.CommitAnalyzer
@@ -1236,9 +1214,9 @@ func validateWithRule(ctx context.Context, commit domain.CommitInfo, rule domain
 	ruleResult := domain.RuleResult{
 		RuleID:         rule.Name(),
 		RuleName:       rule.Name(),
-		Message:        rule.Result(),
-		VerboseMessage: rule.VerboseResult(),
-		HelpMessage:    rule.Help(),
+		Message:        rule.Result(ruleErrors),
+		VerboseMessage: rule.VerboseResult(ruleErrors),
+		HelpMessage:    rule.Help(ruleErrors),
 		Errors:         ruleErrors,
 	}
 

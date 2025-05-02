@@ -148,26 +148,26 @@ func TestSubjectCaseRule(t *testing.T) {
 			// Check validity
 			if testCase.expectedValid {
 				require.Empty(t, result, "Expected no validation errors")
-				require.Equal(t, "Subject case is correct", rule.Result(), "Result should indicate valid case")
+				require.Equal(t, "Subject case is correct", rule.Result(result), "Result should indicate valid case")
 			} else {
 				// For some special cases it might not return errors
 				if len(result) == 0 {
 					// For the "ignore" case choice, we do not generate errors
 					if testCase.caseChoice == "ignore" {
 						// This is expected
-						require.Equal(t, "Subject case is correct", rule.Result(), "Result should indicate valid case")
+						require.Equal(t, "Subject case is correct", rule.Result(result), "Result should indicate valid case")
 					} else {
 						require.NotEmpty(t, result, "Expected validation errors")
 					}
 				} else {
 					// Check error code first to handle special cases
 					if result[0].Code == string(appErrors.ErrEmptyDescription) || result[0].Code == string(appErrors.ErrEmptyMessage) {
-						require.Equal(t, "Subject is empty", rule.Result(), "Result should indicate empty subject")
+						require.Equal(t, "Subject is empty", rule.Result(result), "Result should indicate empty subject")
 					} else if result[0].Code == string(appErrors.ErrInvalidFormat) {
-						require.Equal(t, "Invalid format", rule.Result(), "Result should indicate invalid format")
+						require.Equal(t, "Invalid format", rule.Result(result), "Result should indicate invalid format")
 					} else {
 						// Update this line to match the actual implementation
-						require.Equal(t, "Subject should start with "+testCase.caseChoice, rule.Result(), "Result should indicate the expected case")
+						require.Equal(t, "Subject should start with "+testCase.caseChoice, rule.Result(result), "Result should indicate the expected case")
 					}
 					// Verify error code if expected
 					if testCase.expectedCode != "" {
@@ -176,7 +176,7 @@ func TestSubjectCaseRule(t *testing.T) {
 					// Check rule name is set
 					require.Equal(t, "SubjectCase", result[0].Rule, "Rule name should be set in ValidationError")
 					// Check verbose result for expected content
-					verboseResult := rule.VerboseResult()
+					verboseResult := rule.VerboseResult(result)
 
 					switch appErrors.ValidationErrorCode(result[0].Code) {
 					case appErrors.ErrEmptyDescription, appErrors.ErrEmptyMessage:
@@ -197,7 +197,7 @@ func TestSubjectCaseRule(t *testing.T) {
 						}
 					}
 					// Check help text
-					helpText := rule.Help()
+					helpText := rule.Help(result)
 					require.NotEmpty(t, helpText, "Help text should not be empty")
 				}
 			}
@@ -275,8 +275,8 @@ func TestSubjectCaseHelpMessages(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			rule := test.setupRule()
 			// Validate and get updated rule with state
-			_, rule = rules.ValidateWithState(rule, test.commit)
-			helpText := rule.Help()
+			err, rule := rules.ValidateWithState(rule, test.commit)
+			helpText := rule.Help(err)
 			require.Contains(t, helpText, test.expectedHelp, "Help text should contain expected guidance")
 
 			if test.errorContains != "" {

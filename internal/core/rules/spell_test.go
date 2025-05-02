@@ -137,16 +137,16 @@ func validateRuleMethods(t *testing.T, testCase testCase, rule rules.SpellRule, 
 	t.Helper()
 	// Verify Name() method
 	require.Equal(t, "Spell", rule.Name(), "Rule name should be 'Spell'")
-	// Verify Result() method
+	// Verify Result(errors []errors.ValidationError) method
 	if testCase.expectedErrors > 0 {
 		expectedResult := fmt.Sprintf("%d misspelling(s)", testCase.expectedErrors)
-		require.Equal(t, expectedResult, rule.Result(),
+		require.Equal(t, expectedResult, rule.Result(errors),
 			"Result should report the number of misspellings")
 	} else {
-		require.Equal(t, "No spelling errors", rule.Result(),
+		require.Equal(t, "No spelling errors", rule.Result(errors),
 			"Result should indicate no misspellings")
 	}
-	// Verify Help() method
+	// Verify Help(errors []errors.ValidationError) method
 	validateHelpMethod(t, testCase, rule, errors)
 	// Check VerboseResult output
 	validateVerboseResult(t, testCase, rule)
@@ -156,7 +156,7 @@ func validateRuleMethods(t *testing.T, testCase testCase, rule rules.SpellRule, 
 func validateHelpMethod(t *testing.T, testCase testCase, rule rules.SpellRule, errors []appErrors.ValidationError) {
 	t.Helper()
 
-	helpText := rule.Help()
+	helpText := rule.Help(errors)
 	require.NotEmpty(t, helpText, "Help text should not be empty")
 
 	if testCase.expectedErrors == 0 {
@@ -185,7 +185,7 @@ func validateHelpMethod(t *testing.T, testCase testCase, rule rules.SpellRule, e
 func validateVerboseResult(t *testing.T, testCase testCase, rule rules.SpellRule) {
 	t.Helper()
 
-	verboseText := rule.VerboseResult()
+	verboseText := rule.VerboseResult(rule.Errors())
 	if testCase.expectedErrors == 0 {
 		require.Contains(t, verboseText, "No common misspellings found",
 			"Verbose output should indicate no errors")
@@ -481,8 +481,8 @@ func TestSpellRuleWithConfig(t *testing.T) {
 
 			// Test helpers
 			require.Equal(t, "Spell", rule.Name(), "Rule name should be 'Spell'")
-			require.NotEmpty(t, rule.Help(), "Help text should not be empty")
-			require.NotEmpty(t, rule.VerboseResult(), "Verbose result should not be empty")
+			require.NotEmpty(t, rule.Help(errors), "Help text should not be empty")
+			require.NotEmpty(t, rule.VerboseResult(errors), "Verbose result should not be empty")
 
 			// Verify HasErrors matches our expected validity
 			require.Equal(t, !testCase.expectedValid, rule.HasErrors(),

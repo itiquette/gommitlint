@@ -217,15 +217,15 @@ This is a detailed description.`,
 			// Check validity
 			if testCase.expectedValid {
 				require.Empty(t, errors, "Expected no validation errors")
-				require.Equal(t, "Sign-off is present", rule.Result(), "Expected success message")
+				require.Equal(t, "Sign-off is present", rule.Result(errors), "Expected success message")
 				// Different checks for sign-off not required vs found sign-off
 				if !testCase.requireSignOff {
-					require.Contains(t, rule.VerboseResult(), "not required by configuration", "Verbose result should indicate sign-off not required")
+					require.Contains(t, rule.VerboseResult(errors), "not required by configuration", "Verbose result should indicate sign-off not required")
 				} else {
-					require.Contains(t, rule.VerboseResult(), "Valid Developer Certificate of Origin sign-off found", "Verbose result should indicate valid sign-off")
+					require.Contains(t, rule.VerboseResult(errors), "Valid Developer Certificate of Origin sign-off found", "Verbose result should indicate valid sign-off")
 				}
 
-				require.Contains(t, rule.Help(), "No errors to fix", "Help for valid message should indicate nothing to fix")
+				require.Contains(t, rule.Help(errors), "No errors to fix", "Help for valid message should indicate nothing to fix")
 			} else {
 				require.NotEmpty(t, errors, "Expected errors but found none")
 				// Check error code if specified
@@ -257,8 +257,8 @@ This is a detailed description.`,
 				// Verify rule name is set in ValidationError
 				require.Equal(t, "SignOff", errors[0].Rule,
 					"Rule name should be set in ValidationError")
-				// Verify Help() method provides guidance
-				helpText := rule.Help()
+				// Verify Help(errors []errors.ValidationError) method provides guidance
+				helpText := rule.Help(errors)
 				require.NotEmpty(t, helpText, "Help text should not be empty")
 				// Test specific help messages based on error code
 				if errors[0].Context["original_code"] == "empty_message" {
@@ -270,9 +270,9 @@ This is a detailed description.`,
 				} else if errors[0].Context["original_code"] == "multiple_signoffs" {
 					require.Contains(t, helpText, "multiple", "Help should mention multiple sign-offs issue")
 				}
-				// Verify Result() method returns expected message
-				require.Equal(t, "Missing sign-off", rule.Result(), "Expected error result message")
-				require.NotEqual(t, rule.Result(), rule.VerboseResult(), "Verbose result should be different from regular result")
+				// Verify Result(errors []errors.ValidationError) method returns expected message
+				require.Equal(t, "Missing sign-off", rule.Result(errors), "Expected error result message")
+				require.NotEqual(t, rule.Result(errors), rule.VerboseResult(errors), "Verbose result should be different from regular result")
 			}
 			// Verify Name() method
 			require.Equal(t, "SignOff", rule.Name(), "Name should be 'SignOff'")

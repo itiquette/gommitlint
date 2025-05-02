@@ -605,7 +605,7 @@ func ValidateSignatureWithState(rule SignatureRule, commit domain.CommitInfo) ([
 }
 
 // Result returns a concise validation result as a human-readable string.
-func (r SignatureRule) Result() string {
+func (r SignatureRule) Result(errors []appErrors.ValidationError) string {
 	if len(r.Errors()) > 0 {
 		// Always return the same message for consistency with test expectations
 		return "Missing or invalid signature"
@@ -615,7 +615,7 @@ func (r SignatureRule) Result() string {
 }
 
 // VerboseResult returns a more detailed explanation for verbose mode.
-func (r SignatureRule) VerboseResult() string {
+func (r SignatureRule) VerboseResult(errors []appErrors.ValidationError) string {
 	if r.HasErrors() {
 		errors := r.Errors()
 		if len(errors) == 0 {
@@ -670,7 +670,7 @@ func (r SignatureRule) VerboseResult() string {
 }
 
 // Help returns guidance on how to fix the rule violation.
-func (r SignatureRule) Help() string {
+func (r SignatureRule) Help(errors []appErrors.ValidationError) string {
 	if !r.HasErrors() {
 		return "No errors to fix"
 	}

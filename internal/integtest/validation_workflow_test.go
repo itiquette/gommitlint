@@ -108,7 +108,7 @@ gommitlint:
 			analyzer := repoFactory.CreateCommitAnalyzer()
 
 			// Create validation service with dependencies
-			validationService := validate.CreateValidationServiceWithDependencies(
+			validationService := validate.CreateValidationService(
 				configManager.GetValidationConfig(),
 				commitService,
 				infoProvider,
@@ -247,7 +247,7 @@ gommitlint:
 			analyzer := repoFactory.CreateCommitAnalyzer()
 
 			// Create validation service with dependencies
-			validationService := validate.CreateValidationServiceWithDependencies(
+			validationService := validate.CreateValidationService(
 				configManager.GetValidationConfig(),
 				commitService,
 				infoProvider,
@@ -403,7 +403,7 @@ gommitlint:
 	analyzer := repoFactory.CreateCommitAnalyzer()
 
 	// Create validation service with dependencies
-	validationService := validate.CreateValidationServiceWithDependencies(
+	validationService := validate.CreateValidationService(
 		configManager.GetValidationConfig(),
 		commitService,
 		infoProvider,
@@ -422,7 +422,7 @@ gommitlint:
 	configObj = configObj.WithDisabledRules([]string{})
 
 	// Create a new validation service with this modified config
-	validationService = validate.CreateValidationServiceWithDependencies(
+	validationService = validate.CreateValidationService(
 		configObj,
 		commitService,
 		infoProvider,
@@ -440,7 +440,7 @@ gommitlint:
 	configObj = configObj.WithEnabledRules([]string{})
 
 	// Create a new validation service with this modified config
-	validationService = validate.CreateValidationServiceWithDependencies(
+	validationService = validate.CreateValidationService(
 		configObj,
 		commitService,
 		infoProvider,
@@ -456,7 +456,7 @@ gommitlint:
 	emptyConfig = emptyConfig.WithEnabledRules([]string{})
 
 	// Create a new validation service with empty rules
-	validationService = validate.CreateValidationServiceWithDependencies(
+	validationService = validate.CreateValidationService(
 		emptyConfig,
 		commitService,
 		infoProvider,
@@ -476,7 +476,7 @@ gommitlint:
 	rulesConfig = rulesConfig.WithEnabledRules(rulesToActivate)
 
 	// Create a new service with this config
-	validationService = validate.CreateValidationServiceWithDependencies(
+	validationService = validate.CreateValidationService(
 		rulesConfig,
 		commitService,
 		infoProvider,

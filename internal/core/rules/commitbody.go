@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/errors"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
 
@@ -320,7 +321,7 @@ func (r CommitBodyRule) HasErrors() bool {
 }
 
 // Result returns a concise validation result.
-func (r CommitBodyRule) Result() string {
+func (r CommitBodyRule) Result(errors []errors.ValidationError) string {
 	if r.HasErrors() {
 		return "Invalid commit body"
 	}
@@ -329,7 +330,7 @@ func (r CommitBodyRule) Result() string {
 }
 
 // VerboseResult returns a more detailed explanation for verbose mode.
-func (r CommitBodyRule) VerboseResult() string {
+func (r CommitBodyRule) VerboseResult(errors []errors.ValidationError) string {
 	if r.HasErrors() {
 		return "Commit message body has formatting issues - check for missing content, sign-off requirements, or insufficient detail"
 	}
@@ -338,7 +339,7 @@ func (r CommitBodyRule) VerboseResult() string {
 }
 
 // Help returns guidance for fixing rule violations.
-func (r CommitBodyRule) Help() string {
+func (r CommitBodyRule) Help(errors []errors.ValidationError) string {
 	if !r.HasErrors() {
 		return "No errors to fix in the commit message body"
 	}

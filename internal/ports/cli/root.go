@@ -47,7 +47,7 @@ func newRootCommand(ctx context.Context, versionString string, deps *AppDependen
 	}
 
 	// Create validate command
-	validateCmd := newValidateCmd()
+	validateCmd := newValidateCmd(ctx)
 
 	// Add the validate command
 	rootCmd.AddCommand(validateCmd)

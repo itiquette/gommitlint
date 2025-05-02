@@ -88,14 +88,14 @@ func TestSubjectLengthRule(t *testing.T) {
 
 				// Test pure function implementation explicitly
 				_, updatedRule := rules.ValidateSubjectLengthWithState(rule, commit)
-				require.Equal(t, "Subject too long", updatedRule.Result(), "Result message should indicate subject is too long")
+				require.Equal(t, "Subject too long", updatedRule.Result(errors), "Result message should indicate subject is too long")
 				require.True(t, updatedRule.HasErrors(), "HasErrors should return true for invalid subjects")
 			} else {
 				require.Empty(t, errors, "Expected no errors but got: %v", errors)
 
 				// Test pure function implementation explicitly
 				_, updatedRule := rules.ValidateSubjectLengthWithState(rule, commit)
-				require.Equal(t, "Subject length OK", updatedRule.Result(), "Result message should indicate length is OK")
+				require.Equal(t, "Subject length OK", updatedRule.Result(errors), "Result message should indicate length is OK")
 				require.False(t, updatedRule.HasErrors(), "HasErrors should return false for valid subjects")
 			}
 
@@ -106,10 +106,10 @@ func TestSubjectLengthRule(t *testing.T) {
 			_, ruleWithState := rules.ValidateSubjectLengthWithState(rule, commit)
 
 			// Check verbose result
-			require.NotEmpty(t, ruleWithState.VerboseResult(), "VerboseResult should not be empty")
+			require.NotEmpty(t, ruleWithState.VerboseResult(errors), "VerboseResult should not be empty")
 
 			// Check help message
-			require.NotEmpty(t, ruleWithState.Help(), "Help should not be empty")
+			require.NotEmpty(t, ruleWithState.Help(errors), "Help should not be empty")
 		})
 	}
 }

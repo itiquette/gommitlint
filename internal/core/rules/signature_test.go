@@ -183,11 +183,11 @@ FxlS+hzWnbOPMrRKuSfJ+H8mF6t1V3qUYtxHNQvHtcCvG0gx4auPSoxp7qVCVQ==
 			// Check for expected validation result
 			if testCase.expectedValid {
 				require.Empty(t, errors, "Expected no validation errors")
-				// Verify Result() and VerboseResult() methods return expected messages
-				require.Equal(t, "SSH/GPG signature found", updatedRule.Result(), "Expected default valid message")
-				require.Contains(t, updatedRule.VerboseResult(), "SSH/GPG signature found", "Verbose result should indicate valid signature")
+				// Verify Result(errors []errors.ValidationError) and VerboseResult(errors []errors.ValidationError) methods return expected messages
+				require.Equal(t, "SSH/GPG signature found", updatedRule.Result(errors), "Expected default valid message")
+				require.Contains(t, updatedRule.VerboseResult(errors), "SSH/GPG signature found", "Verbose result should indicate valid signature")
 				// Test Help on valid case
-				require.Contains(t, updatedRule.Help(), "No errors to fix", "Help for valid message should indicate nothing to fix")
+				require.Contains(t, updatedRule.Help(errors), "No errors to fix", "Help for valid message should indicate nothing to fix")
 			} else {
 				require.NotEmpty(t, errors, "Expected errors but found none")
 				// Check error code if specified
@@ -223,12 +223,12 @@ FxlS+hzWnbOPMrRKuSfJ+H8mF6t1V3qUYtxHNQvHtcCvG0gx4auPSoxp7qVCVQ==
 					require.Equal(t, "Signature", errors[0].Rule,
 						"Rule name should be set in ValidationError")
 				}
-				// Verify Help() method provides guidance
-				helpText := updatedRule.Help()
+				// Verify Help(errors []errors.ValidationError) method provides guidance
+				helpText := updatedRule.Help(errors)
 				require.NotEmpty(t, helpText, "Help text should not be empty")
-				// Verify Result() method returns expected message
-				require.Equal(t, "Missing or invalid signature", updatedRule.Result(), "Expected error result message")
-				require.NotEqual(t, updatedRule.Result(), updatedRule.VerboseResult(), "Verbose result should be different from regular result")
+				// Verify Result(errors []errors.ValidationError) method returns expected message
+				require.Equal(t, "Missing or invalid signature", updatedRule.Result(errors), "Expected error result message")
+				require.NotEqual(t, updatedRule.Result(errors), updatedRule.VerboseResult(errors), "Verbose result should be different from regular result")
 			}
 			// Verify Name() method
 			require.Equal(t, "Signature", updatedRule.Name(), "Name should be 'Signature'")

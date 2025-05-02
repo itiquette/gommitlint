@@ -48,13 +48,13 @@ type Rule interface {
 	Validate(ctx context.Context, commit CommitInfo) []errors.ValidationError
 
 	// Result returns a concise result message.
-	Result() string
+	Result(errors []errors.ValidationError) string
 
 	// VerboseResult returns a detailed result message.
-	VerboseResult() string
+	VerboseResult(errors []errors.ValidationError) string
 
 	// Help returns guidance on how to fix rule violations.
-	Help() string
+	Help(errors []errors.ValidationError) string
 
 	// Errors returns all validation errors found by this rule.
 	Errors() []errors.ValidationError

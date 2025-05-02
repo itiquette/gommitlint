@@ -88,7 +88,7 @@ func (r BaseRule) WithVerbosity(verbosity string) BaseRule {
 }
 
 // Result returns a concise result message.
-func (r BaseRule) Result() string {
+func (r BaseRule) Result(errors []errors.ValidationError) string {
 	if !r.hasRun {
 		return "Rule has not been run"
 	}
@@ -101,7 +101,7 @@ func (r BaseRule) Result() string {
 }
 
 // VerboseResult returns a detailed result message with all errors and context.
-func (r BaseRule) VerboseResult() string {
+func (r BaseRule) VerboseResult(errors []errors.ValidationError) string {
 	if !r.hasRun {
 		return r.name + ": Rule has not been run"
 	}
@@ -139,7 +139,7 @@ func (r BaseRule) VerboseResult() string {
 }
 
 // Help returns guidance on how to fix rule violations.
-func (r BaseRule) Help() string {
+func (r BaseRule) Help(errors []errors.ValidationError) string {
 	if !r.HasErrors() {
 		return r.name + ": No errors to fix"
 	}

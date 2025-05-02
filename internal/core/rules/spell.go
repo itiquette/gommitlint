@@ -12,6 +12,7 @@ import (
 	"github.com/golangci/misspell"
 	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/errors"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
 
@@ -412,7 +413,7 @@ TO FIX THIS:
 }
 
 // Result returns a concise string representation of the rule's status.
-func (r SpellRule) Result() string {
+func (r SpellRule) Result(errors []errors.ValidationError) string {
 	if len(r.errors) == 0 {
 		return "No spelling errors"
 	}
@@ -421,7 +422,7 @@ func (r SpellRule) Result() string {
 }
 
 // VerboseResult returns a more detailed explanation for verbose mode.
-func (r SpellRule) VerboseResult() string {
+func (r SpellRule) VerboseResult(errors []errors.ValidationError) string {
 	if len(r.errors) == 0 {
 		localeDesc := "US (American English)"
 		upperLocale := strings.ToUpper(r.locale)
@@ -471,7 +472,7 @@ func (r SpellRule) VerboseResult() string {
 }
 
 // Help returns help information for fixing rule violations.
-func (r SpellRule) Help() string {
+func (r SpellRule) Help(errors []errors.ValidationError) string {
 	// Check if there are errors
 	if len(r.errors) == 0 {
 		return "No errors to fix"

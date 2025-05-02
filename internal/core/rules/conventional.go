@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/errors"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
 
@@ -588,7 +589,7 @@ func (r ConventionalCommitRule) isValidScope(scope string) bool {
 }
 
 // Result returns a concise validation result.
-func (r ConventionalCommitRule) Result() string {
+func (r ConventionalCommitRule) Result(errors []errors.ValidationError) string {
 	if r.HasErrors() {
 		return "Invalid conventional commit format"
 	}
@@ -597,7 +598,7 @@ func (r ConventionalCommitRule) Result() string {
 }
 
 // VerboseResult returns a more detailed explanation for verbose mode.
-func (r ConventionalCommitRule) VerboseResult() string {
+func (r ConventionalCommitRule) VerboseResult(errors []errors.ValidationError) string {
 	if r.HasErrors() {
 		errors := r.Errors()
 		if len(errors) == 0 {
@@ -727,12 +728,11 @@ func min3(first, second, third int) int {
 	return third
 }
 
-func (r ConventionalCommitRule) Help() string {
+func (r ConventionalCommitRule) Help(errors []errors.ValidationError) string {
 	if !r.HasErrors() {
 		return "No errors to fix. This rule checks that commits follow the conventional commit format with proper type, structure, and description (e.g., feat: add new login feature, fix(auth): resolve timeout issue)."
 	}
 
-	errors := r.Errors()
 	if len(errors) > 0 {
 		// Get help text from the enhanced error
 		helpText := errors[0].GetHelp()

@@ -43,7 +43,7 @@ Creating errors:
 	enhancedErr = enhancedErr.WithCommitSHA("abc123")
 
 	// Get help message
-	helpText := enhancedErr.GetHelp()
+	helpText := enhancedErr.GetHelp(errors []errors.ValidationError)
 
 	// Format as text
 	textOutput := enhancedErr.FormatAsText(true) // verbose
@@ -113,7 +113,7 @@ Example
 	    subjectLength, rule.MaxLength)
 
 	err := errors.New(rule.Name(), errors.ErrSubjectTooLong, errorMessage)
-	err = errors.EnhanceValidationError(err, rule.Help())
+	err = errors.EnhanceValidationError(err, rule.Help(errors []errors.ValidationError))
 	err = err.WithContext("subject_length", fmt.Sprintf("%d", subjectLength))
 	    .WithContext("max_length", fmt.Sprintf("%d", rule.MaxLength))
 	    .WithContext("subject", commit.Subject)

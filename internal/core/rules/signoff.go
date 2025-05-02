@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/errors"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
 
@@ -356,7 +357,7 @@ NEXT STEPS:
 }
 
 // Result returns a concise rule message.
-func (r SignOffRule) Result() string {
+func (r SignOffRule) Result(errors []errors.ValidationError) string {
 	if r.HasErrors() {
 		return "Missing sign-off"
 	}
@@ -365,7 +366,7 @@ func (r SignOffRule) Result() string {
 }
 
 // VerboseResult returns a more detailed explanation for verbose mode.
-func (r SignOffRule) VerboseResult() string {
+func (r SignOffRule) VerboseResult(errors []errors.ValidationError) string {
 	if r.HasErrors() {
 		errors := r.Errors()
 		if len(errors) == 0 {
@@ -400,12 +401,11 @@ func (r SignOffRule) VerboseResult() string {
 }
 
 // Help returns a description of how to fix the rule violation.
-func (r SignOffRule) Help() string {
+func (r SignOffRule) Help(errors []errors.ValidationError) string {
 	if !r.HasErrors() {
 		return "No errors to fix. This rule checks that commits have a proper Signed-off-by line indicating Developer Certificate of Origin (DCO) agreement."
 	}
 	// Check error code for more targeted help
-	errors := r.Errors()
 	if len(errors) > 0 {
 		validationErr := errors[0]
 		// First check context for original error code

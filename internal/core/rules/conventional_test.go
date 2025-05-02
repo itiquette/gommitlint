@@ -244,7 +244,7 @@ func TestConventionalCommitRuleErrorMessages(t *testing.T) {
 	require.NotEmpty(t, errors, "Expected validation errors for invalid format")
 
 	// Check the error messages methods
-	require.Equal(t, "Invalid conventional commit format", updatedRule.Result(), "Expected correct result message")
-	require.NotEmpty(t, updatedRule.VerboseResult(), "Expected non-empty verbose result")
-	require.NotEmpty(t, updatedRule.Help(), "Expected non-empty help text")
+	require.Equal(t, "Invalid conventional commit format", updatedRule.Result(errors), "Expected correct result message")
+	require.NotEmpty(t, updatedRule.VerboseResult(errors), "Expected non-empty verbose result")
+	require.NotEmpty(t, updatedRule.Help(errors), "Expected non-empty help text")
 }

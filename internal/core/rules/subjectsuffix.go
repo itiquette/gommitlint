@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/errors"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
 
@@ -257,7 +258,7 @@ func (r SubjectSuffixRule) Validate(_ context.Context, commit domain.CommitInfo)
 }
 
 // Result returns a concise validation result.
-func (r SubjectSuffixRule) Result() string {
+func (r SubjectSuffixRule) Result(errors []errors.ValidationError) string {
 	if r.HasErrors() {
 		return "Invalid subject suffix"
 	}
@@ -266,7 +267,7 @@ func (r SubjectSuffixRule) Result() string {
 }
 
 // VerboseResult returns a more detailed result message.
-func (r SubjectSuffixRule) VerboseResult() string {
+func (r SubjectSuffixRule) VerboseResult(errors []errors.ValidationError) string {
 	if !r.HasErrors() {
 		return "Subject ends with valid character"
 	}
@@ -293,7 +294,7 @@ func (r SubjectSuffixRule) VerboseResult() string {
 }
 
 // Help returns guidance on how to fix rule violations.
-func (r SubjectSuffixRule) Help() string {
+func (r SubjectSuffixRule) Help(errors []errors.ValidationError) string {
 	if !r.HasErrors() {
 		return "No errors to fix. This rule checks that commit subjects end with an appropriate character and don't have trailing punctuation like '" + r.invalidSuffixes + "' that might affect readability."
 	}

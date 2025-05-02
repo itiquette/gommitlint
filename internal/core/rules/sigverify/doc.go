@@ -48,9 +48,9 @@ Example Usage:
 	// Verify the signature against trusted keys
 	rule := sigverify.VerifySignatureIdentity(commit, signature, "/path/to/trusted/keys")
 	if len(rule.Errors()) > 0 {
-	    fmt.Println(rule.Help())
+	    fmt.Println(rule.Help(errors []errors.ValidationError))
 	} else {
-	    fmt.Printf("Commit verified: %s\n", rule.Result())
+	    fmt.Printf("Commit verified: %s\n", rule.Result(errors []errors.ValidationError))
 	}
 */
 package sigverify

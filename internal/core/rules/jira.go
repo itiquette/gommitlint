@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/errors"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
 
@@ -111,7 +112,7 @@ func NewJiraReferenceRuleWithConfig(jiraConfig domain.JiraConfigProvider, conven
 // NewJiraReferenceRuleWithConfig creates a JiraReferenceRule using the unified configuration.
 
 // Result returns a concise rule message.
-func (j JiraReferenceRule) Result() string {
+func (j JiraReferenceRule) Result(errors []errors.ValidationError) string {
 	if j.HasErrors() {
 		errors := j.Errors()
 		if len(errors) > 0 {
@@ -143,7 +144,7 @@ func (j JiraReferenceRule) Result() string {
 }
 
 // VerboseResult returns a more detailed explanation for verbose mode.
-func (j JiraReferenceRule) VerboseResult() string {
+func (j JiraReferenceRule) VerboseResult(errors []errors.ValidationError) string {
 	if j.HasErrors() {
 		errors := j.Errors()
 		if len(errors) == 0 {
@@ -223,7 +224,7 @@ func (j JiraReferenceRule) VerboseResult() string {
 }
 
 // Help returns a description of how to fix the rule violation.
-func (j JiraReferenceRule) Help() string {
+func (j JiraReferenceRule) Help(errors []errors.ValidationError) string {
 	// First check if the rule has errors - this should be the primary check
 	if j.HasErrors() {
 		errors := j.Errors()

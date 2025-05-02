@@ -467,7 +467,7 @@ var conventionalCommitRegex = regexp.MustCompile(`^([a-z]+)(?:\(([\w,/-]+)\))?(!
 // firstWordRegex is a copy of the one used in the rule.
 var firstWordRegex = regexp.MustCompile(`^\s*([a-zA-Z0-9]+)`)
 
-// getFunctionalResult simulates what Result() would return for a rule with errors.
+// getFunctionalResult simulates what Result(errors []errors.ValidationError) would return for a rule with errors.
 func getFunctionalResult(errors []appErrors.ValidationError) string {
 	if len(errors) > 0 {
 		return "Non-imperative verb detected"
@@ -476,7 +476,7 @@ func getFunctionalResult(errors []appErrors.ValidationError) string {
 	return "Commit begins with imperative verb"
 }
 
-// getFunctionalVerboseResult simulates what VerboseResult() would return.
+// getFunctionalVerboseResult simulates what VerboseResult(errors []errors.ValidationError) would return.
 func getFunctionalVerboseResult(errors []appErrors.ValidationError, rule rules.ImperativeVerbRule) string {
 	if len(errors) > 0 {
 		// Return a more detailed error message based on error code
@@ -542,9 +542,9 @@ func getFunctionalVerboseResult(errors []appErrors.ValidationError, rule rules.I
 	// For successful cases, extract the word directly
 	firstWord := ""
 
-	if rule.VerboseResult() != "" {
+	if rule.VerboseResult(errors) != "" {
 		// Try to extract the word from the verbose result
-		parts := strings.Split(rule.VerboseResult(), "'")
+		parts := strings.Split(rule.VerboseResult(errors), "'")
 		if len(parts) >= 3 {
 			firstWord = parts[1]
 		}
@@ -557,12 +557,12 @@ func getFunctionalVerboseResult(errors []appErrors.ValidationError, rule rules.I
 	return "Commit begins with proper imperative verb"
 }
 
-// getFunctionalHelp simulates what Help() would return for a rule with errors.
+// getFunctionalHelp simulates what Help(errors []errors.ValidationError) would return for a rule with errors.
 func getFunctionalHelp(errors []appErrors.ValidationError, rule rules.ImperativeVerbRule) string {
 	if len(errors) == 0 {
 		return "No errors to fix"
 	}
 
 	// The actual help text would be based on the error
-	return rule.Help()
+	return rule.Help(errors)
 }
