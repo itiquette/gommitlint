@@ -301,14 +301,15 @@ TO FIX THIS:
 	// Handling custom words - temporarily using a workaround
 	// due to issues with the misspell library's AddRuleList method
 	if len(r.customWords) > 0 {
-		// Find keys that are contained in the message
-		customWordKeys := make([]string, 0)
-
-		for original := range r.customWords {
-			if strings.Contains(fullMessage, original) {
-				customWordKeys = append(customWordKeys, original)
-			}
-		}
+		// Find keys that are contained in the message using FilterMap
+		customWordKeys := contextx.FilterMap(
+			contextx.Keys(r.customWords),
+			func(original string) bool {
+				return strings.Contains(fullMessage, original)
+			},
+			func(original string) string {
+				return original
+			})
 
 		// If we found any keys, create an error for the first one
 		if len(customWordKeys) > 0 {
@@ -359,7 +360,7 @@ TO FIX THIS:
 	corrected, foundDiffs := replacer.Replace(fullMessage)
 	if corrected != fullMessage {
 		// Process diffs functionally
-		// Filter diffs that should be processed
+		// First, filter diffs that should be processed
 		validDiffs := contextx.Filter(foundDiffs, func(diff misspell.Diff) bool {
 			// Skip diffs for words that should be ignored
 			return !contextx.Contains(r.ignoreWords, diff.Original)
@@ -371,6 +372,9 @@ TO FIX THIS:
 		}
 
 		// Convert diffs to validation errors
+		// Note: We're using Map here instead of FilterMap because we've already filtered and limited the results
+		// In a future refactoring, we could implement a skip parameter or extension to FilterMap to handle
+		// the maxErrors limit directly, combining all three operations
 		diffErrors := contextx.Map(validDiffs, func(diff misspell.Diff) appErrors.ValidationError {
 			helpMessage := fmt.Sprintf(`Spelling Error: "%s" is misspelled.
 

@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/itiquette/gommitlint/internal/contextx"
 )
 
 // EnhanceValidationError adds help text to an existing ValidationError.
@@ -59,21 +61,20 @@ func (e ValidationError) FormatAsText(verbose bool) string {
 	if len(e.Context) > 0 {
 		fmt.Fprintf(&builder, "Context:\n")
 
-		// Get context keys excluding "help"
-		contextKeys := make([]string, 0, len(e.Context))
+		// Filter context map excluding "help" using FilterMapKeys
+		filteredContext := contextx.FilterMapKeys(e.Context, []string{"help"})
 
-		for k := range e.Context {
-			if k != "help" {
-				contextKeys = append(contextKeys, k)
-			}
+		// Get keys and sort them for consistent output
+		contextKeys := make([]string, 0, len(filteredContext))
+		for k := range filteredContext {
+			contextKeys = append(contextKeys, k)
 		}
 
-		// Sort keys for consistent output
 		sort.Strings(contextKeys)
 
 		// Format and write each context entry
 		for _, k := range contextKeys {
-			fmt.Fprintf(&builder, "  %s: %s\n", k, e.Context[k])
+			fmt.Fprintf(&builder, "  %s: %s\n", k, filteredContext[k])
 		}
 	}
 
@@ -97,22 +98,8 @@ func (e ValidationError) FormatAsJSON() ([]byte, error) {
 		Context: make(map[string]string),
 	}
 
-	// Get all context keys except for "help"
-	contextKeys := make([]string, 0, len(e.Context))
-
-	for k := range e.Context {
-		if k != "help" {
-			contextKeys = append(contextKeys, k)
-		}
-	}
-
-	// Create a filtered context map
-	filteredContext := make(map[string]string, len(contextKeys))
-	for _, k := range contextKeys {
-		filteredContext[k] = e.Context[k]
-	}
-
-	representation.Context = filteredContext
+	// Filter context map excluding "help" using FilterMapKeys
+	representation.Context = contextx.FilterMapKeys(e.Context, []string{"help"})
 
 	return json.Marshal(representation)
 }
@@ -129,13 +116,13 @@ func (e ValidationError) FormatAsMarkdown() string {
 		fmt.Fprintf(&builder, "**Help:** %s\n\n", help)
 	}
 
-	// Filter context entries (exclude 'help')
-	contextEntries := make([]string, 0, len(e.Context))
+	// Filter context entries (exclude 'help') using FilterMapKeys
+	filteredContext := contextx.FilterMapKeys(e.Context, []string{"help"})
 
-	for k := range e.Context {
-		if k != "help" {
-			contextEntries = append(contextEntries, k)
-		}
+	// Get all keys from the filtered context
+	contextEntries := make([]string, 0, len(filteredContext))
+	for k := range filteredContext {
+		contextEntries = append(contextEntries, k)
 	}
 
 	// If we have context entries, format them

@@ -92,37 +92,8 @@ func (JSONFormatter) FormatErrors(errs []ValidationError) string {
 			helpText = help
 		}
 
-		// Filter context excluding help
-		contextMap := contextx.Reduce(
-			contextx.Map(
-				contextx.Filter(
-					contextx.Keys(err.Context),
-					func(keyName string) bool { return keyName != "help" },
-				),
-				func(keyName string) struct {
-					key   string
-					value string
-				} {
-					return struct {
-						key   string
-						value string
-					}{
-						key:   keyName,
-						value: err.Context[keyName],
-					}
-				},
-			),
-			make(map[string]string),
-			func(acc map[string]string, pair struct {
-				key   string
-				value string
-			}) map[string]string {
-				result := contextx.DeepCopyMap(acc)
-				result[pair.key] = pair.value
-
-				return result
-			},
-		)
+		// Filter context excluding help using FilterMapKeys
+		contextMap := contextx.FilterMapKeys(err.Context, []string{"help"})
 
 		return errorRepresentation{
 			Rule:    err.Rule,

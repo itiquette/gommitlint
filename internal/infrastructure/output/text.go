@@ -242,17 +242,37 @@ func (f TextFormatter) formatRuleResults(builder *strings.Builder, commitResult 
 	// Sort rule results alphabetically by name
 	sortedRules := getSortedRuleResults(commitResult.RuleResults)
 
-	// Filter out skipped rules
-	activeRules := contextx.Filter(sortedRules, func(rule domain.RuleResult) bool {
-		return rule.Status != domain.StatusSkipped
+	// Use FilterMap to both filter out skipped rules and count passed rules in one pass
+	type RuleCount struct {
+		rule   domain.RuleResult
+		passed bool
+	}
+
+	// Filter out skipped rules and map to a structure that tracks if the rule passed
+	ruleCounts := contextx.FilterMap(sortedRules,
+		// Filter predicate: include only non-skipped rules
+		func(rule domain.RuleResult) bool {
+			return rule.Status != domain.StatusSkipped
+		},
+		// Map function: convert to RuleCount with passed flag
+		func(rule domain.RuleResult) RuleCount {
+			return RuleCount{
+				rule:   rule,
+				passed: rule.Status == domain.StatusPassed,
+			}
+		})
+
+	// Extract active rules and count passed rules
+	activeRules := contextx.Map(ruleCounts, func(rc RuleCount) domain.RuleResult {
+		return rc.rule
 	})
 
 	// Count total rules
 	totalRules := len(activeRules)
 
-	// Count passed rules using Filter
-	passedRules := len(contextx.Filter(activeRules, func(rule domain.RuleResult) bool {
-		return rule.Status == domain.StatusPassed
+	// Count passed rules by filtering the ruleCounts
+	passedRules := len(contextx.Filter(ruleCounts, func(rc RuleCount) bool {
+		return rc.passed
 	}))
 
 	// Process each active rule

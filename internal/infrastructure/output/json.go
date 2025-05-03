@@ -112,45 +112,46 @@ func transformCommitResults(commits []domain.CommitResult) []CommitResultOutput 
 		return []CommitResultOutput{}
 	}
 
-	// Filter out commits with empty hash
-	validCommits := contextx.Filter(commits, func(commit domain.CommitResult) bool {
-		return commit.CommitInfo.Hash != ""
-	})
-
-	// Map valid commits to CommitResultOutput objects
-	return contextx.Map(validCommits, func(commitResult domain.CommitResult) CommitResultOutput {
-		// Create a new commit output
-		commit := CommitResultOutput{
-			Hash:         commitResult.CommitInfo.Hash,
-			Subject:      commitResult.CommitInfo.Subject,
-			IsMerge:      commitResult.CommitInfo.IsMergeCommit,
-			Passed:       commitResult.Passed,
-			RuleResults:  transformRuleResults(commitResult.RuleResults),
-			ErrorCount:   countErrors(commitResult.RuleResults),
-			WarningCount: 0, // Currently not tracking warnings
-		}
-
-		// Set commit date with fallback
-		if commitResult.CommitInfo.CommitDate != "" {
-			commit.CommitDate = commitResult.CommitInfo.CommitDate
-		} else {
-			commit.CommitDate = time.Now().Format(time.RFC3339)
-		}
-
-		// Set author with fallback
-		if commitResult.CommitInfo.AuthorName != "" {
-			authorInfo := commitResult.CommitInfo.AuthorName
-			if commitResult.CommitInfo.AuthorEmail != "" {
-				authorInfo += " <" + commitResult.CommitInfo.AuthorEmail + ">"
+	// Filter and map commits in a single pass using FilterMap
+	return contextx.FilterMap(commits,
+		// Predicate to filter out commits with empty hash
+		func(commit domain.CommitResult) bool {
+			return commit.CommitInfo.Hash != ""
+		},
+		// Map function to transform valid commits to CommitResultOutput
+		func(commitResult domain.CommitResult) CommitResultOutput {
+			// Create a new commit output
+			commit := CommitResultOutput{
+				Hash:         commitResult.CommitInfo.Hash,
+				Subject:      commitResult.CommitInfo.Subject,
+				IsMerge:      commitResult.CommitInfo.IsMergeCommit,
+				Passed:       commitResult.Passed,
+				RuleResults:  transformRuleResults(commitResult.RuleResults),
+				ErrorCount:   countErrors(commitResult.RuleResults),
+				WarningCount: 0, // Currently not tracking warnings
 			}
 
-			commit.Author = authorInfo
-		} else {
-			commit.Author = "Unknown"
-		}
+			// Set commit date with fallback
+			if commitResult.CommitInfo.CommitDate != "" {
+				commit.CommitDate = commitResult.CommitInfo.CommitDate
+			} else {
+				commit.CommitDate = time.Now().Format(time.RFC3339)
+			}
 
-		return commit
-	})
+			// Set author with fallback
+			if commitResult.CommitInfo.AuthorName != "" {
+				authorInfo := commitResult.CommitInfo.AuthorName
+				if commitResult.CommitInfo.AuthorEmail != "" {
+					authorInfo += " <" + commitResult.CommitInfo.AuthorEmail + ">"
+				}
+
+				commit.Author = authorInfo
+			} else {
+				commit.Author = "Unknown"
+			}
+
+			return commit
+		})
 }
 
 // transformRuleResults transforms rule results to output format.
@@ -206,12 +207,19 @@ func copyContextMap(context map[string]string) map[string]string {
 // countErrors counts the number of errors in rule results.
 // This pure function aggregates data without modifying state.
 func countErrors(rules []domain.RuleResult) int {
-	// Filter for failed rules and then use Reduce to sum error counts
-	failedRules := contextx.Filter(rules, func(rule domain.RuleResult) bool {
-		return rule.Status == domain.StatusFailed
-	})
+	// Use FilterMap to both filter failed rules and extract error counts in one pass
+	errorCounts := contextx.FilterMap(rules,
+		// Filter predicate: only include failed rules
+		func(rule domain.RuleResult) bool {
+			return rule.Status == domain.StatusFailed
+		},
+		// Map function: extract the error count from each rule
+		func(rule domain.RuleResult) int {
+			return len(rule.Errors)
+		})
 
-	return contextx.Reduce(failedRules, 0, func(total int, rule domain.RuleResult) int {
-		return total + len(rule.Errors)
+	// Sum up all error counts
+	return contextx.Reduce(errorCounts, 0, func(sum, count int) int {
+		return sum + count
 	})
 }

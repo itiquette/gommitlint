@@ -574,3 +574,160 @@ func TestRange(t *testing.T) {
 		})
 	}
 }
+
+func TestFilterMap(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     []int
+		predicate func(int) bool
+		mapper    func(int) string
+		expected  []string
+	}{
+		{
+			name:      "filter even numbers and convert to string",
+			input:     []int{1, 2, 3, 4, 5, 6},
+			predicate: func(n int) bool { return n%2 == 0 },
+			mapper:    func(n int) string { return strconv.Itoa(n) },
+			expected:  []string{"2", "4", "6"},
+		},
+		{
+			name:      "filter positive numbers and double them",
+			input:     []int{-2, -1, 0, 1, 2},
+			predicate: func(n int) bool { return n > 0 },
+			mapper:    func(n int) string { return strconv.Itoa(n * 2) },
+			expected:  []string{"2", "4"},
+		},
+		{
+			name:      "empty input slice",
+			input:     []int{},
+			predicate: func(n int) bool { return n > 0 },
+			mapper:    func(n int) string { return strconv.Itoa(n) },
+			expected:  []string{},
+		},
+		{
+			name:      "nil input slice",
+			input:     nil,
+			predicate: func(n int) bool { return n > 0 },
+			mapper:    func(n int) string { return strconv.Itoa(n) },
+			expected:  nil,
+		},
+		{
+			name:      "filter all",
+			input:     []int{1, 2, 3},
+			predicate: func(_ int) bool { return false },
+			mapper:    func(n int) string { return strconv.Itoa(n) },
+			expected:  []string{},
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			result := contextx.FilterMap(testCase.input, testCase.predicate, testCase.mapper)
+			require.Equal(t, testCase.expected, result)
+
+			// Ensure the original slice wasn't modified
+			if len(testCase.input) > 0 {
+				originalCopy := make([]int, len(testCase.input))
+				copy(originalCopy, testCase.input)
+				require.Equal(t, originalCopy, testCase.input)
+			}
+		})
+	}
+}
+
+func TestFilterMapKeys(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       map[string]int
+		excludeKeys []string
+		expected    map[string]int
+	}{
+		{
+			name: "exclude single key",
+			input: map[string]int{
+				"a": 1,
+				"b": 2,
+				"c": 3,
+			},
+			excludeKeys: []string{"b"},
+			expected: map[string]int{
+				"a": 1,
+				"c": 3,
+			},
+		},
+		{
+			name: "exclude multiple keys",
+			input: map[string]int{
+				"a": 1,
+				"b": 2,
+				"c": 3,
+				"d": 4,
+			},
+			excludeKeys: []string{"a", "c"},
+			expected: map[string]int{
+				"b": 2,
+				"d": 4,
+			},
+		},
+		{
+			name: "exclude non-existent key",
+			input: map[string]int{
+				"a": 1,
+				"b": 2,
+			},
+			excludeKeys: []string{"c"},
+			expected: map[string]int{
+				"a": 1,
+				"b": 2,
+			},
+		},
+		{
+			name:        "empty map",
+			input:       map[string]int{},
+			excludeKeys: []string{"a"},
+			expected:    map[string]int{},
+		},
+		{
+			name:        "nil map",
+			input:       nil,
+			excludeKeys: []string{"a"},
+			expected:    nil,
+		},
+		{
+			name: "empty exclude list",
+			input: map[string]int{
+				"a": 1,
+				"b": 2,
+			},
+			excludeKeys: []string{},
+			expected: map[string]int{
+				"a": 1,
+				"b": 2,
+			},
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			result := contextx.FilterMapKeys(testCase.input, testCase.excludeKeys)
+			require.Equal(t, testCase.expected, result)
+
+			// Ensure it's a copy, not the original
+			if testCase.input != nil {
+				require.NotSame(t, &testCase.input, &result)
+
+				// Modify result and ensure original is unchanged
+				if len(result) > 0 {
+					for k := range result {
+						originalValue := testCase.input[k]
+						result[k] = 999
+
+						require.Equal(t, originalValue, testCase.input[k])
+
+						break
+					}
+				}
+			}
+		})
+	}
+}

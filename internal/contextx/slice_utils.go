@@ -3,6 +3,10 @@
 // SPDX-License-Identifier: EUPL-1.2
 package contextx
 
+import (
+	"strings"
+)
+
 // NOTE: The basic functional utilities (Map, Filter, Reduce, ForEach, Contains, DeepCopy, DeepCopyMap)
 // are now defined in contextx.go. This file contains additional utilities that build upon those.
 
@@ -89,6 +93,7 @@ func FlatMap[T, U any](items []T, mapFunction func(T) []U) []U {
 	}
 
 	var result []U
+
 	for _, item := range items {
 		mapped := mapFunction(item)
 		result = append(result, mapped...)
@@ -114,9 +119,70 @@ func Unique[T comparable](items []T) []T {
 	for _, item := range items {
 		if _, exists := seen[item]; !exists {
 			seen[item] = struct{}{}
+
 			result = append(result, item)
 		}
 	}
 
 	return result
+}
+
+// FilterMap combines Filter and Map operations in a single pass.
+// It applies a predicate to each element, then maps only the elements that satisfy the predicate.
+// This is more efficient than separate Filter and Map operations when you need both.
+func FilterMap[T, U any](items []T, predicate func(T) bool, mapFn func(T) U) []U {
+	if items == nil {
+		return nil
+	}
+
+	result := make([]U, 0, len(items))
+
+	for _, item := range items {
+		if predicate(item) {
+			result = append(result, mapFn(item))
+		}
+	}
+
+	return result
+}
+
+// FilterMapKeys creates a new map excluding specified keys.
+// This is useful for creating a copy of a map without certain keys.
+func FilterMapKeys[K comparable, V any](inputMap map[K]V, excludeKeys []K) map[K]V {
+	if inputMap == nil {
+		return nil
+	}
+
+	result := make(map[K]V, len(inputMap))
+
+	for key, value := range inputMap {
+		exclude := false
+
+		for _, excludeKey := range excludeKeys {
+			if key == excludeKey {
+				exclude = true
+
+				break
+			}
+		}
+
+		if !exclude {
+			result[key] = value
+		}
+	}
+
+	return result
+}
+
+// FormatMultilineText splits text by newlines, applies formatting to each line, and rejoins.
+// This is useful for formatting error messages, help text, and other multiline strings.
+func FormatMultilineText(text string, formatFn func(string) string) string {
+	if text == "" {
+		return ""
+	}
+
+	lines := strings.Split(text, "\n")
+	formattedLines := Map(lines, formatFn)
+
+	return strings.Join(formattedLines, "\n")
 }

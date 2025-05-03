@@ -914,28 +914,29 @@ func findClosestType(inputType string, allowedTypes []string) string {
 	inputType = strings.ToLower(inputType)
 	minDistance := 3 // Maximum edit distance to consider a good match
 
-	// Filter allowed types to only those of similar length
-	typesOfSimilarLength := contextx.Filter(allowedTypes, func(validType string) bool {
-		return abs(len(validType)-len(inputType)) <= 2
-	})
-
-	if len(typesOfSimilarLength) == 0 {
-		return ""
-	}
-
-	// Create pairs of type and its distance to the input
-	typeDistancePairs := contextx.Map(typesOfSimilarLength, func(validType string) struct {
-		typeName string
-		distance int
-	} {
-		return struct {
+	// Filter types by similar length and map to type-distance pairs in a single pass
+	typeDistancePairs := contextx.FilterMap(allowedTypes,
+		// Filter by similar length
+		func(validType string) bool {
+			return abs(len(validType)-len(inputType)) <= 2
+		},
+		// Map to type+distance pairs
+		func(validType string) struct {
 			typeName string
 			distance int
-		}{
-			typeName: validType,
-			distance: levenshteinDistance(inputType, validType),
-		}
-	})
+		} {
+			return struct {
+				typeName string
+				distance int
+			}{
+				typeName: validType,
+				distance: levenshteinDistance(inputType, validType),
+			}
+		})
+
+	if len(typeDistancePairs) == 0 {
+		return ""
+	}
 
 	// Find the pair with minimum distance
 	return contextx.Reduce(typeDistancePairs, struct {
