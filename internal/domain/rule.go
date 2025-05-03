@@ -63,10 +63,10 @@ type Rule interface {
 // RuleProvider defines an interface for retrieving validation rules.
 type RuleProvider interface {
 	// GetRules returns all available validation rules.
-	GetRules() []Rule
+	GetRules(ctx context.Context) []Rule
 
 	// GetActiveRules returns all active validation rules based on configuration.
-	GetActiveRules() []Rule
+	GetActiveRules(ctx context.Context) []Rule
 
 	// WithActiveRules returns a new provider with the specified active rules.
 	WithActiveRules(ruleNames []string) RuleProvider

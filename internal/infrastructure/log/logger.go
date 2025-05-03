@@ -1,0 +1,232 @@
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
+// Package log provides logging functionality
+// using zerolog and cobra. It offers easy setup of leveled logging.
+package log
+
+import (
+	"context"
+	"io"
+	"os"
+	"time"
+
+	"github.com/itiquette/gommitlint/internal/contextx"
+	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/rs/zerolog"
+	"github.com/spf13/cobra"
+)
+
+// Level represents the available log levels.
+type Level string
+
+// Predefined log levels.
+const (
+	LevelQuiet Level = "quiet" // Only error messages
+	LevelBrief Level = "brief" // Info and above (default)
+	LevelDebug Level = "debug" // Debug and above
+	LevelTrace Level = "trace" // Trace and above (most verbose)
+)
+
+// Format represents the available log output formats.
+type Format string
+
+const (
+	JSON    Format = "json"
+	CONSOLE Format = "console"
+)
+
+// ToZerologLevel converts a LogLevel to the corresponding zerolog.Level.
+func (l Level) ToZerologLevel() zerolog.Level {
+	switch l {
+	case LevelQuiet:
+		return zerolog.ErrorLevel
+	case LevelDebug:
+		return zerolog.DebugLevel
+	case LevelTrace:
+		return zerolog.TraceLevel
+	case LevelBrief:
+		return zerolog.InfoLevel
+	default:
+		return zerolog.InfoLevel // Default to Info for LevelBrief and unknown levels
+	}
+}
+
+// InitLogger initializes and returns a context with a configured logger.
+// It sets up the logger based on the command line flags for verbosity and quiet mode.
+//
+// Parameters:
+//   - ctx: The parent context
+//   - cmd: The cobra.Command instance, used to retrieve flags
+//   - withCaller: Whether to include caller information in logs
+//   - outputFormat: The output format (json or console)
+//
+// Returns:
+//   - context.Context with the configured logger
+//
+// The logger is set up with a console writer for human-readable output unless json is specified.
+// If the log level is set to trace, it includes the caller information in the log output.
+func InitLogger(ctx context.Context, cmd *cobra.Command, withCaller bool, outputFormat string) context.Context {
+	level := getLogLevel(cmd)
+
+	var writer io.Writer
+	if outputFormat == "json" {
+		writer = os.Stdout
+		zerolog.TimeFieldFormat = time.RFC3339
+	} else {
+		writer = zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339}
+	}
+
+	var logger zerolog.Logger
+
+	// Configure logger based on settings
+	loggerContext := zerolog.New(writer).Level(level).With()
+
+	if withCaller {
+		loggerContext = loggerContext.Caller()
+	}
+
+	// Always include timestamp
+	loggerContext = loggerContext.Timestamp()
+
+	// Build the logger
+	logger = loggerContext.Logger()
+
+	// Add CLI options to context
+	options := domain.CLIOptionsFromContext(ctx)
+	options.Verbosity = level.String()
+	options.VerbosityWithCaller = withCaller
+	options.OutputFormat = outputFormat
+	ctx = domain.WithCLIOptions(ctx, options)
+
+	// Add logger to context
+	ctx = logger.WithContext(ctx)
+
+	// Also add it through our contextx key system
+	ctx = contextx.WithValue(ctx, contextx.LoggerKey, &logger)
+
+	return ctx
+}
+
+// Logger retrieves the zerolog.Logger from the given context.
+// It first tries to get the logger from the zerolog context,
+// then falls back to our contextx mechanism.
+//
+// Parameters:
+//   - ctx: The context containing the logger
+//
+// Returns:
+//   - *zerolog.Logger: A pointer to the logger instance
+//
+// Usage:
+//
+//	logger := log.Logger(ctx)
+//	logger.Info().Msg("This is an info message")
+func Logger(ctx context.Context) *zerolog.Logger {
+	// Try to get from zerolog context
+	logger := zerolog.Ctx(ctx)
+	if logger.GetLevel() != zerolog.Disabled {
+		return logger
+	}
+
+	// Try to get from our context
+	if ctx != nil {
+		if loggerFromContext, ok := contextx.Value[*zerolog.Logger](ctx, contextx.LoggerKey); ok {
+			return loggerFromContext
+		}
+	}
+
+	// Return a default logger if none found
+	return defaultLogger()
+}
+
+// defaultLogger returns a default zerolog logger.
+func defaultLogger() *zerolog.Logger {
+	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr}).
+		Level(zerolog.InfoLevel).
+		With().
+		Timestamp().
+		Logger()
+
+	return &logger
+}
+
+// InitBasicLogger initializes and returns a zerolog.Logger configured with sensible defaults.
+// This is useful when you need a logger before command-line flags are parsed.
+//
+// Returns:
+//   - zerolog.Logger: A basic logger instance
+//
+// The logger is set up with a console writer for human-readable output and INFO level logging.
+func InitBasicLogger() zerolog.Logger {
+	writer := zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339}
+
+	// Configure logger with timestamp and INFO level
+	logger := zerolog.New(writer).
+		Level(zerolog.InfoLevel).
+		With().
+		Timestamp().
+		Logger()
+
+	return logger
+}
+
+// getLogLevel determines the log level based on command flags.
+// It checks for the "quiet" flag first, then falls back to the "verbosity" flag.
+//
+// Parameters:
+//   - cmd: The cobra.Command instance to retrieve flags from
+//
+// Returns:
+//   - zerolog.Level: The determined log level
+//
+// Note: This function assumes that the "verbosity" flag is a string
+// and the "quiet" flag is a boolean.
+func getLogLevel(cmd *cobra.Command) zerolog.Level {
+	level, _ := cmd.Flags().GetString("verbosity")
+	quiet, _ := cmd.Flags().GetBool("quiet")
+
+	if quiet {
+		return LevelQuiet.ToZerologLevel()
+	}
+
+	return Level(level).ToZerologLevel()
+}
+
+// LoggerWith returns a new logger with the provided key-value pair added to its context.
+// This is useful for adding structured fields to log output.
+//
+// Parameters:
+//   - ctx: The context containing the base logger
+//   - key: The key for the field to add
+//   - value: The value for the field to add
+//
+// Returns:
+//   - *zerolog.Logger: A new logger with the field added
+//
+// Usage:
+//
+//	logger := log.LoggerWith(ctx, "user_id", userID)
+//	logger.Info().Msg("User logged in")
+func LoggerWith(ctx context.Context, key string, value interface{}) *zerolog.Logger {
+	logger := Logger(ctx)
+	newLogger := logger.With().Interface(key, value).Logger()
+
+	return &newLogger
+}
+
+// SetLogLevel sets the log level of a logger.
+// This is useful for dynamically changing the log level.
+//
+// Parameters:
+//   - logger: The logger to modify
+//   - level: The new log level
+//
+// Returns:
+//   - *zerolog.Logger: A new logger with the updated level
+func SetLogLevel(logger *zerolog.Logger, level Level) *zerolog.Logger {
+	newLogger := logger.Level(level.ToZerologLevel())
+
+	return &newLogger
+}

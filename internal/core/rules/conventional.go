@@ -13,6 +13,7 @@ import (
 	"github.com/itiquette/gommitlint/internal/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
+	"github.com/itiquette/gommitlint/internal/infrastructure/log"
 )
 
 // ConventionalCommitRule validates that commit messages follow the Conventional Commits specification.
@@ -582,7 +583,14 @@ NEXT STEPS:
 
 // Validate validates a commit against the conventional commit rules.
 // This method follows functional programming principles and does not modify the rule's state.
-func (r ConventionalCommitRule) Validate(_ context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
+func (r ConventionalCommitRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
+	// Get the logger from context
+	logger := log.Logger(ctx)
+	logger.Trace().
+		Str("rule", r.Name()).
+		Str("commit_hash", commit.Hash).
+		Msg("Entering ConventionalCommitRule.Validate")
+
 	// Use the pure functional approach
 	errors, _ := validateConventionalWithState(r, commit)
 

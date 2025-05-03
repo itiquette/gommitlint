@@ -11,6 +11,7 @@ import (
 	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/infrastructure/log"
 )
 
 // Engine is responsible for running validation rules against commits.
@@ -35,7 +36,14 @@ func (e Engine) GetRuleProvider() domain.RuleProvider {
 	return e.ruleProvider
 }
 func (e Engine) ValidateCommit(ctx context.Context, commit domain.CommitInfo) domain.CommitResult {
-	activeRules := e.ruleProvider.GetActiveRules()
+	logger := log.Logger(ctx)
+	logger.Trace().
+		Str("commit_hash", commit.Hash).
+		Str("subject", commit.Subject).
+		Bool("is_merge_commit", commit.IsMergeCommit).
+		Msg("Entering Engine.ValidateCommit")
+
+	activeRules := e.ruleProvider.GetActiveRules(ctx)
 	// Initialize result
 	result := domain.CommitResult{
 		CommitInfo:  commit,
@@ -77,6 +85,11 @@ func (e Engine) ValidateCommit(ctx context.Context, commit domain.CommitInfo) do
 
 // ValidateCommits validates multiple commits against all active rules.
 func (e Engine) ValidateCommits(ctx context.Context, commits []domain.CommitInfo) domain.ValidationResults {
+	logger := log.Logger(ctx)
+	logger.Trace().
+		Int("commit_count", len(commits)).
+		Msg("Entering Engine.ValidateCommits")
+
 	// Create a new ValidationResults
 	results := domain.NewValidationResults()
 

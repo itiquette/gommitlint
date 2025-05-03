@@ -5,6 +5,7 @@
 package config
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/contextx"
+	"github.com/itiquette/gommitlint/internal/infrastructure/log"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
@@ -36,16 +38,17 @@ type Manager struct {
 //
 // Each configuration layer overrides values from the previous layers.
 // This is the preferred entry point for creating a configuration service.
-func NewManager() (*Manager, error) {
+func NewManager(ctx context.Context) (*Manager, error) {
 	manager := &Manager{
 		config: NewConfig(), // Always start with defaults
 	}
 
-	// Try to load from standard paths
-	err := manager.LoadFromStandardPaths()
+	// Try to load from standard paths using the provided context
+	err := manager.LoadFromStandardPaths(ctx)
 	if err != nil {
 		// Just log the error and continue with defaults
-		fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
+		logger := log.Logger(ctx)
+		logger.Warn().Err(err).Msg("Failed to load from standard paths, continuing with defaults")
 	}
 
 	return manager, nil
@@ -53,7 +56,11 @@ func NewManager() (*Manager, error) {
 
 // LoadFromStandardPaths tries to load configuration from standard paths.
 // It follows the XDG Base Directory Specification.
-func (m *Manager) LoadFromStandardPaths() error {
+func (m *Manager) LoadFromStandardPaths(ctx context.Context) error {
+	// Use the provided context instead of creating a new one
+	logger := log.Logger(ctx)
+	logger.Trace().Msg("Entering LoadFromStandardPaths")
+
 	// Get paths in order of priority (project first, then XDG)
 	paths := []string{".gommitlint.yaml"}
 
@@ -89,7 +96,7 @@ func (m *Manager) LoadFromStandardPaths() error {
 		}
 
 		// Try to load this config file
-		err := m.LoadFromFile(path)
+		err := m.LoadFromFile(ctx, path)
 		if err != nil {
 			lastError = err
 
@@ -115,7 +122,9 @@ func (m *Manager) LoadFromStandardPaths() error {
 // LoadFromFile loads configuration from a specific file path.
 // If called multiple times, it merges configurations, with values from
 // later calls overriding values from earlier calls.
-func (m *Manager) LoadFromFile(path string) error {
+func (m *Manager) LoadFromFile(ctx context.Context, path string) error {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("path", path).Msg("Entering LoadFromFile")
 	// Check if file exists
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return fmt.Errorf("configuration file does not exist: %s", path)
@@ -231,6 +240,9 @@ func (m *Manager) SetConfig(config Config) {
 }
 
 // GetValidationConfig returns the current configuration for validation.
-func (m *Manager) GetValidationConfig() Config {
+func (m *Manager) GetValidationConfig(ctx context.Context) Config {
+	logger := log.Logger(ctx)
+	logger.Trace().Msg("Entering GetValidationConfig")
+
 	return m.config
 }

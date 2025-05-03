@@ -11,6 +11,7 @@ import (
 	"github.com/itiquette/gommitlint/internal/application/validate"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
+	"github.com/itiquette/gommitlint/internal/infrastructure/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -502,7 +503,10 @@ func (r *CustomRule) Name() string {
 }
 
 // Validate checks a commit for compliance.
-func (r *CustomRule) Validate(_ context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
+func (r *CustomRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("rule", r.name).Msg("Entering CustomRule.Validate")
+
 	r.violations = nil
 
 	// Example validation: require certain text in the commit message
@@ -568,7 +572,10 @@ func (m *mockValidationEngineWithCustomRules) WithCustomRule(rule domain.Rule) v
 }
 
 // GetAvailableRuleNames returns names of all rules including custom ones.
-func (m *mockValidationEngineWithCustomRules) GetAvailableRuleNames() []string {
+func (m *mockValidationEngineWithCustomRules) GetAvailableRuleNames(ctx context.Context) []string {
+	logger := log.Logger(ctx)
+	logger.Trace().Msg("Entering mockValidationEngineWithCustomRules.GetAvailableRuleNames")
+
 	names := []string{"BuiltInRule1", "BuiltInRule2"}
 	for _, rule := range m.customRules {
 		names = append(names, rule.Name())
@@ -603,8 +610,11 @@ func TestCustomRuleRegistration(t *testing.T) {
 		mockInfo,
 	)
 
+	// Create a context for testing
+	ctx := context.Background()
+
 	// Get rule names before adding custom rule
-	beforeRules := service.GetAvailableRuleNames()
+	beforeRules := service.GetAvailableRuleNames(ctx)
 	require.Len(t, beforeRules, 2) // Should have 2 built-in rules
 
 	// Create and add a custom rule
@@ -617,7 +627,7 @@ func TestCustomRuleRegistration(t *testing.T) {
 	service = newService
 
 	// Get rule names after adding custom rule
-	afterRules := service.GetAvailableRuleNames()
+	afterRules := service.GetAvailableRuleNames(ctx)
 	require.Len(t, afterRules, 3) // Should have 2 built-in rules + 1 custom rule
 
 	// Verify the custom rule is in the list

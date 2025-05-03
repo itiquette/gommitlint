@@ -12,6 +12,7 @@ import (
 	"github.com/itiquette/gommitlint/internal/application/report"
 	"github.com/itiquette/gommitlint/internal/application/validate"
 	"github.com/itiquette/gommitlint/internal/infrastructure/git"
+	"github.com/itiquette/gommitlint/internal/infrastructure/log"
 	"github.com/spf13/cobra"
 )
 
@@ -71,11 +72,13 @@ Examples:
 
 // runNewValidation handles the core validation logic and returns an exit code.
 func runNewValidation(ctx context.Context, cmd *cobra.Command) (int, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Msg("Entering runNewValidation")
 	// Create parameters object to encapsulate all inputs
 	params := NewValidationParameters(cmd)
 
-	// Create validation service
-	service, err := params.CreateValidationService()
+	// Create validation service using the context
+	service, err := params.CreateValidationService(ctx)
 	if err != nil {
 		return 1, fmt.Errorf("failed to create validation service: %w", err)
 	}
@@ -97,7 +100,7 @@ func runNewValidation(ctx context.Context, cmd *cobra.Command) (int, error) {
 	reportGenerator := report.NewGenerator(reportOptions, formatter)
 
 	// Generate report using the domain interface
-	err = reportGenerator.GenerateReport(results)
+	err = reportGenerator.GenerateReport(ctx, results)
 	if err != nil {
 		return 1, fmt.Errorf("failed to generate report: %w", err)
 	}
@@ -111,15 +114,17 @@ func runNewValidation(ctx context.Context, cmd *cobra.Command) (int, error) {
 }
 
 // constructValidationService creates a validation service using injected dependencies.
-func constructValidationService(deps *AppDependencies, repoPath string) (validate.ValidationService, error) {
+func constructValidationService(ctx context.Context, deps *AppDependencies, repoPath string) (validate.ValidationService, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("repo_path", repoPath).Msg("Entering constructValidationService")
 	// Get config from manager
-	unifiedConfig := deps.ConfigManager.GetValidationConfig()
+	unifiedConfig := deps.ConfigManager.GetValidationConfig(ctx)
 
 	// Adapt the config to match the ValidationConfig interface
 	validationConfig := NewConfigAdapter(unifiedConfig)
 
 	// Create a repository adapter
-	repoAdapter, err := git.NewRepositoryAdapter(repoPath)
+	repoAdapter, err := git.NewRepositoryAdapter(ctx, repoPath)
 	if err != nil {
 		return validate.ValidationService{}, fmt.Errorf("failed to create repository adapter: %w", err)
 	}

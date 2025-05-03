@@ -7,14 +7,18 @@
 package integtest
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 
 	"github.com/itiquette/gommitlint/internal/config"
+	"github.com/itiquette/gommitlint/internal/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
 )
 
@@ -78,18 +82,61 @@ func IsGitAvailable() bool {
 
 // createTestConfigManager creates a config manager with a specific configuration file
 // and no defaults or standard paths loaded.
-func createTestConfigManager(t *testing.T, configPath string) *config.Manager {
+// It automatically enhances the provided context with logger for tracing.
+// Returns both the config manager and the enhanced context.
+func createTestConfigManager(ctx context.Context, t *testing.T, configPath string) (*config.Manager, context.Context) {
 	t.Helper()
 
-	// Create manager with defaults
-	manager, err := config.NewManager()
+	// Always enhance context with logger for testing
+	ctx = enhanceContextForTesting(ctx, t)
+
+	// Create manager with the enhanced context
+	manager, err := config.NewManager(ctx)
 	require.NoError(t, err)
 
 	// Reset config to explicitly load only our test config
-	err = manager.LoadFromFile(configPath)
+	err = manager.LoadFromFile(ctx, configPath)
 	require.NoError(t, err)
 
-	return manager
+	// For testing purposes, ensure we're using the default config settings
+	// This helps with tests that are dependent on all rules being registered
+	manager.SetConfig(config.DefaultConfig())
+
+	// Now load the test config on top of the default config
+	err = manager.LoadFromFile(ctx, configPath)
+	require.NoError(t, err)
+
+	return manager, ctx
+}
+
+// enhanceContextForTesting adds test-specific logging settings to an existing context.
+// If the provided context is nil, a new background context will be created.
+func enhanceContextForTesting(ctx context.Context, t *testing.T) context.Context {
+	t.Helper()
+
+	// Use existing context or create a new one if nil
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	// Create a zerolog logger with trace level for tests
+	writer := zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339}
+	logger := zerolog.New(writer).Level(zerolog.TraceLevel).With().Timestamp().Logger()
+
+	// Add CLI options to context
+	// Get existing options or use defaults
+	options := domain.CLIOptionsFromContext(ctx)
+	options.Verbosity = "trace"
+	options.VerbosityWithCaller = true
+	ctx = domain.WithCLIOptions(ctx, options)
+
+	// Add logger to context
+	ctx = logger.WithContext(ctx)
+
+	// Also add it through our contextx key system
+	ctx = contextx.WithValue(ctx, contextx.LoggerKey, &logger)
+
+	return ctx
 }
 
 // Helper function to extract validation errors from a commit result.

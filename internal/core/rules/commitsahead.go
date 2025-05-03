@@ -10,6 +10,7 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
+	"github.com/itiquette/gommitlint/internal/infrastructure/log"
 )
 
 // CommitsAheadRule enforces a maximum number of commits ahead of a reference.
@@ -122,6 +123,9 @@ func extractAheadCount(errors []appErrors.ValidationError) int {
 
 // ValidateCommitsAheadWithState validates commits and returns errors along with updated rule state.
 func ValidateCommitsAheadWithState(ctx context.Context, rule CommitsAheadRule, _ domain.CommitInfo) ([]appErrors.ValidationError, CommitsAheadRule) {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("rule", rule.Name()).Str("reference", rule.ref).Int("max_commits_ahead", rule.maxCommitsAhead).Msg("Entering ValidateCommitsAheadWithState")
+
 	errors := make([]appErrors.ValidationError, 0)
 	result := rule // Create a copy to return
 

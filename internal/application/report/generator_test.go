@@ -6,6 +6,7 @@ package report_test
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"os"
 	"testing"
@@ -17,12 +18,12 @@ import (
 
 // mockFormatter implements the domain.ResultFormatter interface for testing.
 type mockFormatter struct {
-	formatFunc func(results domain.ValidationResults) string
+	formatFunc func(ctx context.Context, results domain.ValidationResults) string
 }
 
-func (m mockFormatter) Format(results domain.ValidationResults) string {
+func (m mockFormatter) Format(ctx context.Context, results domain.ValidationResults) string {
 	if m.formatFunc != nil {
-		return m.formatFunc(results)
+		return m.formatFunc(ctx, results)
 	}
 
 	return "Mock formatted output"
@@ -139,7 +140,7 @@ func TestGenerateReport(t *testing.T) {
 	t.Run("Generate successful report", func(t *testing.T) {
 		buf := &bytes.Buffer{}
 		formatter := mockFormatter{
-			formatFunc: func(_ domain.ValidationResults) string {
+			formatFunc: func(_ context.Context, _ domain.ValidationResults) string {
 				return "Test formatted output for successful validation"
 			},
 		}
@@ -148,7 +149,7 @@ func TestGenerateReport(t *testing.T) {
 			Writer: buf,
 		}, formatter)
 
-		err := generator.GenerateReport(results)
+		err := generator.GenerateReport(context.Background(), results)
 		require.NoError(t, err, "GenerateReport should not return an error for successful validation")
 		require.Contains(t, buf.String(), "Test formatted output", "Output should contain formatted text")
 	})
@@ -162,7 +163,7 @@ func TestGenerateReport(t *testing.T) {
 		os.Stdout = writer
 
 		formatter := mockFormatter{
-			formatFunc: func(_ domain.ValidationResults) string {
+			formatFunc: func(_ context.Context, _ domain.ValidationResults) string {
 				return "Test formatted output for failed validation"
 			},
 		}
@@ -177,7 +178,7 @@ func TestGenerateReport(t *testing.T) {
 			Writer: os.Stdout, // Must use os.Stdout to trigger the error condition
 		}, formatter)
 
-		err := generator.GenerateReport(failedResults)
+		err := generator.GenerateReport(context.Background(), failedResults)
 		require.Error(t, err, "GenerateReport should return an error for failed validation")
 		require.Contains(t, err.Error(), "validation failed", "Error should indicate validation failed")
 
@@ -211,7 +212,7 @@ func TestGenerateSummary(t *testing.T) {
 			Writer: buf,
 		}, formatter)
 
-		err := generator.GenerateSummary(results)
+		err := generator.GenerateSummary(context.Background(), results)
 		require.NoError(t, err, "GenerateSummary should not return an error for successful validation")
 		require.Contains(t, buf.String(), "All commits passed", "Output should indicate success")
 	})
@@ -236,7 +237,7 @@ func TestGenerateSummary(t *testing.T) {
 			Writer: os.Stdout, // Must use os.Stdout to trigger the error condition
 		}, formatter)
 
-		err := generator.GenerateSummary(failedResults)
+		err := generator.GenerateSummary(context.Background(), failedResults)
 		require.Error(t, err, "GenerateSummary should return an error for failed validation")
 		require.Contains(t, err.Error(), "validation failed", "Error should indicate validation failed")
 

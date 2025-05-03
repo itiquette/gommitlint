@@ -6,6 +6,7 @@
 package output
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sort"
@@ -15,6 +16,7 @@ import (
 	"github.com/itiquette/gommitlint/internal/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/errors"
+	"github.com/itiquette/gommitlint/internal/infrastructure/log"
 )
 
 // TextFormatter formats validation results as text.
@@ -132,7 +134,10 @@ func (f TextFormatter) WithLightMode(lightMode bool) TextFormatter {
 // instead of modifying state.
 
 // Format formats validation results as text.
-func (f TextFormatter) Format(results domain.ValidationResults) string {
+func (f TextFormatter) Format(ctx context.Context, results domain.ValidationResults) string {
+	logger := log.Logger(ctx)
+	logger.Trace().Bool("verbose", f.verbose).Bool("light_mode", f.lightMode).Bool("show_help", f.showHelp).Int("total_commits", results.TotalCommits).Msg("Entering TextFormatter.Format")
+
 	var builder strings.Builder
 
 	// For multiple commits, show a summary header first

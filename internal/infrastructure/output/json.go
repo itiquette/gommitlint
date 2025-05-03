@@ -4,12 +4,14 @@
 package output
 
 import (
+	"context"
 	"encoding/json"
 	"time"
 
 	"github.com/itiquette/gommitlint/internal/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/errors"
+	"github.com/itiquette/gommitlint/internal/infrastructure/log"
 )
 
 // JSONFormatter formats validation results as JSON.
@@ -67,7 +69,9 @@ type ValidationResultsOutput struct {
 }
 
 // Format formats validation results as JSON.
-func (JSONFormatter) Format(results domain.ValidationResults) string {
+func (JSONFormatter) Format(ctx context.Context, results domain.ValidationResults) string {
+	logger := log.Logger(ctx)
+	logger.Trace().Int("total_commits", results.TotalCommits).Int("passed_commits", results.PassedCommits).Msg("Entering JSONFormatter.Format")
 	// Create the initial report structure with proper initialization
 	report := ValidationResultsOutput{
 		Timestamp:     time.Now().Format(time.RFC3339),

@@ -18,6 +18,7 @@ import (
 	"github.com/itiquette/gommitlint/internal/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
+	"github.com/itiquette/gommitlint/internal/infrastructure/log"
 )
 
 // RepositoryAdapter adapts a git repository to the domain model.
@@ -29,7 +30,9 @@ type RepositoryAdapter struct {
 
 // NewRepositoryAdapter creates a new RepositoryAdapter for the given path.
 // This version returns a value rather than a pointer.
-func NewRepositoryAdapter(path string) (RepositoryAdapter, error) {
+func NewRepositoryAdapter(ctx context.Context, path string) (RepositoryAdapter, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("path", path).Msg("Entering NewRepositoryAdapter")
 	// If path is empty, use current directory
 	if path == "" {
 		var err error
@@ -41,7 +44,7 @@ func NewRepositoryAdapter(path string) (RepositoryAdapter, error) {
 	}
 
 	// Find the git repository
-	gitDir, err := findGitDir(path)
+	gitDir, err := findGitDir(ctx, path)
 	if err != nil {
 		return RepositoryAdapter{}, fmt.Errorf("failed to find git directory: %w", err)
 	}
@@ -60,6 +63,8 @@ func NewRepositoryAdapter(path string) (RepositoryAdapter, error) {
 
 // GetCommit returns a commit by its hash.
 func (g RepositoryAdapter) GetCommit(ctx context.Context, hash string) (domain.CommitInfo, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("hash", hash).Str("repository_path", g.path).Msg("Entering GetCommit")
 	// Instead of repeating the logic for resolving and getting commits,
 	// use our helper function to get exactly 1 commit
 	commits, err := g.getCommitsFromHash(ctx, hash, 1)
@@ -111,6 +116,8 @@ func (g RepositoryAdapter) GetCommit(ctx context.Context, hash string) (domain.C
 // GetCommitRange returns all commits in the given range.
 // This version uses functional patterns to avoid state mutation.
 func (g RepositoryAdapter) GetCommitRange(ctx context.Context, fromHash, toHash string) ([]domain.CommitInfo, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("from_hash", fromHash).Str("to_hash", toHash).Str("repository_path", g.path).Msg("Entering GetCommitRange")
 	// Resolve the hashes
 	hashes, err := g.resolveHashRange(ctx, fromHash, toHash)
 	if err != nil {
@@ -119,7 +126,7 @@ func (g RepositoryAdapter) GetCommitRange(ctx context.Context, fromHash, toHash 
 	}
 
 	// Create iterator - we don't use getCommitsFromHash here because we need a custom stop condition
-	iter, err := g.createCommitIterator(hashes.toHash)
+	iter, err := g.createCommitIterator(ctx, hashes.toHash)
 	if err != nil {
 		// Create enhanced error
 		errCtx := appErrors.NewContext()
@@ -140,7 +147,7 @@ func (g RepositoryAdapter) GetCommitRange(ctx context.Context, fromHash, toHash 
 	}
 
 	// Collect and convert commits until we reach the "from" commit
-	domainCommits, err := g.collectAndConvertCommits(iter, 0, func(commit *object.Commit) bool {
+	domainCommits, err := g.collectAndConvertCommits(ctx, iter, 0, func(commit *object.Commit) bool {
 		return commit.Hash == hashes.fromHash
 	})
 	if err != nil {
@@ -183,12 +190,15 @@ type hashRange struct {
 // resolveHashRange resolves the 'from' and 'to' revision strings to actual hash objects.
 // This pure function handles the resolution without modifying state.
 func (g RepositoryAdapter) resolveHashRange(
-	_ context.Context,
+	ctx context.Context,
 	fromHashStr,
 	toHashStr string,
 ) (hashRange, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("from_hash_str", fromHashStr).Str("to_hash_str", toHashStr).Msg("Entering resolveHashRange")
+
 	// Resolve the "to" hash
-	toHash, err := g.resolveRevision(toHashStr)
+	toHash, err := g.resolveRevision(ctx, toHashStr)
 	if err != nil {
 		// Create enhanced error
 		errCtx := appErrors.NewContext()
@@ -209,7 +219,7 @@ func (g RepositoryAdapter) resolveHashRange(
 	}
 
 	// Resolve the "from" hash
-	fromHash, err := g.resolveRevision(fromHashStr)
+	fromHash, err := g.resolveRevision(ctx, fromHashStr)
 	if err != nil {
 		// Create enhanced error
 		errCtx := appErrors.NewContext()
@@ -238,10 +248,13 @@ func (g RepositoryAdapter) resolveHashRange(
 // ensureFromCommitIncluded creates a new commit collection that includes the 'from' commit.
 // This pure function returns a new slice rather than modifying an existing one.
 func (g RepositoryAdapter) ensureFromCommitIncluded(
-	_ context.Context,
+	ctx context.Context,
 	commits []domain.CommitInfo,
 	fromHash plumbing.Hash,
 ) ([]domain.CommitInfo, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("from_hash", fromHash.String()).Int("commit_count", len(commits)).Msg("Entering ensureFromCommitIncluded")
+
 	// Create a new collection for immutable processing
 	collection := domain.NewCommitCollection(commits)
 
@@ -251,13 +264,13 @@ func (g RepositoryAdapter) ensureFromCommitIncluded(
 	}
 
 	// Get the "from" commit
-	fromCommit, err := g.getCommitByHash(fromHash)
+	fromCommit, err := g.getCommitByHash(ctx, fromHash)
 	if err != nil {
 		return nil, err
 	}
 
 	// Convert to domain commit
-	domainFromCommit := g.convertCommit(fromCommit)
+	domainFromCommit := g.convertCommit(ctx, fromCommit)
 
 	// Create a new collection with the additional commit
 	newCollection := domain.NewCommitCollection(commits)
@@ -268,6 +281,8 @@ func (g RepositoryAdapter) ensureFromCommitIncluded(
 
 // GetHeadCommits returns the specified number of commits from HEAD.
 func (g RepositoryAdapter) GetHeadCommits(ctx context.Context, count int) ([]domain.CommitInfo, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Int("count", count).Str("repository_path", g.path).Msg("Entering GetHeadCommits")
 	// This is already a nicely structured functional approach, but we'll make it more explicit
 	return g.getCommitsFromHash(ctx, "", count)
 }
@@ -275,29 +290,34 @@ func (g RepositoryAdapter) GetHeadCommits(ctx context.Context, count int) ([]dom
 // getCommitsFromHash is a helper function that fetches commits from a specific hash.
 // This pure function encapsulates the commit fetching logic to avoid duplication.
 func (g RepositoryAdapter) getCommitsFromHash(
-	_ context.Context,
+	ctx context.Context,
 	hashStr string,
 	count int,
 ) ([]domain.CommitInfo, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("hash_str", hashStr).Int("count", count).Msg("Entering getCommitsFromHash")
+
 	// Resolve hash
-	hash, err := g.resolveRevision(hashStr) // Empty string means HEAD
+	hash, err := g.resolveRevision(ctx, hashStr) // Empty string means HEAD
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve revision %q: %w", hashStr, err)
 	}
 
 	// Create iterator
-	iter, err := g.createCommitIterator(hash)
+	iter, err := g.createCommitIterator(ctx, hash)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create commit iterator: %w", err)
 	}
 
 	// Collect and convert commits with limit
-	return g.collectAndConvertCommits(iter, count, nil)
+	return g.collectAndConvertCommits(ctx, iter, count, nil)
 }
 
 // GetCurrentBranch returns the name of the current branch.
 // This uses functional patterns to maintain immutability and avoid state mutation.
 func (g RepositoryAdapter) GetCurrentBranch(ctx context.Context) (string, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("repository_path", g.path).Msg("Entering GetCurrentBranch")
 	// Get the HEAD reference
 	ref, err := g.repo.Head()
 	if err != nil {
@@ -332,7 +352,9 @@ func (g RepositoryAdapter) GetCurrentBranch(ctx context.Context) (string, error)
 
 // findBranchForCommit finds a branch that points to the given commit.
 // This is a pure function that implements the branch search functionally.
-func (g RepositoryAdapter) findBranchForCommit(_ context.Context, commitHash plumbing.Hash) (string, error) {
+func (g RepositoryAdapter) findBranchForCommit(ctx context.Context, commitHash plumbing.Hash) (string, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("commit_hash", commitHash.String()).Msg("Entering findBranchForCommit")
 	// Get all branches
 	branches, err := g.repo.Branches()
 	if err != nil {
@@ -380,7 +402,9 @@ func (g RepositoryAdapter) GetRepositoryName(_ context.Context) string {
 // convertCommit converts a go-git commit to a domain commit.
 // This function is responsible for mapping all infrastructure-specific commit data
 // to our domain model, ensuring that domain logic never has to access implementation details.
-func (g RepositoryAdapter) convertCommit(commit *object.Commit) domain.CommitInfo {
+func (g RepositoryAdapter) convertCommit(ctx context.Context, commit *object.Commit) domain.CommitInfo {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("commit_hash", commit.Hash.String()).Msg("Entering convertCommit")
 	// Split the commit message into subject and body
 	message := commit.Message
 	subject, body := domain.SplitCommitMessage(message)
@@ -420,6 +444,8 @@ func (g RepositoryAdapter) IsValid(_ context.Context) bool {
 
 // GetCommitsAhead returns the number of commits ahead of the given reference.
 func (g RepositoryAdapter) GetCommitsAhead(ctx context.Context, reference string) (int, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("reference", reference).Str("repository_path", g.path).Msg("Entering GetCommitsAhead")
 	// Get all the necessary information to compute commits ahead
 	head, _, mergeBase, err := g.resolveCommitReferences(ctx, reference)
 	if err != nil {
@@ -427,13 +453,13 @@ func (g RepositoryAdapter) GetCommitsAhead(ctx context.Context, reference string
 	}
 
 	// Create iterator from HEAD
-	iter, err := g.createCommitIterator(head)
+	iter, err := g.createCommitIterator(ctx, head)
 	if err != nil {
 		return 0, err
 	}
 
 	// Collect commits between HEAD and merge base
-	commits, err := g.collectCommits(iter, 0, func(commit *object.Commit) bool {
+	commits, err := g.collectCommits(ctx, iter, 0, func(commit *object.Commit) bool {
 		return commit.Hash == mergeBase
 	})
 
@@ -448,24 +474,27 @@ func (g RepositoryAdapter) GetCommitsAhead(ctx context.Context, reference string
 // resolveCommitReferences resolves all necessary references for commit comparison.
 // This pure function gathers all the information needed in a single place.
 func (g RepositoryAdapter) resolveCommitReferences(
-	_ context.Context,
+	ctx context.Context,
 	reference string,
 ) (plumbing.Hash, plumbing.Hash, plumbing.Hash, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("reference", reference).Msg("Entering resolveCommitReferences")
+
 	// Resolve HEAD
-	head, err := g.resolveRevision("")
+	head, err := g.resolveRevision(ctx, "")
 	if err != nil {
 		return plumbing.ZeroHash, plumbing.ZeroHash, plumbing.ZeroHash, err
 	}
 
 	// Resolve reference
-	refHash, err := g.resolveRevision(reference)
+	refHash, err := g.resolveRevision(ctx, reference)
 	if err != nil {
 		return plumbing.ZeroHash, plumbing.ZeroHash, plumbing.ZeroHash,
 			fmt.Errorf("failed to resolve reference %s: %w", reference, err)
 	}
 
 	// Find merge base
-	mergeBase, err := g.findMergeBase(head, refHash)
+	mergeBase, err := g.findMergeBase(ctx, head, refHash)
 	if err != nil {
 		return plumbing.ZeroHash, plumbing.ZeroHash, plumbing.ZeroHash,
 			fmt.Errorf("failed to find merge base: %w", err)
@@ -476,59 +505,66 @@ func (g RepositoryAdapter) resolveCommitReferences(
 
 // findMergeBase finds the common ancestor of two commits.
 // This delegates to the pure function implementation in repository_helpers.go.
-func (g RepositoryAdapter) findMergeBase(hash1, hash2 plumbing.Hash) (plumbing.Hash, error) {
-	return findMergeBase(g.repo, hash1, hash2)
+func (g RepositoryAdapter) findMergeBase(ctx context.Context, hash1, hash2 plumbing.Hash) (plumbing.Hash, error) {
+	return findMergeBase(ctx, g.repo, hash1, hash2)
 }
 
 // resolveRevision resolves a revision to a hash.
 // If the revision is empty, HEAD is used.
 // This delegates to the pure function implementation in repository_helpers.go.
-func (g RepositoryAdapter) resolveRevision(revision string) (plumbing.Hash, error) {
-	return resolveRevision(g.repo, revision)
+func (g RepositoryAdapter) resolveRevision(ctx context.Context, revision string) (plumbing.Hash, error) {
+	return resolveRevision(ctx, g.repo, revision)
 }
 
 // getCommitByHash gets a commit by its hash.
-func (g RepositoryAdapter) getCommitByHash(hash plumbing.Hash) (*object.Commit, error) {
-	return getCommitByHash(g.repo, hash)
+func (g RepositoryAdapter) getCommitByHash(ctx context.Context, hash plumbing.Hash) (*object.Commit, error) {
+	return getCommitByHash(ctx, g.repo, hash)
 }
 
 // createCommitIterator creates a commit iterator starting from the given hash.
-func (g RepositoryAdapter) createCommitIterator(hash plumbing.Hash) (object.CommitIter, error) {
-	return createCommitIterator(g.repo, hash)
+func (g RepositoryAdapter) createCommitIterator(ctx context.Context, hash plumbing.Hash) (object.CommitIter, error) {
+	return createCommitIterator(ctx, g.repo, hash)
 }
 
 // collectCommits collects commits from an iterator, with optional limit and stop condition.
 func (g RepositoryAdapter) collectCommits(
+	ctx context.Context,
 	iter object.CommitIter,
 	limit int,
 	stopFn func(*object.Commit) bool,
 ) ([]*object.Commit, error) {
-	return collectCommits(iter, limit, stopFn)
+	return collectCommits(ctx, iter, limit, stopFn)
 }
 
 // collectAndConvertCommits collects commits from an iterator, converts them to domain commits.
 // This is now implemented using a functional approach with value semantics.
 func (g RepositoryAdapter) collectAndConvertCommits(
+	ctx context.Context,
 	iter object.CommitIter,
 	limit int,
 	stopFn func(*object.Commit) bool,
 ) ([]domain.CommitInfo, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Int("limit", limit).Bool("has_stop_fn", stopFn != nil).Msg("Entering collectAndConvertCommits")
+
 	// Collect git commits
-	commits, err := g.collectCommits(iter, limit, stopFn)
+	commits, err := g.collectCommits(ctx, iter, limit, stopFn)
 	if err != nil {
 		return nil, err
 	}
 
 	// Convert to domain commits using mapCommits function for cleaner, functional transformation
-	return g.mapCommits(commits)
+	return g.mapCommits(ctx, commits)
 }
 
 // mapCommits transforms a slice of git commits to domain commits.
 // This pure function handles the transformation without modifying state.
-func (g RepositoryAdapter) mapCommits(commits []*object.Commit) ([]domain.CommitInfo, error) {
+func (g RepositoryAdapter) mapCommits(ctx context.Context, commits []*object.Commit) ([]domain.CommitInfo, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Int("commit_count", len(commits)).Msg("Entering mapCommits")
 	// Use contextx.Map for a more concise functional transformation
 	domainCommits := contextx.Map(commits, func(commit *object.Commit) domain.CommitInfo {
-		return g.convertCommit(commit)
+		return g.convertCommit(ctx, commit)
 	})
 
 	return domainCommits, nil

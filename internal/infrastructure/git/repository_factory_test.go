@@ -5,6 +5,7 @@
 package git
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -24,8 +25,11 @@ func TestRepositoryFactory(t *testing.T) {
 	// We'll use the actual Git repo path for our tests
 	tempDir = tempGitPath
 
+	// Create context
+	ctx := context.Background()
+
 	// Create factory
-	factory, err := NewRepositoryFactory(tempDir)
+	factory, err := NewRepositoryFactory(ctx, tempDir)
 	require.NoError(t, err, "Failed to create repository factory")
 	require.NotNil(t, factory, "Factory should not be nil")
 

@@ -5,6 +5,7 @@
 package git
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -36,12 +37,15 @@ func cleanupTestRepo(tempDir string) {
 }
 
 func TestFindGitDir(t *testing.T) {
+	// Create context
+	ctx := context.Background()
+
 	// Create temporary git repository
 	_, tempDir := setupTestRepo(t)
 	defer cleanupTestRepo(tempDir)
 
 	// Test finding git directory from the repo root
-	gitDir, err := findGitDir(tempDir)
+	gitDir, err := findGitDir(ctx, tempDir)
 	require.NoError(t, err)
 	require.Equal(t, tempDir, gitDir)
 
@@ -50,12 +54,12 @@ func TestFindGitDir(t *testing.T) {
 	err = os.Mkdir(subDir, 0755)
 	require.NoError(t, err)
 
-	gitDir, err = findGitDir(subDir)
+	gitDir, err = findGitDir(ctx, subDir)
 	require.NoError(t, err)
 	require.Equal(t, tempDir, gitDir)
 
 	// Test finding git directory from a non-existent path
-	_, err = findGitDir("/path/that/does/not/exist")
+	_, err = findGitDir(ctx, "/path/that/does/not/exist")
 	require.Error(t, err)
 }
 
@@ -65,6 +69,9 @@ func TestResolveRevision(t *testing.T) {
 }
 
 func TestCollectCommits(t *testing.T) {
+	// Create context
+	ctx := context.Background()
+
 	t.Run("Should limit commits", func(t *testing.T) {
 		// Create test repository
 		_, tempDir := setupTestRepo(t)
@@ -80,7 +87,7 @@ func TestCollectCommits(t *testing.T) {
 		}
 
 		// Collect commits with limit
-		commits, err := collectCommits(mockIter, 2, nil)
+		commits, err := collectCommits(ctx, mockIter, 2, nil)
 
 		// Verify results
 		require.NoError(t, err)
@@ -123,7 +130,7 @@ func TestCollectCommits(t *testing.T) {
 		require.Equal(t, hash1, collectedCommits[0].Hash, "Test setup should collect only commit1")
 
 		// Now test the actual collectCommits function with a real stop condition
-		commits, err := collectCommits(&mockCommitIter{commits: []*object.Commit{commit1, commit2, commit3}}, 0, stopOnHash2)
+		commits, err := collectCommits(ctx, &mockCommitIter{commits: []*object.Commit{commit1, commit2, commit3}}, 0, stopOnHash2)
 
 		// Verify results
 		require.NoError(t, err)
@@ -156,7 +163,7 @@ func TestCollectCommits(t *testing.T) {
 		}
 
 		// Collect commits with nil commit
-		_, err := collectCommits(mockIter, 0, nil)
+		_, err := collectCommits(ctx, mockIter, 0, nil)
 
 		// Verify results
 		require.Error(t, err)

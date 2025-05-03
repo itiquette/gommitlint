@@ -5,6 +5,7 @@
 package cli
 
 import (
+	"context"
 	"testing"
 
 	"github.com/itiquette/gommitlint/internal/application/report"
@@ -184,7 +185,8 @@ func TestValidationParametersFormatters(t *testing.T) {
 			require.NotNil(t, formatter)
 
 			// Test that it implements the domain.ResultFormatter interface
-			formatted := formatter.Format(domain.ValidationResults{})
+			ctx := context.Background()
+			formatted := formatter.Format(ctx, domain.ValidationResults{})
 			require.NotNil(t, formatted)
 		})
 	}

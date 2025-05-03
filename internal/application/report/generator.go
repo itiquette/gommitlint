@@ -6,12 +6,14 @@
 package report
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/infrastructure/log"
 )
 
 // Format represents the output format for reports.
@@ -74,9 +76,18 @@ func NewGenerator(options Options, formatter domain.ResultFormatter) Generator {
 }
 
 // GenerateReport implements the domain.ReportGenerator interface.
-func (g Generator) GenerateReport(results domain.ValidationResults) error {
-	// Use the injected formatter
-	report := g.formatter.Format(results)
+func (g Generator) GenerateReport(ctx context.Context, results domain.ValidationResults) error {
+	logger := log.Logger(ctx)
+	logger.Trace().
+		Str("format", string(g.options.Format)).
+		Bool("verbose", g.options.Verbose).
+		Bool("show_help", g.options.ShowHelp).
+		Int("total_commits", results.TotalCommits).
+		Int("passed_commits", results.PassedCommits).
+		Msg("Entering Generator.GenerateReport")
+
+	// Use the injected formatter with context
+	report := g.formatter.Format(ctx, results)
 
 	// Use a pure function to write the report
 	if err := writeReport(g.options.Writer, report); err != nil {
@@ -155,7 +166,13 @@ func (g Generator) WithRuleToShowHelp(ruleName string) domain.ReportGenerator {
 
 // GenerateSummary generates a brief summary report.
 // This is used for quick command-line feedback.
-func (g Generator) GenerateSummary(results domain.ValidationResults) error {
+func (g Generator) GenerateSummary(ctx context.Context, results domain.ValidationResults) error {
+	logger := log.Logger(ctx)
+	logger.Trace().
+		Int("total_commits", results.TotalCommits).
+		Int("passed_commits", results.PassedCommits).
+		Msg("Entering Generator.GenerateSummary")
+
 	// Generate the summary content using a pure function
 	summary := buildSummary(results)
 

@@ -5,7 +5,10 @@
 package output
 
 import (
+	"context"
+
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/infrastructure/log"
 )
 
 // FormatterAdapter adapts various output formatters to the domain.ResultFormatter interface.
@@ -80,7 +83,10 @@ func WithTargetRule(ruleName string) FormatterOption {
 }
 
 // Format formats the validation results according to the configured format.
-func (a FormatterAdapter) Format(results domain.ValidationResults) string {
+func (a FormatterAdapter) Format(ctx context.Context, results domain.ValidationResults) string {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("format", a.format).Bool("verbose", a.verbose).Bool("light_mode", a.lightMode).Bool("show_help", a.showHelp).Int("total_commits", results.TotalCommits).Msg("Entering FormatterAdapter.Format")
+
 	var formatter domain.ResultFormatter
 
 	switch a.format {
@@ -103,7 +109,7 @@ func (a FormatterAdapter) Format(results domain.ValidationResults) string {
 	}
 
 	// Delegate formatting to the appropriate formatter
-	return formatter.Format(results)
+	return formatter.Format(ctx, results)
 }
 
 // Ensure FormatterAdapter implements domain.ResultFormatter.

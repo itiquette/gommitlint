@@ -5,7 +5,11 @@
 // Package contextx provides context utilities for the application.
 package contextx
 
-import "context"
+import (
+	"context"
+
+	"github.com/rs/zerolog"
+)
 
 // ContextKey is a type for context value keys to avoid collisions.
 type ContextKey string
@@ -26,6 +30,9 @@ const (
 
 	// RuleNameKey is the context key for rule name.
 	RuleNameKey ContextKey = "rule_name"
+
+	// LoggerKey is the context key for the logger.
+	LoggerKey ContextKey = "logger"
 )
 
 // WithValue wraps context.WithValue with type safety for our ContextKey type.
@@ -45,6 +52,77 @@ func Value[T any](ctx context.Context, key ContextKey) (T, bool) {
 	result, ok := value.(T)
 
 	return result, ok
+}
+
+// Logger retrieves a logger from the context or returns a default logger.
+func Logger(ctx context.Context) *zerolog.Logger {
+	if ctx == nil {
+		return defaultLogger()
+	}
+
+	if logger, ok := ctx.Value(LoggerKey).(*zerolog.Logger); ok {
+		return logger
+	}
+
+	return defaultLogger()
+}
+
+// WithLogger adds a logger to the context.
+func WithLogger(ctx context.Context, logger *zerolog.Logger) context.Context {
+	return context.WithValue(ctx, LoggerKey, logger)
+}
+
+// defaultLogger returns a default zerolog logger.
+func defaultLogger() *zerolog.Logger {
+	logger := zerolog.New(zerolog.NewConsoleWriter()).
+		With().
+		Timestamp().
+		Caller().
+		Logger()
+
+	return &logger
+}
+
+// LoggerWith returns a logger with additional context fields.
+func LoggerWith(ctx context.Context, key string, value interface{}) *zerolog.Logger {
+	logger := Logger(ctx)
+	newLogger := logger.With().Interface(key, value).Logger()
+
+	return &newLogger
+}
+
+// MergeContext combines two contexts, with values from the second context
+// taking precedence over values from the first context.
+func MergeContext(ctx1, ctx2 context.Context) context.Context {
+	if ctx1 == nil {
+		return ctx2
+	}
+
+	if ctx2 == nil {
+		return ctx1
+	}
+
+	// Start with a copy of ctx1
+	result := ctx1
+
+	// Add all context keys from ctx2 to result
+	for _, key := range contextKeys {
+		if val := ctx2.Value(key); val != nil {
+			result = context.WithValue(result, key, val)
+		}
+	}
+
+	return result
+}
+
+// List of all context keys for use in MergeContext.
+var contextKeys = []ContextKey{
+	UserIDKey,
+	TraceIDKey,
+	RepositoryPathKey,
+	RevisionKey,
+	RuleNameKey,
+	LoggerKey,
 }
 
 // Map applies a function to each element of a slice and returns a new slice with the results.

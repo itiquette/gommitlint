@@ -103,11 +103,11 @@ func NewMockRuleProvider(rules []domain.Rule) *MockRuleProvider {
 	}
 }
 
-func (p *MockRuleProvider) GetRules() []domain.Rule {
+func (p *MockRuleProvider) GetRules(_ context.Context) []domain.Rule {
 	return p.rules
 }
 
-func (p *MockRuleProvider) GetActiveRules() []domain.Rule {
+func (p *MockRuleProvider) GetActiveRules(_ context.Context) []domain.Rule {
 	return p.rules
 }
 

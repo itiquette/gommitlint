@@ -4,11 +4,13 @@
 
 package domain
 
+import "context"
+
 // ResultFormatter defines an interface for formatting validation results.
 // This interface decouples the domain from specific output formats.
 type ResultFormatter interface {
 	// Format converts validation results to a formatted string.
-	Format(results ValidationResults) string
+	Format(ctx context.Context, results ValidationResults) string
 }
 
 // ReportGenerator defines an interface for generating reports from validation results.
@@ -17,7 +19,10 @@ type ResultFormatter interface {
 // Follows functional programming principles with value semantics.
 type ReportGenerator interface {
 	// GenerateReport creates a report from validation results.
-	GenerateReport(results ValidationResults) error
+	GenerateReport(ctx context.Context, results ValidationResults) error
+
+	// GenerateSummary creates a brief summary report.
+	GenerateSummary(ctx context.Context, results ValidationResults) error
 
 	// WithVerbose returns a new generator with verbose setting updated.
 	WithVerbose(verbose bool) ReportGenerator

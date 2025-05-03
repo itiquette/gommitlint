@@ -4,10 +4,12 @@
 package output
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/infrastructure/log"
 )
 
 // GitLabCIFormatter formats validation results for GitLab CI.
@@ -46,7 +48,10 @@ func (f GitLabCIFormatter) WithShowHelp(showHelp bool) GitLabCIFormatter {
 }
 
 // Format formats validation results for GitLab CI output.
-func (f GitLabCIFormatter) Format(results domain.ValidationResults) string {
+func (f GitLabCIFormatter) Format(ctx context.Context, results domain.ValidationResults) string {
+	logger := log.Logger(ctx)
+	logger.Trace().Bool("verbose", f.verbose).Bool("show_help", f.showHelp).Int("total_commits", results.TotalCommits).Msg("Entering GitLabCIFormatter.Format")
+
 	var builder strings.Builder
 
 	// Print summary

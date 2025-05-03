@@ -8,7 +8,8 @@ import (
 	"os"
 
 	"github.com/itiquette/gommitlint/internal/config"
-	"github.com/rs/zerolog"
+	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/infrastructure/log"
 	"github.com/spf13/cobra"
 )
 
@@ -39,12 +40,26 @@ func newRootCommand(ctx context.Context, versionString string, deps *AppDependen
 		Long:    `A tool to validate git commit messages against configurable rules.`,
 		// Set the context for the command
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+			// Initialize logger with command flags
+			cliOptions := domain.CLIOptionsFromContext(ctx)
+			ctx = log.InitLogger(ctx, cmd, cliOptions.VerbosityWithCaller, cliOptions.OutputFormat)
+
+			// Log initialization (trace level)
+			logger := log.Logger(ctx)
+			logger.Trace().Msg("Logger initialized")
+
 			// Propagate the context to all commands
 			cmd.SetContext(ctx)
 
 			return nil
 		},
 	}
+
+	// Add common flags
+	rootCmd.PersistentFlags().String("verbosity", "brief", "Log level (quiet, brief, debug, trace)")
+	rootCmd.PersistentFlags().Bool("quiet", false, "Suppress all output except errors")
+	rootCmd.PersistentFlags().Bool("caller", false, "Include caller information in logs")
+	rootCmd.PersistentFlags().String("output", "text", "Output format (text, json, github, gitlab)")
 
 	// Create validate command
 	validateCmd := newValidateCmd(ctx)
@@ -58,17 +73,25 @@ func newRootCommand(ctx context.Context, versionString string, deps *AppDependen
 }
 
 func Execute(version, commitSHA, buildDate string) {
+	// Create root context
 	ctx := context.Background()
 
-	// Create config manager
-	configManager, err := config.NewManager()
+	// Add default CLI options to context
+	ctx = domain.WithCLIOptions(ctx, domain.DefaultCLIOptions())
+
+	// Initialize basic logger
+	logger := log.InitBasicLogger()
+	ctx = logger.WithContext(ctx)
+
+	// Create config manager with the context
+	configManager, err := config.NewManager(ctx)
 	if err != nil {
-		zerolog.Ctx(ctx).Error().Err(err).Msg("Failed to create configuration manager")
+		log.Logger(ctx).Error().Err(err).Msg("Failed to create configuration manager")
 		os.Exit(1)
 	}
 
-	// Use the ExecuteWithDependencies function
-	ExecuteWithDependencies(version, commitSHA, buildDate, configManager)
+	// Use the ExecuteWithDependencies function with the context
+	ExecuteWithDependencies(ctx, version, commitSHA, buildDate, configManager)
 }
 
 // ExecuteWithDependencies executes the root command with explicit dependencies.
@@ -76,12 +99,15 @@ func Execute(version, commitSHA, buildDate string) {
 // It follows the Dependency Inversion Principle by accepting domain interfaces
 // rather than concrete implementations.
 func ExecuteWithDependencies(
+	ctx context.Context,
 	version,
 	commitSHA,
 	buildDate string,
 	configManager *config.Manager,
 ) {
-	ctx := context.Background()
+	// Create a logger
+	logger := log.Logger(ctx)
+	logger.Trace().Msg("Entering ExecuteWithDependencies")
 
 	versionString := version + " (Commit SHA: " + commitSHA + ", Build date: " + buildDate + ")"
 
@@ -103,7 +129,7 @@ func HandleError(ctx context.Context, err error) {
 		return
 	}
 
-	logger := zerolog.Ctx(ctx)
+	logger := log.Logger(ctx)
 
 	// Get exit code - default to 1 for general errors
 	exitCode := 1

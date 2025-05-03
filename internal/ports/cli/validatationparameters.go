@@ -5,6 +5,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -281,12 +282,12 @@ func (p ValidationParameters) CreateFormatter() domain.ResultFormatter {
 }
 
 // CreateValidationService creates a validation service based on parameters.
-func (p ValidationParameters) CreateValidationService() (validate.ValidationService, error) {
+func (p ValidationParameters) CreateValidationService(ctx context.Context) (validate.ValidationService, error) {
 	if err := validateFilePath(p.RepoPath); err != nil {
 		return validate.ValidationService{}, fmt.Errorf("invalid repository path: %w", err)
 	}
 
-	return constructValidationService(p.Dependencies, p.RepoPath)
+	return constructValidationService(ctx, p.Dependencies, p.RepoPath)
 }
 
 // parseRevisionRange parses a revision range string (e.g., "main..HEAD") into a slice of parts.

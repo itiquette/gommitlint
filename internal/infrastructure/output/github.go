@@ -4,10 +4,12 @@
 package output
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/infrastructure/log"
 )
 
 // GitHubActionsFormatter formats validation results for GitHub Actions.
@@ -46,7 +48,10 @@ func (f GitHubActionsFormatter) WithShowHelp(showHelp bool) GitHubActionsFormatt
 }
 
 // Format formats validation results for GitHub Actions output.
-func (f GitHubActionsFormatter) Format(results domain.ValidationResults) string {
+func (f GitHubActionsFormatter) Format(ctx context.Context, results domain.ValidationResults) string {
+	logger := log.Logger(ctx)
+	logger.Trace().Bool("verbose", f.verbose).Bool("show_help", f.showHelp).Int("total_commits", results.TotalCommits).Msg("Entering GitHubActionsFormatter.Format")
+
 	var builder strings.Builder
 
 	// Print summary

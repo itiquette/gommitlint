@@ -17,6 +17,7 @@ import (
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/infrastructure/git"
+	"github.com/itiquette/gommitlint/internal/infrastructure/log"
 )
 
 // Options contains options for validation.
@@ -88,6 +89,9 @@ func (s Service) WithConfig(cfg config.Config) Service {
 
 // ValidateCommit validates a single commit.
 func (s Service) ValidateCommit(ctx context.Context, hash string) (domain.CommitResult, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("hash", hash).Msg("Entering Service.ValidateCommit")
+
 	// Get the commit from the git repository
 	commit, err := s.dependencies.CommitService.GetCommit(ctx, hash)
 	if err != nil {
@@ -100,6 +104,9 @@ func (s Service) ValidateCommit(ctx context.Context, hash string) (domain.Commit
 
 // ValidateHeadCommits validates the specified number of commits from HEAD.
 func (s Service) ValidateHeadCommits(ctx context.Context, count int, skipMerge bool) (domain.ValidationResults, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Int("count", count).Bool("skip_merge", skipMerge).Msg("Entering Service.ValidateHeadCommits")
+
 	// Get the commits from the git repository
 	commits, err := s.dependencies.CommitService.GetHeadCommits(ctx, count)
 	if err != nil {
@@ -118,6 +125,13 @@ func (s Service) ValidateHeadCommits(ctx context.Context, count int, skipMerge b
 
 // ValidateCommitRange validates all commits in the given range.
 func (s Service) ValidateCommitRange(ctx context.Context, fromHash, toHash string, skipMerge bool) (domain.ValidationResults, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().
+		Str("from_hash", fromHash).
+		Str("to_hash", toHash).
+		Bool("skip_merge", skipMerge).
+		Msg("Entering Service.ValidateCommitRange")
+
 	// Get the commits from the git repository
 	commits, err := s.dependencies.CommitService.GetCommitRange(ctx, fromHash, toHash)
 	if err != nil {
@@ -136,6 +150,9 @@ func (s Service) ValidateCommitRange(ctx context.Context, fromHash, toHash strin
 
 // ValidateMessageFile validates a commit message from a file.
 func (s Service) ValidateMessageFile(ctx context.Context, filePath string) (domain.ValidationResults, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("file_path", filePath).Msg("Entering Service.ValidateMessageFile")
+
 	// Read the message file
 	messageBytes, err := os.ReadFile(filePath)
 	if err != nil {
@@ -172,6 +189,16 @@ func (s Service) ValidateMessageFile(ctx context.Context, filePath string) (doma
 
 // ValidateWithOptions validates commits according to the provided options.
 func (s Service) ValidateWithOptions(ctx context.Context, opts Options) (domain.ValidationResults, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().
+		Str("commit_hash", opts.CommitHash).
+		Str("from_hash", opts.FromHash).
+		Str("to_hash", opts.ToHash).
+		Str("message_file", opts.MessageFile).
+		Int("commit_count", opts.CommitCount).
+		Bool("skip_merge", opts.SkipMergeCommits).
+		Msg("Entering Service.ValidateWithOptions")
+
 	// Create validation results
 	results := domain.NewValidationResults()
 
@@ -216,9 +243,12 @@ func (s Service) ValidateWithOptions(ctx context.Context, opts Options) (domain.
 }
 
 // CreateService creates a validation service with the configuration.
-func CreateService(config config.Config, repoPath string) (Service, error) {
+func CreateService(ctx context.Context, config config.Config, repoPath string) (Service, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("repo_path", repoPath).Msg("Entering CreateService")
+
 	// Create the repository adapter
-	repoAdapter, err := git.NewRepositoryAdapter(repoPath)
+	repoAdapter, err := git.NewRepositoryAdapter(ctx, repoPath)
 	if err != nil {
 		return Service{}, fmt.Errorf("failed to create repository adapter: %w", err)
 	}
@@ -255,12 +285,18 @@ type RulesManager struct {
 }
 
 // GetRules returns all rules from rule factories.
-func (p *RulesManager) GetRules() []domain.Rule {
+func (p *RulesManager) GetRules(ctx context.Context) []domain.Rule {
+	logger := log.Logger(ctx)
+	logger.Trace().Msg("Entering RulesManager.GetRules")
+
 	return p.getActiveRules()
 }
 
 // GetActiveRules returns all active rules for validation.
-func (p *RulesManager) GetActiveRules() []domain.Rule {
+func (p *RulesManager) GetActiveRules(ctx context.Context) []domain.Rule {
+	logger := log.Logger(ctx)
+	logger.Trace().Msg("Entering RulesManager.GetActiveRules")
+
 	return p.getActiveRules()
 }
 

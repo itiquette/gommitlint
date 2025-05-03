@@ -16,6 +16,7 @@ import (
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/errors"
+	"github.com/itiquette/gommitlint/internal/infrastructure/log"
 )
 
 // Note: Using domain package interfaces instead of a local interface definition
@@ -113,8 +114,18 @@ func (s ValidationService) WithInfoProvider(infoProvider domain.RepositoryInfoPr
 
 // GetAvailableRuleNames returns the names of all available rules.
 // This is useful for discovery and documentation purposes.
-func (s ValidationService) GetAvailableRuleNames() []string {
-	// Check if the engine provider exposes available rule names
+func (s ValidationService) GetAvailableRuleNames(ctx context.Context) []string {
+	logger := log.Logger(ctx)
+	logger.Trace().Msg("Entering ValidationService.GetAvailableRuleNames")
+
+	// Check if the engine provider exposes available rule names with context
+	if provider, ok := s.engine.(interface {
+		GetAvailableRuleNames(ctx context.Context) []string
+	}); ok {
+		return provider.GetAvailableRuleNames(ctx)
+	}
+
+	// Check if the engine provider exposes available rule names without context
 	if provider, ok := s.engine.(interface{ GetAvailableRuleNames() []string }); ok {
 		return provider.GetAvailableRuleNames()
 	}
@@ -321,13 +332,13 @@ func (s ValidationService) WithDisabledRules(ruleNames []string) (ValidationServ
 }
 
 // GetActiveRules returns the names of currently active rules.
-func (s ValidationService) GetActiveRules() []string {
+func (s ValidationService) GetActiveRules(ctx context.Context) []string {
 	// Check if provider is exposed
 	if engineWithProvider, ok := s.engine.(interface{ GetProvider() domain.RuleProvider }); ok {
 		provider := engineWithProvider.GetProvider()
 
 		// Get active rules and extract their names using Map
-		activeRules := provider.GetActiveRules()
+		activeRules := provider.GetActiveRules(ctx)
 
 		return contextx.Map(activeRules, func(rule domain.Rule) string {
 			return rule.Name()
@@ -339,6 +350,9 @@ func (s ValidationService) GetActiveRules() []string {
 
 // ValidateCommit validates a single commit.
 func (s ValidationService) ValidateCommit(ctx context.Context, hash string) (domain.CommitResult, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("commit_hash", hash).Msg("Entering ValidateCommit")
+
 	// Get the commit from the git repository
 	commit, err := s.commitService.GetCommit(ctx, hash)
 	if err != nil {
@@ -351,6 +365,9 @@ func (s ValidationService) ValidateCommit(ctx context.Context, hash string) (dom
 
 // ValidateHeadCommits validates the specified number of commits from HEAD.
 func (s ValidationService) ValidateHeadCommits(ctx context.Context, count int, skipMerge bool) (domain.ValidationResults, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Int("count", count).Bool("skip_merge", skipMerge).Msg("Entering ValidateHeadCommits")
+
 	// Get the commits from the git repository
 	commits, err := s.commitService.GetHeadCommits(ctx, count)
 	if err != nil {
@@ -369,6 +386,13 @@ func (s ValidationService) ValidateHeadCommits(ctx context.Context, count int, s
 
 // ValidateCommitRange validates all commits in the given range.
 func (s ValidationService) ValidateCommitRange(ctx context.Context, fromHash, toHash string, skipMerge bool) (domain.ValidationResults, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().
+		Str("from_hash", fromHash).
+		Str("to_hash", toHash).
+		Bool("skip_merge", skipMerge).
+		Msg("Entering ValidateCommitRange")
+
 	// Get the commits from the git repository
 	commits, err := s.commitService.GetCommitRange(ctx, fromHash, toHash)
 	if err != nil {
@@ -387,6 +411,9 @@ func (s ValidationService) ValidateCommitRange(ctx context.Context, fromHash, to
 
 // ValidateMessageFile validates a commit message from a file.
 func (s ValidationService) ValidateMessageFile(ctx context.Context, filePath string) (domain.ValidationResults, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("file_path", filePath).Msg("Entering ValidateMessageFile")
+
 	// Read the message file
 	messageBytes, err := os.ReadFile(filePath)
 	if err != nil {
@@ -423,6 +450,16 @@ func (s ValidationService) ValidateMessageFile(ctx context.Context, filePath str
 
 // ValidateWithOptions validates commits according to the provided options.
 func (s ValidationService) ValidateWithOptions(ctx context.Context, opts ValidationOptions) (domain.ValidationResults, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().
+		Str("message_file", opts.MessageFile).
+		Str("commit_hash", opts.CommitHash).
+		Str("from_hash", opts.FromHash).
+		Str("to_hash", opts.ToHash).
+		Int("commit_count", opts.CommitCount).
+		Bool("skip_merge", opts.SkipMergeCommits).
+		Msg("Entering ValidateWithOptions")
+
 	// Validate commit message file
 	if opts.MessageFile != "" {
 		return s.ValidateMessageFile(ctx, opts.MessageFile)
@@ -439,8 +476,6 @@ func (s ValidationService) ValidateWithOptions(ctx context.Context, opts Validat
 		results := domain.NewValidationResults()
 		results.AddCommitResult(result)
 
-		// fmt.Println("HEre i am")
-		// fmt.Println(result.RuleResults[0])
 		return results, nil
 	}
 
@@ -451,11 +486,7 @@ func (s ValidationService) ValidateWithOptions(ctx context.Context, opts Validat
 
 	// Validate head commits
 	if opts.CommitCount > 0 {
-		fmt.Println("HEre i am")
-
-		result, _ := s.ValidateHeadCommits(ctx, opts.CommitCount, opts.SkipMergeCommits)
-
-		fmt.Printf("%+v", result)
+		return s.ValidateHeadCommits(ctx, opts.CommitCount, opts.SkipMergeCommits)
 	}
 
 	// Default to validating the HEAD commit
@@ -782,7 +813,10 @@ var standardDomainRuleFactories = map[string]domainRuleFactory{
 }
 
 // GetRules returns all configured validation rules.
-func (p *DomainRuleProvider) GetRules() []domain.Rule {
+func (p *DomainRuleProvider) GetRules(ctx context.Context) []domain.Rule {
+	logger := log.Logger(ctx)
+	logger.Trace().Msg("Entering DomainRuleProvider.GetRules")
+
 	if p.rules == nil {
 		// Initialize rules if not already done
 		p.initializeRules()
@@ -792,8 +826,19 @@ func (p *DomainRuleProvider) GetRules() []domain.Rule {
 }
 
 // GetActiveRules returns all active validation rules.
-func (p *DomainRuleProvider) GetActiveRules() []domain.Rule {
-	allRules := p.GetRules()
+func (p *DomainRuleProvider) GetActiveRules(ctx context.Context) []domain.Rule {
+	logger := log.Logger(ctx)
+	logger.Trace().Msg("Entering DomainRuleProvider.GetActiveRules")
+
+	// Note: We don't have direct access to the RuleRegistry in DomainRuleProvider
+	// So we'll just use the base rules we already have
+	allRules := p.rules
+
+	// Make sure rules are initialized
+	if p.rules == nil {
+		p.initializeRules()
+		allRules = p.rules
+	}
 
 	// If no specific configuration for enabled/disabled rules, return all rules
 	if len(p.config.EnabledRules()) == 0 && len(p.config.DisabledRules()) == 0 {
@@ -812,8 +857,22 @@ func (p *DomainRuleProvider) GetActiveRules() []domain.Rule {
 
 		// Add only the enabled rules
 		for _, name := range p.config.EnabledRules() {
+			// Check if rule exists in map
 			if rule, exists := ruleMap[name]; exists {
 				activeRules = append(activeRules, rule)
+			} else {
+				// Special case for tests: if the rule doesn't exist but it's been explicitly
+				// requested, create it on demand
+				if factory, ok := standardDomainRuleFactories[name]; ok {
+					var rule domain.Rule
+					if factory.requiresAnalyzer {
+						rule = factory.provider(p.config, p.analyzer)
+					} else {
+						rule = factory.provider(p.config, nil)
+					}
+
+					activeRules = append(activeRules, rule)
+				}
 			}
 		}
 
@@ -1100,14 +1159,17 @@ func (e DomainValidationEngine) WithCustomRuleFactory(
 }
 
 // GetAvailableRuleNames delegates to the provider if it supports this method.
-func (e DomainValidationEngine) GetAvailableRuleNames() []string {
+func (e DomainValidationEngine) GetAvailableRuleNames(ctx context.Context) []string {
+	logger := log.Logger(ctx)
+	logger.Trace().Msg("Entering GetAvailableRuleNames")
+
 	// Check if the provider implements a method to get available rule names
 	if nameProvider, ok := e.provider.(interface{ GetAvailableRuleNames() []string }); ok {
 		return nameProvider.GetAvailableRuleNames()
 	}
 
 	// Otherwise return the names of all rules the provider knows about using Map
-	rules := e.provider.GetRules()
+	rules := e.provider.GetRules(ctx)
 
 	return contextx.Map(rules, func(rule domain.Rule) string {
 		return rule.Name()
@@ -1152,7 +1214,7 @@ func (e DomainValidationEngine) WithDisabledRules(ruleNames []string) (DomainVal
 
 // ValidateCommit validates a single commit.
 func (e DomainValidationEngine) ValidateCommit(ctx context.Context, commit domain.CommitInfo) domain.CommitResult {
-	activeRules := e.provider.GetActiveRules()
+	activeRules := e.provider.GetActiveRules(ctx)
 
 	// Use pure functions for validation logic
 	if len(activeRules) == 0 {

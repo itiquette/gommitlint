@@ -93,12 +93,15 @@ func TestSimpleValidation(t *testing.T) {
 			repoPath, cleanup := SetupTestRepository(t, testCase.commitMessage)
 			defer cleanup()
 
+			// Create enhanced context for testing
+			ctx := enhanceContextForTesting(context.Background(), t)
+
 			// Load configuration - just to verify it doesn't error
-			_, err = config.NewManager()
+			_, err = config.NewManager(ctx)
 			require.NoError(t, err)
 
-			// Create repository factory
-			repoFactory, err := git.NewRepositoryFactory(repoPath)
+			// Create repository factory using the same context
+			repoFactory, err := git.NewRepositoryFactory(ctx, repoPath)
 			require.NoError(t, err)
 
 			// Get services from factory
@@ -119,9 +122,6 @@ func TestSimpleValidation(t *testing.T) {
 			)
 
 			require.NoError(t, err)
-
-			// Create context
-			ctx := context.Background()
 
 			// Validate the HEAD commit
 			result, err := validationService.ValidateCommit(ctx, "HEAD")
@@ -166,11 +166,14 @@ gommitlint:
 	repoPath, cleanup := SetupTestRepository(t, "feat: initial commit\n\nThis commit initializes the test repository with proper formatting.")
 	defer cleanup()
 
-	// Create a config manager that only loads our test config
-	configManager := createTestConfigManager(t, configPath)
+	// Create root context for the entire test
+	ctx := context.Background()
 
-	// Create repository factory
-	repoFactory, err := git.NewRepositoryFactory(repoPath)
+	// Create a config manager that only loads our test config and get enhanced context
+	configManager, ctx := createTestConfigManager(ctx, t, configPath)
+
+	// Create repository factory - using the same context
+	repoFactory, err := git.NewRepositoryFactory(ctx, repoPath)
 	require.NoError(t, err)
 
 	// Get services from factory
@@ -178,20 +181,21 @@ gommitlint:
 	infoProvider := repoFactory.CreateInfoProvider()
 	analyzer := repoFactory.CreateCommitAnalyzer()
 
-	// Create validation service with dependencies
+	// Create validation service with dependencies - continue using the same context
 	validationService := validate.CreateValidationService(
-		configManager.GetValidationConfig(),
+		configManager.GetValidationConfig(ctx),
 		commitService,
 		infoProvider,
 		analyzer,
 	)
 
 	// Get all available rules
-	allRules := validationService.GetAvailableRuleNames()
+	allRules := validationService.GetAvailableRuleNames(ctx)
 	t.Logf("Available rules: %v", allRules)
 
-	// Create a configuration with explicitly empty enabled rules list
-	configObj := config.NewConfig()
+	// Create a configuration with explicitly enabled rules
+	configObj := config.DefaultConfig()
+	// Explicitly set enabled rules to empty to test that behavior
 	configObj = configObj.WithEnabledRules([]string{})
 
 	// Create a new validation service with this modified config
@@ -203,13 +207,13 @@ gommitlint:
 	)
 
 	// Verify active rules - should be empty with empty enabled rules
-	activeRules := validationService.GetActiveRules()
+	activeRules := validationService.GetActiveRules(ctx)
 	t.Logf("Active rules: %v", activeRules)
 	// No assertion here - we'll fix this in a more focused way
 
 	// Now set just one existing rule as active
 	standardRuleName := "SubjectLength"
-	configObj = config.NewConfig()
+	configObj = config.DefaultConfig()
 	configObj = configObj.WithEnabledRules([]string{standardRuleName})
 
 	// Create a new validation service with this modified config
@@ -221,12 +225,9 @@ gommitlint:
 	)
 
 	// Get the active rules
-	activeRules = validationService.GetActiveRules()
+	activeRules = validationService.GetActiveRules(ctx)
 	t.Logf("Active rules after setting %s: %v", standardRuleName, activeRules)
 	require.Contains(t, activeRules, standardRuleName, "Standard rule should be active")
-
-	// Create context
-	ctx := context.Background()
 
 	// Validate with standard rule
 	result, err := validationService.ValidateCommit(ctx, "HEAD")

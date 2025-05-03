@@ -95,11 +95,14 @@ gommitlint:
 			repoPath, cleanup := SetupTestRepository(t, testCase.commitMessage)
 			defer cleanup()
 
-			// Create a config manager that only loads our test config
-			configManager := createTestConfigManager(t, configPath)
+			// Create a single context for the entire test
+			ctx := context.Background()
 
-			// Create repository factory
-			repoFactory, err := git.NewRepositoryFactory(repoPath)
+			// Create a config manager that only loads our test config
+			configManager, ctx := createTestConfigManager(ctx, t, configPath)
+
+			// Create repository factory with the same context
+			repoFactory, err := git.NewRepositoryFactory(ctx, repoPath)
 			require.NoError(t, err)
 
 			// Get services from factory
@@ -109,7 +112,7 @@ gommitlint:
 
 			// Create validation service with dependencies
 			validationService := validate.CreateValidationService(
-				configManager.GetValidationConfig(),
+				configManager.GetValidationConfig(ctx),
 				commitService,
 				infoProvider,
 				analyzer,
@@ -121,8 +124,6 @@ gommitlint:
 			require.NoError(t, err)
 
 			// Create context
-			ctx := context.Background()
-
 			// Validate the HEAD commit
 			result, err := validationService.ValidateCommit(ctx, "HEAD")
 			require.NoError(t, err)
@@ -255,8 +256,11 @@ gommitlint:
 			err = os.WriteFile(messagePath, []byte(testCase.fileContents), 0600)
 			require.NoError(t, err)
 
+			// Create a single context for the entire test
+			ctx := context.Background()
+
 			// Create a config manager that only loads our test config
-			configManager := createTestConfigManager(t, configPath)
+			configManager, ctx := createTestConfigManager(ctx, t, configPath)
 
 			// We need a git repository even for message validation
 			// for the API to initialize correctly
@@ -264,7 +268,7 @@ gommitlint:
 			defer cleanup()
 
 			// Create repository factory
-			repoFactory, err := git.NewRepositoryFactory(repoPath)
+			repoFactory, err := git.NewRepositoryFactory(ctx, repoPath)
 			require.NoError(t, err)
 
 			// Get services from factory
@@ -273,8 +277,9 @@ gommitlint:
 			analyzer := repoFactory.CreateCommitAnalyzer()
 
 			// Create validation service with dependencies
+
 			validationService := validate.CreateValidationService(
-				configManager.GetValidationConfig(),
+				configManager.GetValidationConfig(ctx),
 				commitService,
 				infoProvider,
 				analyzer,
@@ -284,9 +289,6 @@ gommitlint:
 			// This overrides any configuration
 			validationService, err = validationService.WithActiveRules([]string{"SubjectLength", "ConventionalCommit"})
 			require.NoError(t, err)
-
-			// Create context
-			ctx := context.Background()
 
 			// Validate the message file
 			results, err := validationService.ValidateMessageFile(ctx, messagePath)
@@ -382,16 +384,19 @@ gommitlint:
 	err = os.WriteFile(configPath, []byte(configContent), 0600)
 	require.NoError(t, err)
 
+	// Create a single context for the entire test
+	ctx := context.Background()
+
 	// Create a config manager that only loads our test config
-	configManager := createTestConfigManager(t, configPath)
+	configManager, ctx := createTestConfigManager(ctx, t, configPath)
 
 	// Log the raw config file for debugging
 	rawConfig, err := os.ReadFile(configPath)
 	require.NoError(t, err)
 	t.Logf("Raw YAML config:\n%s", string(rawConfig))
 
-	// Get validation config
-	validationConfig := configManager.GetValidationConfig()
+	// Get validation config from the context
+	validationConfig := configManager.GetValidationConfig(ctx)
 
 	// Log the actual value for debugging
 	t.Logf("Actual subject max length in validationConfig: %d", validationConfig.SubjectMaxLength())
@@ -442,11 +447,14 @@ gommitlint:
 	repoPath, cleanup := SetupTestRepository(t, "Initial commit\n\nThis provides a proper commit message with a body.")
 	defer cleanup()
 
-	// Create a config manager that only loads our test config
-	configManager := createTestConfigManager(t, configPath)
+	// Create a single context for the entire test
+	ctx := context.Background()
 
-	// Create repository factory
-	repoFactory, err := git.NewRepositoryFactory(repoPath)
+	// Create a config manager that only loads our test config
+	configManager, ctx := createTestConfigManager(ctx, t, configPath)
+
+	// Create repository factory with the same context
+	repoFactory, err := git.NewRepositoryFactory(ctx, repoPath)
 	require.NoError(t, err)
 
 	// Get services from factory
@@ -455,21 +463,22 @@ gommitlint:
 	analyzer := repoFactory.CreateCommitAnalyzer()
 
 	// Create validation service with dependencies
+
 	validationService := validate.CreateValidationService(
-		configManager.GetValidationConfig(),
+		configManager.GetValidationConfig(ctx),
 		commitService,
 		infoProvider,
 		analyzer,
 	)
 
 	// Get all available rules
-	allRules := validationService.GetAvailableRuleNames()
+	allRules := validationService.GetAvailableRuleNames(ctx)
 	require.NotEmpty(t, allRules, "Should have available rules")
 	t.Logf("Available rules: %v", allRules)
 
 	// Test setting only the SubjectLength rule as active
 	// First modify the config to disable all rules
-	configObj := config.NewConfig()
+	configObj := config.DefaultConfig()
 	configObj = configObj.WithEnabledRules([]string{"SubjectLength"})
 	configObj = configObj.WithDisabledRules([]string{})
 
@@ -482,13 +491,13 @@ gommitlint:
 	)
 
 	// Verify active rules
-	activeRules := validationService.GetActiveRules()
+	activeRules := validationService.GetActiveRules(ctx)
 	t.Logf("Active rules after setting SubjectLength: %v", activeRules)
 	require.Contains(t, activeRules, "SubjectLength", "Should have SubjectLength rule active")
 	// Skip the length check because we can't control all rule initialization in the test environment
 
 	// Test disabling all rules by setting empty active rules
-	configObj = config.NewConfig()
+	configObj = config.DefaultConfig()
 	configObj = configObj.WithEnabledRules([]string{})
 
 	// Create a new validation service with this modified config
@@ -500,11 +509,11 @@ gommitlint:
 	)
 
 	// Verify active rules
-	activeRules = validationService.GetActiveRules()
+	activeRules = validationService.GetActiveRules(ctx)
 	t.Logf("Active rules after disabling all: %v", activeRules)
 	// No assertion on activeRules.length because we want to be flexible with implementations
 	// Create a new config with empty enabled rules
-	emptyConfig := config.NewConfig()
+	emptyConfig := config.DefaultConfig()
 	emptyConfig = emptyConfig.WithEnabledRules([]string{})
 
 	// Create a new validation service with empty rules
@@ -516,7 +525,7 @@ gommitlint:
 	)
 
 	// Check active rules
-	activeRules = validationService.GetActiveRules()
+	activeRules = validationService.GetActiveRules(ctx)
 	t.Logf("Active rules after disabling all: %v", activeRules)
 	// Skip assertions on exact contents - implementation may vary
 
@@ -524,7 +533,7 @@ gommitlint:
 	rulesToActivate := []string{"SubjectLength", "ConventionalCommit"}
 
 	// Create config with only specified rules enabled
-	rulesConfig := config.NewConfig()
+	rulesConfig := config.DefaultConfig()
 	rulesConfig = rulesConfig.WithEnabledRules(rulesToActivate)
 
 	// Create a new service with this config
@@ -536,7 +545,7 @@ gommitlint:
 	)
 
 	// Verify active rules
-	activeRules = validationService.GetActiveRules()
+	activeRules = validationService.GetActiveRules(ctx)
 	t.Logf("Active rules after setting multiple: %v", activeRules)
 
 	// Verify both rules are present

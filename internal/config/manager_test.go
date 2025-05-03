@@ -5,6 +5,7 @@
 package config
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -42,8 +43,11 @@ body:
 		}
 	}()
 
+	// Create a context
+	ctx := context.Background()
+
 	// Create a new manager
-	manager, err := NewManager()
+	manager, err := NewManager(ctx)
 	require.NoError(t, err)
 
 	// Check that config was loaded
@@ -72,12 +76,15 @@ body:
 	err = os.WriteFile(tmpFile, []byte(testYaml), 0600)
 	require.NoError(t, err)
 
+	// Create a context
+	ctx := context.Background()
+
 	// Create a new manager
-	manager, err := NewManager()
+	manager, err := NewManager(ctx)
 	require.NoError(t, err)
 
 	// Load from the file
-	err = manager.LoadFromFile(tmpFile)
+	err = manager.LoadFromFile(ctx, tmpFile)
 	require.NoError(t, err)
 
 	// Check that config was loaded
@@ -89,7 +96,7 @@ body:
 	require.NotNil(t, config)
 
 	// Test loading a file that doesn't exist
-	err = manager.LoadFromFile("non-existent-file.yaml")
+	err = manager.LoadFromFile(ctx, "non-existent-file.yaml")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "does not exist")
 }
@@ -113,12 +120,15 @@ func TestLoadNestedConfig(t *testing.T) {
 	err = os.WriteFile(tmpFile, []byte(testYaml), 0600)
 	require.NoError(t, err)
 
+	// Create a context
+	ctx := context.Background()
+
 	// Create a new manager
-	manager, err := NewManager()
+	manager, err := NewManager(ctx)
 	require.NoError(t, err)
 
 	// Load from the file
-	err = manager.LoadFromFile(tmpFile)
+	err = manager.LoadFromFile(ctx, tmpFile)
 	require.NoError(t, err)
 
 	// Check that config was loaded
@@ -130,8 +140,11 @@ func TestLoadNestedConfig(t *testing.T) {
 }
 
 func TestSetConfig(t *testing.T) {
+	// Create a context
+	ctx := context.Background()
+
 	// Create a new manager
-	manager, err := NewManager()
+	manager, err := NewManager(ctx)
 	require.NoError(t, err)
 
 	// Get initial config
@@ -155,8 +168,11 @@ func TestSetConfig(t *testing.T) {
 }
 
 func TestCreateCustomConfig(t *testing.T) {
+	// Create a context
+	ctx := context.Background()
+
 	// Create a new manager
-	manager, err := NewManager()
+	manager, err := NewManager(ctx)
 	require.NoError(t, err)
 
 	// Create a custom config
@@ -181,8 +197,11 @@ func TestCreateCustomConfig(t *testing.T) {
 }
 
 func TestGetValidationConfig(t *testing.T) {
+	// Create a context
+	ctx := context.Background()
+
 	// Create a new manager
-	manager, err := NewManager()
+	manager, err := NewManager(ctx)
 	require.NoError(t, err)
 
 	// Update config with non-default values
@@ -195,7 +214,7 @@ func TestGetValidationConfig(t *testing.T) {
 	manager.SetConfig(updatedConfig)
 
 	// Get validation config
-	validationConfig := manager.GetValidationConfig()
+	validationConfig := manager.GetValidationConfig(ctx)
 
 	// Check that validation config reflects the manager's config
 	// Test subject config methods

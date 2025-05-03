@@ -6,9 +6,11 @@
 package git
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/infrastructure/log"
 )
 
 // RepositoryFactory creates and manages Git repository services.
@@ -23,8 +25,11 @@ type RepositoryFactory struct {
 var _ domain.RepositoryFactory = RepositoryFactory{}
 
 // NewRepositoryFactory creates a new repository factory for the given path.
-func NewRepositoryFactory(path string) (RepositoryFactory, error) {
-	adapter, err := NewRepositoryAdapter(path)
+func NewRepositoryFactory(ctx context.Context, path string) (RepositoryFactory, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("path", path).Msg("Entering NewRepositoryFactory")
+
+	adapter, err := NewRepositoryAdapter(ctx, path)
 	if err != nil {
 		return RepositoryFactory{}, fmt.Errorf("failed to create repository adapter: %w", err)
 	}
@@ -60,8 +65,11 @@ func (f RepositoryFactory) CreateFullService() domain.GitRepositoryService {
 // This simplifies dependency injection by providing all necessary components at once.
 // This is the preferred method for getting repository services.
 // This version uses value semantics throughout.
-func NewRepositoryServices(path string) (domain.GitCommitService, domain.RepositoryInfoProvider, domain.CommitAnalyzer, error) {
-	adapter, err := NewRepositoryAdapter(path)
+func NewRepositoryServices(ctx context.Context, path string) (domain.GitCommitService, domain.RepositoryInfoProvider, domain.CommitAnalyzer, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("path", path).Msg("Entering NewRepositoryServices")
+
+	adapter, err := NewRepositoryAdapter(ctx, path)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create repository adapter: %w", err)
 	}

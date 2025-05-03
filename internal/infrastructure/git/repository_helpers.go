@@ -6,6 +6,7 @@
 package git
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -16,11 +17,14 @@ import (
 
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/itiquette/gommitlint/internal/contextx"
+	"github.com/itiquette/gommitlint/internal/infrastructure/log"
 )
 
 // findGitDir finds the Git directory from a starting path.
 // Implements security best practices for safe path handling.
-func findGitDir(start string) (string, error) {
+func findGitDir(ctx context.Context, start string) (string, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("start_path", start).Msg("Entering findGitDir")
 	// Normalize the path to prevent path traversal issues
 	start = filepath.Clean(start)
 
@@ -81,7 +85,9 @@ func findGitDir(start string) (string, error) {
 
 // resolveRevision resolves a revision to a hash.
 // If the revision is empty, HEAD is used.
-func resolveRevision(repo *git.Repository, revision string) (plumbing.Hash, error) {
+func resolveRevision(ctx context.Context, repo *git.Repository, revision string) (plumbing.Hash, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("revision", revision).Msg("Entering resolveRevision")
 	// Default to HEAD if no revision provided
 	if revision == "" {
 		ref, err := repo.Head()
@@ -102,7 +108,10 @@ func resolveRevision(repo *git.Repository, revision string) (plumbing.Hash, erro
 }
 
 // getCommitByHash gets a commit by its hash.
-func getCommitByHash(repo *git.Repository, hash plumbing.Hash) (*object.Commit, error) {
+func getCommitByHash(ctx context.Context, repo *git.Repository, hash plumbing.Hash) (*object.Commit, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("hash", hash.String()).Msg("Entering getCommitByHash")
+
 	commit, err := repo.CommitObject(hash)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get commit %s: %w", hash.String(), err)
@@ -112,7 +121,10 @@ func getCommitByHash(repo *git.Repository, hash plumbing.Hash) (*object.Commit, 
 }
 
 // createCommitIterator creates a commit iterator starting from the given hash.
-func createCommitIterator(repo *git.Repository, hash plumbing.Hash) (object.CommitIter, error) {
+func createCommitIterator(ctx context.Context, repo *git.Repository, hash plumbing.Hash) (object.CommitIter, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("hash", hash.String()).Msg("Entering createCommitIterator")
+
 	iter, err := repo.Log(&git.LogOptions{From: hash})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create commit iterator: %w", err)
@@ -124,10 +136,13 @@ func createCommitIterator(repo *git.Repository, hash plumbing.Hash) (object.Comm
 // collectCommits collects commits from an iterator, with optional limit and stop condition.
 // This function uses a functional approach with immutability principles.
 func collectCommits(
+	ctx context.Context,
 	iter object.CommitIter,
 	limit int,
 	stopFn func(*object.Commit) bool,
 ) ([]*object.Commit, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Int("limit", limit).Bool("has_stop_fn", stopFn != nil).Msg("Entering collectCommits")
 	// Pre-allocate capacity if we know the limit
 	initialCapacity := 10 // Default reasonable capacity
 	if limit > 0 {
@@ -268,14 +283,19 @@ func collectCommits(
 
 // getAncestors builds a map of all ancestors of a commit.
 // This is a pure function that returns a new ancestors map rather than modifying a passed map.
-func getAncestors(repo *git.Repository, commit *object.Commit) (map[plumbing.Hash]bool, error) {
-	return getAncestorsWithAccumulator(repo, commit, make(map[plumbing.Hash]bool))
+func getAncestors(ctx context.Context, repo *git.Repository, commit *object.Commit) (map[plumbing.Hash]bool, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("commit_hash", commit.Hash.String()).Msg("Entering getAncestors")
+
+	return getAncestorsWithAccumulator(ctx, repo, commit, make(map[plumbing.Hash]bool))
 }
 
 // getAncestorsWithAccumulator is a helper function that builds an ancestors map.
 // This function allows accumulating results while maintaining functional purity at the public API.
 // It uses an iterative breadth-first approach for better performance while maintaining functional principles.
-func getAncestorsWithAccumulator(repo *git.Repository, commit *object.Commit, ancestors map[plumbing.Hash]bool) (map[plumbing.Hash]bool, error) {
+func getAncestorsWithAccumulator(ctx context.Context, repo *git.Repository, commit *object.Commit, ancestors map[plumbing.Hash]bool) (map[plumbing.Hash]bool, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("commit_hash", commit.Hash.String()).Int("existing_ancestors", len(ancestors)).Msg("Entering getAncestorsWithAccumulator")
 	// Create a new map with the current ancestors using DeepCopyMap
 	result := contextx.DeepCopyMap(ancestors)
 
@@ -315,7 +335,9 @@ func getAncestorsWithAccumulator(repo *git.Repository, commit *object.Commit, an
 
 // findMergeBase finds the common ancestor of two commits using a breadth-first search algorithm.
 // This is now a pure function that doesn't mutate any state.
-func findMergeBase(repo *git.Repository, hash1, hash2 plumbing.Hash) (plumbing.Hash, error) {
+func findMergeBase(ctx context.Context, repo *git.Repository, hash1, hash2 plumbing.Hash) (plumbing.Hash, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("hash1", hash1.String()).Str("hash2", hash2.String()).Msg("Entering findMergeBase")
 	// Get the first commit and its ancestors
 	commit1, err := repo.CommitObject(hash1)
 	if err != nil {
@@ -323,7 +345,7 @@ func findMergeBase(repo *git.Repository, hash1, hash2 plumbing.Hash) (plumbing.H
 	}
 
 	// Get all ancestors of the first commit using our pure function
-	ancestors1, err := getAncestors(repo, commit1)
+	ancestors1, err := getAncestors(ctx, repo, commit1)
 	if err != nil {
 		return plumbing.ZeroHash, fmt.Errorf("failed to get ancestors of %s: %w", hash1.String(), err)
 	}
@@ -335,12 +357,14 @@ func findMergeBase(repo *git.Repository, hash1, hash2 plumbing.Hash) (plumbing.H
 	}
 
 	// Use breadthFirstSearch to find the first common ancestor
-	return findCommonAncestor(repo, commit2, ancestors1)
+	return findCommonAncestor(ctx, repo, commit2, ancestors1)
 }
 
 // findCommonAncestor implements a breadth-first search to find the first common ancestor.
 // This has been extracted as a separate pure function for better separation of concerns.
-func findCommonAncestor(repo *git.Repository, startCommit *object.Commit, ancestorsMap map[plumbing.Hash]bool) (plumbing.Hash, error) {
+func findCommonAncestor(ctx context.Context, repo *git.Repository, startCommit *object.Commit, ancestorsMap map[plumbing.Hash]bool) (plumbing.Hash, error) {
+	logger := log.Logger(ctx)
+	logger.Trace().Str("start_commit", startCommit.Hash.String()).Int("ancestors_map_size", len(ancestorsMap)).Msg("Entering findCommonAncestor")
 	// Initialize the queue with the start commit
 	queue := []*object.Commit{startCommit}
 
