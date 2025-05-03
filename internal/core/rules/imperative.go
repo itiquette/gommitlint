@@ -255,7 +255,7 @@ func ValidateImperativeWithState(rule ImperativeVerbRule, commit domain.CommitIn
 }
 
 // Result returns a concise result message.
-func (r ImperativeVerbRule) Result(errors []appErrors.ValidationError) string {
+func (r ImperativeVerbRule) Result(_ []appErrors.ValidationError) string {
 	if r.BaseRule.HasErrors() {
 		return "Non-imperative verb detected"
 	}
@@ -264,7 +264,7 @@ func (r ImperativeVerbRule) Result(errors []appErrors.ValidationError) string {
 }
 
 // VerboseResult returns a detailed result message.
-func (r ImperativeVerbRule) VerboseResult(errors []appErrors.ValidationError) string {
+func (r ImperativeVerbRule) VerboseResult(_ []appErrors.ValidationError) string {
 	if r.BaseRule.HasErrors() {
 		errors := r.BaseRule.Errors()
 		if len(errors) == 0 {

@@ -7,9 +7,9 @@ package validation
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/itiquette/gommitlint/internal/config"
+	"github.com/itiquette/gommitlint/internal/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
 )
 
@@ -39,12 +39,12 @@ func (e Engine) ValidateCommit(ctx context.Context, commit domain.CommitInfo) do
 	// Initialize result
 	result := domain.CommitResult{
 		CommitInfo:  commit,
-		RuleResults: make([]domain.RuleResult, 0, len(activeRules)),
+		RuleResults: nil, // Will be populated by Map function
 		Passed:      true,
 	}
 
-	// Run each rule
-	for _, rule := range activeRules {
+	// Transform rules into rule results using Map
+	ruleResults := contextx.Map(activeRules, func(rule domain.Rule) domain.RuleResult {
 		// Validate commit against rule
 		ruleErrors := rule.Validate(ctx, commit)
 
@@ -52,7 +52,7 @@ func (e Engine) ValidateCommit(ctx context.Context, commit domain.CommitInfo) do
 		status := domain.StatusPassed
 		if len(ruleErrors) > 0 {
 			status = domain.StatusFailed
-			result.Passed = false
+			result.Passed = false // Side effect: update the overall pass/fail status
 		}
 
 		// Create rule result
@@ -66,30 +66,100 @@ func (e Engine) ValidateCommit(ctx context.Context, commit domain.CommitInfo) do
 			Errors:         ruleErrors,
 		}
 
-		fmt.Printf("%+v\n", ruleResult)
-		// Add rule result to the results collection
-		result.RuleResults = append(result.RuleResults, ruleResult)
-	}
+		return ruleResult
+	})
+
+	// Add all rule results to the commit result
+	result.RuleResults = ruleResults
 
 	return result
 }
 
 // ValidateCommits validates multiple commits against all active rules.
 func (e Engine) ValidateCommits(ctx context.Context, commits []domain.CommitInfo) domain.ValidationResults {
+	// Create a new ValidationResults
 	results := domain.NewValidationResults()
 
-	for _, commit := range commits {
-		// Check for context cancellation
-		if ctx.Err() != nil {
-			break
+	// Define a validator function
+	validateCommit := func(acc struct {
+		results domain.ValidationResults
+		done    bool
+	}, commit domain.CommitInfo) struct {
+		results domain.ValidationResults
+		done    bool
+	} {
+		// Check if we're already done
+		if acc.done {
+			return struct {
+				results domain.ValidationResults
+				done    bool
+			}{
+				results: acc.results,
+				done:    true,
+			}
 		}
 
-		// Validate commit
-		commitResult := e.ValidateCommit(ctx, commit)
+		// Create a new results object to maintain immutability
+		newResults := domain.NewValidationResults()
 
-		// Add to results
-		results.AddCommitResult(commitResult)
+		// Copy existing results
+		newResults.CommitResults = contextx.DeepCopy(acc.results.CommitResults)
+
+		// Validate the commit and append to results
+		commitResult := e.ValidateCommit(ctx, commit)
+		newResults.CommitResults = append(newResults.CommitResults, commitResult)
+
+		// Update total and passed commits counts
+		newResults.TotalCommits = acc.results.TotalCommits + 1
+		newResults.PassedCommits = acc.results.PassedCommits
+
+		if commitResult.Passed {
+			newResults.PassedCommits++
+		}
+
+		// Copy and update rule summary
+		newResults.RuleSummary = contextx.DeepCopyMap(acc.results.RuleSummary)
+
+		for _, ruleResult := range commitResult.RuleResults {
+			if ruleResult.Status == domain.StatusFailed {
+				newResults.RuleSummary[ruleResult.RuleID]++
+			}
+		}
+
+		return struct {
+			results domain.ValidationResults
+			done    bool
+		}{
+			results: newResults,
+			done:    false,
+		}
 	}
 
-	return results
+	// Use reduce to process commits in a functional way
+	accumulator := contextx.Reduce(
+		commits,
+		struct {
+			results domain.ValidationResults
+			done    bool
+		}{
+			results: results,
+			done:    false,
+		},
+		func(acc struct {
+			results domain.ValidationResults
+			done    bool
+		}, commit domain.CommitInfo) struct {
+			results domain.ValidationResults
+			done    bool
+		} {
+			// Skip processing if we're already done
+			if acc.done {
+				return acc
+			}
+
+			return validateCommit(acc, commit)
+		},
+	)
+
+	return accumulator.results
 }

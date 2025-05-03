@@ -10,7 +10,6 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/application/validate"
 	"github.com/itiquette/gommitlint/internal/domain"
-	"github.com/itiquette/gommitlint/internal/errors"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -518,7 +517,7 @@ func (r *CustomRule) Validate(_ context.Context, commit domain.CommitInfo) []app
 }
 
 // Result returns a concise result message.
-func (r *CustomRule) Result(errors []errors.ValidationError) string {
+func (r *CustomRule) Result(_ []appErrors.ValidationError) string {
 	if len(r.violations) > 0 {
 		return "Custom validation failed"
 	}
@@ -527,7 +526,7 @@ func (r *CustomRule) Result(errors []errors.ValidationError) string {
 }
 
 // VerboseResult returns a detailed result message.
-func (r *CustomRule) VerboseResult(errors []errors.ValidationError) string {
+func (r *CustomRule) VerboseResult(_ []appErrors.ValidationError) string {
 	if len(r.violations) > 0 {
 		return "Commit message didn't pass custom validation"
 	}
@@ -536,7 +535,7 @@ func (r *CustomRule) VerboseResult(errors []errors.ValidationError) string {
 }
 
 // Help returns guidance for fixing violations.
-func (r *CustomRule) Help(errors []errors.ValidationError) string {
+func (r *CustomRule) Help(_ []appErrors.ValidationError) string {
 	return "Make sure your commit message meets the custom requirements"
 }
 

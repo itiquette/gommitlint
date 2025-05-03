@@ -7,6 +7,7 @@ package errors
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -58,10 +59,21 @@ func (e ValidationError) FormatAsText(verbose bool) string {
 	if len(e.Context) > 0 {
 		fmt.Fprintf(&builder, "Context:\n")
 
-		for k, v := range e.Context {
+		// Get context keys excluding "help"
+		contextKeys := make([]string, 0, len(e.Context))
+
+		for k := range e.Context {
 			if k != "help" {
-				fmt.Fprintf(&builder, "  %s: %s\n", k, v)
+				contextKeys = append(contextKeys, k)
 			}
+		}
+
+		// Sort keys for consistent output
+		sort.Strings(contextKeys)
+
+		// Format and write each context entry
+		for _, k := range contextKeys {
+			fmt.Fprintf(&builder, "  %s: %s\n", k, e.Context[k])
 		}
 	}
 
@@ -85,12 +97,22 @@ func (e ValidationError) FormatAsJSON() ([]byte, error) {
 		Context: make(map[string]string),
 	}
 
-	// Copy context excluding help
-	for k, v := range e.Context {
+	// Get all context keys except for "help"
+	contextKeys := make([]string, 0, len(e.Context))
+
+	for k := range e.Context {
 		if k != "help" {
-			representation.Context[k] = v
+			contextKeys = append(contextKeys, k)
 		}
 	}
+
+	// Create a filtered context map
+	filteredContext := make(map[string]string, len(contextKeys))
+	for _, k := range contextKeys {
+		filteredContext[k] = e.Context[k]
+	}
+
+	representation.Context = filteredContext
 
 	return json.Marshal(representation)
 }
@@ -107,27 +129,31 @@ func (e ValidationError) FormatAsMarkdown() string {
 		fmt.Fprintf(&builder, "**Help:** %s\n\n", help)
 	}
 
-	// Add context section if needed (excluding help)
-	hasContext := false
+	// Filter context entries (exclude 'help')
+	contextEntries := make([]string, 0, len(e.Context))
 
 	for k := range e.Context {
 		if k != "help" {
-			hasContext = true
-
-			break
+			contextEntries = append(contextEntries, k)
 		}
 	}
 
-	if hasContext {
+	// If we have context entries, format them
+	if len(contextEntries) > 0 {
 		fmt.Fprintf(&builder, "**Context:**\n\n")
 
-		for k, v := range e.Context {
-			if k != "help" {
-				fmt.Fprintf(&builder, "- `%s`: %s\n", k, v)
-			}
+		// Format each context entry as a Markdown list item
+		formattedEntries := make([]string, 0, len(contextEntries))
+		for _, k := range contextEntries {
+			formattedEntries = append(formattedEntries, fmt.Sprintf("- `%s`: %s", k, e.Context[k]))
 		}
 
-		fmt.Fprintf(&builder, "\n")
+		// Sort for consistent output
+		sort.Strings(formattedEntries)
+
+		// Join all formatted entries with newlines
+		builder.WriteString(strings.Join(formattedEntries, "\n"))
+		builder.WriteString("\n\n")
 	}
 
 	return builder.String()

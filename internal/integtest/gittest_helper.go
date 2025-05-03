@@ -106,3 +106,18 @@ func getValidationErrors(result domain.CommitResult) []string {
 
 	return errors
 }
+
+// Helper function to extract validation errors from a commit result, excluding a specific rule.
+func getValidationErrorsExcludingRule(result domain.CommitResult, excludeRule string) []string {
+	var errors []string
+
+	for _, ruleResult := range result.RuleResults {
+		if ruleResult.Status == domain.StatusFailed && ruleResult.RuleName != excludeRule {
+			for _, err := range ruleResult.Errors {
+				errors = append(errors, err.Error())
+			}
+		}
+	}
+
+	return errors
+}

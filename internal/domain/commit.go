@@ -7,6 +7,8 @@ package domain
 
 import (
 	"strings"
+
+	"github.com/itiquette/gommitlint/internal/contextx"
 )
 
 // CommitInfo represents information about a Git commit.
@@ -107,15 +109,10 @@ func (s *DefaultCommitService) IsValidCommitMessage(message string) bool {
 func (s *DefaultCommitService) ExtractJiraTickets(message string, _ string) []string {
 	// This is a simplified implementation
 	// In a real application, you would use regex matching
-	var tickets []string
-
 	parts := strings.Split(message, " ")
-	for _, part := range parts {
-		// Simple check for JIRA-123 format
-		if strings.Contains(part, "-") && len(part) >= 3 {
-			tickets = append(tickets, part)
-		}
-	}
 
-	return tickets
+	// Filter parts that look like JIRA tickets (containing "-" and at least 3 chars)
+	return contextx.Filter(parts, func(part string) bool {
+		return strings.Contains(part, "-") && len(part) >= 3
+	})
 }

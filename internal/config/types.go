@@ -4,6 +4,10 @@
 
 package config
 
+import (
+	"github.com/itiquette/gommitlint/internal/contextx"
+)
+
 // GommitlintConfig is the root configuration structure for the application.
 // This preserves the exact original YAML format while using value semantics.
 type GommitlintConfig struct {
@@ -499,14 +503,7 @@ func (c Config) WithDisabledRules(rules []string) Config {
 
 // deepCopyStringSlice creates a deep copy of a string slice.
 func deepCopyStringSlice(src []string) []string {
-	if src == nil {
-		return nil
-	}
-
-	dst := make([]string, len(src))
-	copy(dst, src)
-
-	return dst
+	return contextx.DeepCopy(src)
 }
 
 // deepCopyStringMap creates a deep copy of a string map.

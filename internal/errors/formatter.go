@@ -7,6 +7,8 @@ package errors
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/itiquette/gommitlint/internal/contextx"
 )
 
 // ErrorFormatter defines an interface for formatting validation errors.
@@ -38,17 +40,17 @@ func (f TextFormatter) FormatErrors(errs []ValidationError) string {
 		return "No validation errors found."
 	}
 
-	var result string
+	formatted := contextx.Map(errs, func(err ValidationError) string {
+		return f.FormatError(err)
+	})
 
-	for index, err := range errs {
-		if index > 0 {
-			result += "\n\n"
+	return contextx.Reduce(formatted, "", func(acc string, errStr string) string {
+		if acc == "" {
+			return errStr
 		}
 
-		result += f.FormatError(err)
-	}
-
-	return result
+		return acc + "\n\n" + errStr
+	})
 }
 
 // JSONFormatter formats errors as JSON.
@@ -60,7 +62,7 @@ func NewJSONFormatter() JSONFormatter {
 }
 
 // FormatError formats a single error as JSON.
-func (f JSONFormatter) FormatError(err ValidationError) string {
+func (JSONFormatter) FormatError(err ValidationError) string {
 	data, jsonErr := err.FormatAsJSON()
 	if jsonErr != nil {
 		return fmt.Sprintf(`{"error":"Failed to format error as JSON: %s"}`, jsonErr)
@@ -70,7 +72,7 @@ func (f JSONFormatter) FormatError(err ValidationError) string {
 }
 
 // FormatErrors formats multiple errors as JSON.
-func (f JSONFormatter) FormatErrors(errs []ValidationError) string {
+func (JSONFormatter) FormatErrors(errs []ValidationError) string {
 	if len(errs) == 0 {
 		return `{"errors":[],"count":0}`
 	}
@@ -83,31 +85,53 @@ func (f JSONFormatter) FormatErrors(errs []ValidationError) string {
 		Context map[string]string `json:"context,omitempty"`
 	}
 
-	representations := make([]errorRepresentation, len(errs))
-
-	for index, err := range errs {
+	// Transform ValidationError to errorRepresentation using Map
+	representations := contextx.Map(errs, func(err ValidationError) errorRepresentation {
 		helpText := ""
 		if help, ok := err.Context["help"]; ok {
 			helpText = help
 		}
 
-		// Copy context excluding help
-		contextMap := make(map[string]string)
+		// Filter context excluding help
+		contextMap := contextx.Reduce(
+			contextx.Map(
+				contextx.Filter(
+					contextx.Keys(err.Context),
+					func(keyName string) bool { return keyName != "help" },
+				),
+				func(keyName string) struct {
+					key   string
+					value string
+				} {
+					return struct {
+						key   string
+						value string
+					}{
+						key:   keyName,
+						value: err.Context[keyName],
+					}
+				},
+			),
+			make(map[string]string),
+			func(acc map[string]string, pair struct {
+				key   string
+				value string
+			}) map[string]string {
+				result := contextx.DeepCopyMap(acc)
+				result[pair.key] = pair.value
 
-		for k, v := range err.Context {
-			if k != "help" {
-				contextMap[k] = v
-			}
-		}
+				return result
+			},
+		)
 
-		representations[index] = errorRepresentation{
+		return errorRepresentation{
 			Rule:    err.Rule,
 			Code:    err.Code,
 			Message: err.Message,
 			Help:    helpText,
 			Context: contextMap,
 		}
-	}
+	})
 
 	data, err := json.Marshal(map[string]interface{}{
 		"errors": representations,
@@ -130,23 +154,25 @@ func NewMarkdownFormatter() MarkdownFormatter {
 }
 
 // FormatError formats a single error as Markdown.
-func (f MarkdownFormatter) FormatError(err ValidationError) string {
+func (MarkdownFormatter) FormatError(err ValidationError) string {
 	return err.FormatAsMarkdown()
 }
 
 // FormatErrors formats multiple errors as Markdown.
-func (f MarkdownFormatter) FormatErrors(errs []ValidationError) string {
+func (MarkdownFormatter) FormatErrors(errs []ValidationError) string {
 	if len(errs) == 0 {
 		return "# No validation errors found."
 	}
 
-	var result string
+	header := fmt.Sprintf("# Validation Errors (%d)\n\n", len(errs))
 
-	result = fmt.Sprintf("# Validation Errors (%d)\n\n", len(errs))
+	formattedErrors := contextx.Map(errs, func(err ValidationError) string {
+		return err.FormatAsMarkdown()
+	})
 
-	for _, err := range errs {
-		result += err.FormatAsMarkdown() + "\n"
-	}
+	errorContent := contextx.Reduce(formattedErrors, "", func(acc string, errStr string) string {
+		return acc + errStr + "\n"
+	})
 
-	return result
+	return header + errorContent
 }

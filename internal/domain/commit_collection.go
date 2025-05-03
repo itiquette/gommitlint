@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 package domain
 
+import "github.com/itiquette/gommitlint/internal/contextx"
+
 // CommitCollection represents a collection of commits with common operations.
 // This is a pure domain entity with value semantics.
 type CommitCollection struct {
@@ -11,24 +13,16 @@ type CommitCollection struct {
 
 // NewCommitCollection creates a new CommitCollection from a slice of commits.
 func NewCommitCollection(commits []CommitInfo) CommitCollection {
-	// Create a defensive copy to ensure value semantics
-	copiedCommits := make([]CommitInfo, len(commits))
-	copy(copiedCommits, commits)
-
 	return CommitCollection{
-		commits: copiedCommits,
+		commits: contextx.DeepCopy(commits),
 	}
 }
 
 // FilterMergeCommits returns a new collection with merge commits filtered out.
 func (c CommitCollection) FilterMergeCommits() CommitCollection {
-	filtered := make([]CommitInfo, 0, len(c.commits))
-
-	for _, commit := range c.commits {
-		if !commit.IsMergeCommit {
-			filtered = append(filtered, commit)
-		}
-	}
+	filtered := contextx.Filter(c.commits, func(commit CommitInfo) bool {
+		return !commit.IsMergeCommit
+	})
 
 	return NewCommitCollection(filtered)
 }
@@ -37,13 +31,9 @@ func (c CommitCollection) FilterMergeCommits() CommitCollection {
 // This uses the AuthorName and AuthorEmail fields of CommitInfo rather than accessing
 // the raw Git commit directly, maintaining domain separation.
 func (c CommitCollection) FilterByAuthor(authorNameOrEmail string) CommitCollection {
-	filtered := make([]CommitInfo, 0, len(c.commits))
-
-	for _, commit := range c.commits {
-		if commit.AuthorName == authorNameOrEmail || commit.AuthorEmail == authorNameOrEmail {
-			filtered = append(filtered, commit)
-		}
-	}
+	filtered := contextx.Filter(c.commits, func(commit CommitInfo) bool {
+		return commit.AuthorName == authorNameOrEmail || commit.AuthorEmail == authorNameOrEmail
+	})
 
 	return NewCommitCollection(filtered)
 }
@@ -69,10 +59,7 @@ func (c CommitCollection) Last() CommitInfo {
 // All returns all commits in the collection as a new slice.
 // This returns a copy to maintain value semantics.
 func (c CommitCollection) All() []CommitInfo {
-	result := make([]CommitInfo, len(c.commits))
-	copy(result, c.commits)
-
-	return result
+	return contextx.DeepCopy(c.commits)
 }
 
 // Count returns the number of commits in the collection.
@@ -87,22 +74,18 @@ func (c CommitCollection) IsEmpty() bool {
 
 // Contains returns true if the collection contains a commit with the specified hash.
 func (c CommitCollection) Contains(hash string) bool {
-	for _, commit := range c.commits {
-		if commit.Hash == hash {
-			return true
-		}
-	}
-
-	return false
+	return contextx.Some(c.commits, func(commit CommitInfo) bool {
+		return commit.Hash == hash
+	})
 }
 
 // Add adds a commit to the collection and returns the updated collection.
 // This creates a new collection rather than modifying the existing one,
 // following value semantics.
 func (c CommitCollection) Add(commit CommitInfo) CommitCollection {
-	newCommits := make([]CommitInfo, len(c.commits)+1)
-	copy(newCommits, c.commits)
-	newCommits[len(c.commits)] = commit
+	// We can't use the generic DeepCopy here directly since we need to append
+	newCommits := contextx.DeepCopy(c.commits)
+	newCommits = append(newCommits, commit)
 
 	return CommitCollection{
 		commits: newCommits,
@@ -113,9 +96,9 @@ func (c CommitCollection) Add(commit CommitInfo) CommitCollection {
 // This creates a new collection rather than modifying the existing one,
 // following value semantics.
 func (c CommitCollection) AddAll(other CommitCollection) CommitCollection {
-	newCommits := make([]CommitInfo, len(c.commits)+len(other.commits))
-	copy(newCommits, c.commits)
-	copy(newCommits[len(c.commits):], other.commits)
+	// We need to append all items from other collection
+	newCommits := contextx.DeepCopy(c.commits)
+	newCommits = append(newCommits, contextx.DeepCopy(other.commits)...)
 
 	return CommitCollection{
 		commits: newCommits,

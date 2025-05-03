@@ -5,6 +5,7 @@
 package domain
 
 import (
+	"github.com/itiquette/gommitlint/internal/contextx"
 	"github.com/itiquette/gommitlint/internal/errors"
 )
 
@@ -82,12 +83,15 @@ func (r *ValidationResults) AddCommitResult(result CommitResult) {
 		r.PassedCommits++
 	}
 
-	// Update rule summary
-	for _, ruleResult := range result.RuleResults {
-		if ruleResult.Status == StatusFailed {
-			r.RuleSummary[ruleResult.RuleID]++
-		}
-	}
+	// Update rule summary using functional approach
+	contextx.ForEach(
+		contextx.Filter(result.RuleResults, func(rr RuleResult) bool {
+			return rr.Status == StatusFailed
+		}),
+		func(rr RuleResult) {
+			r.RuleSummary[rr.RuleID]++
+		},
+	)
 }
 
 // AllPassed returns true if all commits passed validation.

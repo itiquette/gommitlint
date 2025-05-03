@@ -13,7 +13,9 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/itiquette/gommitlint/internal/contextx"
 )
 
 // findGitDir finds the Git directory from a starting path.
@@ -120,7 +122,7 @@ func createCommitIterator(repo *git.Repository, hash plumbing.Hash) (object.Comm
 }
 
 // collectCommits collects commits from an iterator, with optional limit and stop condition.
-// This function now follows functional programming principles, avoiding state mutation.
+// This function uses a functional approach with immutability principles.
 func collectCommits(
 	iter object.CommitIter,
 	limit int,
@@ -132,54 +134,136 @@ func collectCommits(
 		initialCapacity = limit
 	}
 
-	// Create a function to collect commits without modifying external state
-	return collectCommitsWithAccumulator(iter, limit, stopFn, make([]*object.Commit, 0, initialCapacity), 0)
-}
+	// Initialize the result slice
+	result := make([]*object.Commit, 0, initialCapacity)
 
-// collectCommitsWithAccumulator is a helper function that implements the actual collection logic.
-// It uses a functional approach with accumulators to avoid mutating state externally.
-func collectCommitsWithAccumulator(
-	iter object.CommitIter,
-	limit int,
-	stopFn func(*object.Commit) bool,
-	commits []*object.Commit,
-	count int,
-) ([]*object.Commit, error) {
-	// Get the next commit
-	commit, err := iter.Next()
-
-	// Handle completion of iteration
-	if err != nil {
-		// Normal end of iteration
-		if err.Error() == "EOF" {
-			return commits, nil
+	// Define a reducer function that accumulates commits
+	collectNext := func(state struct {
+		commits []*object.Commit
+		count   int
+		done    bool
+		err     error
+	}) (struct {
+		commits []*object.Commit
+		count   int
+		done    bool
+		err     error
+	}, error) {
+		// If we're done or have an error, return current state
+		if state.done || state.err != nil {
+			return state, state.err
 		}
 
-		// Real error
-		return commits, fmt.Errorf("error iterating commits: %w", err)
+		// Get the next commit
+		commit, err := iter.Next()
+
+		// Handle completion of iteration
+		if err != nil {
+			// Normal end of iteration
+			if err.Error() == "EOF" {
+				return struct {
+					commits []*object.Commit
+					count   int
+					done    bool
+					err     error
+				}{
+					commits: state.commits,
+					count:   state.count,
+					done:    true,
+					err:     nil,
+				}, nil
+			}
+
+			// Real error
+			return struct {
+				commits []*object.Commit
+				count   int
+				done    bool
+				err     error
+			}{
+				commits: state.commits,
+				count:   state.count,
+				done:    true,
+				err:     fmt.Errorf("error iterating commits: %w", err),
+			}, err
+		}
+
+		// Check for nil commit
+		if commit == nil {
+			nilErr := errors.New("nil commit encountered")
+
+			return struct {
+				commits []*object.Commit
+				count   int
+				done    bool
+				err     error
+			}{
+				commits: state.commits,
+				count:   state.count,
+				done:    true,
+				err:     nilErr,
+			}, nilErr
+		}
+
+		// Check if we should stop processing
+		if stopFn != nil && stopFn(commit) {
+			return struct {
+				commits []*object.Commit
+				count   int
+				done    bool
+				err     error
+			}{
+				commits: state.commits,
+				count:   state.count,
+				done:    true,
+				err:     nil,
+			}, nil
+		}
+
+		// Create a new slice to maintain immutability
+		newCommits := append(contextx.DeepCopy(state.commits), commit)
+		newCount := state.count + 1
+
+		// Check if we've reached the limit
+		done := limit > 0 && newCount >= limit
+
+		return struct {
+			commits []*object.Commit
+			count   int
+			done    bool
+			err     error
+		}{
+			commits: newCommits,
+			count:   newCount,
+			done:    done,
+			err:     nil,
+		}, nil
 	}
 
-	// Check for nil commit
-	if commit == nil {
-		return commits, errors.New("nil commit encountered")
+	// Start with initial state
+	state := struct {
+		commits []*object.Commit
+		count   int
+		done    bool
+		err     error
+	}{
+		commits: result,
+		count:   0,
+		done:    false,
+		err:     nil,
 	}
 
-	// Check if we should stop processing
-	if stopFn != nil && stopFn(commit) {
-		return commits, nil
+	// Keep collecting until done
+	for !state.done {
+		var err error
+
+		state, err = collectNext(state)
+		if err != nil {
+			return state.commits, err
+		}
 	}
 
-	// Create a new slice with the commit appended
-	newCommits := append(commits, commit)
-	newCount := count + 1
-
-	// Check if we've reached the limit
-	if limit > 0 && newCount >= limit {
-		return newCommits, nil
-	}
-
-	// Continue recursively with updated state
-	return collectCommitsWithAccumulator(iter, limit, stopFn, newCommits, newCount)
+	return state.commits, state.err
 }
 
 // getAncestors builds a map of all ancestors of a commit.
@@ -188,38 +272,42 @@ func getAncestors(repo *git.Repository, commit *object.Commit) (map[plumbing.Has
 	return getAncestorsWithAccumulator(repo, commit, make(map[plumbing.Hash]bool))
 }
 
-// getAncestorsWithAccumulator is a helper function that builds an ancestors map recursively.
+// getAncestorsWithAccumulator is a helper function that builds an ancestors map.
 // This function allows accumulating results while maintaining functional purity at the public API.
+// It uses an iterative breadth-first approach for better performance while maintaining functional principles.
 func getAncestorsWithAccumulator(repo *git.Repository, commit *object.Commit, ancestors map[plumbing.Hash]bool) (map[plumbing.Hash]bool, error) {
-	// Create a new map with the current ancestors
-	result := make(map[plumbing.Hash]bool, len(ancestors)+1)
-	for k, v := range ancestors {
-		result[k] = v
-	}
+	// Create a new map with the current ancestors using DeepCopyMap
+	result := contextx.DeepCopyMap(ancestors)
 
-	// Mark this commit as an ancestor
-	result[commit.Hash] = true
+	// Initialize a queue with the starting commit
+	queue := []*object.Commit{commit}
 
-	// Process parents
-	for _, parentHash := range commit.ParentHashes {
-		// Skip if already processed
-		if result[parentHash] {
-			continue
+	// Process commits breadth-first
+	for len(queue) > 0 {
+		// Dequeue the first commit
+		current := queue[0]
+		queue = queue[1:]
+
+		// Mark this commit as an ancestor (immutably)
+		result = contextx.DeepCopyMap(result)
+		result[current.Hash] = true
+
+		// Process all parents of the current commit
+		for _, parentHash := range current.ParentHashes {
+			// Skip if already processed
+			if result[parentHash] {
+				continue
+			}
+
+			// Get the parent commit
+			parent, err := repo.CommitObject(parentHash)
+			if err != nil {
+				continue // Skip parents that can't be resolved
+			}
+
+			// Add to queue using functional approach (create new slice)
+			queue = append(contextx.DeepCopy(queue), parent)
 		}
-
-		parent, err := repo.CommitObject(parentHash)
-		if err != nil {
-			continue
-		}
-
-		// Recursively get ancestors for the parent
-		updatedResult, err := getAncestorsWithAccumulator(repo, parent, result)
-		if err != nil {
-			return result, err
-		}
-
-		// Use the updated result for subsequent iterations
-		result = updatedResult
 	}
 
 	return result, nil

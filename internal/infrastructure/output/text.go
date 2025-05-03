@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
+	"github.com/itiquette/gommitlint/internal/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/errors"
 )
@@ -176,11 +177,15 @@ func (f TextFormatter) formatRuleSummary(builder *strings.Builder, results domai
 	// Sort rules by name for consistent output
 	ruleNames := getSortedRuleNames(results.RuleSummary)
 
-	for _, ruleName := range ruleNames {
+	// Format each rule failure summary using Map
+	formattedSummaries := contextx.Map(ruleNames, func(ruleName string) string {
 		count := results.RuleSummary[ruleName]
-		builder.WriteString(fmt.Sprintf("  - %s: %d failure(s)\n",
-			f.colors.Bold(ruleName), count))
-	}
+
+		return fmt.Sprintf("  - %s: %d failure(s)\n", f.colors.Bold(ruleName), count)
+	})
+
+	// Join all formatted summaries and write to builder
+	builder.WriteString(strings.Join(formattedSummaries, ""))
 }
 
 // formatCommitHeader formats the commit header information.
@@ -234,35 +239,32 @@ func (f TextFormatter) formatCommitMessage(builder *strings.Builder, message str
 
 // formatRuleResults formats the rule validation results.
 func (f TextFormatter) formatRuleResults(builder *strings.Builder, commitResult domain.CommitResult) {
-	// Debug output for commit results
-	fmt.Fprintf(os.Stderr, "DEBUG formatRuleResults: Rule count=%d\n", len(commitResult.RuleResults))
 	// Sort rule results alphabetically by name
 	sortedRules := getSortedRuleResults(commitResult.RuleResults)
 
-	// Debug output removed for production
+	// Filter out skipped rules
+	activeRules := contextx.Filter(sortedRules, func(rule domain.RuleResult) bool {
+		return rule.Status != domain.StatusSkipped
+	})
 
-	// Print validation results for each rule
-	passedRules := 0
-	totalRules := 0
+	// Count total rules
+	totalRules := len(activeRules)
 
-	// Process all rule results, including CommitsAhead
-	for _, ruleResult := range sortedRules {
-		// Skip rules with StatusSkipped status - these are disabled rules
-		if ruleResult.Status == domain.StatusSkipped {
-			continue
-		}
+	// Count passed rules using Filter
+	passedRules := len(contextx.Filter(activeRules, func(rule domain.RuleResult) bool {
+		return rule.Status == domain.StatusPassed
+	}))
 
-		totalRules++
+	// Process each active rule
+	contextx.ForEach(activeRules, func(ruleResult domain.RuleResult) {
 		ruleName := f.colors.Bold(ruleResult.RuleName)
 
 		if ruleResult.Status == domain.StatusPassed {
-			passedRules++
-
 			f.formatPassedRule(builder, ruleName, ruleResult)
 		} else if ruleResult.Status == domain.StatusFailed {
 			f.formatFailedRule(builder, ruleName, ruleResult)
 		}
-	}
+	})
 
 	f.formatRuleSummaryLine(builder, passedRules, totalRules)
 }
@@ -350,7 +352,8 @@ func (f TextFormatter) formatRuleErrors(builder *strings.Builder, validationErro
 	// Create a text formatter for validation errors
 	errorFormatter := errors.NewTextFormatter(!f.verbose) // invert verbose setting: we want compact when not verbose
 
-	for _, err := range validationErrors {
+	// Process each error and format it
+	contextx.ForEach(validationErrors, func(err errors.ValidationError) {
 		// Check for suggested corrections
 		suggestedForm, hasSuggestion := err.Context["suggested_form"]
 		suggestionText, hasText := err.Context["suggestion_text"]
@@ -370,24 +373,27 @@ func (f TextFormatter) formatRuleErrors(builder *strings.Builder, validationErro
 			builder.WriteString("\n")
 		}
 
-		// Use the enhanced error formatting if a help message is available
-		// Use enhanced error formatting based on verbosity
+		// Format error message based on verbosity
 		if !f.verbose {
 			// Simple format for non-verbose mode
 			builder.WriteString(fmt.Sprintf("    - %s\n",
 				f.colors.Error(err.Message)))
 		} else {
 			// In verbose mode, use the enhanced formatter to get rich error display
-			// Indent the text
 			errorText := errorFormatter.FormatError(err)
 
-			// Add indentation to each line
-			lines := strings.Split(strings.TrimSpace(errorText), "\n")
-			for _, line := range lines {
-				builder.WriteString(fmt.Sprintf("    %s\n", line))
-			}
+			// Format and indent each line
+			indentedLines := contextx.Map(
+				strings.Split(strings.TrimSpace(errorText), "\n"),
+				func(line string) string {
+					return fmt.Sprintf("    %s\n", line)
+				},
+			)
+
+			// Join all lines and write to builder
+			builder.WriteString(strings.Join(indentedLines, ""))
 		}
-	}
+	})
 }
 
 // formatHelpText formats the help text for a failed rule.
@@ -398,27 +404,31 @@ func (f TextFormatter) formatHelpText(builder *strings.Builder, ruleResult domai
 
 		// First, check for enhanced errors with help messages
 		if len(ruleResult.Errors) > 0 {
+			// Use Some to find the first error with a help message
 			helpMessage := ""
 
-			// Try to get help from the first error with a help message
-			for _, err := range ruleResult.Errors {
+			// Find the first error with a non-empty help message
+			foundError := contextx.Some(ruleResult.Errors, func(err errors.ValidationError) bool {
 				if help := err.GetHelp(); help != "" {
 					helpMessage = help
 
-					break
+					return true
 				}
-			}
+
+				return false
+			})
 
 			// If we found a help message, use it
-			if helpMessage != "" {
-				// Properly indent and style all help text lines
+			if foundError && helpMessage != "" {
+				// Format helpLines using Map to transform each line
 				helpLines := strings.Split(helpMessage, "\n")
-				for _, line := range helpLines {
-					builder.WriteString(fmt.Sprintf("  %s\n",
-						f.colors.HelpText(line)))
-				}
+				formattedLines := contextx.Map(helpLines, func(line string) string {
+					return "  " + f.colors.HelpText(line)
+				})
 
-				builder.WriteString("\n")
+				// Join all formatted lines with newlines
+				builder.WriteString(strings.Join(formattedLines, "\n"))
+				builder.WriteString("\n\n")
 
 				return
 			}
@@ -426,14 +436,15 @@ func (f TextFormatter) formatHelpText(builder *strings.Builder, ruleResult domai
 
 		// Fallback to rule's help message if enhanced error doesn't have one
 		if ruleResult.HelpMessage != "" {
-			// Properly indent and style all help text lines
+			// Format helpLines using Map to transform each line
 			helpLines := strings.Split(ruleResult.HelpMessage, "\n")
-			for _, line := range helpLines {
-				builder.WriteString(fmt.Sprintf("  %s\n",
-					f.colors.HelpText(line)))
-			}
+			formattedLines := contextx.Map(helpLines, func(line string) string {
+				return "  " + f.colors.HelpText(line)
+			})
 
-			builder.WriteString("\n")
+			// Join all formatted lines with newlines
+			builder.WriteString(strings.Join(formattedLines, "\n"))
+			builder.WriteString("\n\n")
 		}
 	} else if f.verbose && ruleResult.RuleID != "" {
 		// In verbose mode, show a compact tip if we have a rule ID
@@ -492,28 +503,43 @@ func (f TextFormatter) FormatRuleHelp(ruleName string, results domain.Validation
 
 // formatSpecificRuleHelp formats help for a specific rule if available.
 func (f TextFormatter) formatSpecificRuleHelp(builder *strings.Builder, ruleName string, results domain.ValidationResults) bool {
-	// Look through all rule results to find matching rule
+	// Create a flattened list of all rule results from all commits
+	// Using a nested loop isn't very functional, let's refactor this
+	// Function to check if a rule matches the requested name
+	ruleMatches := func(ruleResult domain.RuleResult) bool {
+		return strings.EqualFold(ruleResult.RuleID, ruleName) ||
+			strings.EqualFold(ruleResult.RuleName, ruleName)
+	}
+
+	// Function to format a rule's help message
+	formatRuleHelp := func(ruleResult domain.RuleResult) bool {
+		if ruleResult.HelpMessage == "" {
+			return false
+		}
+
+		// Format help lines using functional Map
+		helpLines := strings.Split(ruleResult.HelpMessage, "\n")
+		formattedLines := contextx.Map(helpLines, func(line string) string {
+			return "  " + f.colors.HelpText(line)
+		})
+
+		// Join all formatted lines with newlines
+		builder.WriteString(strings.Join(formattedLines, "\n"))
+		builder.WriteString("\n\n")
+
+		return true
+	}
+
+	// Search through all commit results
 	for _, commitResult := range results.CommitResults {
-		for _, ruleResult := range commitResult.RuleResults {
-			if !strings.EqualFold(ruleResult.RuleID, ruleName) &&
-				!strings.EqualFold(ruleResult.RuleName, ruleName) {
-				continue
+		// Filter for matching rules
+		matchingRules := contextx.Filter(commitResult.RuleResults, ruleMatches)
+
+		// Format the first matching rule with a help message (if any)
+		for _, rule := range matchingRules {
+			if formatRuleHelp(rule) {
+				return true
 			}
-
-			if ruleResult.HelpMessage == "" {
-				continue
-			}
-
-			// Properly indent and style all help text lines
-			helpLines := strings.Split(ruleResult.HelpMessage, "\n")
-			for _, line := range helpLines {
-				builder.WriteString(fmt.Sprintf("  %s\n",
-					f.colors.HelpText(line)))
-			}
-
-			builder.WriteString("\n")
-
-			return true
 		}
 	}
 
@@ -524,44 +550,57 @@ func (f TextFormatter) formatSpecificRuleHelp(builder *strings.Builder, ruleName
 func (f TextFormatter) formatAvailableRules(builder *strings.Builder, results domain.ValidationResults) {
 	builder.WriteString("Available rules:\n")
 
-	// Collect unique rule names
+	// Collect unique rule names using a map
 	ruleNames := make(map[string]bool)
 
+	// Extract all rule names from the results
 	for _, commitResult := range results.CommitResults {
 		for _, ruleResult := range commitResult.RuleResults {
 			ruleNames[ruleResult.RuleName] = true
 		}
 	}
 
-	// Sort and list available rules
-	sortedNames := make([]string, 0)
+	// Convert the map keys to a slice
+	uniqueRuleNames := make([]string, 0, len(ruleNames))
 	for name := range ruleNames {
-		sortedNames = append(sortedNames, name)
+		uniqueRuleNames = append(uniqueRuleNames, name)
 	}
 
+	// Sort the names using Map to transform them
+	sortedNames := contextx.DeepCopy(uniqueRuleNames)
 	sort.Strings(sortedNames)
 
-	for _, name := range sortedNames {
-		builder.WriteString(fmt.Sprintf("  - %s\n", f.colors.Bold(name)))
-	}
+	// Use Map to transform each rule name into a formatted string
+	formattedRules := contextx.Map(sortedNames, func(name string) string {
+		return "  - " + f.colors.Bold(name)
+	})
+
+	// Join all formatted rules with newlines
+	builder.WriteString(strings.Join(formattedRules, "\n"))
+	builder.WriteString("\n")
 }
 
 // getSortedRuleNames returns a sorted slice of rule names from a map.
 func getSortedRuleNames(ruleMap map[string]int) []string {
-	ruleNames := make([]string, 0)
-	for ruleName := range ruleMap {
-		ruleNames = append(ruleNames, ruleName)
+	// Extract keys from map
+	keys := make([]string, 0, len(ruleMap))
+	for k := range ruleMap {
+		keys = append(keys, k)
 	}
 
-	sort.Strings(ruleNames)
+	// Create a deep copy of the keys and sort it (following functional patterns)
+	sorted := contextx.DeepCopy(keys)
+	sort.Strings(sorted)
 
-	return ruleNames
+	return sorted
 }
 
 // getSortedRuleResults returns a sorted slice of rule results.
 func getSortedRuleResults(ruleResults []domain.RuleResult) []domain.RuleResult {
-	sortedRules := make([]domain.RuleResult, len(ruleResults))
-	copy(sortedRules, ruleResults)
+	// Create a deep copy using our utility
+	sortedRules := contextx.DeepCopy(ruleResults)
+
+	// Sort the copy by rule name
 	sort.Slice(sortedRules, func(i, j int) bool {
 		return strings.ToLower(sortedRules[i].RuleName) < strings.ToLower(sortedRules[j].RuleName)
 	})

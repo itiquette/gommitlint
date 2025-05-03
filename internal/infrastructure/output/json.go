@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/itiquette/gommitlint/internal/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/errors"
 )
@@ -66,7 +67,7 @@ type ValidationResultsOutput struct {
 }
 
 // Format formats validation results as JSON.
-func (f JSONFormatter) Format(results domain.ValidationResults) string {
+func (JSONFormatter) Format(results domain.ValidationResults) string {
 	// Create the initial report structure with proper initialization
 	report := ValidationResultsOutput{
 		Timestamp:     time.Now().Format(time.RFC3339),
@@ -100,12 +101,8 @@ func copyRuleSummary(summary map[string]int) map[string]int {
 		return nil
 	}
 
-	result := make(map[string]int, len(summary))
-	for k, v := range summary {
-		result[k] = v
-	}
-
-	return result
+	// Use contextx.DeepCopyMap for consistency with other functions
+	return contextx.DeepCopyMap(summary)
 }
 
 // transformCommitResults transforms commit results to output format.
@@ -115,14 +112,14 @@ func transformCommitResults(commits []domain.CommitResult) []CommitResultOutput 
 		return []CommitResultOutput{}
 	}
 
-	result := make([]CommitResultOutput, 0, len(commits))
+	// Filter out commits with empty hash
+	validCommits := contextx.Filter(commits, func(commit domain.CommitResult) bool {
+		return commit.CommitInfo.Hash != ""
+	})
 
-	for _, commitResult := range commits {
-		if commitResult.CommitInfo.Hash == "" {
-			continue
-		}
-
-		// Create a new commit output for each commit
+	// Map valid commits to CommitResultOutput objects
+	return contextx.Map(validCommits, func(commitResult domain.CommitResult) CommitResultOutput {
+		// Create a new commit output
 		commit := CommitResultOutput{
 			Hash:         commitResult.CommitInfo.Hash,
 			Subject:      commitResult.CommitInfo.Subject,
@@ -133,14 +130,14 @@ func transformCommitResults(commits []domain.CommitResult) []CommitResultOutput 
 			WarningCount: 0, // Currently not tracking warnings
 		}
 
-		// In the new version, CommitInfo has CommitDate field
+		// Set commit date with fallback
 		if commitResult.CommitInfo.CommitDate != "" {
 			commit.CommitDate = commitResult.CommitInfo.CommitDate
 		} else {
-			commit.CommitDate = time.Now().Format(time.RFC3339) // Fallback
+			commit.CommitDate = time.Now().Format(time.RFC3339)
 		}
 
-		// Set author from available info
+		// Set author with fallback
 		if commitResult.CommitInfo.AuthorName != "" {
 			authorInfo := commitResult.CommitInfo.AuthorName
 			if commitResult.CommitInfo.AuthorEmail != "" {
@@ -149,13 +146,11 @@ func transformCommitResults(commits []domain.CommitResult) []CommitResultOutput 
 
 			commit.Author = authorInfo
 		} else {
-			commit.Author = "Unknown" // Fallback
+			commit.Author = "Unknown"
 		}
 
-		result = append(result, commit)
-	}
-
-	return result
+		return commit
+	})
 }
 
 // transformRuleResults transforms rule results to output format.
@@ -165,11 +160,9 @@ func transformRuleResults(rules []domain.RuleResult) []RuleResultOutput {
 		return []RuleResultOutput{}
 	}
 
-	result := make([]RuleResultOutput, 0, len(rules))
-
-	for _, ruleResult := range rules {
-		// Create a new rule output for each rule
-		rule := RuleResultOutput{
+	// Map rule results to rule outputs
+	return contextx.Map(rules, func(ruleResult domain.RuleResult) RuleResultOutput {
+		return RuleResultOutput{
 			ID:             ruleResult.RuleID,
 			Name:           ruleResult.RuleName,
 			Status:         string(ruleResult.Status),
@@ -178,35 +171,25 @@ func transformRuleResults(rules []domain.RuleResult) []RuleResultOutput {
 			Help:           ruleResult.HelpMessage,
 			Errors:         transformValidationErrors(ruleResult.Errors),
 		}
-
-		result = append(result, rule)
-	}
-
-	return result
+	})
 }
 
 // transformValidationErrors transforms validation errors to output format.
 // This pure function handles the transformation without modifying state.
-func transformValidationErrors(errors []errors.ValidationError) []ValidationErrorOutput {
-	if len(errors) == 0 {
+func transformValidationErrors(validationErrors []errors.ValidationError) []ValidationErrorOutput {
+	if len(validationErrors) == 0 {
 		return nil
 	}
 
-	result := make([]ValidationErrorOutput, 0, len(errors))
-
-	for _, err := range errors {
-		// Create a new error output for each error
-		errorOutput := ValidationErrorOutput{
+	// Map validation errors to error outputs
+	return contextx.Map(validationErrors, func(err errors.ValidationError) ValidationErrorOutput {
+		return ValidationErrorOutput{
 			Rule:    err.Rule,
 			Code:    err.Code,
 			Message: err.Message,
 			Context: copyContextMap(err.Context),
 		}
-
-		result = append(result, errorOutput)
-	}
-
-	return result
+	})
 }
 
 // copyContextMap creates a deep copy of the context map.
@@ -216,24 +199,19 @@ func copyContextMap(context map[string]string) map[string]string {
 		return nil
 	}
 
-	result := make(map[string]string, len(context))
-	for k, v := range context {
-		result[k] = v
-	}
-
-	return result
+	// Use contextx.DeepCopyMap for consistency with other functions
+	return contextx.DeepCopyMap(context)
 }
 
 // countErrors counts the number of errors in rule results.
 // This pure function aggregates data without modifying state.
 func countErrors(rules []domain.RuleResult) int {
-	count := 0
+	// Filter for failed rules and then use Reduce to sum error counts
+	failedRules := contextx.Filter(rules, func(rule domain.RuleResult) bool {
+		return rule.Status == domain.StatusFailed
+	})
 
-	for _, rule := range rules {
-		if rule.Status == domain.StatusFailed {
-			count += len(rule.Errors)
-		}
-	}
-
-	return count
+	return contextx.Reduce(failedRules, 0, func(total int, rule domain.RuleResult) int {
+		return total + len(rule.Errors)
+	})
 }

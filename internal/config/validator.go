@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/itiquette/gommitlint/internal/contextx"
 )
 
 // Maximum allowed lengths to prevent resource exhaustion.
@@ -328,10 +330,5 @@ func isValidRuleName(s string) bool {
 
 // mapKeys extracts keys from a map.
 func mapKeys(m map[string]bool) []string {
-	keys := make([]string, 0, len(m))
-	for key := range m {
-		keys = append(keys, key)
-	}
-
-	return keys
+	return contextx.Keys(m)
 }

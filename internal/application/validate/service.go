@@ -12,6 +12,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/itiquette/gommitlint/internal/contextx"
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/errors"
@@ -325,15 +326,12 @@ func (s ValidationService) GetActiveRules() []string {
 	if engineWithProvider, ok := s.engine.(interface{ GetProvider() domain.RuleProvider }); ok {
 		provider := engineWithProvider.GetProvider()
 
-		// Get active rules and extract their names
+		// Get active rules and extract their names using Map
 		activeRules := provider.GetActiveRules()
-		names := make([]string, 0, len(activeRules))
 
-		for _, rule := range activeRules {
-			names = append(names, rule.Name())
-		}
-
-		return names
+		return contextx.Map(activeRules, func(rule domain.Rule) string {
+			return rule.Name()
+		})
 	}
 
 	return []string{}
@@ -1108,15 +1106,12 @@ func (e DomainValidationEngine) GetAvailableRuleNames() []string {
 		return nameProvider.GetAvailableRuleNames()
 	}
 
-	// Otherwise return the names of all rules the provider knows about
+	// Otherwise return the names of all rules the provider knows about using Map
 	rules := e.provider.GetRules()
-	names := make([]string, 0, len(rules))
 
-	for _, rule := range rules {
-		names = append(names, rule.Name())
-	}
-
-	return names
+	return contextx.Map(rules, func(rule domain.Rule) string {
+		return rule.Name()
+	})
 }
 
 // WithActiveRules returns a new DomainValidationEngine with the specified active rules.
@@ -1192,11 +1187,6 @@ func validateWithRules(ctx context.Context, commit domain.CommitInfo, rules []do
 	results := make([]domain.RuleResult, 0, len(rules))
 
 	for _, rule := range rules {
-		// Check for context cancellation
-		if ctx.Err() != nil {
-			break
-		}
-
 		// Create rule result
 		ruleResult := validateWithRule(ctx, commit, rule)
 		results = append(results, ruleResult)
@@ -1293,13 +1283,9 @@ func generateHelpMessageForFailingRule(ruleName, currentHelp string, _ []errors.
 
 // allRulesPassed checks if all rules passed.
 func allRulesPassed(results []domain.RuleResult) bool {
-	for _, result := range results {
-		if result.Status == domain.StatusFailed {
-			return false
-		}
-	}
-
-	return true
+	return contextx.Every(results, func(result domain.RuleResult) bool {
+		return result.Status != domain.StatusFailed
+	})
 }
 
 // ValidateCommits validates multiple commits.
@@ -1310,20 +1296,11 @@ func (e DomainValidationEngine) ValidateCommits(ctx context.Context, commits []d
 
 // validateMultipleCommits is a pure function that validates multiple commits.
 func validateMultipleCommits(ctx context.Context, engine DomainValidationEngine, commits []domain.CommitInfo) domain.ValidationResults {
-	results := domain.NewValidationResults()
-
-	for _, commit := range commits {
-		// Check for context cancellation
-		if ctx.Err() != nil {
-			break
-		}
-
-		// Validate commit
+	// Use Reduce to process each commit and accumulate results
+	return contextx.Reduce(commits, domain.NewValidationResults(), func(acc domain.ValidationResults, commit domain.CommitInfo) domain.ValidationResults {
 		commitResult := engine.ValidateCommit(ctx, commit)
+		acc.AddCommitResult(commitResult)
 
-		// Add to results
-		results.AddCommitResult(commitResult)
-	}
-
-	return results
+		return acc
+	})
 }

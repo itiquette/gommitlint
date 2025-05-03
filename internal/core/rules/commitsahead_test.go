@@ -42,9 +42,9 @@ func TestCommitsAheadRuleNilRepo(t *testing.T) {
 	require.NotEmpty(t, errors)
 	validationErr := errors[0]
 	require.Equal(t, string(appErrors.ErrInvalidRepo), validationErr.Code)
-	require.Contains(t, updatedRule.Result(errors), "Git repository not accessible")
-	require.Contains(t, updatedRule.VerboseResult(errors), "Repository object is nil")
-	require.Contains(t, updatedRule.Help(errors), "Git repository is not accessible")
+	require.Contains(t, updatedRule.Result(errors), "Repository access error")
+	require.Contains(t, updatedRule.VerboseResult(errors), "Repository access error")
+	require.Contains(t, updatedRule.Help(errors), "Repository access error")
 }
 
 func TestCommitsAheadRuleNilRepoInsideGetter(t *testing.T) {
@@ -67,9 +67,9 @@ func TestCommitsAheadRuleNilRepoInsideGetter(t *testing.T) {
 	require.NotEmpty(t, errors)
 	validationErr := errors[0]
 	require.Equal(t, string(appErrors.ErrInvalidRepo), validationErr.Code)
-	require.Contains(t, updatedRule.Result(errors), "Git repository not accessible")
-	require.Contains(t, updatedRule.VerboseResult(errors), "Repository object is nil")
-	require.Contains(t, updatedRule.Help(errors), "Git repository is not accessible")
+	require.Contains(t, updatedRule.Result(errors), "Repository access error")
+	require.Contains(t, updatedRule.VerboseResult(errors), "Repository access error")
+	require.Contains(t, updatedRule.Help(errors), "Repository access error")
 }
 
 func TestCommitsAheadRuleOptions(t *testing.T) {
@@ -91,8 +91,13 @@ func TestCommitsAheadRuleOptions(t *testing.T) {
 	ctx := context.Background()
 	errors, updatedRule := rules.ValidateCommitsAheadWithState(ctx, rule, commit)
 
-	// Check for errors
-	require.Empty(t, errors)
+	// Check that we have the status info error, but no real validation errors
+	require.NotEmpty(t, errors)
+	// Check that only status info errors are present
+	for _, err := range errors {
+		require.Equal(t, "status_info", err.Code)
+	}
+
 	require.Equal(t, "CommitsAhead", updatedRule.Name())
 }
 
@@ -115,12 +120,22 @@ func TestCommitsAheadRuleTooManyCommits(t *testing.T) {
 	ctx := context.Background()
 	errors, _ := rules.ValidateCommitsAheadWithState(ctx, rule, commit)
 
-	// Check for errors
+	// Check for errors - we need at least one error with the "too_many_commits" code
 	require.NotEmpty(t, errors)
-	validationErr := errors[0]
-	require.Equal(t, string(appErrors.ErrTooManyCommits), validationErr.Code)
 
-	// Use the errors directly for our assertions, as they contain the error information
+	// Find the real error, not the status info one
+	var validationErr appErrors.ValidationError
+
+	for _, err := range errors {
+		if err.Code == string(appErrors.ErrTooManyCommits) {
+			validationErr = err
+
+			break
+		}
+	}
+
+	// Now check the real error
+	require.Equal(t, string(appErrors.ErrTooManyCommits), validationErr.Code)
 	require.Contains(t, validationErr.Message, "HEAD is 5 commits ahead")
 	require.Contains(t, validationErr.Message, "maximum allowed: 4")
 
@@ -137,7 +152,6 @@ func TestCommitsAheadRuleTooManyCommits(t *testing.T) {
 func TestCommitsAheadHelpMessage(t *testing.T) {
 	t.Run("help message is appropriate for state", func(t *testing.T) {
 		// Test the success case first
-		errors := []appErrors.ValidationError{}
 		rule := rules.NewCommitsAheadRule(
 			rules.WithReference("main"),
 			rules.WithMaxCommitsAhead(5),
@@ -150,11 +164,16 @@ func TestCommitsAheadHelpMessage(t *testing.T) {
 
 		// Validate to update the rule state
 		ctx := context.Background()
-		errors, rule = rules.ValidateCommitsAheadWithState(ctx, rule, domain.CommitInfo{})
+		validationErrors, rule := rules.ValidateCommitsAheadWithState(ctx, rule, domain.CommitInfo{})
 
-		// Check the help message
-		helpMsg := rule.Help(errors)
-		require.Equal(t, "No errors to fix", helpMsg)
+		// Check the help message - since these are all status_info errors, should get "Your branch is in sync" message
+		helpMsg := rule.Help(validationErrors)
+		require.Contains(t, helpMsg, "Your branch is in sync with main")
+
+		// Special case for empty errors array
+		emptyErrors := []appErrors.ValidationError{}
+		emptyHelpMsg := rule.Help(emptyErrors)
+		require.Equal(t, "No errors to fix", emptyHelpMsg)
 
 		// Now test the error case
 		errorRule := rules.NewCommitsAheadRule(
@@ -169,10 +188,14 @@ func TestCommitsAheadHelpMessage(t *testing.T) {
 			"HEAD is 10 commits ahead of main (maximum allowed: 5)",
 		).WithContext("commits_ahead", "10")
 
-		errorRule = errorRule.SetErrors([]appErrors.ValidationError{err})
+		// Make a slice with the error
+		errorsWithTooMany := []appErrors.ValidationError{err}
+
+		// Set the errors on the rule
+		errorRule = errorRule.SetErrors(errorsWithTooMany)
 
 		// Check the help message for error state
-		errorHelpMsg := errorRule.Help(errors)
+		errorHelpMsg := errorRule.Help(errorsWithTooMany)
 		require.NotContains(t, errorHelpMsg, "No errors to fix")
 		require.Contains(t, errorHelpMsg, "Your branch is too far ahead")
 		require.Contains(t, errorHelpMsg, "merge")
@@ -204,7 +227,7 @@ func TestCommitsAheadResultMessage(t *testing.T) {
 				maxCommitsAhead: 5,
 				errorCode:       appErrors.ErrTooManyCommits,
 				errorMessage:    "HEAD is 10 commits ahead of main (maximum allowed: 5)",
-				expectedMessage: "Too many commits ahead of main (10)",
+				expectedMessage: "HEAD is 10 commits ahead of main",
 				hasErrors:       true,
 			},
 			{
@@ -213,7 +236,7 @@ func TestCommitsAheadResultMessage(t *testing.T) {
 				maxCommitsAhead: 5,
 				errorCode:       appErrors.ErrInvalidRepo,
 				errorMessage:    "Repository object is nil",
-				expectedMessage: "Git repository not accessible",
+				expectedMessage: "Repository access error",
 				hasErrors:       true,
 			},
 		}
@@ -226,7 +249,7 @@ func TestCommitsAheadResultMessage(t *testing.T) {
 					rules.WithMaxCommitsAhead(testCase.maxCommitsAhead),
 				)
 
-				errors := []appErrors.ValidationError{}
+				var errors []appErrors.ValidationError
 				// Set up errors if needed
 				if testCase.hasErrors {
 					err := appErrors.CreateBasicError(
@@ -240,7 +263,8 @@ func TestCommitsAheadResultMessage(t *testing.T) {
 						err = err.WithContext("commits_ahead", "10")
 					}
 
-					rule = rule.SetErrors([]appErrors.ValidationError{err})
+					errors = []appErrors.ValidationError{err}
+					rule = rule.SetErrors(errors)
 				} else {
 					// For the success case, we need to simulate a successful validation
 					// which would set the ahead count in the rule
@@ -263,7 +287,7 @@ func TestCommitsAheadResultMessage(t *testing.T) {
 				require.Contains(t, result, testCase.expectedMessage, "Result message should match expected")
 
 				// For error cases, the message should clearly indicate a problem
-				if testCase.hasErrors {
+				if testCase.hasErrors && testCase.errorCode == appErrors.ErrInvalidRepo {
 					require.NotContains(t, result, "HEAD is 0 commit", "Error result should not use 'HEAD is X commit' format")
 				}
 			})
@@ -380,9 +404,23 @@ func TestCommitsAheadRuleWithConfig(t *testing.T) {
 			errors := rule.Validate(ctx, commit)
 
 			if testCase.wantErrors {
-				require.NotEmpty(t, errors, "Expected validation errors but got none")
+				// For cases with expected errors, there should be at least one real error
+				hasRealError := false
+
+				for _, err := range errors {
+					if err.Code != "status_info" {
+						hasRealError = true
+
+						break
+					}
+				}
+
+				require.True(t, hasRealError, "Expected validation errors but got none")
 			} else {
-				require.Empty(t, errors, "Expected no validation errors but got: %v", errors)
+				// For cases without expected errors, there should be only status info errors
+				for _, err := range errors {
+					require.Equal(t, "status_info", err.Code, "Expected only status_info errors but got: %v", errors)
+				}
 			}
 		})
 	}

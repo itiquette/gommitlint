@@ -11,7 +11,6 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/core/rules/sigverify"
 	"github.com/itiquette/gommitlint/internal/domain"
-	"github.com/itiquette/gommitlint/internal/errors"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
 
@@ -107,7 +106,7 @@ func (r SignedIdentityRule) ErrorCount() int {
 }
 
 // Result returns a concise string representation of the rule's status.
-func (r SignedIdentityRule) Result(errors []errors.ValidationError) string {
+func (r SignedIdentityRule) Result([]appErrors.ValidationError) string {
 	if r.HasErrors() {
 		return "Invalid signature"
 	}
@@ -116,7 +115,7 @@ func (r SignedIdentityRule) Result(errors []errors.ValidationError) string {
 }
 
 // VerboseResult returns a more detailed explanation for verbose mode.
-func (r SignedIdentityRule) VerboseResult(errors []errors.ValidationError) string {
+func (r SignedIdentityRule) VerboseResult([]appErrors.ValidationError) string {
 	if r.HasErrors() {
 		// Get the first error
 		firstErr := r.Errors()[0]
@@ -188,7 +187,7 @@ func (r SignedIdentityRule) VerboseResult(errors []errors.ValidationError) strin
 }
 
 // Help returns a description of how to fix the rule violation.
-func (r SignedIdentityRule) Help(errors []errors.ValidationError) string {
+func (r SignedIdentityRule) Help([]appErrors.ValidationError) string {
 	// First check if the rule has errors
 	if !r.HasErrors() {
 		return "No errors to fix"

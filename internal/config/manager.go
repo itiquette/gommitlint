@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/itiquette/gommitlint/internal/contextx"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
@@ -208,9 +209,9 @@ func (m *Manager) GetConfig() Config {
 // UpdateConfig applies the given options to the current configuration.
 // This allows for programmatically updating the configuration.
 func (m *Manager) UpdateConfig(opts ...Option) {
-	for _, opt := range opts {
-		m.config = opt(m.config)
-	}
+	m.config = contextx.Reduce(opts, m.config, func(config Config, opt Option) Config {
+		return opt(config)
+	})
 }
 
 // WasLoadedFromFile returns whether configuration was loaded from a file.

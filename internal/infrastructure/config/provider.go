@@ -5,7 +5,9 @@
 // Package config provides configuration loading and access.
 package config
 
-// No imports needed for now.
+import (
+	"github.com/itiquette/gommitlint/internal/contextx"
+)
 
 // Provider provides access to configuration.
 type Provider struct {
@@ -60,8 +62,7 @@ func NewProvider() (Provider, error) {
 	}
 
 	// Create a deep copy of the types slice to ensure immutability
-	typesCopy := make([]string, len(types))
-	copy(typesCopy, types)
+	typesCopy := contextx.DeepCopy(types)
 
 	config := Config{
 		GommitConf: GommitLintConfig{

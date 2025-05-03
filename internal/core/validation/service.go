@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/config"
+	"github.com/itiquette/gommitlint/internal/contextx"
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/infrastructure/git"
@@ -300,9 +301,6 @@ func (p *RulesManager) WithCustomRule(_ domain.Rule) domain.RuleProvider {
 
 // getActiveRules creates and returns all active rules.
 func (p *RulesManager) getActiveRules() []domain.Rule {
-	// Create rules from the rule factories
-	var rules []domain.Rule
-
 	// Get standard rule names
 	// This is a hardcoded list of available rules
 	standardRuleNames := []string{
@@ -315,44 +313,35 @@ func (p *RulesManager) getActiveRules() []domain.Rule {
 	// Apply rule filtering based on configuration
 	ruleNames := p.filterRuleNames(standardRuleNames)
 
-	// Create rules directly based on rule names
-	for _, name := range ruleNames {
-		// Create rule based on name
-		var rule domain.Rule
-
-		switch name {
-		case "SubjectLength":
-			rule = createSubjectLengthRule(p.config)
-		case "ConventionalCommit":
-			rule = createConventionalCommitRule(p.config)
-		case "ImperativeVerb":
-			rule = createImperativeVerbRule(p.config)
-		case "SubjectCase":
-			rule = createSubjectCaseRule(p.config)
-		case "SubjectSuffix":
-			rule = createSubjectSuffixRule(p.config)
-		case "CommitBody":
-			rule = createCommitBodyRule(p.config)
-		case "SignOff":
-			rule = createSignOffRule(p.config)
-		case "Signature":
-			rule = createSignatureRule(p.config)
-		case "JiraReference":
-			rule = createJiraReferenceRule(p.config)
-		case "Spell":
-			rule = createSpellRule(p.config)
-		case "CommitsAhead":
-			rule = createCommitsAheadRule(p.config, p.analyzer)
-		case "SignedIdentity":
-			rule = createSignedIdentityRule(p.config)
-		}
-
-		if rule != nil {
-			rules = append(rules, rule)
-		}
+	// Create a rule factory map for more functional approach
+	ruleFactories := map[string]func() domain.Rule{
+		"SubjectLength":      func() domain.Rule { return createSubjectLengthRule(p.config) },
+		"ConventionalCommit": func() domain.Rule { return createConventionalCommitRule(p.config) },
+		"ImperativeVerb":     func() domain.Rule { return createImperativeVerbRule(p.config) },
+		"SubjectCase":        func() domain.Rule { return createSubjectCaseRule(p.config) },
+		"SubjectSuffix":      func() domain.Rule { return createSubjectSuffixRule(p.config) },
+		"CommitBody":         func() domain.Rule { return createCommitBodyRule(p.config) },
+		"SignOff":            func() domain.Rule { return createSignOffRule(p.config) },
+		"Signature":          func() domain.Rule { return createSignatureRule(p.config) },
+		"JiraReference":      func() domain.Rule { return createJiraReferenceRule(p.config) },
+		"Spell":              func() domain.Rule { return createSpellRule(p.config) },
+		"CommitsAhead":       func() domain.Rule { return createCommitsAheadRule(p.config, p.analyzer) },
+		"SignedIdentity":     func() domain.Rule { return createSignedIdentityRule(p.config) },
 	}
 
-	return rules
+	// Use Map to transform rule names into rule instances, followed by Filter to remove any nil rules
+	return contextx.Filter(
+		contextx.Map(ruleNames, func(name string) domain.Rule {
+			if factory, exists := ruleFactories[name]; exists {
+				return factory()
+			}
+
+			return nil
+		}),
+		func(rule domain.Rule) bool {
+			return rule != nil
+		},
+	)
 }
 
 // All validation logic is now handled by the standard Engine with our custom RulesManager.
@@ -364,44 +353,28 @@ func (p *RulesManager) filterRuleNames(allRuleNames []string) []string {
 
 	// If specific rules are enabled, only use those
 	if len(enabledRules) > 0 {
-		// Filter to only enabled rules
-		filteredNames := make([]string, 0)
-
-		for _, name := range allRuleNames {
-			for _, enabled := range enabledRules {
-				if name == enabled {
-					filteredNames = append(filteredNames, name)
-
-					break
-				}
-			}
-		}
-
-		return filteredNames
+		// Filter to only enabled rules that are in the allRuleNames list
+		return contextx.Filter(allRuleNames, func(name string) bool {
+			return contextx.Contains(enabledRules, name)
+		})
 	}
 
 	// If some rules are disabled, exclude them
 	if len(disabledRules) > 0 {
-		// Remove disabled rules
-		disabledMap := make(map[string]bool)
+		// Convert disabled rules to a set for efficient lookup
+		disabledSet := make(map[string]bool)
 		for _, name := range disabledRules {
-			disabledMap[name] = true
+			disabledSet[name] = true
 		}
 
 		// Filter out disabled rules
-		filteredNames := make([]string, 0)
-
-		for _, name := range allRuleNames {
-			if !disabledMap[name] {
-				filteredNames = append(filteredNames, name)
-			}
-		}
-
-		return filteredNames
+		return contextx.Filter(allRuleNames, func(name string) bool {
+			return !disabledSet[name]
+		})
 	}
 
 	// If no specific filters, return all rules
-	return allRuleNames
+	return contextx.DeepCopy(allRuleNames)
 }
 
 // CreateRuleProvider creates a rule provider for the configuration.

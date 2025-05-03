@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/itiquette/gommitlint/internal/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
-	"github.com/itiquette/gommitlint/internal/errors"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
 
@@ -100,6 +100,7 @@ func WithMaxDescLength(maxLength int) ConventionalCommitOption {
 
 // NewConventionalCommitRule creates a new rule with the specified options.
 func NewConventionalCommitRule(options ...ConventionalCommitOption) ConventionalCommitRule {
+	// Create initial rule with default values
 	rule := ConventionalCommitRule{
 		BaseRule: NewBaseRule("ConventionalCommit"),
 		allowedTypes: []string{
@@ -112,32 +113,62 @@ func NewConventionalCommitRule(options ...ConventionalCommitOption) Conventional
 		maxDescLength:    72,         // Default max length for description
 	}
 
-	// Apply options
-	for _, option := range options {
-		rule = option(rule)
-	}
-
-	return rule
+	// Apply options using Reduce for a more functional approach
+	return contextx.Reduce(
+		options,
+		rule,
+		func(currentRule ConventionalCommitRule, option ConventionalCommitOption) ConventionalCommitRule {
+			return option(currentRule)
+		},
+	)
 }
 
 // NewConventionalCommitRuleWithConfig creates a new rule using configuration.
 func NewConventionalCommitRuleWithConfig(config domain.ConventionalConfigProvider) ConventionalCommitRule {
-	var options []ConventionalCommitOption
+	// Create option collectors using pure functions
+	optionCollectors := []func(domain.ConventionalConfigProvider) []ConventionalCommitOption{
+		// Collect type options
+		func(c domain.ConventionalConfigProvider) []ConventionalCommitOption {
+			types := c.ConventionalTypes()
+			if len(types) > 0 {
+				return []ConventionalCommitOption{WithAllowedTypes(types)}
+			}
 
-	// Apply the allowed types if provided
-	if types := config.ConventionalTypes(); len(types) > 0 {
-		options = append(options, WithAllowedTypes(types))
+			return nil
+		},
+		// Collect scope options
+		func(c domain.ConventionalConfigProvider) []ConventionalCommitOption {
+			scopes := c.ConventionalScopes()
+			if len(scopes) > 0 {
+				return []ConventionalCommitOption{WithAllowedScopes(scopes)}
+			}
+
+			return nil
+		},
+		// Collect max description length options
+		func(c domain.ConventionalConfigProvider) []ConventionalCommitOption {
+			maxLength := c.ConventionalMaxDescriptionLength()
+			if maxLength > 0 {
+				return []ConventionalCommitOption{WithMaxDescLength(maxLength)}
+			}
+
+			return nil
+		},
 	}
 
-	// Apply the allowed scopes if provided
-	if scopes := config.ConventionalScopes(); len(scopes) > 0 {
-		options = append(options, WithAllowedScopes(scopes))
-	}
+	// Use Map to collect options, then flatten the result
+	nestedOptions := contextx.Map(optionCollectors, func(collector func(domain.ConventionalConfigProvider) []ConventionalCommitOption) []ConventionalCommitOption {
+		return collector(config)
+	})
 
-	// Apply the max description length if provided
-	if maxLength := config.ConventionalMaxDescriptionLength(); maxLength > 0 {
-		options = append(options, WithMaxDescLength(maxLength))
-	}
+	// Flatten the nested options
+	options := contextx.Reduce(nestedOptions, []ConventionalCommitOption{}, func(acc []ConventionalCommitOption, opts []ConventionalCommitOption) []ConventionalCommitOption {
+		if len(opts) > 0 {
+			return append(acc, opts...)
+		}
+
+		return acc
+	})
 
 	return NewConventionalCommitRule(options...)
 }
@@ -161,13 +192,15 @@ func (r ConventionalCommitRule) HasErrors() bool {
 // This method supports value semantics by returning a new instance.
 func (r ConventionalCommitRule) SetErrors(errors []appErrors.ValidationError) ConventionalCommitRule {
 	result := r
-	baseRule := r.BaseRule.WithClearedErrors()
 
-	for _, err := range errors {
-		baseRule = baseRule.WithError(err)
-	}
-
-	result.BaseRule = baseRule
+	// Use Reduce to accumulate errors into the BaseRule
+	result.BaseRule = contextx.Reduce(
+		errors,
+		r.BaseRule.WithClearedErrors(),
+		func(baseRule BaseRule, err appErrors.ValidationError) BaseRule {
+			return baseRule.WithError(err)
+		},
+	)
 
 	return result
 }
@@ -563,13 +596,7 @@ func (r ConventionalCommitRule) isValidType(commitType string) bool {
 		return true
 	}
 
-	for _, t := range r.allowedTypes {
-		if commitType == t {
-			return true
-		}
-	}
-
-	return false
+	return contextx.Contains(r.allowedTypes, commitType)
 }
 
 // isValidScope checks if the commit scope is in the list of allowed scopes.
@@ -579,17 +606,11 @@ func (r ConventionalCommitRule) isValidScope(scope string) bool {
 		return true
 	}
 
-	for _, s := range r.allowedScopes {
-		if scope == s {
-			return true
-		}
-	}
-
-	return false
+	return contextx.Contains(r.allowedScopes, scope)
 }
 
 // Result returns a concise validation result.
-func (r ConventionalCommitRule) Result(errors []errors.ValidationError) string {
+func (r ConventionalCommitRule) Result(_ []appErrors.ValidationError) string {
 	if r.HasErrors() {
 		return "Invalid conventional commit format"
 	}
@@ -598,7 +619,7 @@ func (r ConventionalCommitRule) Result(errors []errors.ValidationError) string {
 }
 
 // VerboseResult returns a more detailed explanation for verbose mode.
-func (r ConventionalCommitRule) VerboseResult(errors []errors.ValidationError) string {
+func (r ConventionalCommitRule) VerboseResult(_ []appErrors.ValidationError) string {
 	if r.HasErrors() {
 		errors := r.Errors()
 		if len(errors) == 0 {
@@ -626,109 +647,7 @@ func (r ConventionalCommitRule) VerboseResult(errors []errors.ValidationError) s
 }
 
 // Help returns guidance on how to fix the rule violation.
-// findClosestType finds the closest matching valid type from the allowed types list
-// using Levenshtein distance. Returns an empty string if no good match is found.
-func findClosestType(inputType string, allowedTypes []string) string {
-	if len(allowedTypes) == 0 {
-		return ""
-	}
-
-	// If the allowedTypes list is empty or has only one type, no need to find closest
-	if len(allowedTypes) == 0 {
-		return ""
-	}
-
-	inputType = strings.ToLower(inputType)
-	bestMatch := ""
-	minDistance := 3 // Maximum edit distance to consider a good match
-
-	for _, validType := range allowedTypes {
-		// Skip if the valid type is much longer or shorter than input
-		if abs(len(validType)-len(inputType)) > 2 {
-			continue
-		}
-
-		// Calculate Levenshtein distance
-		distance := levenshteinDistance(inputType, validType)
-
-		// Update best match if this has smaller distance
-		if distance < minDistance {
-			minDistance = distance
-			bestMatch = validType
-		}
-	}
-
-	return bestMatch
-}
-
-// abs returns the absolute value of x.
-func abs(x int) int {
-	if x < 0 {
-		return -x
-	}
-
-	return x
-}
-
-// levenshteinDistance calculates the Levenshtein (edit) distance between two strings.
-func levenshteinDistance(str1, str2 string) int {
-	if len(str1) == 0 {
-		return len(str2)
-	}
-
-	if len(str2) == 0 {
-		return len(str1)
-	}
-
-	// Create matrix
-	matrix := make([][]int, len(str1)+1)
-	for rowIdx := range matrix {
-		matrix[rowIdx] = make([]int, len(str2)+1)
-		matrix[rowIdx][0] = rowIdx // Initialize first column
-	}
-
-	for colIdx := range matrix[0] {
-		matrix[0][colIdx] = colIdx // Initialize first row
-	}
-
-	// Fill in the matrix
-	for rowIdx := 1; rowIdx <= len(str1); rowIdx++ {
-		for colIdx := 1; colIdx <= len(str2); colIdx++ {
-			cost := 1
-			if str1[rowIdx-1] == str2[colIdx-1] {
-				cost = 0
-			}
-
-			// Calculate the minimum of three operations
-			matrix[rowIdx][colIdx] = min3(
-				matrix[rowIdx-1][colIdx]+1,      // deletion
-				matrix[rowIdx][colIdx-1]+1,      // insertion
-				matrix[rowIdx-1][colIdx-1]+cost, // substitution
-			)
-		}
-	}
-
-	return matrix[len(str1)][len(str2)]
-}
-
-// min3 returns the minimum of three integers.
-func min3(first, second, third int) int {
-	if first < second {
-		if first < third {
-			return first
-		}
-
-		return third
-	}
-
-	if second < third {
-		return second
-	}
-
-	return third
-}
-
-func (r ConventionalCommitRule) Help(errors []errors.ValidationError) string {
+func (r ConventionalCommitRule) Help(errors []appErrors.ValidationError) string {
 	if !r.HasErrors() {
 		return "No errors to fix. This rule checks that commits follow the conventional commit format with proper type, structure, and description (e.g., feat: add new login feature, fix(auth): resolve timeout issue)."
 	}
@@ -985,16 +904,162 @@ Common types:
 For more information, see https://www.conventionalcommits.org/`
 }
 
-// Helper function for deep copying string slices.
-func deepCopyStringSlice(src []string) []string {
-	if src == nil {
-		return nil
+// findClosestType finds the closest matching valid type from the allowed types list
+// using Levenshtein distance. Returns an empty string if no good match is found.
+func findClosestType(inputType string, allowedTypes []string) string {
+	if len(allowedTypes) == 0 {
+		return ""
 	}
 
-	dst := make([]string, len(src))
-	copy(dst, src)
+	inputType = strings.ToLower(inputType)
+	minDistance := 3 // Maximum edit distance to consider a good match
 
-	return dst
+	// Filter allowed types to only those of similar length
+	typesOfSimilarLength := contextx.Filter(allowedTypes, func(validType string) bool {
+		return abs(len(validType)-len(inputType)) <= 2
+	})
+
+	if len(typesOfSimilarLength) == 0 {
+		return ""
+	}
+
+	// Create pairs of type and its distance to the input
+	typeDistancePairs := contextx.Map(typesOfSimilarLength, func(validType string) struct {
+		typeName string
+		distance int
+	} {
+		return struct {
+			typeName string
+			distance int
+		}{
+			typeName: validType,
+			distance: levenshteinDistance(inputType, validType),
+		}
+	})
+
+	// Find the pair with minimum distance
+	return contextx.Reduce(typeDistancePairs, struct {
+		typeName  string
+		minDist   int
+		foundGood bool
+	}{
+		typeName:  "",
+		minDist:   minDistance + 1, // Start with a value larger than our threshold
+		foundGood: false,
+	}, func(acc struct {
+		typeName  string
+		minDist   int
+		foundGood bool
+	}, pair struct {
+		typeName string
+		distance int
+	}) struct {
+		typeName  string
+		minDist   int
+		foundGood bool
+	} {
+		if pair.distance < acc.minDist {
+			return struct {
+				typeName  string
+				minDist   int
+				foundGood bool
+			}{
+				typeName:  pair.typeName,
+				minDist:   pair.distance,
+				foundGood: pair.distance < minDistance,
+			}
+		}
+
+		return acc
+	}).typeName
+}
+
+// abs returns the absolute value of x.
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+
+	return x
+}
+
+// levenshteinDistance calculates the Levenshtein (edit) distance between two strings.
+func levenshteinDistance(str1, str2 string) int {
+	if len(str1) == 0 {
+		return len(str2)
+	}
+
+	if len(str2) == 0 {
+		return len(str1)
+	}
+
+	// Create row indices functionally
+	rowIndices := contextx.Range(len(str1) + 1)
+	colIndices := contextx.Range(len(str2) + 1)
+
+	// Initialize matrix with rows
+	matrix := make([][]int, len(str1)+1)
+
+	// Create and initialize each row with first column values
+	contextx.ForEach(rowIndices, func(rowIdx int) {
+		// Create the row
+		row := make([]int, len(str2)+1)
+		// Set first column value
+		row[0] = rowIdx
+		// Store the row
+		matrix[rowIdx] = row
+	})
+
+	// Initialize first row
+	contextx.ForEach(colIndices, func(colIdx int) {
+		matrix[0][colIdx] = colIdx
+	})
+
+	// Fill in the matrix using a more functional-style approach
+	// Create indices for rows and columns, excluding the first row/column (already initialized)
+	innerRowIndices := contextx.Range(len(str1))
+	innerColIndices := contextx.Range(len(str2))
+
+	// Fill the matrix row by row
+	contextx.ForEach(innerRowIndices, func(i int) {
+		rowIdx := i + 1 // Adjust index (skip first row)
+
+		// Fill each cell in this row
+		contextx.ForEach(innerColIndices, func(j int) {
+			colIdx := j + 1 // Adjust index (skip first column)
+
+			// Calculate cost based on character comparison
+			cost := 1
+			if str1[rowIdx-1] == str2[colIdx-1] {
+				cost = 0
+			}
+
+			// Calculate the minimum of three operations
+			matrix[rowIdx][colIdx] = min3(
+				matrix[rowIdx-1][colIdx]+1,      // deletion
+				matrix[rowIdx][colIdx-1]+1,      // insertion
+				matrix[rowIdx-1][colIdx-1]+cost, // substitution
+			)
+		})
+	})
+
+	return matrix[len(str1)][len(str2)]
+}
+
+// min3 returns the minimum of three integers.
+func min3(first, second, third int) int {
+	return contextx.Reduce([]int{first, second, third}, first, func(minVal int, current int) int {
+		if current < minVal {
+			return current
+		}
+
+		return minVal
+	})
+}
+
+// Helper function for deep copying string slices.
+func deepCopyStringSlice(src []string) []string {
+	return contextx.DeepCopy(src)
 }
 
 // ValidateConventionalWithState is the exported version for testing.

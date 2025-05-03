@@ -11,7 +11,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/itiquette/gommitlint/internal/domain"
-	"github.com/itiquette/gommitlint/internal/errors"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
 
@@ -142,7 +141,7 @@ func (r SubjectLengthRule) Validate(_ context.Context, commit domain.CommitInfo)
 }
 
 // Result returns a concise result message.
-func (r SubjectLengthRule) Result(errors []errors.ValidationError) string {
+func (r SubjectLengthRule) Result(_ []appErrors.ValidationError) string {
 	if len(r.Errors()) > 0 {
 		return "Subject too long"
 	}
@@ -151,7 +150,7 @@ func (r SubjectLengthRule) Result(errors []errors.ValidationError) string {
 }
 
 // VerboseResult returns a detailed result message.
-func (r SubjectLengthRule) VerboseResult(errors []errors.ValidationError) string {
+func (r SubjectLengthRule) VerboseResult(_ []appErrors.ValidationError) string {
 	if len(r.Errors()) > 0 {
 		// Get the first error
 		if errors := r.Errors(); len(errors) > 0 {
@@ -169,7 +168,7 @@ func (r SubjectLengthRule) VerboseResult(errors []errors.ValidationError) string
 }
 
 // Help returns guidance on how to fix rule violations.
-func (r SubjectLengthRule) Help(errors []errors.ValidationError) string {
+func (r SubjectLengthRule) Help(_ []appErrors.ValidationError) string {
 	if len(r.Errors()) == 0 {
 		return fmt.Sprintf("No errors to fix. This rule checks that commit subject lines don't exceed %d characters to ensure readability in various Git tools.", r.maxLength)
 	}

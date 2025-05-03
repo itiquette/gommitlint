@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/itiquette/gommitlint/internal/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
-	"github.com/itiquette/gommitlint/internal/errors"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
 
@@ -78,12 +78,14 @@ func NewJiraReferenceRule(options ...JiraReferenceOption) JiraReferenceRule {
 		isConventional:  false,
 	}
 
-	// Apply provided options
-	for _, option := range options {
-		rule = option(rule)
-	}
-
-	return rule
+	// Apply provided options using functional Reduce
+	return contextx.Reduce(
+		options,
+		rule,
+		func(currentRule JiraReferenceRule, option JiraReferenceOption) JiraReferenceRule {
+			return option(currentRule)
+		},
+	)
 }
 
 // NewJiraReferenceRuleWithConfig creates a JiraReferenceRule using a configuration provider.
@@ -112,7 +114,7 @@ func NewJiraReferenceRuleWithConfig(jiraConfig domain.JiraConfigProvider, conven
 // NewJiraReferenceRuleWithConfig creates a JiraReferenceRule using the unified configuration.
 
 // Result returns a concise rule message.
-func (j JiraReferenceRule) Result(errors []errors.ValidationError) string {
+func (j JiraReferenceRule) Result(_ []appErrors.ValidationError) string {
 	if j.HasErrors() {
 		errors := j.Errors()
 		if len(errors) > 0 {
@@ -144,7 +146,7 @@ func (j JiraReferenceRule) Result(errors []errors.ValidationError) string {
 }
 
 // VerboseResult returns a more detailed explanation for verbose mode.
-func (j JiraReferenceRule) VerboseResult(errors []errors.ValidationError) string {
+func (j JiraReferenceRule) VerboseResult(_ []appErrors.ValidationError) string {
 	if j.HasErrors() {
 		errors := j.Errors()
 		if len(errors) == 0 {
@@ -224,7 +226,7 @@ func (j JiraReferenceRule) VerboseResult(errors []errors.ValidationError) string
 }
 
 // Help returns a description of how to fix the rule violation.
-func (j JiraReferenceRule) Help(errors []errors.ValidationError) string {
+func (j JiraReferenceRule) Help(_ []appErrors.ValidationError) string {
 	// First check if the rule has errors - this should be the primary check
 	if j.HasErrors() {
 		errors := j.Errors()
@@ -472,13 +474,14 @@ func (j JiraReferenceRule) HasErrors() bool {
 func (j JiraReferenceRule) SetErrors(errors []appErrors.ValidationError) JiraReferenceRule {
 	result := j
 
-	// Update BaseRule with errors
-	baseRule := j.BaseRule.WithClearedErrors()
-	for _, err := range errors {
-		baseRule = baseRule.WithError(err)
-	}
-
-	result.BaseRule = baseRule
+	// Update BaseRule with errors using functional Reduce
+	result.BaseRule = contextx.Reduce(
+		errors,
+		j.BaseRule.WithClearedErrors(),
+		func(baseRule BaseRule, err appErrors.ValidationError) BaseRule {
+			return baseRule.WithError(err)
+		},
+	)
 
 	return result
 }
@@ -486,7 +489,7 @@ func (j JiraReferenceRule) SetErrors(errors []appErrors.ValidationError) JiraRef
 // SetFoundKeys sets the found keys and returns a new instance.
 func (j JiraReferenceRule) SetFoundKeys(keys []string) JiraReferenceRule {
 	result := j
-	result.foundKeys = keys
+	result.foundKeys = contextx.DeepCopy(keys)
 
 	return result
 }
@@ -1174,13 +1177,21 @@ NEXT STEPS:
 func (j JiraReferenceRule) validateAllFoundProjects(matches []string) []appErrors.ValidationError {
 	errors := make([]appErrors.ValidationError, 0)
 
-	for _, match := range matches {
+	// Using Some to check if any project has validation errors
+	foundInvalid := contextx.Some(matches, func(match string) bool {
 		projectErrors := j.validateJiraProject(match)
 		if len(projectErrors) > 0 {
 			errors = append(errors, projectErrors...)
 
-			break // Stop on first error
+			return true // Found an invalid project
 		}
+
+		return false
+	})
+
+	// If we found at least one invalid project, we return the errors
+	if foundInvalid {
+		return errors
 	}
 
 	return errors
@@ -1458,30 +1469,36 @@ NEXT STEPS:
 func (j JiraReferenceRule) validateJiraKeysInRefLine(bodyLines []string, _ int) []appErrors.ValidationError {
 	errors := make([]appErrors.ValidationError, 0)
 
-	var foundKeys []string
+	// Find the first line matching Refs: pattern
+	refsLine, found := contextx.Find(bodyLines, func(line string) bool {
+		return refsLineRegex.MatchString(strings.TrimSpace(line))
+	})
 
-	for _, line := range bodyLines {
-		line = strings.TrimSpace(line)
-		if refsLineRegex.MatchString(line) {
-			// Extract and validate all Jira keys
-			matches := jiraKeyRegex.FindAllString(line, -1)
-			foundKeys = matches
+	if !found {
+		return errors // No Refs: line found
+	}
 
-			// Store for downstream methods
-			jWithKeys := j.SetFoundKeys(foundKeys)
-			_ = jWithKeys // In purely functional code, we'd pass this forward
+	// Extract Jira keys from the Refs: line
+	matches := jiraKeyRegex.FindAllString(strings.TrimSpace(refsLine), -1)
 
-			for _, match := range matches {
-				projectErrors := j.validateJiraProject(match)
-				if len(projectErrors) > 0 {
-					errors = append(errors, projectErrors...)
+	// Store keys for downstream methods
+	jWithKeys := j.SetFoundKeys(matches)
+	_ = jWithKeys // In purely functional code, we'd pass this forward
 
-					return errors
-				}
-			}
+	// Use Some to check if any project has validation errors
+	hasInvalidProjects := contextx.Some(matches, func(match string) bool {
+		projectErrors := j.validateJiraProject(match)
+		if len(projectErrors) > 0 {
+			errors = append(errors, projectErrors...)
 
-			break // Process only the first Refs: line
+			return true // Found an invalid project
 		}
+
+		return false
+	})
+
+	if hasInvalidProjects {
+		return errors
 	}
 
 	return errors
@@ -1606,11 +1623,5 @@ NEXT STEPS:
 
 // containsString checks if a string is present in a slice of strings.
 func containsString(slice []string, value string) bool {
-	for _, item := range slice {
-		if item == value {
-			return true
-		}
-	}
-
-	return false
+	return contextx.Contains(slice, value)
 }

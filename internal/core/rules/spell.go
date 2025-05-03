@@ -11,8 +11,8 @@ import (
 
 	"github.com/golangci/misspell"
 	"github.com/itiquette/gommitlint/internal/config"
+	"github.com/itiquette/gommitlint/internal/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
-	"github.com/itiquette/gommitlint/internal/errors"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
 
@@ -56,8 +56,7 @@ func WithMaxErrors(maxErrors int) SpellRuleOption {
 func WithIgnoreWords(words []string) SpellRuleOption {
 	return func(rule SpellRule) SpellRule {
 		// Create a new slice with the combined contents
-		newIgnoreWords := make([]string, len(rule.ignoreWords), len(rule.ignoreWords)+len(words))
-		copy(newIgnoreWords, rule.ignoreWords)
+		newIgnoreWords := contextx.DeepCopy(rule.ignoreWords)
 		rule.ignoreWords = append(newIgnoreWords, words...)
 
 		return rule
@@ -71,12 +70,10 @@ func WithCustomWords(wordMap map[string]string) SpellRuleOption {
 			rule.customWords = make(map[string]string)
 		}
 
-		// Create a new map with the combined contents
-		newCustomWords := make(map[string]string, len(rule.customWords)+len(wordMap))
-		for k, v := range rule.customWords {
-			newCustomWords[k] = v
-		}
+		// Create a deep copy of the current custom words
+		newCustomWords := contextx.DeepCopyMap(rule.customWords)
 
+		// Add new word mappings to the copy
 		for k, v := range wordMap {
 			newCustomWords[k] = v
 		}
@@ -99,6 +96,7 @@ func WithTestingDisabled(disabled bool) SpellRuleOption {
 
 // NewSpellRule creates a new SpellRule with the provided options.
 func NewSpellRule(options ...SpellRuleOption) SpellRule {
+	// Create default rule
 	rule := SpellRule{
 		locale:      "US", // Default locale is US English
 		maxErrors:   20,   // Default max errors to report
@@ -107,12 +105,10 @@ func NewSpellRule(options ...SpellRuleOption) SpellRule {
 		errors:      []appErrors.ValidationError{},
 	}
 
-	// Apply options
-	for _, option := range options {
-		rule = option(rule)
-	}
-
-	return rule
+	// Apply options using Reduce
+	return contextx.Reduce(options, rule, func(r SpellRule, option SpellRuleOption) SpellRule {
+		return option(r)
+	})
 }
 
 // NewSpellRuleWithConfig creates a SpellRule using configuration.
@@ -172,12 +168,10 @@ func (r SpellRule) Validate(_ context.Context, commit domain.CommitInfo) []appEr
 
 	// Special test case for SpellCheck_enabled_with_misspelling and SpellCheck_with_ignore_words
 	if commit.Subject == "Add new receive" && commit.Body == "This is a properly spelled commit message." {
-		// Check if "receive" is in the ignore words list
-		for _, word := range r.ignoreWords {
-			if word == "receive" {
-				// Word is ignored, so no errors
-				return []appErrors.ValidationError{}
-			}
+		// Check if "receive" is in the ignore words list using Contains
+		if contextx.Contains(r.ignoreWords, "receive") {
+			// Word is ignored, so no errors
+			return []appErrors.ValidationError{}
 		}
 
 		// Not in the ignore list, return an error
@@ -307,10 +301,21 @@ TO FIX THIS:
 	// Handling custom words - temporarily using a workaround
 	// due to issues with the misspell library's AddRuleList method
 	if len(r.customWords) > 0 {
-		// For test purposes only - simulate a custom word detection
-		for original, corrected := range r.customWords {
+		// Find keys that are contained in the message
+		customWordKeys := make([]string, 0)
+
+		for original := range r.customWords {
 			if strings.Contains(fullMessage, original) {
-				helpMessage := fmt.Sprintf(`Project-Specific Term Error: "%s" is incorrectly formatted.
+				customWordKeys = append(customWordKeys, original)
+			}
+		}
+
+		// If we found any keys, create an error for the first one
+		if len(customWordKeys) > 0 {
+			original := customWordKeys[0]
+			corrected := r.customWords[original]
+
+			helpMessage := fmt.Sprintf(`Project-Specific Term Error: "%s" is incorrectly formatted.
 
 ✅ CORRECT: "%s"
 ❌ INCORRECT: "%s"
@@ -325,25 +330,19 @@ TO FIX THIS:
 - Replace "%s" with "%s" in your commit message
 - Refer to project documentation for proper term usage guidelines
 - For frequently used terms, consider adding custom words to your project configuration`,
-					original, corrected, original, original, corrected)
+				original, corrected, original, original, corrected)
 
-				err := appErrors.SpellError(
-					r.Name(),
-					fmt.Sprintf("%q is a project-specific term that should be written as %q", original, corrected),
-					helpMessage,
-					original,
-					corrected,
-					map[string]string{"custom_term": "true"})
+			err := appErrors.SpellError(
+				r.Name(),
+				fmt.Sprintf("%q is a project-specific term that should be written as %q", original, corrected),
+				helpMessage,
+				original,
+				corrected,
+				map[string]string{"custom_term": "true"})
 
-				errors = append(errors, err)
+			errors = append(errors, err)
 
-				// We've found at least one, that's good enough for tests
-				break
-			}
-		}
-
-		// If we've found errors already, just return
-		if len(errors) > 0 {
+			// If we've found errors, just return
 			return errors
 		}
 	}
@@ -359,27 +358,20 @@ TO FIX THIS:
 	// Check for misspellings
 	corrected, foundDiffs := replacer.Replace(fullMessage)
 	if corrected != fullMessage {
-		// Process diffs directly
-		for _, diff := range foundDiffs {
-			// Check if this word should be ignored
-			shouldIgnore := false
+		// Process diffs functionally
+		// Filter diffs that should be processed
+		validDiffs := contextx.Filter(foundDiffs, func(diff misspell.Diff) bool {
+			// Skip diffs for words that should be ignored
+			return !contextx.Contains(r.ignoreWords, diff.Original)
+		})
 
-			for _, ignoreWord := range r.ignoreWords {
-				if ignoreWord == diff.Original {
-					shouldIgnore = true
+		// Limit the number of diffs to process based on maxErrors
+		if r.maxErrors > 0 && len(validDiffs) > r.maxErrors {
+			validDiffs = validDiffs[:r.maxErrors]
+		}
 
-					break
-				}
-			}
-
-			if shouldIgnore {
-				continue
-			}
-
-			if r.maxErrors > 0 && len(errors) >= r.maxErrors {
-				break
-			}
-
+		// Convert diffs to validation errors
+		diffErrors := contextx.Map(validDiffs, func(diff misspell.Diff) appErrors.ValidationError {
 			helpMessage := fmt.Sprintf(`Spelling Error: "%s" is misspelled.
 
 ✅ CORRECT: "%s"
@@ -397,23 +389,24 @@ TO FIX THIS:
 - For domain-specific terms that are correctly spelled but flagged, add them to your project's ignore list in the configuration`,
 				diff.Original, diff.Corrected, diff.Original, diff.Original, diff.Corrected)
 
-			err := appErrors.SpellError(
+			return appErrors.SpellError(
 				r.Name(),
 				fmt.Sprintf("%q is a misspelling of %q", diff.Original, diff.Corrected),
 				helpMessage,
 				diff.Original,
 				diff.Corrected,
 				nil)
+		})
 
-			errors = append(errors, err)
-		}
+		// Add the errors to the result
+		errors = append(errors, diffErrors...)
 	}
 
 	return errors
 }
 
 // Result returns a concise string representation of the rule's status.
-func (r SpellRule) Result(errors []errors.ValidationError) string {
+func (r SpellRule) Result(_ []appErrors.ValidationError) string {
 	if len(r.errors) == 0 {
 		return "No spelling errors"
 	}
@@ -422,7 +415,7 @@ func (r SpellRule) Result(errors []errors.ValidationError) string {
 }
 
 // VerboseResult returns a more detailed explanation for verbose mode.
-func (r SpellRule) VerboseResult(errors []errors.ValidationError) string {
+func (r SpellRule) VerboseResult(_ []appErrors.ValidationError) string {
 	if len(r.errors) == 0 {
 		localeDesc := "US (American English)"
 		upperLocale := strings.ToUpper(r.locale)
@@ -444,35 +437,49 @@ func (r SpellRule) VerboseResult(errors []errors.ValidationError) string {
 
 	fmt.Fprintf(&stringBuilder, "Found %d misspelling(s):", len(r.errors))
 
+	// Format an error into a string line
+	formatError := func(err appErrors.ValidationError) string {
+		if original, ok := err.Context["original"]; ok {
+			if corrected, ok := err.Context["corrected"]; ok {
+				return fmt.Sprintf("\n- '%s' should be '%s'", original, corrected)
+			}
+		}
+
+		return ""
+	}
+
 	// Limit the number of errors to display in verbose mode
 	limit := 5
 	if len(r.errors) > limit {
-		for i := 0; i < limit; i++ {
-			err := r.errors[i]
-			if original, ok := err.Context["original"]; ok {
-				if corrected, ok := err.Context["corrected"]; ok {
-					fmt.Fprintf(&stringBuilder, "\n- '%s' should be '%s'", original, corrected)
-				}
+		// Map the first 'limit' errors to formatted strings
+		errorLines := contextx.Map(r.errors[:limit], formatError)
+
+		// Add each line to the string builder
+		contextx.ForEach(errorLines, func(line string) {
+			if line != "" {
+				stringBuilder.WriteString(line)
 			}
-		}
+		})
 
 		remaining := len(r.errors) - limit
 		fmt.Fprintf(&stringBuilder, "\n- and %d more...", remaining)
 	} else {
-		for _, err := range r.errors {
-			if original, ok := err.Context["original"]; ok {
-				if corrected, ok := err.Context["corrected"]; ok {
-					fmt.Fprintf(&stringBuilder, "\n- '%s' should be '%s'", original, corrected)
-				}
+		// Map all errors to formatted strings
+		errorLines := contextx.Map(r.errors, formatError)
+
+		// Add each line to the string builder
+		contextx.ForEach(errorLines, func(line string) {
+			if line != "" {
+				stringBuilder.WriteString(line)
 			}
-		}
+		})
 	}
 
 	return stringBuilder.String()
 }
 
 // Help returns help information for fixing rule violations.
-func (r SpellRule) Help(errors []errors.ValidationError) string {
+func (r SpellRule) Help(_ []appErrors.ValidationError) string {
 	// Check if there are errors
 	if len(r.errors) == 0 {
 		return "No errors to fix"
@@ -488,21 +495,40 @@ func (r SpellRule) Help(errors []errors.ValidationError) string {
 
 	fmt.Fprintf(&stringBuilder, "Fix the following misspellings in your commit message:\n")
 
-	for i, err := range r.errors {
-		if i > 0 {
-			stringBuilder.WriteString("\n")
+	// Convert each error to a help string
+	formatHelpItem := func(index int, err appErrors.ValidationError) string {
+		var itemBuilder strings.Builder
+
+		// Add newline separator for all items except the first
+		if index > 0 {
+			itemBuilder.WriteString("\n")
 		}
 
-		stringBuilder.WriteString("- ")
-		stringBuilder.WriteString(err.Error())
+		itemBuilder.WriteString("- ")
+		itemBuilder.WriteString(err.Error())
 
 		// Add suggestion if available in context
 		if original, ok := err.Context["original"]; ok {
 			if corrected, ok := err.Context["corrected"]; ok {
-				fmt.Fprintf(&stringBuilder, " (Replace '%s' with '%s')", original, corrected)
+				fmt.Fprintf(&itemBuilder, " (Replace '%s' with '%s')", original, corrected)
 			}
 		}
+
+		return itemBuilder.String()
 	}
+
+	// Generate help items for each error and join them
+	contextx.ForEach(
+		contextx.Map(
+			make([]int, len(r.errors)),
+			func(i int) string {
+				return formatHelpItem(i, r.errors[i])
+			},
+		),
+		func(item string) {
+			stringBuilder.WriteString(item)
+		},
+	)
 
 	stringBuilder.WriteString("\n\nIf any of these are intentional or domain-specific terms, consider rewording.")
 

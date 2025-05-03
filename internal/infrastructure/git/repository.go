@@ -15,6 +15,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/itiquette/gommitlint/internal/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
@@ -59,23 +60,6 @@ func NewRepositoryAdapter(path string) (RepositoryAdapter, error) {
 
 // GetCommit returns a commit by its hash.
 func (g RepositoryAdapter) GetCommit(ctx context.Context, hash string) (domain.CommitInfo, error) {
-	// Check for context cancellation
-	if ctx.Err() != nil {
-		// Create a rich error context
-		errCtx := appErrors.NewContext()
-
-		// Create an enhanced error
-		err := appErrors.CreateRichError(
-			"GitRepository",
-			appErrors.ErrContextCancelled,
-			fmt.Sprintf("Context cancelled while getting commit %s: %s", hash, ctx.Err()),
-			"The operation was cancelled. This may be due to a timeout or manual cancellation.",
-			errCtx,
-		)
-
-		return domain.CommitInfo{}, err
-	}
-
 	// Instead of repeating the logic for resolving and getting commits,
 	// use our helper function to get exactly 1 commit
 	commits, err := g.getCommitsFromHash(ctx, hash, 1)
@@ -127,26 +111,6 @@ func (g RepositoryAdapter) GetCommit(ctx context.Context, hash string) (domain.C
 // GetCommitRange returns all commits in the given range.
 // This version uses functional patterns to avoid state mutation.
 func (g RepositoryAdapter) GetCommitRange(ctx context.Context, fromHash, toHash string) ([]domain.CommitInfo, error) {
-	// Check for context cancellation
-	if ctx.Err() != nil {
-		// Create enhanced error
-		errCtx := appErrors.NewContext()
-
-		richErr := appErrors.CreateRichError(
-			"GitRepository",
-			appErrors.ErrContextCancelled,
-			fmt.Sprintf("Context cancelled while getting commit range %s..%s: %s", fromHash, toHash, ctx.Err()),
-			"The operation was cancelled. This may be due to a timeout or manual cancellation.",
-			errCtx,
-		)
-
-		// Add range context
-		richErr = richErr.WithContext("from_hash", fromHash)
-		richErr = richErr.WithContext("to_hash", toHash)
-
-		return nil, richErr
-	}
-
 	// Resolve the hashes
 	hashes, err := g.resolveHashRange(ctx, fromHash, toHash)
 	if err != nil {
@@ -171,26 +135,6 @@ func (g RepositoryAdapter) GetCommitRange(ctx context.Context, fromHash, toHash 
 		// Add context
 		richErr = richErr.WithContext("to_hash", toHash)
 		richErr = richErr.WithContext("repository_path", g.path)
-
-		return nil, richErr
-	}
-
-	// Check for context cancellation before proceeding with potentially lengthy operation
-	if ctx.Err() != nil {
-		// Create enhanced error
-		errCtx := appErrors.NewContext()
-
-		richErr := appErrors.CreateRichError(
-			"GitRepository",
-			appErrors.ErrContextCancelled,
-			fmt.Sprintf("Context cancelled while processing commit range %s..%s: %s", fromHash, toHash, ctx.Err()),
-			"The operation was cancelled. This may be due to a timeout or manual cancellation.",
-			errCtx,
-		)
-
-		// Add range context
-		richErr = richErr.WithContext("from_hash", fromHash)
-		richErr = richErr.WithContext("to_hash", toHash)
 
 		return nil, richErr
 	}
@@ -239,30 +183,10 @@ type hashRange struct {
 // resolveHashRange resolves the 'from' and 'to' revision strings to actual hash objects.
 // This pure function handles the resolution without modifying state.
 func (g RepositoryAdapter) resolveHashRange(
-	ctx context.Context,
+	_ context.Context,
 	fromHashStr,
 	toHashStr string,
 ) (hashRange, error) {
-	// Check for context cancellation
-	if ctx.Err() != nil {
-		// Create enhanced error
-		errCtx := appErrors.NewContext()
-
-		richErr := appErrors.CreateRichError(
-			"GitRepository",
-			appErrors.ErrContextCancelled,
-			fmt.Sprintf("Context cancelled while resolving hash range %s..%s: %s", fromHashStr, toHashStr, ctx.Err()),
-			"The operation was cancelled. This may be due to a timeout or manual cancellation.",
-			errCtx,
-		)
-
-		// Add range context
-		richErr = richErr.WithContext("from_hash", fromHashStr)
-		richErr = richErr.WithContext("to_hash", toHashStr)
-
-		return hashRange{}, richErr
-	}
-
 	// Resolve the "to" hash
 	toHash, err := g.resolveRevision(toHashStr)
 	if err != nil {
@@ -314,7 +238,7 @@ func (g RepositoryAdapter) resolveHashRange(
 // ensureFromCommitIncluded creates a new commit collection that includes the 'from' commit.
 // This pure function returns a new slice rather than modifying an existing one.
 func (g RepositoryAdapter) ensureFromCommitIncluded(
-	ctx context.Context,
+	_ context.Context,
 	commits []domain.CommitInfo,
 	fromHash plumbing.Hash,
 ) ([]domain.CommitInfo, error) {
@@ -324,11 +248,6 @@ func (g RepositoryAdapter) ensureFromCommitIncluded(
 	// If "from" commit is already included, return the original collection
 	if collection.Contains(fromHash.String()) {
 		return collection.All(), nil
-	}
-
-	// Check for context cancellation
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
 	}
 
 	// Get the "from" commit
@@ -349,11 +268,6 @@ func (g RepositoryAdapter) ensureFromCommitIncluded(
 
 // GetHeadCommits returns the specified number of commits from HEAD.
 func (g RepositoryAdapter) GetHeadCommits(ctx context.Context, count int) ([]domain.CommitInfo, error) {
-	// Check for context cancellation
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
-	}
-
 	// This is already a nicely structured functional approach, but we'll make it more explicit
 	return g.getCommitsFromHash(ctx, "", count)
 }
@@ -361,7 +275,7 @@ func (g RepositoryAdapter) GetHeadCommits(ctx context.Context, count int) ([]dom
 // getCommitsFromHash is a helper function that fetches commits from a specific hash.
 // This pure function encapsulates the commit fetching logic to avoid duplication.
 func (g RepositoryAdapter) getCommitsFromHash(
-	ctx context.Context,
+	_ context.Context,
 	hashStr string,
 	count int,
 ) ([]domain.CommitInfo, error) {
@@ -377,11 +291,6 @@ func (g RepositoryAdapter) getCommitsFromHash(
 		return nil, fmt.Errorf("failed to create commit iterator: %w", err)
 	}
 
-	// Check for context cancellation before proceeding with potentially lengthy operation
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
-	}
-
 	// Collect and convert commits with limit
 	return g.collectAndConvertCommits(iter, count, nil)
 }
@@ -389,11 +298,6 @@ func (g RepositoryAdapter) getCommitsFromHash(
 // GetCurrentBranch returns the name of the current branch.
 // This uses functional patterns to maintain immutability and avoid state mutation.
 func (g RepositoryAdapter) GetCurrentBranch(ctx context.Context) (string, error) {
-	// Check for context cancellation
-	if ctx.Err() != nil {
-		return "", ctx.Err()
-	}
-
 	// Get the HEAD reference
 	ref, err := g.repo.Head()
 	if err != nil {
@@ -408,16 +312,11 @@ func (g RepositoryAdapter) GetCurrentBranch(ctx context.Context) (string, error)
 	// We're in detached HEAD state, try to find the branch that contains HEAD
 	headHash := ref.Hash()
 
-	// Check for context cancellation before proceeding with potentially lengthy operation
-	if ctx.Err() != nil {
-		return "", ctx.Err()
-	}
-
 	// Try to find a branch pointing to HEAD
 	branchName, err := g.findBranchForCommit(ctx, headHash)
 	if err != nil {
 		// Only return error if it's not a "not found" type of error
-		if !errors.Is(err, ctx.Err()) && err.Error() != "branch not found" {
+		if err.Error() != "branch not found" {
 			return "", fmt.Errorf("failed to find branch: %w", err)
 		}
 	}
@@ -433,7 +332,7 @@ func (g RepositoryAdapter) GetCurrentBranch(ctx context.Context) (string, error)
 
 // findBranchForCommit finds a branch that points to the given commit.
 // This is a pure function that implements the branch search functionally.
-func (g RepositoryAdapter) findBranchForCommit(ctx context.Context, commitHash plumbing.Hash) (string, error) {
+func (g RepositoryAdapter) findBranchForCommit(_ context.Context, commitHash plumbing.Hash) (string, error) {
 	// Get all branches
 	branches, err := g.repo.Branches()
 	if err != nil {
@@ -445,11 +344,6 @@ func (g RepositoryAdapter) findBranchForCommit(ctx context.Context, commitHash p
 	var result string
 
 	err = branches.ForEach(func(branch *plumbing.Reference) error {
-		// Check for context cancellation during iteration
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-
 		if branch.Hash() == commitHash {
 			// Store the result (immutable pattern would avoid this,
 			// but we're constrained by the Branches() API)
@@ -461,10 +355,8 @@ func (g RepositoryAdapter) findBranchForCommit(ctx context.Context, commitHash p
 		return nil
 	})
 
-	// ForEach returns a "stop" error when we've found the branch, or ctx.Err() when cancelled
-	if ctx.Err() != nil {
-		return "", ctx.Err()
-	} else if err != nil && err.Error() != "stop" {
+	// ForEach returns a "stop" error when we've found the branch
+	if err != nil && err.Error() != "stop" {
 		return "", fmt.Errorf("failed to iterate branches: %w", err)
 	}
 
@@ -528,11 +420,6 @@ func (g RepositoryAdapter) IsValid(_ context.Context) bool {
 
 // GetCommitsAhead returns the number of commits ahead of the given reference.
 func (g RepositoryAdapter) GetCommitsAhead(ctx context.Context, reference string) (int, error) {
-	// Check for context cancellation
-	if ctx.Err() != nil {
-		return 0, ctx.Err()
-	}
-
 	// Get all the necessary information to compute commits ahead
 	head, _, mergeBase, err := g.resolveCommitReferences(ctx, reference)
 	if err != nil {
@@ -545,25 +432,10 @@ func (g RepositoryAdapter) GetCommitsAhead(ctx context.Context, reference string
 		return 0, err
 	}
 
-	// Check for context cancellation before proceeding with potentially lengthy operation
-	if ctx.Err() != nil {
-		return 0, ctx.Err()
-	}
-
 	// Collect commits between HEAD and merge base
 	commits, err := g.collectCommits(iter, 0, func(commit *object.Commit) bool {
-		// Check for context cancellation during iteration (this check has minimal performance impact)
-		if ctx.Err() != nil {
-			return true // Break the iteration
-		}
-
 		return commit.Hash == mergeBase
 	})
-
-	// Handle context cancellation that might have happened during commit collection
-	if ctx.Err() != nil {
-		return 0, ctx.Err()
-	}
 
 	if err != nil {
 		return 0, fmt.Errorf("failed to count commits ahead: %w", err)
@@ -576,7 +448,7 @@ func (g RepositoryAdapter) GetCommitsAhead(ctx context.Context, reference string
 // resolveCommitReferences resolves all necessary references for commit comparison.
 // This pure function gathers all the information needed in a single place.
 func (g RepositoryAdapter) resolveCommitReferences(
-	ctx context.Context,
+	_ context.Context,
 	reference string,
 ) (plumbing.Hash, plumbing.Hash, plumbing.Hash, error) {
 	// Resolve HEAD
@@ -590,11 +462,6 @@ func (g RepositoryAdapter) resolveCommitReferences(
 	if err != nil {
 		return plumbing.ZeroHash, plumbing.ZeroHash, plumbing.ZeroHash,
 			fmt.Errorf("failed to resolve reference %s: %w", reference, err)
-	}
-
-	// Check for context cancellation
-	if ctx.Err() != nil {
-		return plumbing.ZeroHash, plumbing.ZeroHash, plumbing.ZeroHash, ctx.Err()
 	}
 
 	// Find merge base
@@ -659,31 +526,10 @@ func (g RepositoryAdapter) collectAndConvertCommits(
 // mapCommits transforms a slice of git commits to domain commits.
 // This pure function handles the transformation without modifying state.
 func (g RepositoryAdapter) mapCommits(commits []*object.Commit) ([]domain.CommitInfo, error) {
-	// Pre-allocate the result slice to avoid repeated allocations
-	domainCommits := make([]domain.CommitInfo, 0, len(commits))
+	// Use contextx.Map for a more concise functional transformation
+	domainCommits := contextx.Map(commits, func(commit *object.Commit) domain.CommitInfo {
+		return g.convertCommit(commit)
+	})
 
-	// Use recursion with an accumulator for a functional approach
-	return g.mapCommitsWithAccumulator(commits, domainCommits, 0)
-}
-
-// mapCommitsWithAccumulator is a helper function that implements the mapping logic recursively.
-// This maintains functional purity while allowing efficient accumulation of results.
-func (g RepositoryAdapter) mapCommitsWithAccumulator(
-	commits []*object.Commit,
-	accumulator []domain.CommitInfo,
-	index int,
-) ([]domain.CommitInfo, error) {
-	// Base case: if we've processed all commits, return the accumulator
-	if index >= len(commits) {
-		return accumulator, nil
-	}
-
-	// Convert the current commit
-	domainCommit := g.convertCommit(commits[index])
-
-	// Create a new accumulator with the new commit appended
-	newAccumulator := append(accumulator, domainCommit)
-
-	// Process the next commit
-	return g.mapCommitsWithAccumulator(commits, newAccumulator, index+1)
+	return domainCommits, nil
 }
