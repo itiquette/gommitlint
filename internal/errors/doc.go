@@ -9,7 +9,7 @@ with rich context and functional programming principles.
 # Core Components
 
  1. ValidationError:
-    A unified error type that includes rule name, code, message, and context.
+    A structured error type that includes rule name, code, message, and context.
     The errors follow immutable design principles - operations return new errors
     rather than modifying existing ones.
 

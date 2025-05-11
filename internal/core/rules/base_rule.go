@@ -19,6 +19,7 @@ type BaseRule struct {
 	hasRun     bool
 	verbosity  string
 	IsRequired bool
+	// No configuration fields - configuration should be retrieved from context
 }
 
 // NewBaseRule creates a new BaseRule with the given name.

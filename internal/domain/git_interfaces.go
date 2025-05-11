@@ -6,7 +6,7 @@ package domain
 
 import "context"
 
-// GitCommitService provides a unified interface for git commit-related operations.
+// GitCommitService provides an interface for git commit-related operations.
 // It combines the functionality of reading individual commits and commit history.
 type GitCommitService interface {
 	// GetCommit returns a commit by its hash.

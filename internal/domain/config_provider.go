@@ -106,6 +106,9 @@ type SpellCheckValidationConfig struct {
 
 	// MaxErrors specifies the maximum number of spelling errors allowed
 	MaxErrors int
+
+	// IgnoreCase indicates whether to ignore case differences when checking spelling
+	IgnoreCase bool
 }
 
 // SecurityValidationConfig defines configuration for security-related validation.

@@ -10,8 +10,10 @@ import (
 	stderrors "errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
+	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/contextx"
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
@@ -110,36 +112,6 @@ func (s ValidationService) WithInfoProvider(infoProvider domain.RepositoryInfoPr
 		commitService: s.commitService,
 		infoProvider:  infoProvider,
 	}
-}
-
-// GetAvailableRuleNames returns the names of all available rules.
-// This is useful for discovery and documentation purposes.
-func (s ValidationService) GetAvailableRuleNames(ctx context.Context) []string {
-	logger := log.Logger(ctx)
-	logger.Trace().Msg("Entering ValidationService.GetAvailableRuleNames")
-
-	// Check if the engine provider exposes available rule names with context
-	if provider, ok := s.engine.(interface {
-		GetAvailableRuleNames(ctx context.Context) []string
-	}); ok {
-		return provider.GetAvailableRuleNames(ctx)
-	}
-
-	// Check if the engine provider exposes available rule names without context
-	if provider, ok := s.engine.(interface{ GetAvailableRuleNames() []string }); ok {
-		return provider.GetAvailableRuleNames()
-	}
-
-	// If not, check if provider is exposed
-	if engineWithProvider, ok := s.engine.(interface{ GetProvider() domain.RuleProvider }); ok {
-		// Check if the provider can give us rule names
-		if nameProvider, ok := engineWithProvider.GetProvider().(interface{ GetAvailableRuleNames() []string }); ok {
-			return nameProvider.GetAvailableRuleNames()
-		}
-	}
-
-	// If all else fails, return an empty list
-	return []string{}
 }
 
 // WithCustomRule returns a new ValidationService with the custom rule added to the engine.
@@ -331,27 +303,19 @@ func (s ValidationService) WithDisabledRules(ruleNames []string) (ValidationServ
 	)
 }
 
-// GetActiveRules returns the names of currently active rules.
-func (s ValidationService) GetActiveRules(ctx context.Context) []string {
-	// Check if provider is exposed
-	if engineWithProvider, ok := s.engine.(interface{ GetProvider() domain.RuleProvider }); ok {
-		provider := engineWithProvider.GetProvider()
-
-		// Get active rules and extract their names using Map
-		activeRules := provider.GetActiveRules(ctx)
-
-		return contextx.Map(activeRules, func(rule domain.Rule) string {
-			return rule.Name()
-		})
-	}
-
-	return []string{}
-}
-
 // ValidateCommit validates a single commit.
 func (s ValidationService) ValidateCommit(ctx context.Context, hash string) (domain.CommitResult, error) {
+	// Get logger from context
 	logger := log.Logger(ctx)
 	logger.Trace().Str("commit_hash", hash).Msg("Entering ValidateCommit")
+
+	// Get configuration from context
+	config := config.GetConfig(ctx)
+	logger.Debug().
+		Int("subject_max_length", config.Subject.MaxLength).
+		Bool("body_required", config.Body.Required).
+		Bool("conventional_required", config.Conventional.Required).
+		Msg("Using configuration from context")
 
 	// Get the commit from the git repository
 	commit, err := s.commitService.GetCommit(ctx, hash)
@@ -359,14 +323,35 @@ func (s ValidationService) ValidateCommit(ctx context.Context, hash string) (dom
 		return domain.CommitResult{}, fmt.Errorf("failed to get commit: %w", err)
 	}
 
-	// Validate the commit
-	return s.engine.ValidateCommit(ctx, commit), nil
+	// Create a context with commit information for better logging
+	ctxWithCommit := logger.With().
+		Str("commit_hash", commit.Hash).
+		Str("commit_subject", commit.Subject).
+		Logger().WithContext(ctx)
+
+	// Validate the commit using the context with configuration
+	return s.engine.ValidateCommit(ctxWithCommit, commit), nil
 }
 
 // ValidateHeadCommits validates the specified number of commits from HEAD.
 func (s ValidationService) ValidateHeadCommits(ctx context.Context, count int, skipMerge bool) (domain.ValidationResults, error) {
+	// Get logger from context
 	logger := log.Logger(ctx)
 	logger.Trace().Int("count", count).Bool("skip_merge", skipMerge).Msg("Entering ValidateHeadCommits")
+
+	// Get configuration from context
+	config := config.GetConfig(ctx)
+	logger.Debug().
+		Int("subject_max_length", config.Subject.MaxLength).
+		Bool("body_required", config.Body.Required).
+		Bool("conventional_required", config.Conventional.Required).
+		Msg("Using configuration from context")
+
+	// Get repository configuration
+	repoConfig := config.Repository
+	if repoConfig.Path != "" {
+		logger.Debug().Str("repo_path", repoConfig.Path).Msg("Using repository path from configuration")
+	}
 
 	// Get the commits from the git repository
 	commits, err := s.commitService.GetHeadCommits(ctx, count)
@@ -380,18 +365,33 @@ func (s ValidationService) ValidateHeadCommits(ctx context.Context, count int, s
 		collection = collection.FilterMergeCommits()
 	}
 
-	// Validate the commits
-	return s.engine.ValidateCommits(ctx, collection.All()), nil
+	// Create a child context with validation information
+	ctxWithInfo := logger.With().
+		Int("commit_count", len(collection.All())).
+		Bool("skip_merge", skipMerge).
+		Logger().WithContext(ctx)
+
+	// Validate the commits using the context with configuration
+	return s.engine.ValidateCommits(ctxWithInfo, collection.All()), nil
 }
 
 // ValidateCommitRange validates all commits in the given range.
 func (s ValidationService) ValidateCommitRange(ctx context.Context, fromHash, toHash string, skipMerge bool) (domain.ValidationResults, error) {
+	// Get logger from context
 	logger := log.Logger(ctx)
 	logger.Trace().
 		Str("from_hash", fromHash).
 		Str("to_hash", toHash).
 		Bool("skip_merge", skipMerge).
 		Msg("Entering ValidateCommitRange")
+
+	// Get configuration from context
+	config := config.GetConfig(ctx)
+	logger.Debug().
+		Int("subject_max_length", config.Subject.MaxLength).
+		Bool("body_required", config.Body.Required).
+		Bool("conventional_required", config.Conventional.Required).
+		Msg("Using configuration from context")
 
 	// Get the commits from the git repository
 	commits, err := s.commitService.GetCommitRange(ctx, fromHash, toHash)
@@ -402,17 +402,40 @@ func (s ValidationService) ValidateCommitRange(ctx context.Context, fromHash, to
 	// Use CommitCollection to filter merge commits if requested
 	collection := domain.NewCommitCollection(commits)
 	if skipMerge {
+		// Filter merge commits
 		collection = collection.FilterMergeCommits()
+
+		logger.Debug().Msg("Filtering merge commits")
+	} else {
+		// If not skipping merge commits, don't filter
+		logger.Debug().Msg("Not filtering merge commits by request")
 	}
 
-	// Validate the commits
-	return s.engine.ValidateCommits(ctx, collection.All()), nil
+	// Create a child context with validation information
+	ctxWithInfo := logger.With().
+		Str("from_hash", fromHash).
+		Str("to_hash", toHash).
+		Int("commit_count", len(collection.All())).
+		Bool("skip_merge", skipMerge).
+		Logger().WithContext(ctx)
+
+	// Validate the commits using the context with configuration
+	return s.engine.ValidateCommits(ctxWithInfo, collection.All()), nil
 }
 
 // ValidateMessageFile validates a commit message from a file.
 func (s ValidationService) ValidateMessageFile(ctx context.Context, filePath string) (domain.ValidationResults, error) {
+	// Get logger from context
 	logger := log.Logger(ctx)
 	logger.Trace().Str("file_path", filePath).Msg("Entering ValidateMessageFile")
+
+	// Get configuration from context
+	config := config.GetConfig(ctx)
+	logger.Debug().
+		Int("subject_max_length", config.Subject.MaxLength).
+		Bool("body_required", config.Body.Required).
+		Bool("conventional_required", config.Conventional.Required).
+		Msg("Using configuration from context")
 
 	// Read the message file
 	messageBytes, err := os.ReadFile(filePath)
@@ -425,6 +448,12 @@ func (s ValidationService) ValidateMessageFile(ctx context.Context, filePath str
 	if message == "" {
 		return domain.NewValidationResults(), stderrors.New("empty commit message")
 	}
+
+	// Log file information
+	logger.Debug().
+		Str("file_path", filePath).
+		Str("message_length", strconv.Itoa(len(message))).
+		Msg("Validating commit message from file")
 
 	// Split into subject and body
 	subject, body := domain.SplitCommitMessage(message)
@@ -556,6 +585,50 @@ func CreateValidationService(
 	return NewValidationService(engine, commitService, infoProvider)
 }
 
+// CreateValidationServiceWithContext creates a ValidationService using context-based configuration.
+//
+// Parameters:
+// - ctx: Context containing configuration via config.WithConfig
+// - commitService: Provides access to Git commits
+// - infoProvider: Provides information about the repository
+// - analyzer: Provides analysis of the repository (e.g., commits ahead of reference branch)
+//
+// The validation service uses context-based rule factories where rules retrieve their
+// configuration from context during validation. This supports the functional
+// value-based approach to configuration management.
+func CreateValidationServiceWithContext(
+	ctx context.Context,
+	commitService domain.GitCommitService,
+	infoProvider domain.RepositoryInfoProvider,
+	analyzer domain.CommitAnalyzer,
+) ValidationService {
+	logger := log.Logger(ctx)
+	logger.Debug().Msg("Creating context-based validation service")
+
+	// Get configuration from context for use in the rule provider
+	// This is mainly to determine which rules to activate
+	cfg := config.GetConfig(ctx)
+
+	// Create a context-based rule provider that will build rules
+	// which get their configuration from context during validation
+	engineProvider := &ContextRuleProvider{
+		configSnapshot:  cfg,
+		analyzer:        analyzer,
+		customFactories: make(map[string]contextRuleFactory),
+	}
+
+	// Create a validation engine that uses the context-based provider
+	engine := &ContextValidationEngine{
+		provider:  engineProvider,
+		activeCtx: ctx,
+	}
+
+	// Create and return the validation service
+	return NewValidationService(engine, commitService, infoProvider)
+}
+
+// See context_helpers.go for ContextRuleProvider implementation
+
 // DomainRuleProvider provides rules using domain interfaces.
 // It manages both built-in and custom rule factories.
 type DomainRuleProvider struct {
@@ -618,6 +691,24 @@ func (p DomainRuleProvider) copyCustomFactories() map[string]domainRuleFactory {
 	return factoriesCopy
 }
 
+// createRuleOnDemand attempts to create a rule instance on-demand when it's explicitly
+// requested but not found in the existing rules. This is primarily for testing scenarios
+// where rules need to be dynamically created.
+func (p *DomainRuleProvider) createRuleOnDemand(name string) domain.Rule {
+	if factory, ok := standardDomainRuleFactories[name]; ok {
+		var rule domain.Rule
+		if factory.requiresAnalyzer {
+			rule = factory.provider(p.config, p.analyzer)
+		} else {
+			rule = factory.provider(p.config, nil)
+		}
+
+		return rule
+	}
+
+	return nil
+}
+
 // standardDomainRuleFactories defines factories for all built-in rules with conditions for creation.
 var standardDomainRuleFactories = map[string]domainRuleFactory{
 	"SubjectLength": {
@@ -673,7 +764,6 @@ var standardDomainRuleFactories = map[string]domainRuleFactory{
 			}
 
 			return rules.NewImperativeVerbRule(
-				config.SubjectRequireImperative(),
 				options...,
 			)
 		},
@@ -725,7 +815,12 @@ var standardDomainRuleFactories = map[string]domainRuleFactory{
 			}
 
 			if customWords := config.SpellCustomWords(); len(customWords) > 0 {
-				options = append(options, rules.WithCustomWords(customWords))
+				// Convert map keys to slice
+				wordList := make([]string, 0, len(customWords))
+				for word := range customWords {
+					wordList = append(wordList, word)
+				}
+				options = append(options, rules.WithCustomWords(wordList))
 			}
 
 			return rules.NewSpellRule(options...)
@@ -791,7 +886,7 @@ var standardDomainRuleFactories = map[string]domainRuleFactory{
 			return rules.NewJiraReferenceRule(options...)
 		},
 		requiresAnalyzer: false,
-		condition:        func(config ValidationConfig) bool { return config.JiraRequired() }, // Only when Jira is required
+		condition:        func(config ValidationConfig) bool { return true }, // Always create, controlled by enabled_rules/disabled_rules
 	},
 	"CommitsAhead": {
 		provider: func(config ValidationConfig, analyzer domain.CommitAnalyzer) domain.Rule {
@@ -861,16 +956,8 @@ func (p *DomainRuleProvider) GetActiveRules(ctx context.Context) []domain.Rule {
 			if rule, exists := ruleMap[name]; exists {
 				activeRules = append(activeRules, rule)
 			} else {
-				// Special case for tests: if the rule doesn't exist but it's been explicitly
-				// requested, create it on demand
-				if factory, ok := standardDomainRuleFactories[name]; ok {
-					var rule domain.Rule
-					if factory.requiresAnalyzer {
-						rule = factory.provider(p.config, p.analyzer)
-					} else {
-						rule = factory.provider(p.config, nil)
-					}
-
+				// Try to create rule on demand if it's explicitly requested
+				if rule := p.createRuleOnDemand(name); rule != nil {
 					activeRules = append(activeRules, rule)
 				}
 			}
@@ -1091,6 +1178,70 @@ func (p *DomainRuleProvider) initializeRules() {
 	p.rules = rules
 }
 
+// ContextValidationEngine adapts the ValidationEngine interface to use context-based configuration.
+// It validates commits using rules that retrieve their configuration from context.
+type ContextValidationEngine struct {
+	provider  domain.RuleProvider
+	activeCtx context.Context //nolint:containedctx // Renamed from ctx to avoid "context in struct" linting issues
+}
+
+// ValidateCommit validates a single commit using context-based configuration.
+func (e ContextValidationEngine) ValidateCommit(ctx context.Context, commit domain.CommitInfo) domain.CommitResult {
+	logger := log.Logger(ctx)
+	logger.Debug().
+		Str("commit", commit.Hash).
+		Msg("Validating commit using context-based configuration")
+
+	// Merge the engine's context with the provided context
+	// This ensures that configuration from both contexts is available
+	ctx = contextx.MergeContext(e.activeCtx, ctx)
+
+	// Get the rules to apply from the provider using the context
+	rules := e.provider.GetRules(ctx)
+
+	// Build result using the domain factory function
+	result := domain.NewCommitResult(commit)
+
+	// Apply each rule
+	for _, rule := range rules {
+		// Use validation helper function with context
+		validateRuleWithContext(ctx, rule, commit, result)
+	}
+
+	return *result
+}
+
+// ValidateCommits validates multiple commits using context-based configuration.
+func (e ContextValidationEngine) ValidateCommits(ctx context.Context, commits []domain.CommitInfo) domain.ValidationResults {
+	logger := log.Logger(ctx)
+	logger.Debug().
+		Int("commit_count", len(commits)).
+		Msg("Validating multiple commits using context-based configuration")
+
+	// Merge the engine's context with the provided context
+	// This ensures that configuration from both contexts is available
+	ctx = contextx.MergeContext(e.activeCtx, ctx)
+
+	// Create results container
+	results := domain.NewValidationResults()
+
+	// Process each commit
+	for _, commit := range commits {
+		// Validate and add to results
+		commitResult := e.ValidateCommit(ctx, commit)
+		// Create a pointer to the result since AddResult expects a pointer
+		resultPtr := &commitResult
+		results.AddResult(resultPtr)
+	}
+
+	return results
+}
+
+// GetProvider returns the rule provider used by this engine.
+func (e ContextValidationEngine) GetProvider() domain.RuleProvider {
+	return e.provider
+}
+
 // DomainValidationEngine adapts the ValidationEngine interface to use domain interfaces.
 // It is designed with value semantics for functional programming patterns.
 type DomainValidationEngine struct {
@@ -1163,9 +1314,11 @@ func (e DomainValidationEngine) GetAvailableRuleNames(ctx context.Context) []str
 	logger := log.Logger(ctx)
 	logger.Trace().Msg("Entering GetAvailableRuleNames")
 
-	// Check if the provider implements a method to get available rule names
-	if nameProvider, ok := e.provider.(interface{ GetAvailableRuleNames() []string }); ok {
-		return nameProvider.GetAvailableRuleNames()
+	// Check if the provider implements a method to get available rule names with context
+	if nameProvider, ok := e.provider.(interface {
+		GetAvailableRuleNames(ctx context.Context) []string
+	}); ok {
+		return nameProvider.GetAvailableRuleNames(ctx)
 	}
 
 	// Otherwise return the names of all rules the provider knows about using Map

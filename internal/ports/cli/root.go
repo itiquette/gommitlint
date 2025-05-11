@@ -25,8 +25,8 @@ const (
 // It uses domain interfaces instead of concrete implementations to follow
 // the Dependency Inversion Principle.
 type AppDependencies struct {
-	// ConfigManager provides configuration
-	ConfigManager *config.Manager
+	// ConfigProvider provides configuration
+	ConfigProvider *config.Provider
 }
 
 func newRootCommand(ctx context.Context, versionString string, deps *AppDependencies) *cobra.Command {
@@ -83,15 +83,39 @@ func Execute(version, commitSHA, buildDate string) {
 	logger := log.InitBasicLogger()
 	ctx = logger.WithContext(ctx)
 
-	// Create config manager with the context
-	configManager, err := config.NewManager(ctx)
+	// Create config provider with the context
+	configProvider, err := config.NewProvider()
 	if err != nil {
-		log.Logger(ctx).Error().Err(err).Msg("Failed to create configuration manager")
+		log.Logger(ctx).Error().Err(err).Msg("Failed to create configuration provider")
 		os.Exit(1)
 	}
 
+	// Load configuration from file and verify config was loaded
+	if err := configProvider.Load(); err != nil {
+		log.Logger(ctx).Error().Err(err).Msg("Failed to load configuration")
+		os.Exit(1)
+	}
+
+	// Print loaded config information to verify
+	cfg := configProvider.GetConfig()
+	log.Logger(ctx).Info().
+		Strs("enabled_rules", cfg.Rules.EnabledRules).
+		Strs("disabled_rules", cfg.Rules.DisabledRules).
+		Msg("Loaded configuration")
+
+	// Add provider to context
+	ctx = config.WithProviderInContext(ctx, configProvider)
+
 	// Use the ExecuteWithDependencies function with the context
-	ExecuteWithDependencies(ctx, version, commitSHA, buildDate, configManager)
+	ExecuteWithDependencies(
+		ctx,
+		version,
+		commitSHA,
+		buildDate,
+		&AppDependencies{
+			ConfigProvider: configProvider,
+		},
+	)
 }
 
 // ExecuteWithDependencies executes the root command with explicit dependencies.
@@ -103,18 +127,13 @@ func ExecuteWithDependencies(
 	version,
 	commitSHA,
 	buildDate string,
-	configManager *config.Manager,
+	deps *AppDependencies,
 ) {
 	// Create a logger
 	logger := log.Logger(ctx)
 	logger.Trace().Msg("Entering ExecuteWithDependencies")
 
 	versionString := version + " (Commit SHA: " + commitSHA + ", Build date: " + buildDate + ")"
-
-	// Create dependencies container
-	deps := &AppDependencies{
-		ConfigManager: configManager,
-	}
 
 	// Create and execute root command with dependencies
 	err := newRootCommand(ctx, versionString, deps).Execute()

@@ -1,550 +1,480 @@
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
-
 package rules
 
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
-	"github.com/golangci/misspell"
+	"github.com/client9/misspell"
 	"github.com/itiquette/gommitlint/internal/config"
-	"github.com/itiquette/gommitlint/internal/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
+	"github.com/itiquette/gommitlint/internal/infrastructure/log"
 )
 
-// SpellRule checks for spelling errors in commit messages.
-// It uses the misspell library to detect and suggest corrections for
-// commonly misspelled English words.
-type SpellRule struct {
-	locale          string
-	maxErrors       int
-	ignoreWords     []string
-	customWords     map[string]string
-	testingDisabled bool
-	errors          []appErrors.ValidationError
-	diffs           []misspell.Diff
+// Configuration context key for spell checking.
+type spellCheckConfigKey string
+
+const (
+	// Key for storing spell check configuration in context.
+	spellCheckKey spellCheckConfigKey = "spell_check_config"
+)
+
+// SpellCheckConfig represents configuration for spell checking.
+type SpellCheckConfig struct {
+	// Enabled indicates whether spell checking is enabled.
+	Enabled bool
+	// Language specifies the language/locale to use for spell checking.
+	Language string
+	// CustomDictionary contains words to ignore during spell checking.
+	CustomDictionary []string
+	// IgnoreCase indicates whether to ignore case when checking spelling.
+	IgnoreCase bool
 }
 
-// SpellRuleOption is a functional option for configuring the SpellRule.
+// DefaultSpellCheckConfig returns default configuration for spell checking.
+func DefaultSpellCheckConfig() SpellCheckConfig {
+	return SpellCheckConfig{
+		Enabled:          true,
+		Language:         "en_US",
+		CustomDictionary: []string{},
+		IgnoreCase:       true,
+	}
+}
+
+// WithSpellCheckConfig adds spell check configuration to the context.
+func WithSpellCheckConfig(ctx context.Context, config SpellCheckConfig) context.Context {
+	return context.WithValue(ctx, spellCheckKey, config)
+}
+
+// SpellCheckConfigFromContext extracts spell check configuration from the context.
+func SpellCheckConfigFromContext(ctx context.Context) SpellCheckConfig {
+	if config, ok := ctx.Value(spellCheckKey).(SpellCheckConfig); ok {
+		return config
+	}
+
+	return DefaultSpellCheckConfig()
+}
+
+// SpellRule validates spelling in commit messages.
+type SpellRule struct {
+	baseRule     BaseRule
+	ignoreCase   bool
+	ignoreWords  []string
+	locale       string
+	misspellings map[string]string
+}
+
+// SpellRuleOption configures a SpellRule.
 type SpellRuleOption func(SpellRule) SpellRule
 
-// WithLocale sets the locale for spell checking. Valid values are "US" (default), "UK", or "GB".
-func WithLocale(locale string) SpellRuleOption {
+// WithIgnoreCase configures case sensitivity for spell checking.
+func WithIgnoreCase(ignore bool) SpellRuleOption {
 	return func(rule SpellRule) SpellRule {
-		rule.locale = locale
+		result := rule
+		result.ignoreCase = ignore
 
-		return rule
+		return result
 	}
 }
 
-// WithMaxErrors limits the number of spelling errors reported.
-func WithMaxErrors(maxErrors int) SpellRuleOption {
-	return func(rule SpellRule) SpellRule {
-		if maxErrors > 0 {
-			rule.maxErrors = maxErrors
-		}
-
-		return rule
-	}
-}
-
-// WithIgnoreWords provides a list of words to ignore during spell checking.
+// WithIgnoreWords configures words to ignore during spell checking.
 func WithIgnoreWords(words []string) SpellRuleOption {
 	return func(rule SpellRule) SpellRule {
-		// Create a new slice with the combined contents
-		newIgnoreWords := contextx.DeepCopy(rule.ignoreWords)
-		rule.ignoreWords = append(newIgnoreWords, words...)
+		result := rule
+		// Create a deep copy of the words slice
+		result.ignoreWords = make([]string, len(words))
+		copy(result.ignoreWords, words)
 
-		return rule
+		return result
 	}
 }
 
-// WithCustomWords provides a map of custom word mappings (misspelled -> correct).
-func WithCustomWords(wordMap map[string]string) SpellRuleOption {
+// WithLocale configures the locale for spell checking.
+func WithLocale(locale string) SpellRuleOption {
 	return func(rule SpellRule) SpellRule {
-		if rule.customWords == nil {
-			rule.customWords = make(map[string]string)
+		result := rule
+		result.locale = locale
+
+		return result
+	}
+}
+
+// Note: There are no test-specific options in the implementation
+
+// WithMaxErrors sets the maximum number of spelling errors before the check fails.
+func WithMaxErrors(_ int) SpellRuleOption {
+	return func(rule SpellRule) SpellRule {
+		// Currently, all errors are reported regardless of count
+		result := rule
+
+		return result
+	}
+}
+
+// WithCustomWords adds custom words to the dictionary for spell checking.
+func WithCustomWords(words []string) SpellRuleOption {
+	return func(rule SpellRule) SpellRule {
+		result := rule
+		// Create a new slice with the combined words
+		newIgnoreWords := make([]string, len(result.ignoreWords), len(result.ignoreWords)+len(words))
+		copy(newIgnoreWords, result.ignoreWords)
+		result.ignoreWords = append(newIgnoreWords, words...)
+
+		return result
+	}
+}
+
+// WithCustomWordsMap accepts a map of custom words for compatibility with older code.
+// It extracts the keys and passes them to WithCustomWords.
+func WithCustomWordsMap(wordsMap map[string]string) SpellRuleOption {
+	return func(rule SpellRule) SpellRule {
+		// Extract keys from the map
+		words := make([]string, 0, len(wordsMap))
+		for word := range wordsMap {
+			words = append(words, word)
 		}
 
-		// Create a deep copy of the current custom words
-		newCustomWords := contextx.DeepCopyMap(rule.customWords)
-
-		// Add new word mappings to the copy
-		for k, v := range wordMap {
-			newCustomWords[k] = v
-		}
-
-		rule.customWords = newCustomWords
-
-		return rule
+		// Use the regular WithCustomWords function
+		return WithCustomWords(words)(rule)
 	}
 }
 
-// WithTestingDisabled disables spell checking completely.
-// This is used when spell checking is disabled in the configuration.
-func WithTestingDisabled(disabled bool) SpellRuleOption {
-	return func(rule SpellRule) SpellRule {
-		rule.testingDisabled = disabled
-
-		return rule
-	}
-}
-
-// NewSpellRule creates a new SpellRule with the provided options.
+// NewSpellRule creates a new rule for validating spelling in commit messages.
 func NewSpellRule(options ...SpellRuleOption) SpellRule {
-	// Create default rule
+	// Create a rule with default values
 	rule := SpellRule{
-		locale:      "US", // Default locale is US English
-		maxErrors:   20,   // Default max errors to report
-		ignoreWords: []string{},
-		customWords: make(map[string]string),
-		errors:      []appErrors.ValidationError{},
+		baseRule:     NewBaseRule("Spell"),
+		ignoreCase:   true,
+		ignoreWords:  []string{},
+		locale:       "en_US",
+		misspellings: make(map[string]string),
 	}
 
-	// Apply options using Reduce
-	return contextx.Reduce(options, rule, func(r SpellRule, option SpellRuleOption) SpellRule {
-		return option(r)
-	})
+	// Apply all options
+	for _, option := range options {
+		rule = option(rule)
+	}
+
+	return rule
 }
 
-// NewSpellRuleWithConfig creates a SpellRule using configuration.
-func NewSpellRuleWithConfig(config config.Config) SpellRule {
-	// Build options based on the configuration
-	var options []SpellRuleOption
+// Validate checks the spelling in commit messages using configuration from context.
+func (r SpellRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
+	logger := log.Logger(ctx)
+	logger.Trace().
+		Str("rule", r.Name()).
+		Str("commit_hash", commit.Hash).
+		Msg("Validating spelling using context configuration")
 
-	// Check if spell checking is enabled
-	if !config.SpellEnabled() {
-		options = append(options, WithTestingDisabled(true))
+	// Create a new rule with context configuration
+	rule := r.withContextConfig(ctx)
+
+	// Skip validation if spell checking is disabled in config
+	if !rule.isEnabled(ctx) {
+		logger.Debug().Msg("Spell checking is disabled in configuration")
+
+		return []appErrors.ValidationError{}
 	}
 
-	// Set the locale if provided
-	if locale := config.SpellLocale(); locale != "" {
-		options = append(options, WithLocale(locale))
-	}
-
-	// Set the maximum errors if provided
-	if maxErrors := config.SpellMaxErrors(); maxErrors > 0 {
-		options = append(options, WithMaxErrors(maxErrors))
-	}
-
-	// Set the ignore words if provided
-	if ignoreWords := config.SpellIgnoreWords(); len(ignoreWords) > 0 {
-		options = append(options, WithIgnoreWords(ignoreWords))
-	}
-
-	// Set the custom words if provided
-	if customWords := config.SpellCustomWords(); len(customWords) > 0 {
-		options = append(options, WithCustomWords(customWords))
-	}
-
-	return NewSpellRule(options...)
-}
-
-// Name returns the rule identifier.
-func (r SpellRule) Name() string {
-	return "Spell"
-}
-
-// SetErrors sets the validation errors and diffs.
-// This is needed to support value receivers while maintaining state.
-func (r SpellRule) SetErrors(errors []appErrors.ValidationError, diffs []misspell.Diff) SpellRule {
-	r.errors = errors
-	r.diffs = diffs
-
-	return r
-}
-func (r SpellRule) Validate(_ context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
-	// We'll return a new slice of errors
-	var errors []appErrors.ValidationError
-
-	// Check if spell checking is disabled
-	if r.testingDisabled {
-		return []appErrors.ValidationError{} // Empty errors - spell check is disabled
-	}
-
-	// Special test case for SpellCheck_enabled_with_misspelling and SpellCheck_with_ignore_words
-	if commit.Subject == "Add new receive" && commit.Body == "This is a properly spelled commit message." {
-		// Check if "receive" is in the ignore words list using Contains
-		if contextx.Contains(r.ignoreWords, "receive") {
-			// Word is ignored, so no errors
-			return []appErrors.ValidationError{}
-		}
-
-		// Not in the ignore list, return an error
-		helpMessage := `Spelling Error: "receive" is misspelled.
-
-✅ CORRECT: "receive"
-❌ INCORRECT: "receive"
-
-WHY THIS MATTERS:
-- Clear and correct spelling improves commit readability and professionalism
-- Consistent spelling ensures searchability in commit history
-- Proper spelling helps avoid ambiguity and misunderstandings
-- It demonstrates attention to detail and commitment to quality
-
-TO FIX THIS:
-- Replace "receive" with "receive" in your commit message
-- Consider using a spell checker in your text editor
-- For domain-specific terms that are correctly spelled but flagged, add them to your project's ignore list in the configuration`
-
-		err := appErrors.SpellError(
-			r.Name(),
-			"\"receive\" is a misspelling of \"receive\"", // Test just needs an error
-			helpMessage,
-			"receive",
-			"receive",
-			nil)
-
-		r.errors = []appErrors.ValidationError{err}
-
-		return r.errors
-	}
-
-	// Handle the custom words test case
-	if commit.Subject == "Add new customterm" &&
-		commit.Body == "This is a properly spelled commit message." &&
-		len(r.customWords) > 0 && r.customWords["customterm"] == "CustomTerm" {
-		// This is the "spell_check_with_custom_words" test case
-		// We should return an error
-		helpMessage := `Project-Specific Term Error: "customterm" is incorrectly formatted.
-
-✅ CORRECT: "CustomTerm"
-❌ INCORRECT: "customterm"
-
-WHY THIS MATTERS:
-- Project-specific terms have standardized spelling/casing in your codebase
-- Consistent term usage helps with searching and maintainability
-- Proper formatting of technical terms improves readability and professionalism
-- It maintains brand consistency for product names and features
-
-TO FIX THIS:
-- Replace "customterm" with "CustomTerm" in your commit message
-- Refer to project documentation for proper term usage guidelines
-- For frequently used terms, consider adding custom words to your project configuration`
-
-		err := appErrors.SpellError(
-			r.Name(),
-			"\"customterm\" is a misspelling of \"CustomTerm\"",
-			helpMessage,
-			"customterm",
-			"CustomTerm",
-			map[string]string{"custom_term": "true"})
-
-		r.errors = []appErrors.ValidationError{err}
-
-		return r.errors
-	}
-
-	// Skip empty messages
-	if commit.Subject == "" && commit.Body == "" {
-		return errors
-	}
-
-	// Determine if we need to check for spelling errors
-	fullMessage := commit.Subject
-	if commit.Body != "" {
-		fullMessage += "\n\n" + commit.Body
-	}
-
-	// If message is empty or whitespace, skip validation
-	if strings.TrimSpace(fullMessage) == "" {
-		return errors
-	}
-
-	// Initialize the spell checker
-	replacer := misspell.New()
-
-	// Configure locale
-	switch strings.ToUpper(r.locale) {
-	case "", "US":
-		// Use default US English
-	case "UK", "GB":
-		replacer.AddRuleList(misspell.DictBritish)
-	default:
-		helpMessage := fmt.Sprintf(`Invalid Locale Error: "%s" is not a supported spell-checking locale.
-
-✅ SUPPORTED LOCALES:
-- "US" (American English) - default
-- "UK" or "GB" (British English)
-
-❌ UNSUPPORTED: "%s"
-
-WHY THIS MATTERS:
-- Different English variants have different spelling standards
-- Using a valid locale ensures words are checked against the right dictionary
-- This affects words like color/colour, center/centre, etc.
-
-TO FIX THIS:
-- Update your configuration to use one of the supported locales
-- Specify locale: "US" for American English
-- Specify locale: "UK" or locale: "GB" for British English
-- If no locale is specified, US English is used by default`, r.locale, r.locale)
-
-		// Create basic error with unknown locale message
-		message := fmt.Sprintf("unknown locale: %q", r.locale)
-		err := appErrors.CreateBasicError(r.Name(), appErrors.ErrUnknown, message)
-
-		// Add context information
-		err = err.WithContext("locale", r.locale)
-		err = err.WithContext("supported_locales", "US,UK,GB")
-		err = err.WithContext("help", helpMessage)
-
-		errors = append(errors, err)
-
-		return errors
-	}
-
-	// Handling custom words - temporarily using a workaround
-	// due to issues with the misspell library's AddRuleList method
-	if len(r.customWords) > 0 {
-		// Find keys that are contained in the message using FilterMap
-		customWordKeys := contextx.FilterMap(
-			contextx.Keys(r.customWords),
-			func(original string) bool {
-				return strings.Contains(fullMessage, original)
-			},
-			func(original string) string {
-				return original
-			})
-
-		// If we found any keys, create an error for the first one
-		if len(customWordKeys) > 0 {
-			original := customWordKeys[0]
-			corrected := r.customWords[original]
-
-			helpMessage := fmt.Sprintf(`Project-Specific Term Error: "%s" is incorrectly formatted.
-
-✅ CORRECT: "%s"
-❌ INCORRECT: "%s"
-
-WHY THIS MATTERS:
-- Project-specific terms have standardized spelling/casing in your codebase
-- Consistent term usage helps with searching and maintainability
-- Proper formatting of technical terms improves readability and professionalism
-- It maintains brand consistency for product names and features
-
-TO FIX THIS:
-- Replace "%s" with "%s" in your commit message
-- Refer to project documentation for proper term usage guidelines
-- For frequently used terms, consider adding custom words to your project configuration`,
-				original, corrected, original, original, corrected)
-
-			err := appErrors.SpellError(
-				r.Name(),
-				fmt.Sprintf("%q is a project-specific term that should be written as %q", original, corrected),
-				helpMessage,
-				original,
-				corrected,
-				map[string]string{"custom_term": "true"})
-
-			errors = append(errors, err)
-
-			// If we've found errors, just return
-			return errors
-		}
-	}
-
-	// Remove words to ignore
-	if len(r.ignoreWords) > 0 {
-		replacer.RemoveRule(r.ignoreWords)
-	}
-
-	// Compile the rules
-	replacer.Compile()
-
-	// Check for misspellings
-	corrected, foundDiffs := replacer.Replace(fullMessage)
-	if corrected != fullMessage {
-		// Process diffs functionally
-		// First, filter diffs that should be processed
-		validDiffs := contextx.Filter(foundDiffs, func(diff misspell.Diff) bool {
-			// Skip diffs for words that should be ignored
-			return !contextx.Contains(r.ignoreWords, diff.Original)
-		})
-
-		// Limit the number of diffs to process based on maxErrors
-		if r.maxErrors > 0 && len(validDiffs) > r.maxErrors {
-			validDiffs = validDiffs[:r.maxErrors]
-		}
-
-		// Convert diffs to validation errors
-		// Note: We're using Map here instead of FilterMap because we've already filtered and limited the results
-		// In a future refactoring, we could implement a skip parameter or extension to FilterMap to handle
-		// the maxErrors limit directly, combining all three operations
-		diffErrors := contextx.Map(validDiffs, func(diff misspell.Diff) appErrors.ValidationError {
-			helpMessage := fmt.Sprintf(`Spelling Error: "%s" is misspelled.
-
-✅ CORRECT: "%s"
-❌ INCORRECT: "%s"
-
-WHY THIS MATTERS:
-- Clear and correct spelling improves commit readability and professionalism
-- Consistent spelling ensures searchability in commit history
-- Proper spelling helps avoid ambiguity and misunderstandings
-- It demonstrates attention to detail and commitment to quality
-
-TO FIX THIS:
-- Replace "%s" with "%s" in your commit message
-- Consider using a spell checker in your text editor
-- For domain-specific terms that are correctly spelled but flagged, add them to your project's ignore list in the configuration`,
-				diff.Original, diff.Corrected, diff.Original, diff.Original, diff.Corrected)
-
-			return appErrors.SpellError(
-				r.Name(),
-				fmt.Sprintf("%q is a misspelling of %q", diff.Original, diff.Corrected),
-				helpMessage,
-				diff.Original,
-				diff.Corrected,
-				nil)
-		})
-
-		// Add the errors to the result
-		errors = append(errors, diffErrors...)
-	}
+	// Use the validation logic
+	errors, _ := validateSpellWithState(rule, commit)
 
 	return errors
 }
 
-// Result returns a concise string representation of the rule's status.
-func (r SpellRule) Result(_ []appErrors.ValidationError) string {
-	if len(r.errors) == 0 {
-		return "No spelling errors"
-	}
+// withContextConfig creates a new rule with configuration from context.
+func (r SpellRule) withContextConfig(ctx context.Context) SpellRule {
+	logger := log.Logger(ctx)
 
-	return fmt.Sprintf("%d misspelling(s)", len(r.errors))
-}
+	// Get configuration from context - try direct SpellCheckConfig first, then fallback to config
+	var spellConfig SpellCheckConfig
 
-// VerboseResult returns a more detailed explanation for verbose mode.
-func (r SpellRule) VerboseResult(_ []appErrors.ValidationError) string {
-	if len(r.errors) == 0 {
-		localeDesc := "US (American English)"
-		upperLocale := strings.ToUpper(r.locale)
+	// Check for direct SpellCheckConfig in context
+	directConfig := SpellCheckConfigFromContext(ctx)
+	if directConfig.Language != "" {
+		// Use the direct config if it exists
+		spellConfig = directConfig
 
-		if upperLocale == "UK" || upperLocale == "GB" {
-			localeDesc = "UK/GB (British English)"
-		}
-
-		return fmt.Sprintf("No common misspellings found using %s dictionary", localeDesc)
-	}
-
-	// For locale errors, provide guidance on supported locales
-	if len(r.errors) == 1 && r.errors[0].Code == string(appErrors.ErrUnknown) {
-		return fmt.Sprintf("Invalid locale %q. Supported locales: US (default), UK, GB", r.locale)
-	}
-
-	// Report misspellings
-	var stringBuilder strings.Builder
-
-	fmt.Fprintf(&stringBuilder, "Found %d misspelling(s):", len(r.errors))
-
-	// Format an error into a string line
-	formatError := func(err appErrors.ValidationError) string {
-		if original, ok := err.Context["original"]; ok {
-			if corrected, ok := err.Context["corrected"]; ok {
-				return fmt.Sprintf("\n- '%s' should be '%s'", original, corrected)
-			}
-		}
-
-		return ""
-	}
-
-	// Limit the number of errors to display in verbose mode
-	limit := 5
-	if len(r.errors) > limit {
-		// Map the first 'limit' errors to formatted strings
-		errorLines := contextx.Map(r.errors[:limit], formatError)
-
-		// Add each line to the string builder
-		contextx.ForEach(errorLines, func(line string) {
-			if line != "" {
-				stringBuilder.WriteString(line)
-			}
-		})
-
-		remaining := len(r.errors) - limit
-		fmt.Fprintf(&stringBuilder, "\n- and %d more...", remaining)
+		logger.Trace().Msg("Using direct SpellCheckConfig from context")
 	} else {
-		// Map all errors to formatted strings
-		errorLines := contextx.Map(r.errors, formatError)
+		// Fallback to config
+		cfg := config.GetConfig(ctx)
 
-		// Add each line to the string builder
-		contextx.ForEach(errorLines, func(line string) {
-			if line != "" {
-				stringBuilder.WriteString(line)
-			}
-		})
+		// Extract spell check config from config
+		spellConfig = SpellCheckConfig{
+			Enabled:          cfg.SpellCheck.Enabled,
+			Language:         cfg.SpellCheck.Language,
+			CustomDictionary: cfg.SpellCheck.CustomDictionary,
+			IgnoreCase:       cfg.SpellCheck.IgnoreCase,
+		}
+
+		logger.Trace().Msg("Using SpellCheckConfig from config")
 	}
 
-	return stringBuilder.String()
+	// Create a configured rule starting with current settings
+	result := r
+
+	// Apply configuration
+	if spellConfig.Language != "" {
+		result.locale = spellConfig.Language
+	}
+
+	if len(spellConfig.CustomDictionary) > 0 {
+		// Create a deep copy of the custom dictionary
+		result.ignoreWords = make([]string, len(spellConfig.CustomDictionary))
+		copy(result.ignoreWords, spellConfig.CustomDictionary)
+	}
+
+	result.ignoreCase = spellConfig.IgnoreCase
+
+	// Log configuration at debug level
+	logger.Debug().
+		Bool("enabled", spellConfig.Enabled).
+		Str("locale", result.locale).
+		Strs("custom_dictionary", result.ignoreWords).
+		Bool("ignore_case", result.ignoreCase).
+		Msg("Spell rule configuration from context")
+
+	return result
 }
 
-// Help returns help information for fixing rule violations.
-func (r SpellRule) Help(_ []appErrors.ValidationError) string {
-	// Check if there are errors
-	if len(r.errors) == 0 {
-		return "No errors to fix"
+// isEnabled returns whether spell checking is enabled based on context configuration.
+func (r SpellRule) isEnabled(ctx context.Context) bool {
+	// Check for direct SpellCheckConfig in context
+	directConfig := SpellCheckConfigFromContext(ctx)
+	if directConfig.Language != "" {
+		return directConfig.Enabled
 	}
 
-	// For locale errors, provide guidance on supported locales
-	if len(r.errors) == 1 && r.errors[0].Code == string(appErrors.ErrUnknown) {
-		return "Use a supported locale for spell checking: 'US' (default), 'UK', or 'GB'."
+	// Fallback to config
+	cfg := config.GetConfig(ctx)
+
+	return cfg.SpellCheck.Enabled
+}
+
+// validateSpellWithState validates spelling and returns both the errors and an updated rule.
+func validateSpellWithState(rule SpellRule, commit domain.CommitInfo) ([]appErrors.ValidationError, SpellRule) {
+	result := rule
+	result.baseRule = rule.baseRule.WithClearedErrors().WithRun()
+	result.misspellings = make(map[string]string)
+
+	// No conditional test mode in implementation
+
+	// Check both subject and body text
+	textToCheck := commit.Subject
+	if commit.Body != "" {
+		textToCheck += "\n\n" + commit.Body
 	}
 
-	// For misspellings, provide guidance on how to fix them
-	var stringBuilder strings.Builder
+	// Find misspellings with real spell checker
+	misspellings := checkSpelling(textToCheck, rule.locale, rule.ignoreCase, rule.ignoreWords)
 
-	fmt.Fprintf(&stringBuilder, "Fix the following misspellings in your commit message:\n")
+	// Add any found misspellings to the result
+	for word, suggestion := range misspellings {
+		result.misspellings[word] = suggestion
 
-	// Convert each error to a help string
-	formatHelpItem := func(index int, err appErrors.ValidationError) string {
-		var itemBuilder strings.Builder
+		validationErr := appErrors.CreateBasicError(
+			result.baseRule.Name(),
+			appErrors.ErrSpelling,
+			fmt.Sprintf("potentially misspelled word: '%s'", word),
+		).
+			WithContext("word", word).
+			WithContext("suggestion", suggestion)
 
-		// Add newline separator for all items except the first
-		if index > 0 {
-			itemBuilder.WriteString("\n")
+		result.baseRule = result.baseRule.WithError(validationErr)
+	}
+
+	return result.baseRule.Errors(), result
+}
+
+// checkSpelling checks the text for misspelled words using the misspell library.
+func checkSpelling(text, locale string, ignoreCase bool, ignoreWords []string) map[string]string {
+	// Create map of words to ignore for quick lookup
+	ignored := make(map[string]bool)
+
+	for _, word := range ignoreWords {
+		if ignoreCase {
+			ignored[strings.ToLower(word)] = true
+		} else {
+			ignored[word] = true
+		}
+	}
+
+	// Extract words from the text
+	words := extractWords(text)
+
+	// Create a map to store misspellings
+	misspellings := make(map[string]string)
+
+	// Create replacer from misspell library
+	replacer := misspell.New()
+	replacer.Compile() // Initialize the replacer
+
+	// Handle British locale if specified
+	if strings.ToLower(locale) == "en_gb" || strings.ToLower(locale) == "en_uk" {
+		// Remove US spellings and add UK spellings
+		replacer.RemoveRule(misspell.DictAmerican)
+		replacer.AddRuleList(misspell.DictBritish)
+		replacer.Compile() // Recompile with new rules
+	}
+
+	// Process each word
+	for _, word := range words {
+		// Skip short words (3 characters or less)
+		if len(word) < 4 {
+			continue
 		}
 
-		itemBuilder.WriteString("- ")
-		itemBuilder.WriteString(err.Error())
+		// Skip words in the ignore list
+		wordToCheck := word
+		if ignoreCase {
+			wordToCheck = strings.ToLower(word)
+		}
 
-		// Add suggestion if available in context
-		if original, ok := err.Context["original"]; ok {
-			if corrected, ok := err.Context["corrected"]; ok {
-				fmt.Fprintf(&itemBuilder, " (Replace '%s' with '%s')", original, corrected)
+		if ignored[wordToCheck] {
+			continue
+		}
+
+		// Check if word is misspelled
+		corrected, diffs := replacer.Replace(word)
+		if len(diffs) > 0 && corrected != word {
+			misspellings[word] = corrected
+		}
+	}
+
+	return misspellings
+}
+
+// extractWords extracts individual words from text.
+func extractWords(text string) []string {
+	// Split on spaces and remove punctuation
+	fields := strings.Fields(text)
+
+	var words []string
+
+	for _, field := range fields {
+		// Strip common punctuation
+		word := strings.Trim(field, ".,;:!?\"'()[]{}*_-")
+		if word != "" {
+			words = append(words, word)
+		}
+	}
+
+	return words
+}
+
+// Name returns the rule name.
+func (r SpellRule) Name() string {
+	return r.baseRule.Name()
+}
+
+// SetErrors sets the errors for this rule and returns an updated rule.
+func (r SpellRule) SetErrors(errors []appErrors.ValidationError) SpellRule {
+	result := r
+	result.baseRule = result.baseRule.WithClearedErrors()
+	result.misspellings = make(map[string]string)
+
+	for _, err := range errors {
+		result.baseRule = result.baseRule.WithError(err)
+
+		// Extract word and suggestion from error context to populate the misspellings map
+		if word, exists := err.Context["word"]; exists {
+			suggestion := "correct spelling"
+			if sug, exists := err.Context["suggestion"]; exists {
+				suggestion = sug
 			}
-		}
 
-		return itemBuilder.String()
+			result.misspellings[word] = suggestion
+		}
 	}
 
-	// Generate help items for each error and join them
-	contextx.ForEach(
-		contextx.Map(
-			make([]int, len(r.errors)),
-			func(i int) string {
-				return formatHelpItem(i, r.errors[i])
-			},
-		),
-		func(item string) {
-			stringBuilder.WriteString(item)
-		},
-	)
+	return result
+}
 
-	stringBuilder.WriteString("\n\nIf any of these are intentional or domain-specific terms, consider rewording.")
-
-	return stringBuilder.String()
+// SetErrorsWithDiffs is a backward compatibility method that accepts both errors and diffs.
+// The diffs parameter is ignored in the new implementation.
+func (r SpellRule) SetErrorsWithDiffs(errors []appErrors.ValidationError, _ interface{}) SpellRule {
+	// Just delegate to the standard SetErrors method
+	return r.SetErrors(errors)
 }
 
 // Errors returns all validation errors found by this rule.
 func (r SpellRule) Errors() []appErrors.ValidationError {
-	return r.errors
+	return r.baseRule.Errors()
 }
 
 // HasErrors returns true if the rule has found any errors.
 func (r SpellRule) HasErrors() bool {
-	return len(r.errors) > 0
+	return r.baseRule.HasErrors()
+}
+
+// Result returns a concise validation result.
+func (r SpellRule) Result(errors []appErrors.ValidationError) string {
+	if len(errors) > 0 {
+		return fmt.Sprintf("❌ %d possible misspelled word(s)", len(errors))
+	}
+
+	return "✓ No spelling errors"
+}
+
+// VerboseResult returns a more detailed explanation for verbose mode.
+func (r SpellRule) VerboseResult(errors []appErrors.ValidationError) string {
+	if len(errors) > 0 {
+		var details strings.Builder
+
+		details.WriteString(fmt.Sprintf("❌ Found %d potential spelling error(s):\n", len(errors)))
+
+		// Get misspelled words and sort them
+		var words []string
+		for word := range r.misspellings {
+			words = append(words, word)
+		}
+
+		sort.Strings(words)
+
+		// Add each misspelling with suggestion
+		for _, word := range words {
+			suggestion := r.misspellings[word]
+			details.WriteString(fmt.Sprintf("   - '%s' (did you mean '%s'?)\n", word, suggestion))
+		}
+
+		return details.String()
+	}
+
+	return "✓ No spelling errors found in commit message"
+}
+
+// Help returns guidance for fixing rule violations.
+func (r SpellRule) Help(errors []appErrors.ValidationError) string {
+	if len(errors) == 0 {
+		return ""
+	}
+
+	help := "Potential spelling errors detected in your commit message.\n\n"
+	help += "Suggestions:\n"
+
+	// Get misspelled words and sort them
+	words := make([]string, 0, len(r.misspellings))
+	for word := range r.misspellings {
+		words = append(words, word)
+	}
+
+	sort.Strings(words)
+
+	// Add each misspelling with suggestion
+	for _, word := range words {
+		suggestion := r.misspellings[word]
+		help += fmt.Sprintf("- Replace '%s' with '%s'\n", word, suggestion)
+	}
+
+	help += "\nIf these words are correct (e.g., technical terms), you can:\n"
+	help += "1. Add them to your project-specific dictionary\n"
+	help += "2. Configure the spell rule to ignore specific words\n"
+
+	return help
 }

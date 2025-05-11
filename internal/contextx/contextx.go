@@ -112,6 +112,21 @@ func MergeContext(ctx1, ctx2 context.Context) context.Context {
 		}
 	}
 
+	// Handle special configuration key
+	// This ensures configuration is properly merged
+	if val := ctx2.Value(ConfigContextKey); val != nil {
+		result = context.WithValue(result, ConfigContextKey, val)
+	}
+
+	// Also handle OutputFormatContextKey and VerbosityContextKey
+	if val := ctx2.Value(OutputFormatContextKey); val != nil {
+		result = context.WithValue(result, OutputFormatContextKey, val)
+	}
+
+	if val := ctx2.Value(VerbosityContextKey); val != nil {
+		result = context.WithValue(result, VerbosityContextKey, val)
+	}
+
 	return result
 }
 
@@ -123,7 +138,28 @@ var contextKeys = []ContextKey{
 	RevisionKey,
 	RuleNameKey,
 	LoggerKey,
+	ConfigContextKey,
+	OutputFormatContextKey,
+	VerbosityContextKey,
 }
+
+// Predefined context keys for the configuration system.
+const (
+	// ConfigContextKey is the context key for gommitlint config.
+	ConfigContextKey ContextKey = "gommitlint-config"
+
+	// OutputFormatContextKey is the context key for output format.
+	OutputFormatContextKey ContextKey = "output-format"
+
+	// VerbosityContextKey is the context key for verbosity.
+	VerbosityContextKey ContextKey = "verbosity"
+
+	// ParentContextPreserveKey is used to mark contexts that should preserve parent values.
+	ParentContextPreserveKey ContextKey = "preserve-parent-context"
+)
+
+// Additionally, we need to handle any non-ContextKey values that might be in the context
+// This is used to ensure configuration values are properly merged
 
 // Map applies a function to each element of a slice and returns a new slice with the results.
 func Map[T, U any](items []T, mapFunction func(T) U) []U {

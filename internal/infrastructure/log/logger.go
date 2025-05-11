@@ -8,6 +8,7 @@ package log
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"time"
@@ -70,12 +71,39 @@ func (l Level) ToZerologLevel() zerolog.Level {
 func InitLogger(ctx context.Context, cmd *cobra.Command, withCaller bool, outputFormat string) context.Context {
 	level := getLogLevel(cmd)
 
+	// Set global log level
+	zerolog.SetGlobalLevel(level)
+
 	var writer io.Writer
 	if outputFormat == "json" {
 		writer = os.Stdout
 		zerolog.TimeFieldFormat = time.RFC3339
 	} else {
-		writer = zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339}
+		writer = zerolog.ConsoleWriter{
+			Out:        os.Stderr,
+			TimeFormat: time.RFC3339,
+			// Improve readability
+			FormatLevel: func(levelVal interface{}) string {
+				if levelStr, ok := levelVal.(string); ok {
+					switch levelStr {
+					case "trace":
+						return "\x1b[90m" + "TRC" + "\x1b[0m"
+					case "debug":
+						return "\x1b[36m" + "DBG" + "\x1b[0m"
+					case "info":
+						return "\x1b[34m" + "INF" + "\x1b[0m"
+					case "warn":
+						return "\x1b[33m" + "WRN" + "\x1b[0m"
+					case "error":
+						return "\x1b[31m" + "ERR" + "\x1b[0m"
+					default:
+						return "\x1b[37m" + levelStr + "\x1b[0m"
+					}
+				}
+
+				return fmt.Sprintf("%s", levelVal)
+			},
+		}
 	}
 
 	var logger zerolog.Logger
@@ -188,9 +216,11 @@ func getLogLevel(cmd *cobra.Command) zerolog.Level {
 	quiet, _ := cmd.Flags().GetBool("quiet")
 
 	if quiet {
-		return LevelQuiet.ToZerologLevel()
+		// For quiet mode, set to Error level only, which effectively disables all normal logs
+		return zerolog.ErrorLevel
 	}
 
+	// For "log", "brief", "trace", get from Level enum
 	return Level(level).ToZerologLevel()
 }
 
@@ -229,4 +259,39 @@ func SetLogLevel(logger *zerolog.Logger, level Level) *zerolog.Logger {
 	newLogger := logger.Level(level.ToZerologLevel())
 
 	return &newLogger
+}
+
+// WithLogger adds a logger to the context.
+// This is a convenience function for adding a logger to a context.
+//
+// Parameters:
+//   - ctx: The context to add the logger to
+//   - logger: The logger to add
+//
+// Returns:
+//   - context.Context: A new context with the logger added
+func WithLogger(ctx context.Context, logger *zerolog.Logger) context.Context {
+	// Add logger to context using zerolog's context mechanism
+	ctx = logger.WithContext(ctx)
+
+	// Also add it through our contextx key system for compatibility
+	ctx = contextx.WithValue(ctx, contextx.LoggerKey, logger)
+
+	return ctx
+}
+
+// NewTestLogger creates a logger suitable for testing.
+// The logger is configured with TraceLevel and a console writer.
+//
+// Returns:
+//   - *zerolog.Logger: A logger configured for testing
+func NewTestLogger() *zerolog.Logger {
+	writer := zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339}
+	logger := zerolog.New(writer).
+		Level(zerolog.TraceLevel).
+		With().
+		Timestamp().
+		Logger()
+
+	return &logger
 }

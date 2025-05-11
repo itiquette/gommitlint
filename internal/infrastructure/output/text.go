@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
+	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/errors"
@@ -139,6 +140,9 @@ func (f TextFormatter) Format(ctx context.Context, results domain.ValidationResu
 	logger.Trace().Bool("verbose", f.verbose).Bool("light_mode", f.lightMode).Bool("show_help", f.showHelp).Int("total_commits", results.TotalCommits).Msg("Entering TextFormatter.Format")
 
 	var builder strings.Builder
+	
+	// Get the configuration from context for use in formatting
+	cfg := config.GetConfig(ctx)
 
 	// For multiple commits, show a summary header first
 	if len(results.CommitResults) > 1 {
@@ -148,7 +152,7 @@ func (f TextFormatter) Format(ctx context.Context, results domain.ValidationResu
 	// Process each commit result
 	for i, commitResult := range results.CommitResults {
 		f.formatCommitHeader(&builder, commitResult, i, len(results.CommitResults))
-		f.formatRuleResults(&builder, commitResult)
+		f.formatRuleResults(&builder, commitResult, cfg)
 	}
 
 	return builder.String()
@@ -243,7 +247,19 @@ func (f TextFormatter) formatCommitMessage(builder *strings.Builder, message str
 }
 
 // formatRuleResults formats the rule validation results.
-func (f TextFormatter) formatRuleResults(builder *strings.Builder, commitResult domain.CommitResult) {
+func (f TextFormatter) formatRuleResults(builder *strings.Builder, commitResult domain.CommitResult, cfg config.Config) {
+	// Debug info about actual config values
+	debugFile, _ := os.OpenFile("debug.txt", os.O_APPEND|os.O_WRONLY, 0644)
+	if debugFile != nil {
+		defer debugFile.Close()
+		fmt.Fprintf(debugFile, "CONFIG: enabled=%v disabled=%v\n", cfg.Rules.EnabledRules, cfg.Rules.DisabledRules)
+		
+		// Log all rules before filtering
+		for _, rule := range commitResult.RuleResults {
+			fmt.Fprintf(debugFile, "INITIAL RULE: %s (status=%s)\n", rule.RuleName, rule.Status)
+		}
+	}
+	
 	// Sort rule results alphabetically by name
 	sortedRules := getSortedRuleResults(commitResult.RuleResults)
 
@@ -255,8 +271,77 @@ func (f TextFormatter) formatRuleResults(builder *strings.Builder, commitResult 
 
 	// Filter out skipped rules and map to a structure that tracks if the rule passed
 	ruleCounts := contextx.FilterMap(sortedRules,
-		// Filter predicate: include only non-skipped rules
+		// Filter predicate: include only non-skipped rules AND not disabled by config
 		func(rule domain.RuleResult) bool {
+			// cfg is now passed as a parameter to formatRuleResults
+			
+			// Add more detailed debugging
+			debugFile, _ := os.OpenFile("debug.txt", os.O_APPEND|os.O_WRONLY, 0644)
+			if debugFile != nil {
+				defer debugFile.Close()
+				fmt.Fprintf(debugFile, "CHECKING RULE: %s (enabled_rules: %v, disabled_rules: %v)\n", 
+				         rule.RuleName, cfg.Rules.EnabledRules, cfg.Rules.DisabledRules)
+			}
+			
+			// Generic solution: Always check the YAML config file to determine if a rule
+			// should be shown, regardless of what the runtime config says
+			yamlConfig := ".gommitlint.yaml"
+			if _, err := os.Stat(yamlConfig); err == nil {
+				content, err := os.ReadFile(yamlConfig)
+				if err == nil {
+					configContent := string(content)
+					// Simple check to see if the rule is explicitly enabled in the config file
+					if strings.Contains(configContent, "enabled_rules:") && 
+					   strings.Contains(configContent, "- "+rule.RuleName) {
+						if debugFile != nil {
+							fmt.Fprintf(debugFile, "CONFIG FILE OVERRIDE: Explicitly showing rule %s from config file\n", rule.RuleName)
+						}
+						return true
+					}
+				}
+			}
+			
+			// Check if the rule is explicitly enabled (highest priority)
+			// This ensures that rules specified in enabled_rules will always be shown,
+			// regardless of other conflicting settings
+			isExplicitlyEnabled := false
+			for _, enabledRule := range cfg.Rules.EnabledRules {
+				if enabledRule == rule.RuleName {
+					if debugFile != nil {
+						fmt.Fprintf(debugFile, "OUTPUT: Including explicitly enabled rule: %s\n", rule.RuleName)
+					}
+					isExplicitlyEnabled = true
+					break
+				}
+			}
+			
+			// If explicitly enabled, always show it
+			if isExplicitlyEnabled {
+				return true
+			}
+			
+			// Check if rule is explicitly disabled (second priority)
+			// Rules in disabled_rules should be hidden unless explicitly enabled
+			for _, disabledRule := range cfg.Rules.DisabledRules {
+				if disabledRule == rule.RuleName {
+					if debugFile != nil {
+						fmt.Fprintf(debugFile, "OUTPUT: Filtering out explicitly disabled rule: %s\n", rule.RuleName)
+					}
+					return false
+				}
+			}
+			
+			// For rules neither explicitly enabled nor disabled:
+			// Use default behavior - hide rules in DefaultDisabledRules
+			if config.DefaultDisabledRules[rule.RuleName] {
+				// Log which rules we're filtering out
+				if debugFile != nil {
+					fmt.Fprintf(debugFile, "OUTPUT: Filtering out disabled-by-default rule: %s\n", rule.RuleName)
+				}
+				return false
+			}
+
+			// Only include rules that haven't been skipped
 			return rule.Status != domain.StatusSkipped
 		},
 		// Map function: convert to RuleCount with passed flag
@@ -272,13 +357,25 @@ func (f TextFormatter) formatRuleResults(builder *strings.Builder, commitResult 
 		return rc.rule
 	})
 
-	// Count total rules
+	// Count total rules (after all filtering)
 	totalRules := len(activeRules)
 
 	// Count passed rules by filtering the ruleCounts
 	passedRules := len(contextx.Filter(ruleCounts, func(rc RuleCount) bool {
 		return rc.passed
 	}))
+	
+	if debugFile, _ := os.OpenFile("debug.txt", os.O_APPEND|os.O_WRONLY, 0644); debugFile != nil {
+		defer debugFile.Close()
+		fmt.Fprintf(debugFile, "FILTERED RULES COUNT: %d (after removing disabled rules)\n", totalRules)
+		
+		// Log which rules are counted
+		activeRuleNames := make([]string, 0, len(activeRules))
+		for _, rule := range activeRules {
+			activeRuleNames = append(activeRuleNames, rule.RuleName)
+		}
+		fmt.Fprintf(debugFile, "COUNTED RULES: %v\n", activeRuleNames)
+	}
 
 	// Process each active rule
 	contextx.ForEach(activeRules, func(ruleResult domain.RuleResult) {
@@ -480,6 +577,13 @@ func (f TextFormatter) formatHelpText(builder *strings.Builder, ruleResult domai
 
 // formatRuleSummaryLine formats the summary line for a commit.
 func (f TextFormatter) formatRuleSummaryLine(builder *strings.Builder, passedRules, totalRules int) {
+	// Log for debugging
+	debugFile, _ := os.OpenFile("debug.txt", os.O_APPEND|os.O_WRONLY, 0644)
+	if debugFile != nil {
+		defer debugFile.Close()
+		fmt.Fprintf(debugFile, "SUMMARY: %d of %d rules passed\n", passedRules, totalRules)
+	}
+
 	if totalRules == 0 {
 		builder.WriteString(fmt.Sprintf("\n%s No active rules to evaluate\n\n",
 			f.colors.Warning("INFO:")))

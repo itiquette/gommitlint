@@ -311,6 +311,24 @@ func SpellError(ruleName string, message string, helpText string,
 	return err
 }
 
+// SubjectError creates a ValidationError for subject-related issues.
+func SubjectError(ruleName, message, help string, context map[string]string) ValidationError {
+	err := CreateRichError(
+		ruleName,
+		ErrSubjectLength,
+		message,
+		help,
+		NewContext(),
+	)
+
+	// Add context
+	for k, v := range context {
+		err = err.WithContext(k, v)
+	}
+
+	return err
+}
+
 // ConfigError creates a rich error for configuration validation failures.
 func ConfigError(ruleName string, message string, helpText string, context map[string]string) ValidationError {
 	errorCtx := NewContext()

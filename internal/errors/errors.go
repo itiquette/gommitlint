@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 // Package errors provides a consolidated error handling system for gommitlint.
-// It defines a unified error type and a factory function approach for creating errors.
+// It defines a structured error type and a factory function approach for creating errors.
 package errors
 
 import (
@@ -25,6 +25,7 @@ const (
 
 	// Subject errors.
 	ErrSubjectTooLong ValidationErrorCode = "subject_too_long"
+	ErrSubjectLength  ValidationErrorCode = "subject_length"
 	ErrSubjectCase    ValidationErrorCode = "invalid_case"
 	ErrSubjectSuffix  ValidationErrorCode = "invalid_suffix"
 	ErrMissingSubject ValidationErrorCode = "missing_subject"
@@ -41,7 +42,8 @@ const (
 	ErrDescriptionTooLong ValidationErrorCode = "description_too_long"
 
 	// Jira errors.
-	ErrMissingJira ValidationErrorCode = "missing_jira"
+	ErrMissingJira   ValidationErrorCode = "missing_jira"
+	ErrMisplacedJira ValidationErrorCode = "misplaced_jira"
 
 	// Imperative mood errors.
 	ErrNonImperative ValidationErrorCode = "non_imperative"
@@ -72,7 +74,8 @@ const (
 	ErrMissingSignoff ValidationErrorCode = "missing_signoff"
 
 	// Spelling errors.
-	ErrSpelling ValidationErrorCode = "spelling_error"
+	ErrSpelling       ValidationErrorCode = "spelling_error"
+	ErrMisspelledWord ValidationErrorCode = "misspelled_word"
 
 	// Commits ahead errors.
 	ErrTooManyCommits ValidationErrorCode = "too_many_commits"
@@ -102,7 +105,7 @@ const (
 // and standardized formatting.
 
 // ValidationError represents an error detected during validation.
-// This is the single, unified error type for the entire application.
+// This is the standard error type for the entire application.
 type ValidationError struct {
 	// Rule is the name of the rule that produced this error.
 	Rule string

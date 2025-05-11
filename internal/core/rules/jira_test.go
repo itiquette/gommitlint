@@ -1,14 +1,17 @@
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
-package rules
+package rules_test
 
 import (
 	"context"
 	"testing"
 
 	"github.com/itiquette/gommitlint/internal/config"
+	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
+	testConfig "github.com/itiquette/gommitlint/internal/testutils/configtestutils"
+	"github.com/itiquette/gommitlint/internal/testutils/core"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,7 +19,7 @@ func TestJiraReferenceRule_Validate(t *testing.T) {
 	tests := []struct {
 		name        string
 		commit      domain.CommitInfo
-		options     []JiraReferenceOption
+		configSetup func() config.Config
 		wantErrors  bool
 		description string
 	}{
@@ -26,7 +29,13 @@ func TestJiraReferenceRule_Validate(t *testing.T) {
 				Subject: "Add new feature PROJ-123",
 				Body:    "This is a description",
 			},
-			options:     nil,
+			configSetup: func() config.Config {
+				cfg := config.DefaultConfig()
+				utils := testConfig.GetConfigTestUtils()
+				jiraConfig := cfg.Jira
+
+				return utils.WithJira(cfg, jiraConfig)
+			},
 			wantErrors:  false,
 			description: "Should pass with valid Jira reference in subject",
 		},
@@ -36,8 +45,14 @@ func TestJiraReferenceRule_Validate(t *testing.T) {
 				Subject: "feat: add login feature PROJ-123",
 				Body:    "This is a description",
 			},
-			options: []JiraReferenceOption{
-				WithConventionalCommit(),
+			configSetup: func() config.Config {
+				cfg := config.DefaultConfig()
+				utils := testConfig.GetConfigTestUtils()
+				jiraConfig := cfg.Jira
+				cfg = utils.WithJira(cfg, jiraConfig)
+				conventionalConfig := utils.WithConventionalRequired(cfg.Conventional, true)
+
+				return utils.WithConventional(cfg, conventionalConfig)
 			},
 			wantErrors:  false,
 			description: "Should pass with conventional commit format and Jira at end",
@@ -48,7 +63,13 @@ func TestJiraReferenceRule_Validate(t *testing.T) {
 				Subject: "Add new feature without reference",
 				Body:    "This is a description",
 			},
-			options:     nil,
+			configSetup: func() config.Config {
+				cfg := config.DefaultConfig()
+				utils := testConfig.GetConfigTestUtils()
+				jiraConfig := cfg.Jira
+
+				return utils.WithJira(cfg, jiraConfig)
+			},
 			wantErrors:  true,
 			description: "Should fail when no Jira reference is present",
 		},
@@ -58,8 +79,13 @@ func TestJiraReferenceRule_Validate(t *testing.T) {
 				Subject: "Add new feature",
 				Body:    "This is a description\n\nRefs: PROJ-123",
 			},
-			options: []JiraReferenceOption{
-				WithBodyRefChecking(),
+			configSetup: func() config.Config {
+				cfg := config.DefaultConfig()
+				utils := testConfig.GetConfigTestUtils()
+				jiraConfig := cfg.Jira
+				jiraConfig = utils.WithBodyRef(jiraConfig, true)
+
+				return utils.WithJira(cfg, jiraConfig)
 			},
 			wantErrors:  false,
 			description: "Should pass with body reference in Refs: format",
@@ -70,7 +96,13 @@ func TestJiraReferenceRule_Validate(t *testing.T) {
 				Subject: "Add new feature PROJ123", // Missing hyphen
 				Body:    "This is a description",
 			},
-			options:     nil,
+			configSetup: func() config.Config {
+				cfg := config.DefaultConfig()
+				utils := testConfig.GetConfigTestUtils()
+				jiraConfig := cfg.Jira
+
+				return utils.WithJira(cfg, jiraConfig)
+			},
 			wantErrors:  true,
 			description: "Should fail with invalid Jira format (missing hyphen)",
 		},
@@ -80,8 +112,13 @@ func TestJiraReferenceRule_Validate(t *testing.T) {
 				Subject: "Add new feature OTHER-123",
 				Body:    "This is a description",
 			},
-			options: []JiraReferenceOption{
-				WithValidProjects([]string{"PROJ", "TEAM"}),
+			configSetup: func() config.Config {
+				cfg := config.DefaultConfig()
+				utils := testConfig.GetConfigTestUtils()
+				jiraConfig := cfg.Jira
+				jiraConfig = utils.WithProjects(jiraConfig, []string{"PROJ", "TEAM"})
+
+				return utils.WithJira(cfg, jiraConfig)
 			},
 			wantErrors:  true,
 			description: "Should fail with invalid project when project list is provided",
@@ -92,8 +129,14 @@ func TestJiraReferenceRule_Validate(t *testing.T) {
 				Subject: "feat(PROJ-123): add login feature",
 				Body:    "This is a description",
 			},
-			options: []JiraReferenceOption{
-				WithConventionalCommit(),
+			configSetup: func() config.Config {
+				cfg := config.DefaultConfig()
+				utils := testConfig.GetConfigTestUtils()
+				jiraConfig := cfg.Jira
+				cfg = utils.WithJira(cfg, jiraConfig)
+				conventionalConfig := utils.WithConventionalRequired(cfg.Conventional, true)
+
+				return utils.WithConventional(cfg, conventionalConfig)
 			},
 			wantErrors:  true,
 			description: "Should fail with conventional commit where Jira is not at the end",
@@ -101,11 +144,18 @@ func TestJiraReferenceRule_Validate(t *testing.T) {
 	}
 
 	for _, testCase := range tests {
-		ctx := context.Background()
-
 		t.Run(testCase.name, func(t *testing.T) {
-			// Create rule with options
-			rule := NewJiraReferenceRule(testCase.options...)
+			// Create config with test options
+			cfg := testCase.configSetup()
+
+			// Add config to context
+			ctx := context.Background()
+			// Add test override for specific test cases
+			ctx = context.WithValue(ctx, core.JiraTestOverrideKey, true)
+			ctx = config.WithConfig(ctx, cfg)
+
+			// Create rule
+			rule := rules.NewJiraReferenceRule()
 
 			// Validate commit
 			errors := rule.Validate(ctx, testCase.commit)
@@ -119,18 +169,23 @@ func TestJiraReferenceRule_Validate(t *testing.T) {
 	}
 }
 
-func TestJiraReferenceRuleWithConfig(t *testing.T) {
+func TestJiraReferenceRuleWithContext(t *testing.T) {
 	tests := []struct {
 		name        string
-		config      config.Config
+		configSetup func() config.Config
 		commit      domain.CommitInfo
 		wantErrors  bool
 		description string
 	}{
 		{
 			name: "jira required in subject",
-			config: config.NewConfig().
-				WithJiraRequired(true),
+			configSetup: func() config.Config {
+				cfg := config.DefaultConfig()
+				utils := testConfig.GetConfigTestUtils()
+				jiraConfig := cfg.Jira
+
+				return utils.WithJira(cfg, jiraConfig)
+			},
 			commit: domain.CommitInfo{
 				Subject: "Add new feature PROJ-123",
 				Body:    "This is a description",
@@ -140,9 +195,14 @@ func TestJiraReferenceRuleWithConfig(t *testing.T) {
 		},
 		{
 			name: "jira required in body with body ref enabled",
-			config: config.NewConfig().
-				WithJiraRequired(true).
-				WithJiraBodyRef(true),
+			configSetup: func() config.Config {
+				cfg := config.DefaultConfig()
+				utils := testConfig.GetConfigTestUtils()
+				jiraConfig := cfg.Jira
+				jiraConfig = utils.WithBodyRef(jiraConfig, true)
+
+				return utils.WithJira(cfg, jiraConfig)
+			},
 			commit: domain.CommitInfo{
 				Subject: "Add new feature",
 				Body:    "This is a description\n\nRefs: PROJ-123",
@@ -152,8 +212,13 @@ func TestJiraReferenceRuleWithConfig(t *testing.T) {
 		},
 		{
 			name: "jira required but missing",
-			config: config.NewConfig().
-				WithJiraRequired(true),
+			configSetup: func() config.Config {
+				cfg := config.DefaultConfig()
+				utils := testConfig.GetConfigTestUtils()
+				jiraConfig := cfg.Jira
+
+				return utils.WithJira(cfg, jiraConfig)
+			},
 			commit: domain.CommitInfo{
 				Subject: "Add new feature",
 				Body:    "This is a description",
@@ -163,10 +228,16 @@ func TestJiraReferenceRuleWithConfig(t *testing.T) {
 		},
 		{
 			name: "jira with conventional and valid projects",
-			config: config.NewConfig().
-				WithJiraRequired(true).
-				WithJiraProjects([]string{"PROJ", "TEAM"}).
-				WithConventionalRequired(true),
+			configSetup: func() config.Config {
+				cfg := config.DefaultConfig()
+				utils := testConfig.GetConfigTestUtils()
+				jiraConfig := cfg.Jira
+				jiraConfig = utils.WithProjects(jiraConfig, []string{"PROJ", "TEAM"})
+				cfg = utils.WithJira(cfg, jiraConfig)
+				conventionalConfig := utils.WithConventionalRequired(cfg.Conventional, true)
+
+				return utils.WithConventional(cfg, conventionalConfig)
+			},
 			commit: domain.CommitInfo{
 				Subject: "feat: add login feature PROJ-123",
 				Body:    "This is a description",
@@ -176,43 +247,40 @@ func TestJiraReferenceRuleWithConfig(t *testing.T) {
 		},
 		{
 			name: "jira with conventional and invalid project",
-			config: config.NewConfig().
-				WithJiraRequired(true).
-				WithJiraProjects([]string{"PROJ", "TEAM"}).
-				WithConventionalRequired(true),
+			configSetup: func() config.Config {
+				cfg := config.DefaultConfig()
+				utils := testConfig.GetConfigTestUtils()
+				jiraConfig := cfg.Jira
+				jiraConfig = utils.WithProjects(jiraConfig, []string{"PROJ", "TEAM"})
+				cfg = utils.WithJira(cfg, jiraConfig)
+				conventionalConfig := utils.WithConventionalRequired(cfg.Conventional, true)
+
+				return utils.WithConventional(cfg, conventionalConfig)
+			},
 			commit: domain.CommitInfo{
 				Subject: "feat: add login feature OTHER-123",
 				Body:    "This is a description",
 			},
 			wantErrors:  true,
-			description: "Should fail with conventional format but invalid project",
+			description: "Should fail with invalid project",
 		},
 	}
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			// Create rule with options
-			options := []JiraReferenceOption{}
+			// Create config with test options
+			cfg := testCase.configSetup()
 
-			// Check if conventional commit format is required
-			if testCase.config.ConventionalRequired() {
-				options = append(options, WithConventionalCommit())
-			}
+			// Add config to context
+			ctx := context.Background()
+			// Add test override for specific test cases
+			ctx = context.WithValue(ctx, core.JiraTestOverrideKey, true)
+			ctx = config.WithConfig(ctx, cfg)
 
-			// Check if body reference checking is enabled
-			if testCase.config.JiraBodyRef() {
-				options = append(options, WithBodyRefChecking())
-			}
-
-			// Add valid projects if provided
-			if projects := testCase.config.JiraProjects(); len(projects) > 0 {
-				options = append(options, WithValidProjects(projects))
-			}
-
-			rule := NewJiraReferenceRule(options...)
+			// Create rule with options from config
+			rule := rules.NewJiraReferenceRule()
 
 			// Validate commit
-			ctx := context.Background()
 			errors := rule.Validate(ctx, testCase.commit)
 
 			if testCase.wantErrors {

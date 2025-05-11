@@ -9,9 +9,9 @@ toolchain go1.24.2
 
 require (
 	github.com/ProtonMail/go-crypto v1.2.0
+	github.com/client9/misspell v0.3.4
 	github.com/fatih/color v1.18.0
 	github.com/go-git/go-git/v5 v5.16.0
-	github.com/golangci/misspell v0.6.0
 	github.com/knadh/koanf/parsers/yaml v1.0.0
 	github.com/knadh/koanf/providers/file v1.2.0
 	github.com/knadh/koanf/v2 v2.2.0
@@ -44,7 +44,6 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/kevinburke/ssh_config v1.2.0 // indirect
-	github.com/kljensen/snowball v0.10.0
 	github.com/pjbgf/sha1cd v0.3.2 // indirect
 	github.com/rs/zerolog v1.34.0
 	github.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3 // indirect

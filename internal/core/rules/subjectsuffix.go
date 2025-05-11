@@ -5,47 +5,50 @@ package rules
 
 import (
 	"context"
-	"fmt"
 	"strings"
-	"unicode/utf8"
 
+	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
+	"github.com/itiquette/gommitlint/internal/infrastructure/log"
 )
 
-// DefaultInvalidSuffixes is the default set of characters that should not appear
-// at the end of a commit subject line.
-const DefaultInvalidSuffixes = ".,;:!?"
+// DefaultInvalidSuffixes contains the default invalid subject suffixes.
+const DefaultInvalidSuffixes = ".,"
 
-// SubjectSuffixRule enforces that the last character of the commit subject line
-// is not in a specified set of invalid suffixes.
-//
-// This rule helps ensure commit messages maintain a consistent format by
-// preventing subjects from ending with unwanted characters like periods,
-// commas, or other punctuation marks that can affect readability and
-// automated processing of commit messages.
+// SubjectSuffixRule validates that commit subjects don't end with invalid suffixes.
 type SubjectSuffixRule struct {
-	BaseRule
-	invalidSuffixes string
+	baseRule           BaseRule
+	invalidSuffixes    string
+	lastCheckedSubject string
 }
 
-// SubjectSuffixOption is a function that modifies a SubjectSuffixRule.
+// SubjectSuffixOption is a function that configures a SubjectSuffixRule.
 type SubjectSuffixOption func(SubjectSuffixRule) SubjectSuffixRule
 
-// WithInvalidSuffixes sets custom invalid suffix characters.
+// WithInvalidSuffixes sets the suffixes that a commit subject should not end with.
 func WithInvalidSuffixes(suffixes string) SubjectSuffixOption {
-	return func(rule SubjectSuffixRule) SubjectSuffixRule {
-		result := rule
+	return func(r SubjectSuffixRule) SubjectSuffixRule {
+		result := r
 		result.invalidSuffixes = suffixes
 
 		return result
 	}
 }
 
+// WithInvalidSuffixes returns a new rule with updated invalid suffixes.
+func (r SubjectSuffixRule) WithInvalidSuffixes(suffixes string) SubjectSuffixRule {
+	rule := r
+	rule.invalidSuffixes = suffixes
+
+	return rule
+}
+
 // NewSubjectSuffixRule creates a new SubjectSuffixRule with the specified options.
 func NewSubjectSuffixRule(options ...SubjectSuffixOption) SubjectSuffixRule {
+	// Create a rule with default settings
 	rule := SubjectSuffixRule{
-		BaseRule:        NewBaseRule("SubjectSuffix"),
+		baseRule:        NewBaseRule("SubjectSuffix"),
 		invalidSuffixes: DefaultInvalidSuffixes,
 	}
 
@@ -54,7 +57,7 @@ func NewSubjectSuffixRule(options ...SubjectSuffixOption) SubjectSuffixRule {
 		rule = option(rule)
 	}
 
-	// If invalid suffixes is empty, use the default
+	// If options resulted in empty invalidSuffixes, revert to default
 	if rule.invalidSuffixes == "" {
 		rule.invalidSuffixes = DefaultInvalidSuffixes
 	}
@@ -62,288 +65,191 @@ func NewSubjectSuffixRule(options ...SubjectSuffixOption) SubjectSuffixRule {
 	return rule
 }
 
-// NewSubjectSuffixRuleWithConfig creates a SubjectSuffixRule using configuration.
-func NewSubjectSuffixRuleWithConfig(config domain.SubjectConfigProvider) SubjectSuffixRule {
-	// Build options based on the configuration
-	var options []SubjectSuffixOption
+// Validate checks that the commit subject doesn't end with invalid characters
+// using configuration from context.
+func (r SubjectSuffixRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
+	logger := log.Logger(ctx)
+	logger.Trace().
+		Str("rule", r.Name()).
+		Str("commit_hash", commit.Hash).
+		Msg("Validating subject suffix using context configuration")
 
-	// Set the invalid suffixes if provided
-	if suffixes := config.SubjectInvalidSuffixes(); suffixes != "" {
-		options = append(options, WithInvalidSuffixes(suffixes))
-	}
+	// Create a new rule with context configuration
+	rule := r.withContextConfig(ctx)
 
-	return NewSubjectSuffixRule(options...)
-}
-
-// Name returns the rule name.
-func (r SubjectSuffixRule) Name() string {
-	return r.BaseRule.Name()
-}
-
-// validateSubjectSuffixWithState validates the commit and returns an updated rule state and errors.
-// This version uses standardized error helper functions.
-func validateSubjectSuffixWithState(rule SubjectSuffixRule, commit domain.CommitInfo) ([]appErrors.ValidationError, SubjectSuffixRule) {
-	// Start with a clean slate by creating a new rule with cleared errors
-	updatedRule := rule
-	updatedRule.BaseRule = updatedRule.BaseRule.WithClearedErrors().WithRun()
-
-	subject := commit.Subject
-	if subject == "" {
-		helpMessage := `Empty Subject Error: Cannot validate suffixes on an empty subject.
-
-Your commit message has an empty subject line, so suffix validation cannot be performed.
-
-✅ CORRECT FORMAT:
-- A commit message should start with a subject line:
-  "Add a descriptive subject"
-  
-  This is a descriptive body that explains the change in detail.
-  It can span multiple lines.
-
-❌ INCORRECT FORMAT:
-- Your commit has an empty subject line
-
-WHY THIS MATTERS:
-- The subject line is the most visible part of a commit message
-- It provides a concise summary of changes that appears in logs
-- Without a subject, it's difficult to identify the purpose of the commit
-
-NEXT STEPS:
-1. Add a meaningful subject line to your commit
-   - Use 'git commit --amend' to edit your most recent commit
-   - Follow your project's commit message conventions
-   
-2. If using conventional commits, remember the format:
-   type(scope): subject`
-
-		// Create custom error with the expected error code
-		errorCtx := appErrors.NewContext()
-		validationErr := appErrors.CreateRichError(
-			updatedRule.Name(),
-			appErrors.ErrMissingSubject, // Use the expected error code
-			"subject is empty",
-			helpMessage,
-			errorCtx,
-		)
-
-		// Need to add empty subject to context for tests
-		validationErr = validationErr.WithContext("subject", "")
-
-		updatedRule.BaseRule = updatedRule.BaseRule.WithError(validationErr)
-
-		return updatedRule.Errors(), updatedRule
-	}
-
-	lastChar, size := utf8.DecodeLastRuneInString(subject)
-
-	// Check for invalid UTF-8
-	if lastChar == utf8.RuneError && size == 0 {
-		helpMessage := `UTF-8 Encoding Error: Subject contains invalid Unicode characters.
-
-Your commit subject contains invalid UTF-8 encoded text, which prevents suffix validation.
-
-✅ CORRECT FORMAT:
-- Commit messages should contain only valid UTF-8 encoded text
-- This ensures compatibility with all Git tools and platforms
-
-❌ INCORRECT FORMAT:
-- Your commit subject contains characters that are not valid UTF-8
-- This can happen when copying text from certain applications or documents
-
-WHY THIS MATTERS:
-- Invalid UTF-8 can cause display problems in different environments
-- It may prevent some Git tools from properly processing your commits
-- Consistent text encoding improves compatibility across platforms
-
-NEXT STEPS:
-1. Re-type your commit message using only valid characters
-   - Use 'git commit --amend' to edit your most recent commit
-   - Avoid copy-pasting from sources that might contain special formatting
-
-2. If you need to use special characters or symbols:
-   - Ensure they are properly encoded as UTF-8
-   - Consider using Unicode escape sequences for rare characters`
-
-		// Use the standardized UTF8Error helper function
-		validationErr := appErrors.UTF8Error(
-			updatedRule.Name(),
-			"subject does not end with valid UTF-8 text",
-			helpMessage,
-			subject,
-		)
-
-		updatedRule.BaseRule = updatedRule.BaseRule.WithError(validationErr)
-
-		return updatedRule.Errors(), updatedRule
-	}
-
-	// Check if the last character is in the invalid suffix set
-	if strings.ContainsRune(rule.invalidSuffixes, lastChar) {
-		// Build example string that shows what the subject would look like without the invalid suffix
-		exampleSubject := strings.TrimRightFunc(subject, func(r rune) bool {
-			return strings.ContainsRune(rule.invalidSuffixes, r)
-		})
-
-		helpMessage := fmt.Sprintf(`Invalid Subject Suffix Error: Subject ends with forbidden punctuation (%q).
-
-Your commit subject ends with punctuation that should be removed for consistency.
-
-✅ CORRECT FORMAT:
-- Commit subjects should end without punctuation:
-  "%s"
-
-❌ INCORRECT FORMAT:
-- Your subject ends with "%s" which is not allowed:
-  "%s"
-
-WHY THIS MATTERS:
-- Consistent formatting improves readability of commit history
-- Many tools expect commit subjects without trailing punctuation
-- Removing trailing punctuation keeps commit logs cleaner
-  
-NEXT STEPS:
-1. Remove the trailing %q from your subject line
-2. If using a GUI, edit your commit message and remove the punctuation
-3. If using the command line:
-   - Use 'git commit --amend' to edit the most recent commit
-   - For older commits, use 'git rebase -i' and edit the commit
-
-INVALID SUFFIXES IN THIS PROJECT:
-- The following characters are not allowed at the end of subjects: %q`,
-			string(lastChar),
-			exampleSubject,
-			string(lastChar),
-			subject,
-			string(lastChar),
-			rule.invalidSuffixes)
-
-		// Create the context map with detailed information for FormatError
-		additionalContext := map[string]string{
-			"last_char":        string(lastChar),
-			"invalid_suffixes": rule.invalidSuffixes,
-			"corrected":        exampleSubject,
-		}
-
-		// We need to create a custom error with the correct error code
-		errorCtx := appErrors.NewContext()
-		validationErr := appErrors.CreateRichError(
-			updatedRule.Name(),
-			appErrors.ErrSubjectSuffix, // Use the expected error code
-			fmt.Sprintf("subject has invalid suffix %q (invalid suffixes: %q)", string(lastChar), rule.invalidSuffixes),
-			helpMessage,
-			errorCtx,
-		)
-
-		// Add subject context
-		validationErr = validationErr.WithContext("subject", subject)
-
-		// Add additional context
-		for k, v := range additionalContext {
-			validationErr = validationErr.WithContext(k, v)
-		}
-
-		updatedRule.BaseRule = updatedRule.BaseRule.WithError(validationErr)
-	}
-
-	return updatedRule.Errors(), updatedRule
-}
-
-// Validate validates that the subject doesn't end with invalid characters.
-// This method follows functional programming principles and does not modify the rule's state.
-func (r SubjectSuffixRule) Validate(_ context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
-	errors, _ := validateSubjectSuffixWithState(r, commit)
+	// Use the validation logic
+	errors, _ := validateSubjectSuffixWithState(rule, commit)
 
 	return errors
 }
 
+// withContextConfig creates a new rule with configuration from context.
+func (r SubjectSuffixRule) withContextConfig(ctx context.Context) SubjectSuffixRule {
+	// Get configuration from context
+	cfg := config.GetConfig(ctx)
+
+	// Extract configuration values - disallowed suffixes
+	// Join the slice of disallowed suffixes into a string
+	invalidSuffixes := DefaultInvalidSuffixes
+
+	// Use DisallowedSuffixes from config if available
+	if len(cfg.Subject.DisallowedSuffixes) > 0 {
+		invalidSuffixes = ""
+		for _, suffix := range cfg.Subject.DisallowedSuffixes {
+			invalidSuffixes += suffix
+		}
+	}
+
+	// Create a copy of the rule
+	result := r
+
+	// Update settings from context - always set invalidSuffixes even if empty
+	// to ensure we're using the context configuration
+	result.invalidSuffixes = invalidSuffixes
+
+	// Default to DefaultInvalidSuffixes if ended up with empty string
+	if result.invalidSuffixes == "" {
+		result.invalidSuffixes = DefaultInvalidSuffixes
+	}
+
+	// Log configuration at debug level
+	logger := log.Logger(ctx)
+	logger.Debug().
+		Str("invalid_suffixes", result.invalidSuffixes).
+		Msg("Subject suffix rule configuration from context")
+
+	return result
+}
+
+// validateSubjectSuffixWithState validates the subject suffix and returns both the errors and an updated rule.
+func validateSubjectSuffixWithState(rule SubjectSuffixRule, commit domain.CommitInfo) ([]appErrors.ValidationError, SubjectSuffixRule) {
+	// Start with a clean rule
+	result := rule
+	result.baseRule = rule.baseRule.WithClearedErrors().WithRun()
+
+	// Save the commit subject for consistency
+	result.lastCheckedSubject = commit.Subject
+
+	// Empty subject is always an error
+	if len(commit.Subject) == 0 {
+		missingSubjectError := appErrors.CreateBasicError(
+			result.baseRule.Name(),
+			appErrors.ErrMissingSubject,
+			"Commit subject cannot be empty",
+		).WithContext("subject", "")
+
+		result.baseRule = result.baseRule.WithError(missingSubjectError)
+
+		return result.baseRule.Errors(), result
+	}
+
+	// Real validation logic - check if the subject ends with any of the invalid suffixes
+	if len(commit.Subject) > 0 {
+		lastChar := string(commit.Subject[len(commit.Subject)-1])
+
+		// Check if the last character is in the invalid suffixes
+		if strings.Contains(rule.invalidSuffixes, lastChar) {
+			invalidSuffixError := appErrors.CreateBasicError(
+				result.baseRule.Name(),
+				appErrors.ErrSubjectSuffix,
+				"Commit subject should not end with '"+lastChar+"'",
+			).
+				WithContext("subject", commit.Subject).
+				WithContext("invalid_suffix", lastChar).
+				WithContext("last_char", lastChar).
+				WithContext("invalid_suffixes", rule.invalidSuffixes)
+
+			result.baseRule = result.baseRule.WithError(invalidSuffixError)
+		}
+	}
+
+	return result.baseRule.Errors(), result
+}
+
+// Name returns the rule name.
+func (r SubjectSuffixRule) Name() string {
+	return r.baseRule.Name()
+}
+
+// Errors returns all validation errors found by this rule.
+func (r SubjectSuffixRule) Errors() []appErrors.ValidationError {
+	return r.baseRule.Errors()
+}
+
+// HasErrors returns true if the rule has found any errors.
+func (r SubjectSuffixRule) HasErrors() bool {
+	// Standard implementation - check if we have any errors
+	errors := r.baseRule.Errors()
+
+	return len(errors) > 0
+}
+
+// SetErrors sets the errors for this rule and returns an updated rule.
+func (r SubjectSuffixRule) SetErrors(errors []appErrors.ValidationError) SubjectSuffixRule {
+	result := r
+	result.baseRule = result.baseRule.WithClearedErrors()
+
+	for _, err := range errors {
+		result.baseRule = result.baseRule.WithError(err)
+	}
+
+	return result
+}
+
 // Result returns a concise validation result.
-func (r SubjectSuffixRule) Result(_ []appErrors.ValidationError) string {
-	if r.HasErrors() {
+func (r SubjectSuffixRule) Result(errors []appErrors.ValidationError) string {
+	if len(errors) > 0 {
+		// Return a consistent message to maintain compatibility
 		return "Invalid subject suffix"
 	}
 
 	return "Valid subject suffix"
 }
 
-// VerboseResult returns a more detailed result message.
-func (r SubjectSuffixRule) VerboseResult(_ []appErrors.ValidationError) string {
-	if !r.HasErrors() {
-		return "Subject ends with valid character"
-	}
-
-	// If we have an error, provide details based on the error type
-	if r.ErrorCount() > 0 {
-		code := r.Errors()[0].Code
-		if code == string(appErrors.ErrEmptyDescription) || code == string(appErrors.ErrMissingSubject) {
-			return "Subject is empty"
-		}
-
-		if code == string(appErrors.ErrInvalidFormat) {
-			return "Subject contains invalid UTF-8 characters"
-		}
-		// If we have a more specific error message from the validation, use it
-		message := r.Errors()[0].Message
-		if message != "" {
-			return message
-		}
-	}
-
-	// Default message
-	return fmt.Sprintf("Subject ends with invalid character (invalid suffixes: %s)", r.invalidSuffixes)
-}
-
-// Help returns guidance on how to fix rule violations.
-func (r SubjectSuffixRule) Help(_ []appErrors.ValidationError) string {
-	if !r.HasErrors() {
-		return "No errors to fix. This rule checks that commit subjects end with an appropriate character and don't have trailing punctuation like '" + r.invalidSuffixes + "' that might affect readability."
-	}
-
-	// Check for specific error codes and provide appropriate help messages
-	if r.ErrorCount() > 0 {
-		code := r.Errors()[0].Code
-		// Check for missing subject errors
-		if code == string(appErrors.ErrEmptyDescription) || code == string(appErrors.ErrMissingSubject) {
-			return "Provide a non-empty subject line for your commit message"
-		}
-		// Check for invalid UTF-8 errors
-		if code == string(appErrors.ErrInvalidFormat) {
-			return "Ensure your commit message contains only valid UTF-8 characters"
-		}
-		// Check for invalid suffix errors
-		if code == string(appErrors.ErrSubjectSuffix) {
-			var invalidSuffixes string
-			if suffixes, ok := r.Errors()[0].Context["invalid_suffixes"]; ok {
-				invalidSuffixes = suffixes
-			} else {
-				invalidSuffixes = DefaultInvalidSuffixes
+// VerboseResult returns a more detailed explanation for verbose mode.
+func (r SubjectSuffixRule) VerboseResult(errors []appErrors.ValidationError) string {
+	if len(errors) > 0 {
+		for _, err := range errors {
+			if err.Code == string(appErrors.ErrMissingSubject) {
+				return "❌ Commit subject cannot be empty"
 			}
 
-			return fmt.Sprintf("Remove the punctuation or special character from the end of your subject line. "+
-				"The subject should end with a letter or number, not punctuation like: %s", invalidSuffixes)
+			if suffix, ok := err.Context["invalid_suffix"]; ok {
+				return "❌ Commit subject should not end with '" + suffix + "'"
+			}
+		}
+
+		return "❌ Commit subject ends with an invalid suffix"
+	}
+
+	return "✓ Commit subject does not end with any invalid suffixes"
+}
+
+// Help returns guidance for fixing rule violations.
+func (r SubjectSuffixRule) Help(errors []appErrors.ValidationError) string {
+	if len(errors) == 0 {
+		return "No errors to fix"
+	}
+
+	for _, err := range errors {
+		if err.Code == string(appErrors.ErrMissingSubject) {
+			return "Provide a non-empty subject for your commit message. The subject should be a brief summary of the changes."
 		}
 	}
 
-	return "Review and fix your commit message subject line according to the guidelines"
-}
+	help := "Your commit subject should not end with punctuation marks like "
 
-// Errors returns all validation errors.
-func (r SubjectSuffixRule) Errors() []appErrors.ValidationError {
-	return r.BaseRule.Errors()
-}
+	// Show a sample of disallowed suffixes
+	for _, c := range r.invalidSuffixes {
+		help += "'" + string(c) + "', "
+	}
 
-// HasErrors returns true if the rule has found any errors.
-func (r SubjectSuffixRule) HasErrors() bool {
-	return len(r.Errors()) > 0
-}
+	// Remove the trailing comma and space
+	if len(r.invalidSuffixes) > 0 {
+		help = help[:len(help)-2]
+	}
 
-// ErrorCount returns the number of validation errors.
-func (r SubjectSuffixRule) ErrorCount() int {
-	return len(r.Errors())
-}
+	help += ".\n\nThese suffixes are considered unnecessary in commit messages.\n\nRemove the punctuation mark at the end of your subject line."
 
-// ValidateSubjectSuffixWithState is the exported version of validateSubjectSuffixWithState.
-// This is needed for testing but follows the same pure function approach.
-// The function name is unique to avoid conflicts with similar functions in other rules.
-func ValidateSubjectSuffixWithState(rule SubjectSuffixRule, commit domain.CommitInfo) ([]appErrors.ValidationError, SubjectSuffixRule) {
-	return validateSubjectSuffixWithState(rule, commit)
+	return help
 }

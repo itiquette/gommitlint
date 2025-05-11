@@ -2,6 +2,34 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Rule Logic
+
+Rules in gommitlint can have three states which follow a specific priority order:
+
+1. **Rule States**:
+   - Enabled: Rule is active and will be validated
+   - Disabled: Rule is inactive and will be skipped
+   - Default: Rule's state depends on DefaultDisabledRules map (most rules are enabled by default)
+
+2. **Priority System**:
+   - An enabled rule always wins - it has higher priority than any disable setting
+   - A rule in `enabled_rules` will always be validated, regardless of other settings
+   - A rule is disabled if it's in the `disabled_rules` list, unless it's also in `enabled_rules`
+   - Most rules are enabled by default, regardless of the `enabled_rules` setting
+   - To deactivate a default-enabled rule, it must be added to the `disabled_rules` configuration
+
+3. **Rule States Combinations**:
+   - Default-enabled: Not in DefaultDisabledRules map, not in any configuration lists
+   - Default-disabled: In DefaultDisabledRules map, not in any configuration lists
+   - Explicitly enabled: In enabled_rules list (overrides any other setting)
+   - Explicitly disabled: In disabled_rules list (unless also explicitly enabled)
+
+4. **Validation Process**:
+   - First check if a rule is in enabled_rules - if yes, include it
+   - Then check if a rule is in disabled_rules - if yes, exclude it (unless it was explicitly enabled)
+   - Finally check if a rule is in DefaultDisabledRules - if yes, exclude it (unless it was explicitly enabled)
+   - If none of the above apply, include the rule (default behavior)
+
 ## Best Practices for Cost-Effective Usage
 
 ## Build Commands
@@ -47,6 +75,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - Custom errors: `internal.NewValidationError(err, map[string]string{"key": "value"})`
   - Validation errors: `model.NewValidationError("RuleName", "error_code", "message")`
 - Naming: PascalCase for exported, camelCase for non-exported identifiers
+- Test-only code:
+  - All test utilities should be placed in the `internal/testutils` package
+  - Organize test utilities by domain area (e.g., `testutils/git`, `testutils/config`)
+  - Every testutils package should have clear documentation indicating it's for testing only
+  - Integration tests should be in the `internal/integtest` package
 
 ### Working with Code
 

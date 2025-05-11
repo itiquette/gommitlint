@@ -32,7 +32,7 @@ This commit adds new validation rules for:
 - Email format
 - Username requirements`,
 			expectError:    false,
-			expectedResult: "Valid commit body",
+			expectedResult: "✓ Commit message body format is valid and meets all requirements",
 		},
 		{
 			name: "valid commit with body and sign-off",
@@ -43,223 +43,167 @@ Add more examples
 
 Signed-off-by: Laval Lion <laval@cavora.org>`,
 			expectError:    false,
-			expectedResult: "Valid commit body",
+			expectedResult: "✓ Commit message body format is valid and meets all requirements",
 		},
 		{
 			name:           "commit without body",
 			message:        "just a subject",
 			expectError:    true,
 			errorCode:      string(appErrors.ErrInvalidBody),
-			expectedResult: "Invalid commit body",
+			expectedResult: "❌ Invalid commit body", // Default is body required
 		},
 		{
-			name: "commit without empty line between subject and body",
-			message: `Update CI pipeline
-Adding new stages for:
-- Security scanning
-- Performance testing
-Signed-off-by: Laval Lion <laval@cavora.org>`,
-			expectError:    true,
-			errorCode:      string(appErrors.ErrInvalidBody),
-			expectedResult: "Invalid commit body",
-		},
-		{
-			name: "commit with empty line after subject but empty body",
-			message: `Update CI pipeline
-
-`,
-			expectError:    true,
-			errorCode:      string(appErrors.ErrInvalidBody),
-			expectedResult: "Invalid commit body",
-		},
-		{
-			name: "commit with only sign-off",
-			message: `Update config
+			name: "commit with body containing only sign-off",
+			message: `Fix typo
 
 Signed-off-by: Laval Lion <laval@cavora.org>`,
 			expectError:    true,
 			errorCode:      string(appErrors.ErrInvalidBody),
-			expectedResult: "Invalid commit body",
+			expectedResult: "❌ Invalid commit body", // Default doesn't allow sign-off only
 		},
 		{
-			name: "commit with multiple sign-off lines but no body",
-			message: `Update dependencies
+			name: "commit with body and options requiring body but not enough lines",
+			message: `Add feature
 
-Signed-off-by: Laval Lion <laval@cavora.org>
-Signed-off-by: Cragger Crocodile <cragger@svamp.org>`,
-			expectError:    true,
-			errorCode:      string(appErrors.ErrInvalidBody),
-			expectedResult: "Invalid commit body",
-		},
-		{
-			name: "commit with only sign-off but configured to allow it",
-			message: `Update config
-
-Signed-off-by: Laval Lion <laval@cavora.org>`,
+This is a body with real content`,
 			options: []rules.CommitBodyOption{
 				rules.WithRequireBody(true),
-				rules.WithAllowSignOffOnly(true),
+			},
+			expectError:    true,
+			errorCode:      string(appErrors.ErrInvalidBody),
+			expectedResult: "❌ Invalid commit body",
+		},
+		{
+			name:    "commit without body but body required",
+			message: "Just a subject line",
+			options: []rules.CommitBodyOption{
+				rules.WithRequireBody(true),
+			},
+			expectError:    true,
+			errorCode:      string(appErrors.ErrInvalidBody),
+			expectedResult: "❌ Invalid commit body",
+		},
+		{
+			name: "commit with adequate body for default min lines",
+			message: `Add feature
+
+Line one of the content
+Line two of the content 
+Line three of the content`,
+			options: []rules.CommitBodyOption{
+				rules.WithRequireBody(true),
 			},
 			expectError:    false,
-			expectedResult: "Valid commit body",
+			expectedResult: "✓ Commit message body format is valid and meets all requirements",
 		},
 		{
-			name:           "body not required when configured",
-			message:        "just a subject line",
-			options:        []rules.CommitBodyOption{rules.WithRequireBody(false)},
-			expectError:    false,
-			expectedResult: "Valid commit body",
-		},
-		{
-			name: "commit with empty body line but content after",
-			message: `Fix typo in documentation
+			name: "commit with min length body requirement not satisfied",
+			message: `Add feature
 
-Fixed the typo in API documentation.`,
+Too short`,
+			options: []rules.CommitBodyOption{
+				rules.WithRequireBody(true),
+				rules.WithMinimumLines(20),
+			},
+			expectError:    true,
+			errorCode:      string(appErrors.ErrInvalidBody),
+			expectedResult: "❌ Invalid commit body",
+		},
+		{
+			name: "commit with sign-off only when required body",
+			message: `Fix issue
+
+Signed-off-by: Example User <user@example.com>`,
+			options: []rules.CommitBodyOption{
+				rules.WithRequireBody(true),
+				rules.WithAllowSignOffOnly(false),
+			},
+			expectError:    true,
+			errorCode:      string(appErrors.ErrInvalidBody),
+			expectedResult: "❌ Invalid commit body",
+		},
+		{
+			name: "commit with body and sign-off when required body",
+			message: `Fix issue
+
+This fixes a critical issue with the logger component.
+It ensures that log messages are properly formatted.
+Line three of proper content.
+
+Signed-off-by: Example User <user@example.com>`,
+			options: []rules.CommitBodyOption{
+				rules.WithRequireBody(true),
+				rules.WithAllowSignOffOnly(false),
+			},
 			expectError:    false,
-			expectedResult: "Valid commit body",
+			expectedResult: "✓ Commit message body format is valid and meets all requirements",
+		},
+		{
+			name: "valid commit with explicitly set minimum lines",
+			message: `Add feature
+
+Line 1
+Line 2
+Line 3`,
+			options: []rules.CommitBodyOption{
+				rules.WithRequireBody(true),
+				rules.WithMinimumLines(3),
+			},
+			expectError:    false,
+			expectedResult: "✓ Commit message body format is valid and meets all requirements",
+		},
+		{
+			name: "invalid commit with too few lines for configured minimum",
+			message: `Add feature
+
+Only one line`,
+			options: []rules.CommitBodyOption{
+				rules.WithRequireBody(true),
+				rules.WithMinimumLines(3),
+			},
+			expectError:    true,
+			errorCode:      string(appErrors.ErrInvalidBody),
+			expectedResult: "❌ Invalid commit body",
 		},
 	}
+
 	for _, testCase := range tests {
-		ctx := context.Background()
-
 		t.Run(testCase.name, func(t *testing.T) {
-			// Create commit info object
+			// Parse test message into a structured commit
 			commit := domain.CommitInfo{
 				Message: testCase.message,
 			}
 
-			// Always require body for test cases unless specified otherwise in options
-			options := append([]rules.CommitBodyOption{rules.WithRequireBody(true)}, testCase.options...)
+			// Split the commit message into subject and body
+			subject, body := domain.SplitCommitMessage(testCase.message)
+			commit.Subject = subject
+			commit.Body = body
 
-			// Test using value semantics
-			rule := rules.NewCommitBodyRule(options...)
-			errors := rule.Validate(ctx, commit)
+			// Create the rule with options
+			rule := rules.NewCommitBodyRule(testCase.options...)
 
-			// Verify name is correct
-			require.Equal(t, "CommitBody", rule.Name(), "Rule name should be 'CommitBody'")
-
-			if testCase.expectError {
-				require.NotEmpty(t, errors, "expected errors but got none")
-
-				// Access ValidationError directly (no type assertion needed)
-				require.GreaterOrEqual(t, len(errors), 1, "should have at least one error")
-				valErr := errors[0]
-				require.Equal(t, testCase.errorCode, valErr.Code, "unexpected error code")
-				require.Equal(t, "CommitBody", valErr.Rule, "rule name should be set")
-			} else {
-				require.Empty(t, errors, "unexpected errors: %v", errors)
-			}
-		})
-	}
-}
-
-func TestCommitBodyVerboseResult(t *testing.T) {
-	testCases := []struct {
-		name        string
-		message     string
-		expectError bool
-	}{
-		{
-			name:        "missing body",
-			message:     "subject only",
-			expectError: true,
-		},
-		{
-			name:        "missing blank line",
-			message:     "subject\nbody without blank line",
-			expectError: true,
-		},
-		{
-			name:        "empty body",
-			message:     "subject\n\n",
-			expectError: true,
-		},
-		{
-			name:        "signoff first line",
-			message:     "subject\n\nSigned-off-by: Test <test@example.com>",
-			expectError: true,
-		},
-		{
-			name:        "only signoff lines",
-			message:     "subject\n\nSigned-off-by: Test <test@example.com>\nSigned-off-by: Another <another@example.com>",
-			expectError: true,
-		},
-		{
-			name:        "valid commit",
-			message:     "subject\n\nThis is a valid body.",
-			expectError: false,
-		},
-	}
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			// Create commit info
+			// Execute validation
 			ctx := context.Background()
-			commit := domain.CommitInfo{
-				Message: testCase.message,
-			}
-
-			// Use value semantics
-			rule := rules.NewCommitBodyRule(rules.WithRequireBody(true))
 			errors := rule.Validate(ctx, commit)
 
+			// Check results
 			if testCase.expectError {
-				require.NotEmpty(t, errors, "expected validation errors for invalid commit")
+				require.NotEmpty(t, errors, "Expected validation errors but got none")
+				require.Equal(t, testCase.errorCode, errors[0].Code, "Error code should match expected")
+				require.Contains(t, rule.Result(errors), "❌", "Result should indicate error")
+				require.Contains(t, rule.VerboseResult(errors), "❌", "Verbose result should indicate error")
+				require.NotEmpty(t, rule.Help(errors), "Help should provide guidance")
 			} else {
-				require.Empty(t, errors, "expected no validation errors for valid commit")
+				require.Empty(t, errors, "Expected no validation errors but got: %v", errors)
+				require.Equal(t, "✓ Commit message body format is valid and meets all requirements", rule.VerboseResult(errors), "Verbose result should indicate success")
+				require.Equal(t, "✓ Valid commit body", rule.Result(errors), "Result should indicate success")
+				require.Empty(t, rule.Help(errors), "Help should be empty for valid commit")
 			}
+
+			// Always verify the rule name
+			require.Equal(t, "CommitBody", rule.Name(), "Rule name should be 'CommitBody'")
 		})
 	}
-}
-
-func TestCommitBodyHelpMethod(t *testing.T) {
-	t.Run("valid and invalid commits", func(t *testing.T) {
-		testCases := []struct {
-			name        string
-			message     string
-			expectError bool
-		}{
-			{
-				name:        "missing body",
-				message:     "subject only",
-				expectError: true,
-			},
-			{
-				name:        "missing blank line",
-				message:     "subject\nbody without blank line",
-				expectError: true,
-			},
-			{
-				name:        "empty body",
-				message:     "subject\n\n",
-				expectError: true,
-			},
-			{
-				name:        "valid commit",
-				message:     "subject\n\nThis is a valid body.",
-				expectError: false,
-			},
-		}
-
-		for _, testCase := range testCases {
-			t.Run(testCase.name, func(t *testing.T) {
-				// Create commit info
-				ctx := context.Background()
-				commit := domain.CommitInfo{
-					Message: testCase.message,
-				}
-
-				// Create rule with value semantics and validate
-				rule := rules.NewCommitBodyRule(rules.WithRequireBody(true))
-				errors := rule.Validate(ctx, commit)
-
-				if testCase.expectError {
-					require.NotEmpty(t, errors, "expected validation errors")
-				} else {
-					require.Empty(t, errors, "expected no validation errors")
-				}
-			})
-		}
-	})
 }
 
 func TestCommitBodyRuleWithConfig(t *testing.T) {
@@ -275,24 +219,30 @@ func TestCommitBodyRuleWithConfig(t *testing.T) {
 			name:    "body required and missing",
 			message: "Just a subject line",
 			configSetup: func() config.Config {
-				return config.NewConfig().
-					WithBodyRequired(true).
-					WithBodyAllowSignOffOnly(false)
+				cfg := config.DefaultConfig()
+
+				return WithConfigBody(cfg, config.BodyConfig{
+					Required:         true,
+					AllowSignOffOnly: false,
+				})
 			},
 			expectError:    true,
 			errorCode:      string(appErrors.ErrInvalidBody),
-			expectedResult: "Invalid commit body",
+			expectedResult: "❌ Invalid commit body",
 		},
 		{
 			name:    "body not required and missing",
 			message: "Just a subject line",
 			configSetup: func() config.Config {
-				return config.NewConfig().
-					WithBodyRequired(false).
-					WithBodyAllowSignOffOnly(false)
+				cfg := config.DefaultConfig()
+
+				return WithConfigBody(cfg, config.BodyConfig{
+					Required:         false,
+					AllowSignOffOnly: false,
+				})
 			},
 			expectError:    false,
-			expectedResult: "Valid commit body",
+			expectedResult: "✓ Commit message body format is valid and meets all requirements",
 		},
 		{
 			name: "body with only sign-off not allowed",
@@ -300,13 +250,16 @@ func TestCommitBodyRuleWithConfig(t *testing.T) {
 
 Signed-off-by: Example User <user@example.com>`,
 			configSetup: func() config.Config {
-				return config.NewConfig().
-					WithBodyRequired(true).
-					WithBodyAllowSignOffOnly(false)
+				cfg := config.DefaultConfig()
+
+				return WithConfigBody(cfg, config.BodyConfig{
+					Required:         true,
+					AllowSignOffOnly: false,
+				})
 			},
 			expectError:    true,
 			errorCode:      string(appErrors.ErrInvalidBody),
-			expectedResult: "Invalid commit body",
+			expectedResult: "❌ Invalid commit body",
 		},
 		{
 			name: "body with only sign-off allowed",
@@ -314,66 +267,84 @@ Signed-off-by: Example User <user@example.com>`,
 
 Signed-off-by: Example User <user@example.com>`,
 			configSetup: func() config.Config {
-				return config.NewConfig().
-					WithBodyRequired(true).
-					WithBodyAllowSignOffOnly(true)
+				cfg := config.DefaultConfig()
+
+				return WithConfigBody(cfg, config.BodyConfig{
+					Required:         true,
+					AllowSignOffOnly: true,
+					MinimumLines:     1, // Override default of 3
+				})
 			},
 			expectError:    false,
-			expectedResult: "Valid commit body",
+			expectedResult: "✓ Commit message body format is valid and meets all requirements",
 		},
 		{
-			name: "valid commit with body",
-			message: `Add new feature
+			name: "body with min length specified and not met",
+			message: `Update config
 
-This commit adds a new feature to the project.
-It includes both implementation and tests.`,
+Too short`,
 			configSetup: func() config.Config {
-				return config.NewConfig().
-					WithBodyRequired(true).
-					WithBodyAllowSignOffOnly(false)
+				cfg := config.DefaultConfig()
+
+				return WithConfigBody(cfg, config.BodyConfig{
+					Required:  true,
+					MinLength: 20,
+				})
 			},
-			expectError:    false,
-			expectedResult: "Valid commit body",
+			expectError:    true,
+			errorCode:      string(appErrors.ErrInvalidBody),
+			expectedResult: "❌ Invalid commit body",
 		},
 	}
 
 	for _, testCase := range tests {
-		ctx := context.Background()
-
 		t.Run(testCase.name, func(t *testing.T) {
-			// Create commit info object
+			// Create config
+			cfg := testCase.configSetup()
+
+			// Add config to context
+			ctx := context.Background()
+			ctx = config.WithConfig(ctx, cfg)
+
+			// Parse test message into a structured commit
 			commit := domain.CommitInfo{
 				Message: testCase.message,
 			}
 
-			// Create the config using the setup function
-			unifiedConfig := testCase.configSetup()
+			// Split the commit message into subject and body
+			subject, body := domain.SplitCommitMessage(testCase.message)
+			commit.Subject = subject
+			commit.Body = body
 
-			// Create rule with unified config
-			// Create rule with options
-			options := []rules.CommitBodyOption{}
+			// Create the rule
+			rule := rules.NewCommitBodyRule()
 
-			// Apply options based on config
-			options = append(options,
-				rules.WithRequireBody(unifiedConfig.BodyRequired()),
-				rules.WithAllowSignOffOnly(unifiedConfig.BodyAllowSignOffOnly()),
-			)
-
-			rule := rules.NewCommitBodyRule(options...)
+			// Execute validation
 			errors := rule.Validate(ctx, commit)
 
-			// Verify rule name
-			require.Equal(t, "CommitBody", rule.Name(), "Rule name should be 'CommitBody'")
-
+			// Check results
 			if testCase.expectError {
-				require.NotEmpty(t, errors, "expected errors but got none")
-				require.GreaterOrEqual(t, len(errors), 1, "should have at least one error")
-				valErr := errors[0]
-				require.Equal(t, testCase.errorCode, valErr.Code, "unexpected error code")
-				require.Equal(t, "CommitBody", valErr.Rule, "rule name should be set")
+				require.NotEmpty(t, errors, "Expected validation errors but got none")
+				require.Equal(t, testCase.errorCode, errors[0].Code, "Error code should match expected")
+				require.Contains(t, rule.Result(errors), "❌", "Result should indicate error")
+				require.Contains(t, rule.VerboseResult(errors), "❌", "Verbose result should indicate error")
+				require.NotEmpty(t, rule.Help(errors), "Help should provide guidance")
 			} else {
-				require.Empty(t, errors, "unexpected errors: %v", errors)
+				require.Empty(t, errors, "Expected no validation errors but got: %v", errors)
+				require.Equal(t, "✓ Commit message body format is valid and meets all requirements", rule.VerboseResult(errors), "Verbose result should indicate success")
+				require.Equal(t, "✓ Valid commit body", rule.Result(errors), "Result should indicate success")
+				require.Empty(t, rule.Help(errors), "Help should be empty for valid commit")
 			}
+
+			// Always verify the rule name
+			require.Equal(t, "CommitBody", rule.Name(), "Rule name should be 'CommitBody'")
 		})
 	}
+}
+
+func WithConfigBody(cfg config.Config, body config.BodyConfig) config.Config {
+	result := cfg
+	result.Body = body
+
+	return result
 }

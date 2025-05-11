@@ -15,21 +15,21 @@ import (
 )
 
 // Engine is responsible for running validation rules against commits.
+// It does not use backward compatibility adapters anymore.
 type Engine struct {
 	ruleProvider domain.RuleProvider
+	// No need to store configuration directly - it's in the context
 }
 
-// NewEngine creates a new validation engine.
-func NewEngine(provider domain.RuleProvider) Engine {
+// CreateEngine creates a validation engine using the configuration and context.
+func CreateEngine(_ context.Context, _ config.Config, _ domain.CommitAnalyzer) Engine {
+	// Now creates the engine with context directly
+	// Parameters are unused as we've moved to context-based configuration
 	return Engine{
-		ruleProvider: provider,
+		// Rule provider is now implemented directly in the application layer
+		// using context-based configuration
+		ruleProvider: nil,
 	}
-}
-
-// NewFakeConfigForTesting creates a simple config for testing purposes.
-// This is only used in tests and should not be used in production code.
-func NewFakeConfigForTesting() config.Config {
-	return config.NewConfig()
 }
 
 func (e Engine) GetRuleProvider() domain.RuleProvider {
@@ -44,6 +44,19 @@ func (e Engine) ValidateCommit(ctx context.Context, commit domain.CommitInfo) do
 		Msg("Entering Engine.ValidateCommit")
 
 	activeRules := e.ruleProvider.GetActiveRules(ctx)
+
+	// Get the active rules - we no longer need special filtering here
+	// as this is now handled by the rule provider's GetActiveRules method
+
+	// Log active rules for debugging
+	activeRuleNames := make([]string, 0, len(activeRules))
+	for _, rule := range activeRules {
+		activeRuleNames = append(activeRuleNames, rule.Name())
+	}
+
+	// Print debug info about rules
+	logger.Debug().Strs("active_rules", activeRuleNames).Msg("Active rules for validation")
+
 	// Initialize result
 	result := domain.CommitResult{
 		CommitInfo:  commit,

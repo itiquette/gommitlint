@@ -25,7 +25,16 @@ var (
 
 func main() {
 	// Configure initial basic logging
-	stdlog.Logger = stdlog.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+	// Set global log level to panic to avoid any logging during initial setup
+	// The logger will be properly configured in InitLogger later
+	zerolog.SetGlobalLevel(zerolog.PanicLevel)
+
+	// IMPORTANT: Use Stderr for logs to separate them from regular report output
+	stdlog.Logger = stdlog.Output(zerolog.ConsoleWriter{
+		Out:        os.Stderr,
+		TimeFormat: "15:04PM",
+		NoColor:    false,
+	})
 
 	// Create the root context
 	ctx := context.Background()
@@ -40,12 +49,16 @@ func main() {
 	// Create dependencies
 	// This is the composition root where all dependencies are wired together
 
-	// Create config manager using the context
-	configManager, err := config.NewManager(ctx)
+	// Create config provider using the context
+	// Use the config provider which provides configuration
+	configProvider, err := config.NewProvider()
 	if err != nil {
-		customlog.Logger(ctx).Error().Err(err).Msg("Failed to create configuration manager")
+		customlog.Logger(ctx).Error().Err(err).Msg("Failed to create configuration provider")
 		os.Exit(1)
 	}
+
+	// Add provider to context
+	ctx = config.WithProviderInContext(ctx, configProvider)
 
 	// Execute root command with our dependencies
 	// This approach allows us to replace dependencies for testing
@@ -54,6 +67,8 @@ func main() {
 		version,
 		commit,
 		date,
-		configManager,
+		&cli.AppDependencies{
+			ConfigProvider: configProvider,
+		},
 	)
 }

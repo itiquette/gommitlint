@@ -1,48 +1,47 @@
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
-// Package rules provides validation rules for Git commits.
+
 package rules
 
 import (
 	"context"
 	"fmt"
-	"strconv"
-	"unicode/utf8"
+	"strings"
 
+	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
+	"github.com/itiquette/gommitlint/internal/infrastructure/log"
 )
 
-// SubjectLengthRule validates that the commit subject is not too long.
+// SubjectLengthRule validates the length of commit subjects.
 type SubjectLengthRule struct {
-	BaseRule
+	baseRule  BaseRule
 	maxLength int
 }
 
-// SubjectLengthOption is a function that configures a SubjectLengthRule.
+// SubjectLengthOption configures a SubjectLengthRule.
 type SubjectLengthOption func(SubjectLengthRule) SubjectLengthRule
 
-// WithMaxLength sets the maximum allowed length for a commit subject.
-func WithMaxLength(maxLength int) SubjectLengthOption {
-	return func(rule SubjectLengthRule) SubjectLengthRule {
-		if maxLength > 0 {
-			rule.maxLength = maxLength
-		}
+// WithMaxLength sets the maximum subject length for the rule.
+func WithMaxLength(length int) SubjectLengthOption {
+	return func(r SubjectLengthRule) SubjectLengthRule {
+		result := r
+		result.maxLength = length
 
-		return rule
+		return result
 	}
 }
 
-// NewSubjectLengthRule creates a new SubjectLengthRule with options.
+// NewSubjectLengthRule creates a new SubjectLengthRule with the given options.
 func NewSubjectLengthRule(options ...SubjectLengthOption) SubjectLengthRule {
-	// Create base rule with default values
 	rule := SubjectLengthRule{
-		BaseRule:  NewBaseRule("SubjectLength"),
-		maxLength: 100, // Default max length
+		baseRule:  NewBaseRule("SubjectLength"),
+		maxLength: 72, // Default max length
 	}
 
-	// Apply options
+	// Apply all options
 	for _, option := range options {
 		rule = option(rule)
 	}
@@ -50,208 +49,155 @@ func NewSubjectLengthRule(options ...SubjectLengthOption) SubjectLengthRule {
 	return rule
 }
 
-// NewSubjectLengthRuleWithConfig creates a rule using configuration.
-func NewSubjectLengthRuleWithConfig(config domain.SubjectConfigProvider) SubjectLengthRule {
-	maxLength := config.SubjectMaxLength()
-
-	// Use the options pattern
-	return NewSubjectLengthRule(WithMaxLength(maxLength))
-}
-
-// NewSubjectLengthRuleWithConfig creates a rule using the unified configuration.
-
 // Name returns the rule name.
 func (r SubjectLengthRule) Name() string {
-	return r.BaseRule.Name()
+	return r.baseRule.Name()
 }
 
-// validateSubjectLengthWithState validates a commit and returns both errors and an updated rule state.
-// The function is purposely named with a unique name to avoid conflicts with other rules.
-func validateSubjectLengthWithState(rule SubjectLengthRule, commit domain.CommitInfo) ([]appErrors.ValidationError, SubjectLengthRule) {
-	// Start with clean slate and mark the rule as run
-	updatedRule := rule
-	updatedRule.BaseRule = updatedRule.BaseRule.WithClearedErrors().WithRun()
+// Validate performs validation against a commit.
+func (r SubjectLengthRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
+	// Log validation at trace level
+	logger := log.Logger(ctx)
+	logger.Trace().
+		Str("rule", r.Name()).
+		Str("commit_hash", commit.Hash).
+		Msg("Validating subject length")
 
-	// Calculate subject length
-	subjectLength := utf8.RuneCountInString(commit.Subject)
+	// Create a new rule with context configuration
+	rule := r.withContextConfig(ctx)
 
-	// Check if subject is too long
-	if subjectLength > rule.maxLength {
-		// Generate a rich help message with examples
-		helpMessage := fmt.Sprintf(`Subject Length Error: Subject line is too long.
+	// Create a copy of the rule and run validation
+	_, updatedRule := validateSubjectLengthWithState(rule, commit)
 
-Your commit subject is %d characters long, which exceeds the maximum limit of %d characters.
+	// Return any validation errors
+	return updatedRule.Errors()
+}
 
-✅ CORRECT FORMAT:
-- Add user authentication feature (%d chars)
-- Fix timeout issue in API requests (%d chars)
-- Update documentation for deployment process (%d chars)
+// withContextConfig creates a new rule with configuration from context.
+func (r SubjectLengthRule) withContextConfig(ctx context.Context) SubjectLengthRule {
+	// Get configuration from context
+	cfg := config.GetConfig(ctx)
 
-❌ INCORRECT FORMAT:
-- %s (%d chars)
+	// Create a copy of the rule
+	result := r
 
-WHY THIS MATTERS:
-- Shorter subjects are more readable in Git logs and UIs
-- Many Git tools truncate subjects longer than 50-72 characters
-- Short subjects force you to be concise and clearly describe the change
-- Long subjects may indicate you're trying to include too many changes in one commit
+	// Override max length if specified in context config
+	if cfg.Subject.MaxLength > 0 {
+		result.maxLength = cfg.Subject.MaxLength
 
-NEXT STEPS:
-1. Reduce the length of your subject line by:
-   - Removing unnecessary details (save them for the body)
-   - Using more concise wording
-   - Focusing on the core change, not implementation details
-   
-2. If your subject is too complex to shorten, consider splitting 
-   the commit into multiple smaller, focused commits
-
-3. Use 'git commit --amend' to modify your most recent commit`,
-			subjectLength, rule.maxLength,
-			len("Add user authentication feature"),
-			len("Fix timeout issue in API requests"),
-			len("Update documentation for deployment process"),
-			commit.Subject, subjectLength)
-
-		// Create an enhanced validation error using the helper function
-		errorMessage := fmt.Sprintf("Subject length (%d) exceeds maximum allowed (%d)", subjectLength, rule.maxLength)
-
-		validationErr := appErrors.LengthError(
-			rule.Name(),
-			errorMessage,
-			helpMessage,
-			subjectLength,
-			rule.maxLength,
-			commit.Subject,
-		)
-
-		// Update rule with error using value semantics
-		updatedRule.BaseRule = updatedRule.BaseRule.WithError(validationErr)
+		// Log configuration at debug level
+		logger := log.Logger(ctx)
+		logger.Debug().
+			Int("max_length", result.maxLength).
+			Msg("Subject length rule configuration from context")
 	}
 
-	return updatedRule.Errors(), updatedRule
+	return result
 }
 
-// Validate validates the commit subject length.
-// This uses value semantics and returns the errors.
-func (r SubjectLengthRule) Validate(_ context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
-	// Call the pure function implementation
-	errors, _ := validateSubjectLengthWithState(r, commit)
-
-	return errors
-}
-
-// Result returns a concise result message.
-func (r SubjectLengthRule) Result(_ []appErrors.ValidationError) string {
-	if len(r.Errors()) > 0 {
-		return "Subject too long"
-	}
-
-	return "Subject length OK"
-}
-
-// VerboseResult returns a detailed result message.
-func (r SubjectLengthRule) VerboseResult(_ []appErrors.ValidationError) string {
-	if len(r.Errors()) > 0 {
-		// Get the first error
-		if errors := r.Errors(); len(errors) > 0 {
-			// Use the enhanced error formatting
-			formatter := appErrors.NewTextFormatter(true) // verbose mode
-
-			return formatter.FormatError(errors[0])
-		}
-
-		// Fallback if no specific errors
-		return fmt.Sprintf("Subject length exceeds maximum length of %d characters", r.maxLength)
-	}
-
-	return fmt.Sprintf("Subject length is within the limit of %d characters", r.maxLength)
-}
-
-// Help returns guidance on how to fix rule violations.
-func (r SubjectLengthRule) Help(_ []appErrors.ValidationError) string {
-	if len(r.Errors()) == 0 {
-		return fmt.Sprintf("No errors to fix. This rule checks that commit subject lines don't exceed %d characters to ensure readability in various Git tools.", r.maxLength)
-	}
-
-	// If we have errors with the enhanced format, use their built-in help
-	if errors := r.Errors(); len(errors) > 0 {
-		// Get help from the enhanced error
-		helpText := errors[0].GetHelp()
-		if helpText != "" {
-			return helpText
-		}
-
-		// Get current length if available
-		currentLength := 0
-
-		if ctx := errors[0].Context; ctx != nil {
-			if val, ok := ctx["subject_length"]; ok {
-				if parsedVal, err := strconv.Atoi(val); err == nil {
-					currentLength = parsedVal
-				}
-			}
-		}
-
-		// Detailed help with examples
-		if currentLength > 0 {
-			return fmt.Sprintf(`Subject line is too long (%d characters). It should be at most %d characters.
-
-Why this matters:
-- Shorter subjects are more readable in Git logs and UIs 
-- Many Git tools truncate subjects longer than 50-72 characters
-- Short subjects force you to be concise and descriptive
-
-Examples of good subject lines:
-- Add user authentication feature (%d chars)
-- Fix timeout issue in API requests (%d chars)
-- Update documentation for deployment process (%d chars)
-
-How to fix:
-1. Remove unnecessary details (save them for the body)
-2. Use more concise wording
-3. Focus on the core change, not implementation details`,
-				currentLength, r.maxLength,
-				len("Add user authentication feature"),
-				len("Fix timeout issue in API requests"),
-				len("Update documentation for deployment process"))
-		}
-
-		// Fallback to template-based help message
-		return fmt.Sprintf(`Ensure the subject line is at most %d characters long.
-
-Why this matters:
-- Shorter subjects are more readable in Git logs and UIs
-- Many Git tools truncate subjects longer than 50-72 characters
-- Short subjects force you to be concise and descriptive
-
-Examples of good subject lines:
-- Add user authentication feature
-- Fix timeout issue in API requests
-- Update documentation for deployment process
-
-How to fix:
-1. Remove unnecessary details (save them for the body)
-2. Use more concise wording
-3. Focus on the core change, not implementation details`, r.maxLength)
-	}
-
-	// Default help message
-	return fmt.Sprintf("Keep the subject line under %d characters for better readability.", r.maxLength)
-}
-
-// Errors returns all validation errors.
+// Errors returns all validation errors found by this rule.
 func (r SubjectLengthRule) Errors() []appErrors.ValidationError {
-	return r.BaseRule.Errors()
+	return r.baseRule.Errors()
 }
 
 // HasErrors returns true if the rule has found any errors.
 func (r SubjectLengthRule) HasErrors() bool {
-	return len(r.Errors()) > 0
+	return r.baseRule.HasErrors()
 }
 
-// ValidateSubjectLengthWithState is the exported version of validateSubjectLengthWithState.
-// This is needed for testing but follows the same pure function approach.
-// The function name is unique to avoid conflicts with similar functions in other rules.
-func ValidateSubjectLengthWithState(rule SubjectLengthRule, commit domain.CommitInfo) ([]appErrors.ValidationError, SubjectLengthRule) {
-	return validateSubjectLengthWithState(rule, commit)
+// validateSubjectLengthWithState validates the subject length and returns both the errors and an updated rule.
+func validateSubjectLengthWithState(rule SubjectLengthRule, commit domain.CommitInfo) ([]appErrors.ValidationError, SubjectLengthRule) {
+	result := rule
+	result.baseRule = rule.baseRule.WithClearedErrors().WithRun()
+
+	// Parse subject from commit
+	subject := commit.Subject
+	if subject == "" && commit.Message != "" {
+		subject, _ = domain.SplitCommitMessage(commit.Message)
+	}
+
+	// Check subject length
+	if len(subject) > rule.maxLength {
+		helpText := fmt.Sprintf(`Subject Length Error: Your commit subject is too long.
+
+Your commit subject exceeds the maximum allowed length of %d characters.
+
+✅ CORRECT FORMAT:
+A concise subject line that fits within %d characters
+
+❌ INCORRECT FORMAT:
+%s
+
+WHY THIS MATTERS:
+- Short subjects are easier to read in logs and commit history
+- Many tools truncate long subjects when displaying commit history
+- Enforcing a maximum length encourages clear, focused commits
+
+NEXT STEPS:
+1. Edit your commit message to shorten the subject line:
+   - Focus on the core change, not every detail
+   - Remove unnecessary words or context
+   - Consider using a more concise verb
+   - If needed, move details to the commit body
+
+2. Your current subject is %d characters (maximum: %d)
+3. Use 'git commit --amend' to update your commit message`,
+			rule.maxLength, rule.maxLength, subject, len(subject), rule.maxLength)
+
+		// We don't need a contextMap since LengthError accepts individual parameters
+		// instead of a map for the standard fields
+
+		validationErr := appErrors.LengthError(
+			result.baseRule.Name(),
+			fmt.Sprintf("subject exceeds maximum length (%d > %d)", len(subject), rule.maxLength),
+			helpText,
+			len(subject),
+			rule.maxLength,
+			subject)
+
+		result.baseRule = result.baseRule.WithError(validationErr)
+	}
+
+	return result.baseRule.Errors(), result
+}
+
+// Result returns a concise validation result.
+func (r SubjectLengthRule) Result(errors []appErrors.ValidationError) string {
+	if len(errors) > 0 {
+		return "❌ Subject length exceeds maximum"
+	}
+
+	return "✓ Subject length is valid"
+}
+
+// VerboseResult returns a more detailed explanation for verbose mode.
+func (r SubjectLengthRule) VerboseResult(errors []appErrors.ValidationError) string {
+	if len(errors) > 0 {
+		var details []string
+
+		for _, err := range errors {
+			if subjectLen, ok := err.Context["subject_length"]; ok {
+				if maxLen, ok := err.Context["max_length"]; ok {
+					details = append(details, fmt.Sprintf("subject is %s characters (maximum allowed: %s)", subjectLen, maxLen))
+				}
+			}
+		}
+
+		if len(details) > 0 {
+			return "❌ Subject length validation failed: " + strings.Join(details, ", ")
+		}
+
+		return "❌ Subject length validation failed"
+	}
+
+	return "✓ Subject length is within allowed limits"
+}
+
+// Help returns guidance for fixing rule violations.
+func (r SubjectLengthRule) Help(errors []appErrors.ValidationError) string {
+	if len(errors) == 0 {
+		return ""
+	}
+
+	return "Your commit subject is too long. Edit your commit message with 'git commit --amend' to shorten the subject line."
 }

@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	testGit "github.com/itiquette/gommitlint/internal/testutils/git"
 )
 
 // TestHookInstallationParameters tests the functional parameters type.
@@ -18,7 +20,7 @@ func TestHookInstallationParameters(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Set up a real Git repository
-	err := setupGitRepo(tmpDir)
+	err := testGit.SetupGitRepo(tmpDir)
 	require.NoError(t, err, "Failed to set up Git repository")
 
 	// Test the basic parameters
@@ -82,7 +84,7 @@ func TestInstallHook(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Set up a real Git repository
-	err := setupGitRepo(tmpDir)
+	err := testGit.SetupGitRepo(tmpDir)
 	require.NoError(t, err, "Failed to set up Git repository")
 
 	// Define table-driven test cases

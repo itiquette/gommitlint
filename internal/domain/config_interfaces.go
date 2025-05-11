@@ -27,9 +27,6 @@ type JiraConfigProvider interface {
 	// JiraBodyRef returns whether a Jira key must be present in body ref.
 	JiraBodyRef() bool
 
-	// JiraRequired returns whether a Jira key must be present.
-	JiraRequired() bool
-
 	// JiraPattern returns the regex pattern for Jira keys.
 	JiraPattern() string
 
@@ -95,6 +92,9 @@ type SpellCheckConfigProvider interface {
 
 	// SpellMaxErrors returns the maximum number of spelling errors allowed.
 	SpellMaxErrors() int
+
+	// SpellIgnoreCase returns whether to ignore case differences when checking spelling.
+	SpellIgnoreCase() bool
 }
 
 // RepositoryConfigProvider defines configuration for repository-related validation.

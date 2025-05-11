@@ -45,11 +45,103 @@ TE
 * *Signature* - Verifies commits have a cryptographic signature (GPG or SSH)
 * *SignedIdentity* - Validates signatures against trusted keys with full cryptographic verification
 
+== Documentation
+
+* link:docs/usage.adoc[Usage Guide] - How to use Gommitlint
+* link:docs/CONFIGURATION_GUIDE.md[Configuration Guide] - How to configure Gommitlint
+* link:docs/ARCHITECTURE.md[Architecture Overview] - Understand the design
+
 == Getting Started
 TODO
 //1. Check out the link:docs/usage.adoc[Usage Guide] for a quick start.
 // 2. The link:INSTALL.adoc[Installation Guide] will get you up and running.
 
+  gommitlint:
+    subject:
+      case: "sentence"           # Options: sentence, lower, upper
+      max_length: 72             # Maximum length of subject line
+      require_imperative: true   # Whether subjects should use imperative mood
+      disallowed_suffixes:       # List of disallowed ending characters
+        - "."
+        - ","
+        - ";"
+
+    body:
+      required: false            # Whether a commit body is required
+      min_length: 10             # Minimum body length
+      minimum_lines: 3           # Minimum number of lines in body
+      allow_sign_off_only: true  # Whether body can only contain sign-off info
+
+    conventional:
+      required: true             # Whether conventional commits are required
+      require_scope: false       # Whether scope is required in conventional format
+      types:                     # Allowed commit types
+        - "feat"
+        - "fix"
+        - "docs"
+        - "style"
+        - "refactor"
+        - "perf"
+        - "test"
+        - "build"
+        - "ci"
+        - "chore"
+        - "revert"
+      scopes: []                 # Allowed scopes (empty means any scope is allowed)
+      allow_breaking_changes: true # Whether breaking changes are allowed
+      max_description_length: 72 # Maximum length of description
+
+    rules:
+      enabled_rules:             # Explicitly enabled rules
+        - SubjectLength
+        - SubjectCase
+        - SubjectSuffix
+        - ConventionalCommit
+        - ImperativeVerb
+        - Signature
+        - SignOff
+        - Spell
+        - JiraReference
+        - CommitsAhead
+      disabled_rules:            # Explicitly disabled rules
+        - CommitBody           # Disabled by default
+
+    security:
+      sign_off_required: true    # Whether sign-off is required
+      gpg_required: false        # Whether GPG signature is required
+      key_directory: ""          # Path to key directory
+      allowed_signature_types:   # Allowed signature types
+        - "GPG"
+        - "SSH"
+      allowed_keyrings: []       # List of allowed keyrings
+      allowed_identities: []     # List of allowed identities
+      allow_multiple_sign_offs: true # Whether multiple sign-offs are allowed
+
+    repository:
+      path: ""                   # Path to repository
+      reference_branch: "main"   # Reference branch for CommitsAhead rule
+      max_commits_ahead: 5       # Maximum commits ahead of reference
+      max_history_days: 365      # Maximum days to look back in history
+      output_format: "text"      # Output format
+      ignore_merge_commits: true # Whether to ignore merge commits
+
+    output:
+      format: "text"             # Output format: text, json, github, gitlab
+      verbose: false             # Whether to show verbose output
+      quiet: false               # Whether to suppress output
+      color: true                # Whether to colorize output
+
+    spell_check:
+      language: "en-US"          # Spell check language
+      ignore_case: false         # Whether to ignore case in spell checking
+      custom_dictionary:         # Custom words to allow
+        - "gommitlint"
+        - "zerolog"
+
+    jira:
+      pattern: "[A-Z]+-\\d+"     # Pattern for JIRA ticket references
+      projects: []               # List of allowed JIRA projects
+      body_ref: false            # Whether JIRA references can be in body
 == Make Gommitlint better?
 ED: Currently I'm not reading PRs as there are a few base things to fix before that.
 

@@ -11,13 +11,15 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
+
+	testGit "github.com/itiquette/gommitlint/internal/testutils/git"
 )
 
 // TestHookRemovalParameters tests the functional parameters type.
 func TestHookRemovalParameters(t *testing.T) {
 	// Create temp directory with git repo
 	tmpDir := t.TempDir()
-	err := setupGitRepo(tmpDir)
+	err := testGit.SetupGitRepo(tmpDir)
 	require.NoError(t, err)
 
 	// Create a mock cobra command
@@ -83,7 +85,7 @@ func TestHookRemovalParameters(t *testing.T) {
 func TestRemoveHook(t *testing.T) {
 	// Create temp directory with git repo
 	tmpDir := t.TempDir()
-	err := setupGitRepo(tmpDir)
+	err := testGit.SetupGitRepo(tmpDir)
 	require.NoError(t, err)
 
 	// Create a mock cobra command
@@ -91,7 +93,7 @@ func TestRemoveHook(t *testing.T) {
 
 	// Create hook directories
 	hooksDir := filepath.Join(tmpDir, ".git", "hooks")
-	err = os.MkdirAll(hooksDir, 0600)
+	err = os.MkdirAll(hooksDir, 0755)
 	require.NoError(t, err)
 
 	// Create a gommitlint hook

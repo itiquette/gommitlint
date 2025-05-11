@@ -7,12 +7,17 @@ package validation_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
+	"time"
 
+	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/require"
+
+	"github.com/itiquette/gommitlint/internal/contextx"
 	"github.com/itiquette/gommitlint/internal/core/validation"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/errors"
-	"github.com/stretchr/testify/require"
 )
 
 // MockRule is a mock implementation of the Rule interface for testing.
@@ -126,7 +131,32 @@ func (p *MockRuleProvider) WithCustomRule(_ domain.Rule) domain.RuleProvider {
 	return p
 }
 
-// TestValidationEngine_ValidateCommit tests the validation of a single commit.
+// createTestContext creates a context with a logger for testing.
+func createTestContext(t *testing.T) context.Context {
+	t.Helper()
+
+	// Create a context
+	ctx := context.Background()
+
+	// Create a logger for testing
+	writer := zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339}
+	logger := zerolog.New(writer).Level(zerolog.TraceLevel).With().Timestamp().Logger()
+
+	// Add logger to context using zerolog's context mechanism
+	ctx = logger.WithContext(ctx)
+
+	// Also add it through our contextx key system for compatibility
+	ctx = contextx.WithValue(ctx, contextx.LoggerKey, &logger)
+
+	// Add CLI options to context
+	options := domain.CLIOptionsFromContext(ctx)
+	options.Verbosity = "trace"
+	options.VerbosityWithCaller = true
+	ctx = domain.WithCLIOptions(ctx, options)
+
+	return ctx
+}
+
 func TestValidationEngine_ValidateCommit(t *testing.T) {
 	// Create mock rules
 	passingRule := NewMockRule("PassingRule", true)
@@ -139,7 +169,7 @@ func TestValidationEngine_ValidateCommit(t *testing.T) {
 	_ = &MockAnalyzer{}
 
 	// Create validation engine with custom rule provider
-	engine := validation.NewEngine(provider)
+	engine := validation.CreateTestEngine(provider)
 
 	// Create test commit
 	commit := domain.CommitInfo{
@@ -148,8 +178,11 @@ func TestValidationEngine_ValidateCommit(t *testing.T) {
 		Message: "This is a test commit",
 	}
 
+	// Create context with logger
+	ctx := createTestContext(t)
+
 	// Validate commit
-	result := engine.ValidateCommit(context.Background(), commit)
+	result := engine.ValidateCommit(ctx, commit)
 
 	// Assert result
 	require.Equal(t, commit, result.CommitInfo, "CommitInfo should be the same")
@@ -196,8 +229,7 @@ func TestValidationEngine_ValidateCommits(t *testing.T) {
 	_ = &MockAnalyzer{}
 
 	// Create validation engine with custom rule provider
-	engine := validation.NewEngine(provider)
-
+	engine := validation.CreateTestEngine(provider)
 	// Create test commits
 	commits := []domain.CommitInfo{
 		{
@@ -217,8 +249,11 @@ func TestValidationEngine_ValidateCommits(t *testing.T) {
 		},
 	}
 
+	// Create context with logger
+	ctx := createTestContext(t)
+
 	// Validate commits
-	results := engine.ValidateCommits(context.Background(), commits)
+	results := engine.ValidateCommits(ctx, commits)
 
 	// Assert results
 	require.Equal(t, 3, results.TotalCommits, "Should have validated all commits")
@@ -274,19 +309,15 @@ func TestValidationEngine_Timeout(t *testing.T) {
 	_ = &MockAnalyzer{}
 
 	// Create validation engine with custom rule provider
-	engine := validation.NewEngine(provider)
-
-	// Create test commit
+	engine := validation.CreateTestEngine(provider)
 	commit := domain.CommitInfo{
 		Hash:    "testcommit",
 		Subject: "Test commit",
 		Message: "This is a test commit",
 	}
 
-	// Use a context with timeout
-	// Normally we'd create a context with timeout, but for
-	// testing purposes we'll just use a non-canceling context
-	ctx := context.Background()
+	// Create context with logger
+	ctx := createTestContext(t)
 
 	// Validate commit - in a real test, this would time out
 	result := engine.ValidateCommit(ctx, commit)
@@ -362,6 +393,12 @@ func (r *MockCommitsAheadRule) Help(_ []errors.ValidationError) string {
 func (r *MockCommitsAheadRule) Errors() []errors.ValidationError {
 	ctx := context.Background()
 
+	// Create a context with logger if we ever want to trace this
+	writer := zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339}
+	logger := zerolog.New(writer).Level(zerolog.TraceLevel).With().Timestamp().Logger()
+	ctx = logger.WithContext(ctx)
+	ctx = contextx.WithValue(ctx, contextx.LoggerKey, &logger)
+
 	return r.Validate(ctx, domain.CommitInfo{})
 }
 
@@ -406,7 +443,7 @@ func TestValidationEngine_CommitsAheadMessages(t *testing.T) {
 			provider := NewMockRuleProvider([]domain.Rule{rule})
 
 			// Create the engine
-			engine := validation.NewEngine(provider)
+			engine := validation.CreateTestEngine(provider)
 
 			// Create a dummy commit
 			commit := domain.CommitInfo{
@@ -416,7 +453,11 @@ func TestValidationEngine_CommitsAheadMessages(t *testing.T) {
 			}
 
 			// Validate
-			result := engine.ValidateCommit(context.Background(), commit)
+			// Create context with logger
+			ctx := createTestContext(t)
+
+			// Validate
+			result := engine.ValidateCommit(ctx, commit)
 
 			// Get the rule result
 			require.Len(t, result.RuleResults, 1, "Should have one rule result")

@@ -8,28 +8,30 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 	"github.com/itiquette/gommitlint/internal/infrastructure/log"
 )
 
-// CommitsAheadRule enforces a maximum number of commits ahead of a reference.
+// CommitsAheadRule validates that the current branch is not too many commits ahead
+// of the reference branch.
 type CommitsAheadRule struct {
 	baseRule         BaseRule
 	maxCommitsAhead  int
-	ref              string
+	reference        string
 	repositoryGetter func() domain.CommitAnalyzer
-	errors           []appErrors.ValidationError
+	commitsAhead     int
 }
 
 // CommitsAheadOption is a function that configures a CommitsAheadRule.
 type CommitsAheadOption func(CommitsAheadRule) CommitsAheadRule
 
-// WithMaxCommitsAhead sets the maximum number of commits allowed ahead of the reference.
-func WithMaxCommitsAhead(maxCommits int) CommitsAheadOption {
+// WithMaxCommitsAhead sets the maximum number of commits allowed ahead of the reference branch.
+func WithMaxCommitsAhead(maxCount int) CommitsAheadOption {
 	return func(r CommitsAheadRule) CommitsAheadRule {
 		result := r
-		result.maxCommitsAhead = maxCommits
+		result.maxCommitsAhead = maxCount
 
 		return result
 	}
@@ -39,13 +41,13 @@ func WithMaxCommitsAhead(maxCommits int) CommitsAheadOption {
 func WithReference(ref string) CommitsAheadOption {
 	return func(r CommitsAheadRule) CommitsAheadRule {
 		result := r
-		result.ref = ref
+		result.reference = ref
 
 		return result
 	}
 }
 
-// WithRepositoryGetter sets the function that provides the Git repository.
+// WithRepositoryGetter sets the function used to get the repository.
 func WithRepositoryGetter(getter func() domain.CommitAnalyzer) CommitsAheadOption {
 	return func(r CommitsAheadRule) CommitsAheadRule {
 		result := r
@@ -55,15 +57,16 @@ func WithRepositoryGetter(getter func() domain.CommitAnalyzer) CommitsAheadOptio
 	}
 }
 
-// NewCommitsAheadRule creates a new CommitsAheadRule with the given options.
+// NewCommitsAheadRule creates a new rule for checking commits ahead of a reference branch.
 func NewCommitsAheadRule(options ...CommitsAheadOption) CommitsAheadRule {
+	// Create a rule with default values
 	rule := CommitsAheadRule{
 		baseRule:        NewBaseRule("CommitsAhead"),
-		ref:             "main", // Default reference branch
-		maxCommitsAhead: 5,      // Default maximum commits ahead
-		errors:          make([]appErrors.ValidationError, 0),
+		maxCommitsAhead: 10,     // Default: 10 commits ahead is the maximum
+		reference:       "main", // Default reference branch
 	}
-	// Apply options
+
+	// Apply all options
 	for _, option := range options {
 		rule = option(rule)
 	}
@@ -71,425 +74,207 @@ func NewCommitsAheadRule(options ...CommitsAheadOption) CommitsAheadRule {
 	return rule
 }
 
-// NewCommitsAheadRuleWithConfig creates a new CommitsAheadRule using domain configuration interfaces.
-func NewCommitsAheadRuleWithConfig(config domain.RepositoryConfigProvider, analyzer domain.CommitAnalyzer) CommitsAheadRule {
-	rule := CommitsAheadRule{
-		baseRule:        NewBaseRule("CommitsAhead"),
-		ref:             "main", // Default reference branch
-		maxCommitsAhead: 5,      // Default maximum commits ahead
-		errors:          make([]appErrors.ValidationError, 0),
-	}
-	// Apply configuration if provided
-	if config != nil {
-		// Set reference branch if configured
-		if ref := config.ReferenceBranch(); ref != "" {
-			rule.ref = ref
-		}
-		// Set max commits ahead if configured
-		if maxCommits := config.MaxCommitsAhead(); maxCommits > 0 {
-			rule.maxCommitsAhead = maxCommits
-		}
-	}
-	// Set repository getter if analyzer is provided
-	if analyzer != nil {
-		rule.repositoryGetter = func() domain.CommitAnalyzer {
-			return analyzer
-		}
-	}
-
-	return rule
-}
-
-// Helper function to extract ahead count from errors.
-func extractAheadCount(errors []appErrors.ValidationError) int {
-	for _, err := range errors {
-		if countStr, exists := err.Context["ahead_count"]; exists {
-			if count, parseErr := strconv.Atoi(countStr); parseErr == nil {
-				return count
-			}
-		}
-		// Fallback to other keys
-		for _, key := range []string{"commitsahead_count", "actual_ahead_count", "commits_ahead"} {
-			if countStr, exists := err.Context[key]; exists {
-				if count, parseErr := strconv.Atoi(countStr); parseErr == nil {
-					return count
-				}
-			}
-		}
-	}
-
-	return 0 // Default if not found
-}
-
-// ValidateCommitsAheadWithState validates commits and returns errors along with updated rule state.
-func ValidateCommitsAheadWithState(ctx context.Context, rule CommitsAheadRule, _ domain.CommitInfo) ([]appErrors.ValidationError, CommitsAheadRule) {
+// Validate checks that the current branch is not too many commits ahead of the reference branch.
+// This implementation uses context to get configuration values.
+func (r CommitsAheadRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
 	logger := log.Logger(ctx)
-	logger.Trace().Str("rule", rule.Name()).Str("reference", rule.ref).Int("max_commits_ahead", rule.maxCommitsAhead).Msg("Entering ValidateCommitsAheadWithState")
+	logger.Trace().
+		Str("rule", r.Name()).
+		Str("commit_hash", commit.Hash).
+		Msg("Validating commits ahead using context configuration")
 
-	errors := make([]appErrors.ValidationError, 0)
-	result := rule // Create a copy to return
+	// Create a new rule with context configuration
+	rule := r.withContextConfig(ctx)
 
-	// Skip validation if we can't get the repository
-	if rule.repositoryGetter == nil {
-		// Create error context with rich information
-		ctx := appErrors.NewContext()
-		helpMessage := `Repository access error: Unable to access the Git repository.
-The CommitsAhead rule requires access to the Git repository to check the number of commits
-ahead of the reference branch. However, the repository object is nil, which means the
-system cannot access Git information.
-This could be caused by:
-- The current directory is not a Git repository
-- The Git repository is corrupt or missing
-- Insufficient permissions to access the repository
-- The Git binary is not installed or not in PATH
-- Internal configuration issues in the application
-To fix this issue:
-1. Ensure you are running the command from within a valid Git repository
-2. Verify that Git is properly installed and accessible
-3. Check repository permissions and integrity with 'git status'
-4. If running in CI/CD, ensure Git is available in the build environment`
-		err := appErrors.CreateRichError(
-			rule.Name(),
-			appErrors.ErrInvalidRepo,
-			"Repository object is nil",
-			helpMessage,
-			ctx,
-		)
-		errors = append(errors, err)
-		result.errors = errors
-
-		return errors, result
-	}
-
-	analyzer := rule.repositoryGetter()
-	if analyzer == nil {
-		// Create error context with rich information
-		ctx := appErrors.NewContext()
-		helpMessage := `Repository access error: The Git repository analyzer is not available.
-The CommitsAhead rule successfully obtained a repository getter function, but the function
-returned nil when called. This indicates a problem accessing or initializing the Git repository analyzer.
-This could be caused by:
-- The repository was accessible during initialization but became unavailable
-- Permission issues with the Git repository
-- A corrupted Git repository state
-- Internal application errors in the Git integration
-To fix this issue:
-1. Verify that the repository is still accessible with 'git status'
-2. Check if Git hooks or configurations have been modified unexpectedly
-3. Ensure that no other processes are locking the Git repository
-4. Try running 'git gc' to clean up the repository if it's corrupted`
-		err := appErrors.CreateRichError(
-			rule.Name(),
-			appErrors.ErrInvalidRepo,
-			"Repository object is nil - Git repository not accessible",
-			helpMessage,
-			ctx,
-		)
-		errors = append(errors, err)
-		result.errors = errors
-
-		return errors, result
-	}
-
-	// Get commits ahead
-	ahead, err := analyzer.GetCommitsAhead(ctx, rule.ref)
-	if err != nil {
-		// Create error context with rich information
-		errorCtx := appErrors.NewContext()
-		helpMessage := `Repository Operation Error: Failed to calculate commits ahead.
-The CommitsAhead rule encountered an error while trying to determine how many commits
-your current branch is ahead of the reference branch '${rule.ref}'.
-Error details: ${err.Error()}
-This could be caused by:
-- The reference branch '${rule.ref}' doesn't exist
-- Network issues when trying to access remote repository
-- Git configuration problems
-- Git repository corruption
-- Permission issues with the repository
-To fix this issue:
-1. Verify that the reference branch exists:
-   git branch -a | grep ${rule.ref}
-2. Make sure your local repository is up-to-date:
-   git fetch
-3. Check for any Git configuration issues:
-   git config --list
-4. If the reference branch is remote, ensure you have access to it:
-   git ls-remote origin ${rule.ref}
-5. Try running Git garbage collection if repository seems corrupted:
-   git gc`
-		validationErr := appErrors.CreateRichError(
-			rule.Name(),
-			"repo_access_error",
-			"Error accessing repository: "+err.Error(),
-			helpMessage,
-			errorCtx,
-		)
-		// Add additional context
-		validationErr = validationErr.WithContext("error", err.Error())
-		validationErr = validationErr.WithContext("reference", rule.ref)
-		errors = append(errors, validationErr)
-		result.errors = errors
-
-		return errors, result
-	}
-
-	// Create a status info error with ahead count
-	statusErr := appErrors.CreateBasicError(
-		rule.Name(),
-		"status_info",
-		fmt.Sprintf("HEAD is %d commit(s) ahead of %s", ahead, rule.ref),
-	).WithContext("ahead_count", strconv.Itoa(ahead))
-	errors = append(errors, statusErr)
-
-	// Check if we exceed the maximum
-	if rule.maxCommitsAhead > 0 && ahead > rule.maxCommitsAhead {
-		exceedCount := ahead - rule.maxCommitsAhead
-		helpMessage := fmt.Sprintf(`Too Many Commits Error: Your branch has too many commits ahead of '%s'.
-Your branch is currently %d commits ahead of the reference branch '%s', which exceeds
-the maximum allowed limit of %d commits. This means your branch has diverged significantly
-from the reference branch and should be synchronized.
-✅ RECOMMENDED ACTIONS:
-1. Merge the reference branch into your branch to stay up-to-date:
-   git fetch
-   git merge %s
-2. Rebase your branch onto the latest reference branch version:
-   git fetch
-   git rebase %s
-3. Squash some of your commits to reduce the total count:
-   git rebase -i HEAD~%d
-   (in the editor, change some "pick" to "squash" or "fixup")
-4. Consider creating a pull request/merge request if your feature is complete
-WHY THIS MATTERS:
-- Keeping branches in sync reduces future merge conflicts
-- Smaller, more focused branches are easier to review and merge
-- Long-lived branches can accumulate technical debt
-- Following branch hygiene helps maintain project velocity
-Current commits ahead:  %d
-Maximum allowed:        %d
-Exceeds maximum by:     %d commits`,
-			rule.ref, ahead, rule.ref, rule.maxCommitsAhead,
-			rule.ref, rule.ref, ahead, ahead, rule.maxCommitsAhead, exceedCount)
-		// Create the rich error
-		err := appErrors.CreateBasicError(
-			rule.Name(),
-			appErrors.ErrTooManyCommits,
-			fmt.Sprintf("HEAD is %d commits ahead of %s (maximum allowed: %d)",
-				ahead, rule.ref, rule.maxCommitsAhead),
-		)
-		// Add additional context using WithContext method from ValidationError
-		err = err.WithContext("ahead_count", strconv.Itoa(ahead))
-		err = err.WithContext("commits_ahead", strconv.Itoa(ahead))
-		err = err.WithContext("max_allowed", strconv.Itoa(rule.maxCommitsAhead))
-		err = err.WithContext("reference", rule.ref)
-		err = err.WithContext("exceeds_by", strconv.Itoa(exceedCount))
-		err = err.WithContext("is_feature_branch", "false") // Simplified as we don't have branch information
-		err = err.WithContext("help", helpMessage)
-		errors = append(errors, err)
-	}
-
-	result.errors = errors
-
-	return errors, result
-}
-
-func (r CommitsAheadRule) Validate(ctx context.Context, commitInfo domain.CommitInfo) []appErrors.ValidationError {
-	errors, _ := ValidateCommitsAheadWithState(ctx, r, commitInfo)
+	// Use the existing validation logic
+	errors, _ := ValidateCommitsAheadWithState(ctx, rule, commit)
 
 	return errors
 }
 
-// SetErrors sets the validation errors and returns a new rule.
-func (r CommitsAheadRule) SetErrors(errors []appErrors.ValidationError) CommitsAheadRule {
+// withContextConfig creates a new rule with configuration from context.
+func (r CommitsAheadRule) withContextConfig(ctx context.Context) CommitsAheadRule {
+	// Get configuration from context
+	cfg := config.GetConfig(ctx)
+
+	// Extract configuration values
+	maxCommitsAhead := cfg.Repository.MaxCommitsAhead
+	ref := cfg.Repository.ReferenceBranch
+
+	// Log configuration at debug level
+	logger := log.Logger(ctx)
+	logger.Debug().
+		Int("max_commits_ahead", maxCommitsAhead).
+		Str("reference", ref).
+		Msg("CommitsAhead rule configuration from context")
+
+	// Create a copy of the rule
 	result := r
-	result.errors = errors
 
-	// Also update baseRule for consistency
-	baseRule := r.baseRule
+	// Update with context configuration
+	result.maxCommitsAhead = maxCommitsAhead
+	result.reference = ref
 
-	for _, err := range errors {
-		// Skip status info "errors" that aren't real validation errors
-		if code := appErrors.ValidationErrorCode(err.Code); code != "status_info" {
-			baseRule = baseRule.WithError(err)
-		}
-	}
-
-	result.baseRule = baseRule
+	// Keep the repository getter from the original rule
+	// (We don't replace it with contextual configuration)
 
 	return result
 }
 
-// Errors returns the validation errors for the rule.
-func (r CommitsAheadRule) Errors() []appErrors.ValidationError {
-	// Filter out status info "errors" that aren't real validation errors
-	realErrors := make([]appErrors.ValidationError, 0)
+// ValidateCommitsAheadWithState validates the commits ahead and returns both the errors and an updated rule.
+func ValidateCommitsAheadWithState(ctx context.Context, rule CommitsAheadRule, commit domain.CommitInfo) ([]appErrors.ValidationError, CommitsAheadRule) {
+	// Log validation at trace level
+	log.Logger(ctx).Trace().
+		Str("rule", rule.Name()).
+		Str("commit_hash", commit.Hash).
+		Msg("Validating commits ahead")
+	// Start with a clean rule
+	result := rule
+	result.baseRule = rule.baseRule.WithClearedErrors().WithRun()
 
-	for _, err := range r.errors {
-		if code := appErrors.ValidationErrorCode(err.Code); code != "status_info" {
-			realErrors = append(realErrors, err)
-		}
+	// Get the repository
+	if rule.repositoryGetter == nil {
+		// Without a repository getter, we can't validate
+		return result.baseRule.Errors(), result
 	}
 
-	return realErrors
-}
+	repository := rule.repositoryGetter()
+	if repository == nil {
+		// Without a repository, we can't validate
+		validationErr := appErrors.CreateBasicError(
+			result.baseRule.Name(),
+			appErrors.ErrInvalidRepo,
+			"Repository object is nil",
+		)
+		result.baseRule = result.baseRule.WithError(validationErr)
 
-// HasErrors returns true if there are any validation errors.
-func (r CommitsAheadRule) HasErrors() bool {
-	// Check for real errors, not status info
-	for _, err := range r.errors {
-		if code := appErrors.ValidationErrorCode(err.Code); code != "status_info" {
-			return true
-		}
+		return result.baseRule.Errors(), result
 	}
 
-	return false
-}
+	// Get the number of commits ahead
+	commitsAhead, err := repository.GetCommitsAhead(ctx, rule.reference)
+	if err != nil {
+		// Handle errors from the repository
+		validationErr := appErrors.CreateBasicError(
+			result.baseRule.Name(),
+			appErrors.ErrGitOperationFailed,
+			"Failed to get commits ahead of reference",
+		).WithContext("reference", rule.reference).WithContext("error", err.Error())
 
-// Result returns a concise result message.
-func (r CommitsAheadRule) Result(errors []appErrors.ValidationError) string {
-	// Extract ahead count from errors
-	aheadCount := extractAheadCount(errors)
+		result.baseRule = result.baseRule.WithError(validationErr)
 
-	// Check for validation errors
-	for _, err := range errors {
-		// Skip status info errors
-		if code := appErrors.ValidationErrorCode(err.Code); code == "status_info" {
-			continue
-		}
-
-		// Format appropriate message based on error code
-		if code := appErrors.ValidationErrorCode(err.Code); code == appErrors.ErrTooManyCommits {
-			return fmt.Sprintf("HEAD is %d commits ahead of %s (exceeds limit of %d)",
-				aheadCount, r.ref, r.maxCommitsAhead)
-		} else if code == appErrors.ErrInvalidRepo || code == appErrors.ErrGitOperationFailed {
-			return "Repository access error - " + err.Message
-		}
+		return result.baseRule.Errors(), result
 	}
 
-	// Use the extracted ahead count for result reporting
-	if aheadCount > r.maxCommitsAhead {
-		return fmt.Sprintf("HEAD is %d commits ahead of %s (exceeds limit of %d)",
-			aheadCount, r.ref, r.maxCommitsAhead)
-	} else if aheadCount == 0 {
-		return "HEAD is at same commit as " + r.ref
+	// Update the rule with the number of commits ahead
+	result.commitsAhead = commitsAhead
+
+	// Validate against the maximum
+	if rule.maxCommitsAhead > 0 && commitsAhead > rule.maxCommitsAhead {
+		validationErr := appErrors.CreateBasicError(
+			result.baseRule.Name(),
+			appErrors.ErrTooManyCommits,
+			fmt.Sprintf("Branch is %d commits ahead of reference branch '%s'",
+				commitsAhead, rule.reference),
+		).
+			WithContext("reference", rule.reference).
+			WithContext("commits_ahead", strconv.Itoa(commitsAhead)).
+			WithContext("max_allowed", strconv.Itoa(rule.maxCommitsAhead))
+
+		result.baseRule = result.baseRule.WithError(validationErr)
 	}
 
-	return fmt.Sprintf("HEAD is %d commit(s) ahead of %s (within limit)", aheadCount, r.ref)
-}
+	// Update the rule with the number of commits ahead even if no error
+	result.commitsAhead = commitsAhead
 
-// AheadCount returns the number of commits ahead of the reference branch.
-func (r CommitsAheadRule) AheadCount(errors []appErrors.ValidationError) int {
-	return extractAheadCount(errors)
-}
-
-// VerboseResult returns a more detailed explanation for verbose mode.
-func (r CommitsAheadRule) VerboseResult(errors []appErrors.ValidationError) string {
-	// Extract ahead count from errors
-	aheadCount := extractAheadCount(errors)
-
-	// Check for validation errors
-	for _, err := range errors {
-		// Skip status info errors
-		if code := appErrors.ValidationErrorCode(err.Code); code == "status_info" {
-			continue
-		}
-
-		// Format appropriate message based on error code
-		if code := appErrors.ValidationErrorCode(err.Code); code == appErrors.ErrTooManyCommits {
-			return fmt.Sprintf(
-				"HEAD is currently %d commits ahead of %s (maximum allowed: %d). Consider merging or rebasing with %s.",
-				aheadCount, r.ref, r.maxCommitsAhead, r.ref)
-		} else if code == appErrors.ErrInvalidRepo || code == appErrors.ErrGitOperationFailed {
-			return "Repository access error - " + err.Message
-		}
-	}
-
-	// Use the extracted ahead count for result reporting
-	if aheadCount > r.maxCommitsAhead {
-		return fmt.Sprintf(
-			"HEAD is currently %d commits ahead of %s (maximum allowed: %d). Consider merging or rebasing with %s.",
-			aheadCount, r.ref, r.maxCommitsAhead, r.ref)
-	} else if aheadCount == 0 {
-		return fmt.Sprintf("HEAD is currently at same commit as %s (limit is %d)",
-			r.ref, r.maxCommitsAhead)
-	}
-
-	return fmt.Sprintf("HEAD is currently %d commit(s) ahead of %s (within limit of %d)",
-		aheadCount, r.ref, r.maxCommitsAhead)
-}
-
-// Help returns guidance on how to fix the rule violation.
-func (r CommitsAheadRule) Help(errors []appErrors.ValidationError) string {
-	// Filter out status info errors
-	realErrors := make([]appErrors.ValidationError, 0)
-
-	for _, err := range errors {
-		if code := appErrors.ValidationErrorCode(err.Code); code != "status_info" {
-			realErrors = append(realErrors, err)
-		}
-	}
-
-	// Return early if no real errors, including if errors slice is empty
-	if len(realErrors) == 0 {
-		// Check if the first error has a help message
-		for _, err := range errors {
-			if help, ok := err.Context["help"]; ok && help != "" {
-				return help
-			}
-		}
-
-		// For test cases that expect "No errors to fix"
-		if len(errors) == 0 {
-			return "No errors to fix"
-		}
-
-		// For status errors, still provide a useful message
-		return fmt.Sprintf("Your branch is in sync with %s. No action required.", r.ref)
-	}
-
-	// Extract ahead count from errors
-	aheadCount := extractAheadCount(errors)
-
-	// Find the first real error
-	validationErr := realErrors[0]
-	code := appErrors.ValidationErrorCode(validationErr.Code)
-
-	// Check if there's a help context in the error
-	if help, ok := validationErr.Context["help"]; ok && help != "" {
-		return help
-	}
-
-	if code == appErrors.ErrTooManyCommits {
-		return fmt.Sprintf(`Your branch is too far ahead of %s. To fix this, either:
-1. Merge %s into your branch:
-   git fetch
-   git merge %s
-2. Rebase your branch onto the latest %s:
-   git fetch
-   git rebase %s
-3. Squash some commits to reduce the total count:
-   git rebase -i HEAD~%d
-The maximum allowed commits ahead is %d, but your branch is %d commits ahead.`,
-			r.ref, r.ref, r.ref, r.ref, r.ref, aheadCount, r.maxCommitsAhead, aheadCount)
-	}
-
-	if code == appErrors.ErrInvalidRepo {
-		return "The Git repository is not accessible. Ensure you are in a valid Git repository and have appropriate permissions."
-	}
-
-	if code == appErrors.ErrInvalidConfig {
-		return "Specify a valid reference branch name in the configuration."
-	}
-
-	if code == appErrors.ErrGitOperationFailed {
-		return "Ensure your repository is valid and accessible, then try again."
-	}
-
-	// Default help for any other error cases
-	return fmt.Sprintf(`Ensure your branch is not more than %d commits ahead of %s by regularly merging or rebasing.
-For better git hygiene, consider using smaller, more focused commits.`, r.maxCommitsAhead, r.ref)
+	return result.baseRule.Errors(), result
 }
 
 // Name returns the rule name.
 func (r CommitsAheadRule) Name() string {
 	return r.baseRule.Name()
+}
+
+// Errors returns all validation errors found by this rule.
+func (r CommitsAheadRule) Errors() []appErrors.ValidationError {
+	return r.baseRule.Errors()
+}
+
+// HasErrors returns true if the rule has found any errors.
+func (r CommitsAheadRule) HasErrors() bool {
+	return r.baseRule.HasErrors()
+}
+
+// SetErrors sets the errors for this rule and returns an updated rule.
+func (r CommitsAheadRule) SetErrors(errors []appErrors.ValidationError) CommitsAheadRule {
+	result := r
+	result.baseRule = r.baseRule.WithClearedErrors()
+
+	for _, err := range errors {
+		result.baseRule = result.baseRule.WithError(err)
+	}
+
+	return result
+}
+
+// Result returns a concise validation result.
+func (r CommitsAheadRule) Result(errors []appErrors.ValidationError) string {
+	// Check for repository error first
+	for _, err := range errors {
+		if err.Code == string(appErrors.ErrInvalidRepo) {
+			return "Repository object is nil"
+		}
+	}
+
+	if len(errors) > 0 {
+		return fmt.Sprintf("Branch is %d commits ahead of reference branch '%s'",
+			r.commitsAhead, r.reference)
+	}
+
+	return fmt.Sprintf("Branch is %d commits ahead of reference branch '%s'",
+		r.commitsAhead, r.reference)
+}
+
+// VerboseResult returns a more detailed explanation for verbose mode.
+func (r CommitsAheadRule) VerboseResult(errors []appErrors.ValidationError) string {
+	// Check for repository error first
+	for _, err := range errors {
+		if err.Code == string(appErrors.ErrInvalidRepo) {
+			return "Repository object is nil - unable to analyze commits ahead"
+		}
+	}
+
+	if len(errors) > 0 {
+		return fmt.Sprintf("❌ Branch is %d commits ahead of reference branch '%s' (maximum allowed: %d)",
+			r.commitsAhead, r.reference, r.maxCommitsAhead)
+	}
+
+	return fmt.Sprintf("✓ Branch is %d commits ahead of reference branch '%s' (within limit of %d)",
+		r.commitsAhead, r.reference, r.maxCommitsAhead)
+}
+
+// Help returns guidance for fixing rule violations.
+func (r CommitsAheadRule) Help(errors []appErrors.ValidationError) string {
+	if len(errors) == 0 {
+		return `This rule compares your current branch with a reference branch (usually 'main').
+It ensures your branch doesn't diverge too much from the reference, which can make integrating 
+your changes more difficult. If your branch is too far ahead, consider merging or rebasing.`
+	}
+
+	// Check for specific error types
+	for _, err := range errors {
+		if err.Code == string(appErrors.ErrInvalidRepo) {
+			return `Repository Access Error: Unable to access the Git repository for commit analysis.
+Make sure you are in a valid Git repository and have appropriate permissions.`
+		}
+	}
+
+	return fmt.Sprintf(`Commits Ahead Error: Your branch has too many commits compared to reference branch '%s'.
+Your branch is %d commits ahead of reference branch '%s', which exceeds the maximum of %d.
+
+Consider one of the following:
+1. Merge '%s' into your branch to reduce the divergence
+2. Rebase your branch onto '%s'
+3. Adjust the maxCommitsAhead configuration if this limit is too restrictive`,
+		r.reference, r.commitsAhead, r.reference, r.maxCommitsAhead, r.reference, r.reference)
 }

@@ -89,9 +89,17 @@ func (g Generator) GenerateReport(ctx context.Context, results domain.Validation
 	// Use the injected formatter with context
 	report := g.formatter.Format(ctx, results)
 
+	// Log the result size at debug level
+	logger.Debug().Int("report_length", len(report)).Msg("Generated formatted report")
+
 	// Use a pure function to write the report
 	if err := writeReport(g.options.Writer, report); err != nil {
-		return err
+		return fmt.Errorf("write error: %w", err)
+	}
+
+	// Force flush os.Stdout to ensure all content is written
+	if g.options.Writer == os.Stdout {
+		os.Stdout.Sync()
 	}
 
 	// Use a pure function to handle failure cases
@@ -100,9 +108,22 @@ func (g Generator) GenerateReport(ctx context.Context, results domain.Validation
 
 // writeReport is a pure function to write content to a writer.
 func writeReport(writer io.Writer, content string) error {
-	_, err := writer.Write([]byte(content))
+	// If there's nothing to write, consider it success (empty reports are valid)
+	if len(content) == 0 {
+		return nil
+	}
 
-	return err
+	// Write the content to the writer
+	bytesWritten, err := writer.Write([]byte(content))
+	if err != nil {
+		return fmt.Errorf("failed to write %d bytes: %w", len(content), err)
+	}
+
+	if bytesWritten != len(content) {
+		return fmt.Errorf("short write: wrote %d of %d bytes", bytesWritten, len(content))
+	}
+
+	return nil
 }
 
 // handleFailure is a pure function that returns appropriate error for failed validations.

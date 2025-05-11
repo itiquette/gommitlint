@@ -36,15 +36,10 @@ func TestCommitsAheadRuleNilRepo(t *testing.T) {
 
 	// Validate with context using the value-based approach
 	ctx := context.Background()
-	errors, updatedRule := rules.ValidateCommitsAheadWithState(ctx, rule, commit)
+	errors, _ := rules.ValidateCommitsAheadWithState(ctx, rule, commit)
 
-	// Verify the error
-	require.NotEmpty(t, errors)
-	validationErr := errors[0]
-	require.Equal(t, string(appErrors.ErrInvalidRepo), validationErr.Code)
-	require.Contains(t, updatedRule.Result(errors), "Repository access error")
-	require.Contains(t, updatedRule.VerboseResult(errors), "Repository access error")
-	require.Contains(t, updatedRule.Help(errors), "Repository access error")
+	// This should not generate any errors because the repositoryGetter is nil
+	require.Empty(t, errors, "No errors expected when repositoryGetter is nil")
 }
 
 func TestCommitsAheadRuleNilRepoInsideGetter(t *testing.T) {
@@ -67,9 +62,9 @@ func TestCommitsAheadRuleNilRepoInsideGetter(t *testing.T) {
 	require.NotEmpty(t, errors)
 	validationErr := errors[0]
 	require.Equal(t, string(appErrors.ErrInvalidRepo), validationErr.Code)
-	require.Contains(t, updatedRule.Result(errors), "Repository access error")
-	require.Contains(t, updatedRule.VerboseResult(errors), "Repository access error")
-	require.Contains(t, updatedRule.Help(errors), "Repository access error")
+	require.Contains(t, validationErr.Message, "Repository object is nil")
+	require.Contains(t, updatedRule.Result(errors), "Repository object is nil")
+	require.Contains(t, updatedRule.Help(errors), "Repository Access Error")
 }
 
 func TestCommitsAheadRuleOptions(t *testing.T) {
@@ -87,16 +82,20 @@ func TestCommitsAheadRuleOptions(t *testing.T) {
 	// Create a dummy commit info
 	commit := domain.CommitInfo{}
 
-	// Validate with context using value semantics
+	// Add configuration to context
 	ctx := context.Background()
+	ctx = config.WithConfig(ctx, config.DefaultConfig().
+		WithRepository(config.RepositoryConfig{
+			MaxCommitsAhead: 10,
+			ReferenceBranch: "main",
+		}))
+
+	// Validate with context using value semantics
 	errors, updatedRule := rules.ValidateCommitsAheadWithState(ctx, rule, commit)
 
-	// Check that we have the status info error, but no real validation errors
-	require.NotEmpty(t, errors)
-	// Check that only status info errors are present
-	for _, err := range errors {
-		require.Equal(t, "status_info", err.Code)
-	}
+	// No validation errors should be present since commits ahead is within limit
+	// We used to check for status_info errors, but those were removed in the updated implementation
+	require.Empty(t, errors, "No validation errors should occur when commits ahead is within limit")
 
 	require.Equal(t, "CommitsAhead", updatedRule.Name())
 }
@@ -116,28 +115,26 @@ func TestCommitsAheadRuleTooManyCommits(t *testing.T) {
 	// Create a dummy commit info
 	commit := domain.CommitInfo{}
 
-	// Validate with context using value semantics
+	// Add configuration to context
 	ctx := context.Background()
+	ctx = config.WithConfig(ctx, config.DefaultConfig().
+		WithRepository(config.RepositoryConfig{
+			MaxCommitsAhead: 4, // Match the rule's limit
+			ReferenceBranch: "main",
+		}))
+
+	// Validate with context using value semantics
 	errors, _ := rules.ValidateCommitsAheadWithState(ctx, rule, commit)
 
-	// Check for errors - we need at least one error with the "too_many_commits" code
+	// Check for errors - we should have exactly one error with the ErrTooManyCommits code
 	require.NotEmpty(t, errors)
+	require.Len(t, errors, 1, "Should have exactly one error")
 
-	// Find the real error, not the status info one
-	var validationErr appErrors.ValidationError
-
-	for _, err := range errors {
-		if err.Code == string(appErrors.ErrTooManyCommits) {
-			validationErr = err
-
-			break
-		}
-	}
-
-	// Now check the real error
+	validationErr := errors[0]
 	require.Equal(t, string(appErrors.ErrTooManyCommits), validationErr.Code)
-	require.Contains(t, validationErr.Message, "HEAD is 5 commits ahead")
-	require.Contains(t, validationErr.Message, "maximum allowed: 4")
+	// Error message format is "Branch is X commits ahead of reference branch 'Y'"
+	require.Contains(t, validationErr.Message, "Branch is 5 commits ahead")
+	require.Contains(t, validationErr.Message, "of reference branch 'main'")
 
 	// Create a rule with errors for testing help text
 	ruleWithErrors := rules.NewCommitsAheadRule(
@@ -146,7 +143,12 @@ func TestCommitsAheadRuleTooManyCommits(t *testing.T) {
 	)
 	ruleWithErrors = ruleWithErrors.SetErrors(errors)
 
-	require.Contains(t, ruleWithErrors.Help(errors), "to reduce the total count")
+	// Check that the help message contains useful information
+	helpText := ruleWithErrors.Help(errors)
+	require.Contains(t, helpText, "Commits Ahead Error")
+	require.Contains(t, helpText, "Your branch has too many commits")
+	require.Contains(t, helpText, "Merge")
+	require.Contains(t, helpText, "Rebase")
 }
 
 func TestCommitsAheadHelpMessage(t *testing.T) {
@@ -162,133 +164,154 @@ func TestCommitsAheadHelpMessage(t *testing.T) {
 			}),
 		)
 
-		// Validate to update the rule state
+		// Add configuration to context
 		ctx := context.Background()
+		ctx = config.WithConfig(ctx, config.DefaultConfig().
+			WithRepository(config.RepositoryConfig{
+				MaxCommitsAhead: 5,
+				ReferenceBranch: "main",
+			}))
+
+		// Validate to update the rule state
 		validationErrors, rule := rules.ValidateCommitsAheadWithState(ctx, rule, domain.CommitInfo{})
 
-		// Check the help message - since these are all status_info errors, should get "Your branch is in sync" message
-		helpMsg := rule.Help(validationErrors)
-		require.Contains(t, helpMsg, "Your branch is in sync with main")
+		// With the new implementation, a commit within limits should have no errors
+		require.Empty(t, validationErrors, "No validation errors should occur when commits ahead is within limit")
 
-		// Special case for empty errors array
-		emptyErrors := []appErrors.ValidationError{}
-		emptyHelpMsg := rule.Help(emptyErrors)
-		require.Equal(t, "No errors to fix", emptyHelpMsg)
+		// Check the help message - for no errors, we should get general help about the rule
+		helpMsg := rule.Help(validationErrors)
+		require.Contains(t, helpMsg, "This rule compares your current branch with a reference branch")
 
 		// Now test the error case
+		ctx = context.Background()
+		ctx = config.WithConfig(ctx, config.DefaultConfig().
+			WithRepository(config.RepositoryConfig{
+				MaxCommitsAhead: 5,
+				ReferenceBranch: "main",
+			}))
+
 		errorRule := rules.NewCommitsAheadRule(
 			rules.WithReference("main"),
 			rules.WithMaxCommitsAhead(5),
+			rules.WithRepositoryGetter(func() domain.CommitAnalyzer {
+				return &mockCommitAnalyzer{
+					commitsAhead: 10, // Exceeds limit
+				}
+			}),
 		)
 
-		// Create a custom error
-		err := appErrors.CreateBasicError(
-			"CommitsAhead",
-			appErrors.ErrTooManyCommits,
-			"HEAD is 10 commits ahead of main (maximum allowed: 5)",
-		).WithContext("commits_ahead", "10")
-
-		// Make a slice with the error
-		errorsWithTooMany := []appErrors.ValidationError{err}
-
-		// Set the errors on the rule
-		errorRule = errorRule.SetErrors(errorsWithTooMany)
+		// Get validation errors
+		errorsWithTooMany, _ := rules.ValidateCommitsAheadWithState(ctx, errorRule, domain.CommitInfo{})
+		require.NotEmpty(t, errorsWithTooMany, "Should have validation errors")
 
 		// Check the help message for error state
 		errorHelpMsg := errorRule.Help(errorsWithTooMany)
-		require.NotContains(t, errorHelpMsg, "No errors to fix")
-		require.Contains(t, errorHelpMsg, "Your branch is too far ahead")
-		require.Contains(t, errorHelpMsg, "merge")
-		require.Contains(t, errorHelpMsg, "rebase")
+		require.Contains(t, errorHelpMsg, "Commits Ahead Error")
+		require.Contains(t, errorHelpMsg, "Your branch has too many commits")
+		require.Contains(t, errorHelpMsg, "Merge")
+		require.Contains(t, errorHelpMsg, "Rebase")
 	})
 }
 
 func TestCommitsAheadResultMessage(t *testing.T) {
 	t.Run("result message matches error state", func(t *testing.T) {
 		tests := []struct {
-			name            string
-			commitsAhead    int
-			maxCommitsAhead int
-			errorMessage    string
-			errorCode       appErrors.ValidationErrorCode
-			expectedMessage string
-			hasErrors       bool
+			name              string
+			commitsAhead      int
+			maxCommitsAhead   int
+			errorCode         appErrors.ValidationErrorCode
+			expectedInMessage string // What the error message should contain
+			hasErrors         bool
 		}{
 			{
-				name:            "within limit",
-				commitsAhead:    3,
-				maxCommitsAhead: 5,
-				expectedMessage: "HEAD is 3 commit(s) ahead of main",
-				hasErrors:       false,
+				name:              "within limit",
+				commitsAhead:      3,
+				maxCommitsAhead:   5,
+				expectedInMessage: "Branch is 3 commits ahead of reference branch 'main'",
+				hasErrors:         false,
 			},
 			{
-				name:            "exceeds limit",
-				commitsAhead:    10,
-				maxCommitsAhead: 5,
-				errorCode:       appErrors.ErrTooManyCommits,
-				errorMessage:    "HEAD is 10 commits ahead of main (maximum allowed: 5)",
-				expectedMessage: "HEAD is 10 commits ahead of main",
-				hasErrors:       true,
+				name:              "exceeds limit",
+				commitsAhead:      10,
+				maxCommitsAhead:   5,
+				errorCode:         appErrors.ErrTooManyCommits,
+				expectedInMessage: "Branch is 10 commits ahead",
+				hasErrors:         true,
 			},
 			{
-				name:            "repository error",
-				commitsAhead:    0,
-				maxCommitsAhead: 5,
-				errorCode:       appErrors.ErrInvalidRepo,
-				errorMessage:    "Repository object is nil",
-				expectedMessage: "Repository access error",
-				hasErrors:       true,
+				name:              "repository error",
+				commitsAhead:      0,
+				maxCommitsAhead:   5,
+				errorCode:         appErrors.ErrInvalidRepo,
+				expectedInMessage: "Repository object is nil",
+				hasErrors:         true,
 			},
 		}
 
 		for _, testCase := range tests {
 			t.Run(testCase.name, func(t *testing.T) {
-				// Create a rule
-				rule := rules.NewCommitsAheadRule(
-					rules.WithReference("main"),
-					rules.WithMaxCommitsAhead(testCase.maxCommitsAhead),
-				)
+				ctx := context.Background()
+				// Add configuration to context
+				ctx = config.WithConfig(ctx, config.DefaultConfig().
+					WithRepository(config.RepositoryConfig{
+						MaxCommitsAhead: testCase.maxCommitsAhead,
+						ReferenceBranch: "main",
+					}))
+
+				var rule rules.CommitsAheadRule
 
 				var errors []appErrors.ValidationError
-				// Set up errors if needed
+
 				if testCase.hasErrors {
-					err := appErrors.CreateBasicError(
-						"CommitsAhead",
-						testCase.errorCode,
-						testCase.errorMessage,
-					)
-
-					// Add context for commits ahead error
-					if testCase.errorCode == appErrors.ErrTooManyCommits {
-						err = err.WithContext("commits_ahead", "10")
+					if testCase.errorCode == appErrors.ErrInvalidRepo {
+						// For repository error case
+						rule = rules.NewCommitsAheadRule(
+							rules.WithReference("main"),
+							rules.WithMaxCommitsAhead(testCase.maxCommitsAhead),
+							rules.WithRepositoryGetter(func() domain.CommitAnalyzer {
+								return nil // This will cause a repository error
+							}),
+						)
+					} else if testCase.errorCode == appErrors.ErrTooManyCommits {
+						// For too many commits case
+						rule = rules.NewCommitsAheadRule(
+							rules.WithReference("main"),
+							rules.WithMaxCommitsAhead(testCase.maxCommitsAhead),
+							rules.WithRepositoryGetter(func() domain.CommitAnalyzer {
+								return &mockCommitAnalyzer{
+									commitsAhead: testCase.commitsAhead, // This exceeds the limit
+								}
+							}),
+						)
 					}
-
-					errors = []appErrors.ValidationError{err}
-					rule = rule.SetErrors(errors)
 				} else {
-					// For the success case, we need to simulate a successful validation
-					// which would set the ahead count in the rule
-					analyzer := &mockCommitAnalyzer{commitsAhead: testCase.commitsAhead}
+					// For success case
 					rule = rules.NewCommitsAheadRule(
 						rules.WithReference("main"),
 						rules.WithMaxCommitsAhead(testCase.maxCommitsAhead),
 						rules.WithRepositoryGetter(func() domain.CommitAnalyzer {
-							return analyzer
+							return &mockCommitAnalyzer{
+								commitsAhead: testCase.commitsAhead, // This is within the limit
+							}
 						}),
 					)
+				}
 
-					// Validate to update the rule state
-					ctx := context.Background()
-					errors, rule = rules.ValidateCommitsAheadWithState(ctx, rule, domain.CommitInfo{})
+				// Validate to get errors
+				errors, rule = rules.ValidateCommitsAheadWithState(ctx, rule, domain.CommitInfo{})
+
+				// Check presence of errors matches expectation
+				if testCase.hasErrors {
+					require.NotEmpty(t, errors, "Expected errors but got none")
 				}
 
 				// Check the result message
 				result := rule.Result(errors)
-				require.Contains(t, result, testCase.expectedMessage, "Result message should match expected")
+				require.Contains(t, result, testCase.expectedInMessage, "Result message should contain expected text")
 
-				// For error cases, the message should clearly indicate a problem
-				if testCase.hasErrors && testCase.errorCode == appErrors.ErrInvalidRepo {
-					require.NotContains(t, result, "HEAD is 0 commit", "Error result should not use 'HEAD is X commit' format")
+				// For the repository error case, we have a specific check
+				if testCase.errorCode == appErrors.ErrInvalidRepo {
+					require.Contains(t, result, "Repository object is nil")
 				}
 			})
 		}
@@ -306,10 +329,11 @@ func TestCommitsAheadRuleWithConfig(t *testing.T) {
 		{
 			name: "commits ahead check enabled, within limit",
 			configSetup: func() config.Config {
-				return config.NewConfig().
-					WithCheckCommitsAhead(true).
-					WithMaxCommitsAhead(5).
-					WithReferenceBranch("main")
+				return config.DefaultConfig().
+					WithRepository(config.RepositoryConfig{
+						MaxCommitsAhead: 5,
+						ReferenceBranch: "main",
+					})
 			},
 			analyzer: &mockCommitAnalyzer{
 				commitsAhead: 3,
@@ -321,10 +345,11 @@ func TestCommitsAheadRuleWithConfig(t *testing.T) {
 		{
 			name: "commits ahead check enabled, exceeds limit",
 			configSetup: func() config.Config {
-				return config.NewConfig().
-					WithCheckCommitsAhead(true).
-					WithMaxCommitsAhead(5).
-					WithReferenceBranch("main")
+				return config.DefaultConfig().
+					WithRepository(config.RepositoryConfig{
+						MaxCommitsAhead: 5,
+						ReferenceBranch: "main",
+					})
 			},
 			analyzer: &mockCommitAnalyzer{
 				commitsAhead: 8,
@@ -336,10 +361,11 @@ func TestCommitsAheadRuleWithConfig(t *testing.T) {
 		{
 			name: "commits ahead check disabled",
 			configSetup: func() config.Config {
-				return config.NewConfig().
-					WithCheckCommitsAhead(false).
-					WithMaxCommitsAhead(5).
-					WithReferenceBranch("main")
+				return config.DefaultConfig().
+					WithRepository(config.RepositoryConfig{
+						MaxCommitsAhead: 0, // Disabled
+						ReferenceBranch: "main",
+					})
 			},
 			analyzer: &mockCommitAnalyzer{
 				commitsAhead: 10, // This would normally fail
@@ -351,10 +377,11 @@ func TestCommitsAheadRuleWithConfig(t *testing.T) {
 		{
 			name: "commits ahead check enabled, analyzer error",
 			configSetup: func() config.Config {
-				return config.NewConfig().
-					WithCheckCommitsAhead(true).
-					WithMaxCommitsAhead(5).
-					WithReferenceBranch("main")
+				return config.DefaultConfig().
+					WithRepository(config.RepositoryConfig{
+						MaxCommitsAhead: 5,
+						ReferenceBranch: "main",
+					})
 			},
 			analyzer: &mockCommitAnalyzer{
 				commitsAhead: 0,
@@ -366,10 +393,11 @@ func TestCommitsAheadRuleWithConfig(t *testing.T) {
 		{
 			name: "custom reference branch",
 			configSetup: func() config.Config {
-				return config.NewConfig().
-					WithCheckCommitsAhead(true).
-					WithMaxCommitsAhead(5).
-					WithReferenceBranch("develop")
+				return config.DefaultConfig().
+					WithRepository(config.RepositoryConfig{
+						MaxCommitsAhead: 5,
+						ReferenceBranch: "develop",
+					})
 			},
 			analyzer: &mockCommitAnalyzer{
 				commitsAhead: 3,
@@ -383,13 +411,30 @@ func TestCommitsAheadRuleWithConfig(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			// Create the config using the setup function
-			unifiedConfig := testCase.configSetup()
+			cfg := testCase.configSetup()
 
-			// Create rule with unified config
-			rule := rules.NewCommitsAheadRuleWithConfig(unifiedConfig, testCase.analyzer)
+			// Add the config to context
+			ctx := context.Background()
+			ctx = config.WithConfig(ctx, cfg)
 
-			// Skip validation on disabled check case
-			if !unifiedConfig.CheckCommitsAhead() {
+			// Create rule (no need to pass config as it will get it from context)
+			rule := rules.NewCommitsAheadRule(rules.WithRepositoryGetter(func() domain.CommitAnalyzer {
+				return testCase.analyzer
+			}))
+
+			// For config checks, use the config from the context
+			config := config.GetConfig(ctx)
+			if config.Repository.MaxCommitsAhead <= 0 {
+				// Create empty commit info as this rule doesn't validate the commit itself
+				commit := domain.CommitInfo{
+					Subject: "Test commit",
+					Body:    "",
+				}
+
+				// Validate commit - should return empty errors in disabled case
+				errors := rule.Validate(ctx, commit)
+				require.Empty(t, errors, "Expected no errors when commits ahead check is disabled")
+
 				return
 			}
 
@@ -399,7 +444,6 @@ func TestCommitsAheadRuleWithConfig(t *testing.T) {
 				Body:    "",
 			}
 
-			ctx := context.Background()
 			// Validate commit
 			errors := rule.Validate(ctx, commit)
 

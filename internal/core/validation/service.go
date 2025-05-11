@@ -13,12 +13,12 @@ import (
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/config"
-	"github.com/itiquette/gommitlint/internal/contextx"
-	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/infrastructure/git"
 	"github.com/itiquette/gommitlint/internal/infrastructure/log"
 )
+
+// Note: Engine implementation and methods are now defined in engine.go
 
 // Options contains options for validation.
 type Options struct {
@@ -243,6 +243,7 @@ func (s Service) ValidateWithOptions(ctx context.Context, opts Options) (domain.
 }
 
 // CreateService creates a validation service with the configuration.
+// This now uses context directly for configuration.
 func CreateService(ctx context.Context, config config.Config, repoPath string) (Service, error) {
 	logger := log.Logger(ctx)
 	logger.Trace().Str("repo_path", repoPath).Msg("Entering CreateService")
@@ -253,8 +254,8 @@ func CreateService(ctx context.Context, config config.Config, repoPath string) (
 		return Service{}, fmt.Errorf("failed to create repository adapter: %w", err)
 	}
 
-	// Create engine using rule provider
-	engine := CreateEngine(config, repoAdapter)
+	// Create engine using rule provider and context
+	engine := CreateEngine(ctx, config, repoAdapter)
 
 	// Create dependencies
 	deps := ServiceDependencies{
@@ -266,237 +267,4 @@ func CreateService(ctx context.Context, config config.Config, repoPath string) (
 
 	// Create and return service
 	return NewService(deps, config), nil
-}
-
-// CreateEngine creates a validation engine using the configuration.
-func CreateEngine(config config.Config, analyzer domain.CommitAnalyzer) Engine {
-	return Engine{
-		ruleProvider: &RulesManager{
-			config:   config,
-			analyzer: analyzer,
-		},
-	}
-}
-
-// RulesManager provides rules using rule factories.
-type RulesManager struct {
-	config   config.Config
-	analyzer domain.CommitAnalyzer
-}
-
-// GetRules returns all rules from rule factories.
-func (p *RulesManager) GetRules(ctx context.Context) []domain.Rule {
-	logger := log.Logger(ctx)
-	logger.Trace().Msg("Entering RulesManager.GetRules")
-
-	return p.getActiveRules()
-}
-
-// GetActiveRules returns all active rules for validation.
-func (p *RulesManager) GetActiveRules(ctx context.Context) []domain.Rule {
-	logger := log.Logger(ctx)
-	logger.Trace().Msg("Entering RulesManager.GetActiveRules")
-
-	return p.getActiveRules()
-}
-
-// WithActiveRules returns a new provider with the specified active rules.
-func (p *RulesManager) WithActiveRules(ruleNames []string) domain.RuleProvider {
-	// Use the WithEnabledRules method on Config which follows value semantics
-	newConfig := p.config.WithEnabledRules(ruleNames)
-
-	// Return a new instance with the updated configuration
-	return &RulesManager{
-		config:   newConfig,
-		analyzer: p.analyzer,
-	}
-}
-
-// WithDisabledRules returns a new provider with the specified rules disabled.
-func (p *RulesManager) WithDisabledRules(ruleNames []string) domain.RuleProvider {
-	// Use the WithDisabledRules method on Config which follows value semantics
-	newConfig := p.config.WithDisabledRules(ruleNames)
-
-	// Return a new instance with the updated configuration
-	return &RulesManager{
-		config:   newConfig,
-		analyzer: p.analyzer,
-	}
-}
-
-// WithCustomRule returns a new provider with the custom rule added.
-func (p *RulesManager) WithCustomRule(_ domain.Rule) domain.RuleProvider {
-	// Custom rules aren't directly supported in the system
-	// For now, we return a new instance without changes
-	// A future implementation could store custom rules in a slice
-	return &RulesManager{
-		config:   p.config,
-		analyzer: p.analyzer,
-	}
-}
-
-// getActiveRules creates and returns all active rules.
-func (p *RulesManager) getActiveRules() []domain.Rule {
-	// Get standard rule names
-	// This is a hardcoded list of available rules
-	standardRuleNames := []string{
-		"SubjectLength", "ConventionalCommit", "ImperativeVerb",
-		"SubjectCase", "SubjectSuffix", "CommitBody",
-		"SignOff", "Signature", "JiraReference",
-		"Spell", "CommitsAhead", "SignedIdentity",
-	}
-
-	// Apply rule filtering based on configuration
-	ruleNames := p.filterRuleNames(standardRuleNames)
-
-	// Create a rule factory map for more functional approach
-	ruleFactories := map[string]func() domain.Rule{
-		"SubjectLength":      func() domain.Rule { return createSubjectLengthRule(p.config) },
-		"ConventionalCommit": func() domain.Rule { return createConventionalCommitRule(p.config) },
-		"ImperativeVerb":     func() domain.Rule { return createImperativeVerbRule(p.config) },
-		"SubjectCase":        func() domain.Rule { return createSubjectCaseRule(p.config) },
-		"SubjectSuffix":      func() domain.Rule { return createSubjectSuffixRule(p.config) },
-		"CommitBody":         func() domain.Rule { return createCommitBodyRule(p.config) },
-		"SignOff":            func() domain.Rule { return createSignOffRule(p.config) },
-		"Signature":          func() domain.Rule { return createSignatureRule(p.config) },
-		"JiraReference":      func() domain.Rule { return createJiraReferenceRule(p.config) },
-		"Spell":              func() domain.Rule { return createSpellRule(p.config) },
-		"CommitsAhead":       func() domain.Rule { return createCommitsAheadRule(p.config, p.analyzer) },
-		"SignedIdentity":     func() domain.Rule { return createSignedIdentityRule(p.config) },
-	}
-
-	// Use Map to transform rule names into rule instances, followed by Filter to remove any nil rules
-	return contextx.Filter(
-		contextx.Map(ruleNames, func(name string) domain.Rule {
-			if factory, exists := ruleFactories[name]; exists {
-				return factory()
-			}
-
-			return nil
-		}),
-		func(rule domain.Rule) bool {
-			return rule != nil
-		},
-	)
-}
-
-// All validation logic is now handled by the standard Engine with our custom RulesManager.
-
-// filterRuleNames applies configuration-based filtering to a list of rule names.
-func (p *RulesManager) filterRuleNames(allRuleNames []string) []string {
-	enabledRules := p.config.EnabledRules()
-	disabledRules := p.config.DisabledRules()
-
-	// If specific rules are enabled, only use those
-	if len(enabledRules) > 0 {
-		// Filter to only enabled rules that are in the allRuleNames list
-		return contextx.Filter(allRuleNames, func(name string) bool {
-			return contextx.Contains(enabledRules, name)
-		})
-	}
-
-	// If some rules are disabled, exclude them
-	if len(disabledRules) > 0 {
-		// Convert disabled rules to a set for efficient lookup
-		disabledSet := make(map[string]bool)
-		for _, name := range disabledRules {
-			disabledSet[name] = true
-		}
-
-		// Filter out disabled rules
-		return contextx.Filter(allRuleNames, func(name string) bool {
-			return !disabledSet[name]
-		})
-	}
-
-	// If no specific filters, return all rules
-	return contextx.DeepCopy(allRuleNames)
-}
-
-// CreateRuleProvider creates a rule provider for the configuration.
-func CreateRuleProvider(config config.Config, analyzer domain.CommitAnalyzer) domain.RuleProvider {
-	return &RulesManager{
-		config:   config,
-		analyzer: analyzer,
-	}
-}
-
-// Helper functions to create various rule types
-
-func createSubjectLengthRule(config config.Config) domain.Rule {
-	rule := rules.NewSubjectLengthRuleWithConfig(config)
-
-	return rule
-}
-
-func createConventionalCommitRule(config config.Config) domain.Rule {
-	rule := rules.NewConventionalCommitRuleWithConfig(config)
-
-	return rule
-}
-
-func createImperativeVerbRule(config config.Config) domain.Rule {
-	return rules.NewImperativeVerbRuleWithConfig(config, config)
-}
-
-func createSubjectCaseRule(config config.Config) domain.Rule {
-	return rules.NewSubjectCaseRuleWithConfig(config, config)
-}
-
-func createSubjectSuffixRule(config config.Config) domain.Rule {
-	rule := rules.NewSubjectSuffixRuleWithConfig(config)
-
-	return rule
-}
-
-func createCommitBodyRule(config config.Config) domain.Rule {
-	// CommitBodyRule uses the options pattern directly, building from configuration
-	options := []rules.CommitBodyOption{}
-
-	// Add body requirement option
-	options = append(options, rules.WithRequireBody(config.Body.Required))
-
-	// Add sign-off only option if configured
-	options = append(options, rules.WithAllowSignOffOnly(config.Body.AllowSignOffOnly))
-
-	return rules.NewCommitBodyRule(options...)
-}
-
-func createSignOffRule(config config.Config) domain.Rule {
-	rule := rules.NewSignOffRuleWithConfig(config)
-
-	return rule
-}
-
-func createSignatureRule(config config.Config) domain.Rule {
-	rule := rules.NewSignatureRuleWithConfig(config)
-
-	return rule
-}
-
-func createJiraReferenceRule(config config.Config) domain.Rule {
-	return rules.NewJiraReferenceRuleWithConfig(config, config)
-}
-
-func createSpellRule(config config.Config) domain.Rule {
-	rule := rules.NewSpellRuleWithConfig(config)
-
-	return rule
-}
-
-func createCommitsAheadRule(config config.Config, analyzer domain.CommitAnalyzer) domain.Rule {
-	rule := rules.NewCommitsAheadRuleWithConfig(config, analyzer)
-
-	return rule
-}
-
-func createSignedIdentityRule(config config.Config) domain.Rule {
-	options := []rules.SignedIdentityOption{}
-
-	// Set key directory if configured
-	if keyURI := config.Security.Identity.PublicKeyURI; keyURI != "" {
-		options = append(options, rules.WithKeyDirectory(keyURI))
-	}
-
-	return rules.NewSignedIdentityRule(options...)
 }

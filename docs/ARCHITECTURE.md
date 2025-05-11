@@ -1,6 +1,6 @@
 # Gommitlint Architecture
 
-Gommitlint follows a functional hexagonal architecture (also known as ports and adapters) to ensure a clean separation of concerns and to make the codebase more maintainable and testable. The application is prefering functional programming principles with value semantics.
+Gommitlint follows a functional hexagonal architecture (also known as ports and adapters) to ensure a clean separation of concerns and to make the codebase more maintainable and testable. The application thoroughly embraces functional programming principles with value semantics throughout.
 
 ## Overview
 
@@ -52,6 +52,7 @@ This architectural approach provides several benefits:
 │    - Git Repository Implementation with Value Semantics       │
 │    - Immutable Configuration Provider                         │
 │    - Functional Output Formatters                             │
+│    - Context-Aware Structured Logging System                  │
 │                                                               │
 └───────────────────────────────────────────────────────────────┘
 ```
@@ -74,6 +75,17 @@ In the functional architecture, dependencies flow inward with explicit passing:
                                                 └───────────────┘
 ```
 
+## Core Functional Principles
+
+The codebase thoroughly embraces functional programming principles:
+
+1. **Value Semantics**: All components use value types with value receivers
+2. **Immutability**: Data is never modified; new instances are created and returned instead
+3. **Pure Functions**: Functions avoid side effects and return the same output for the same input
+4. **Function Composition**: Complex operations are built by composing simpler functions
+5. **Functional Options Pattern**: Configuration is done through higher-order functions
+6. **State Transformation**: State changes are handled through explicit transformations
+
 ## Project Structure
 
 ### Domain Layer
@@ -85,6 +97,7 @@ The domain layer is the heart of the application, containing the core business l
 - `/internal/domain/result.go`: Validation result structures
 - `/internal/domain/git_interfaces.go`: Segregated interfaces for Git operations
 - `/internal/domain/commit_collection.go`: Domain collection for commit operations
+- `/internal/domain/cli_options.go`: CLI options framework with context integration
 
 Key interfaces:
 
@@ -103,7 +116,16 @@ The core layer contains the business rules implementation:
 - `/internal/core/validation/rule_provider.go`: Rule provider
 - `/internal/core/rules/`: Rule implementations
 
-All rules follow the same pattern and implement the `domain.Rule` interface.
+All rules follow the same pattern and implement the `domain.Rule` interface with value semantics.
+
+### Context Utilities
+
+The enhanced context utilities provide functional programming tools and context management:
+
+- `/internal/contextx/contextx.go`: Context extension utilities
+- `/internal/contextx/slice_utils.go`: Functional operations for slice transformations
+
+The context utilities include map, filter, reduce, and other higher-order functions for collections.
 
 ### Application Layer
 
@@ -119,6 +141,7 @@ The ports layer provides interfaces to the outside world:
 - `/internal/ports/cli/validate.go`: CLI validation command
 - `/internal/ports/cli/installhook.go`: CLI command for installing Git hooks
 - `/internal/ports/cli/removehook.go`: CLI command for removing Git hooks
+- `/internal/ports/cli/configadapter.go`: Adapter for CLI configuration
 
 ### Infrastructure Layer (Adapters)
 
@@ -129,6 +152,7 @@ The infrastructure layer provides concrete implementations of interfaces:
 - `/internal/infrastructure/git/repository_factory.go`: Factory for creating repository interfaces
 - `/internal/infrastructure/config/provider.go`: Configuration provider
 - `/internal/infrastructure/output/`: Output formatters (text, JSON, GitHub, GitLab)
+- `/internal/infrastructure/log/logger.go`: Context-aware structured logging system
 
 ## Functional Interfaces
 
@@ -300,7 +324,7 @@ Business logic operates on state through transformations that return new state:
 
 ```go
 // State transformation through chained methods
-func (s *ValidationService) ValidateCommit(ctx context.Context, hash string) (domain.ValidationResult, error) {
+func (s ValidationService) ValidateCommit(ctx context.Context, hash string) (domain.ValidationResult, error) {
     // Get the commit
     commit, err := s.commitService.GetCommit(ctx, hash)
     if err != nil {
@@ -308,7 +332,7 @@ func (s *ValidationService) ValidateCommit(ctx context.Context, hash string) (do
     }
     
     // Transform through validation
-    return s.engine.Validate(commit), nil
+    return s.engine.Validate(ctx, commit), nil
 }
 ```
 
@@ -342,6 +366,30 @@ func validateWithState(rule SubjectCaseRule, commit domain.CommitInfo) ([]appErr
     
     return errors, updatedRule
 }
+```
+
+### Functional Collection Utilities
+
+Enhanced collection operations with higher-order functions:
+
+```go
+// Map a slice with a transformation function
+commits := contextx.Map(rawCommits, func(c *git.Commit) domain.CommitInfo {
+    return mapToCommitInfo(c)
+})
+
+// Filter a slice based on a predicate
+active := contextx.Filter(rules, func(r Rule) bool {
+    return r.IsActive()
+})
+
+// Combine operations in a pipeline
+result := contextx.Pipe(
+    items,
+    contextx.Map[Item, ProcessedItem](processItem),
+    contextx.Filter[ProcessedItem](isValid),
+    contextx.Reduce[ProcessedItem, Summary](summarize, initialSummary),
+)
 ```
 
 ## Functional Options Pattern
@@ -383,6 +431,58 @@ rule := NewSubjectLengthRule(
 )
 ```
 
+## Context-Aware Logging System
+
+The application uses a structured, context-aware logging system:
+
+```go
+// Creating a logger
+logger := log.NewLogger(log.WithLevel(log.LevelDebug))
+
+// Adding logger to context
+ctx = log.WithLogger(ctx, logger)
+
+// Getting logger from context
+logger := log.GetLogger(ctx)
+
+// Logging with structured data
+logger.Info().
+    Str("commit", commit.Hash).
+    Str("rule", rule.Name()).
+    Msg("Validating commit")
+
+// Contextual logging
+logger.Debug().
+    Str("subject", commit.Subject).
+    Int("length", len(commit.Subject)).
+    Bool("valid", valid).
+    Msg("Subject length validation")
+```
+
+## CLI Options Framework
+
+The CLI options are handled through a context-based framework:
+
+```go
+// Define CLI options
+type ValidateOptions struct {
+    CommitRange     string
+    SkipMergeCommits bool
+    OutputFormat    string
+}
+
+// Add options to context
+ctx = options.WithValidateOptions(ctx, ValidateOptions{
+    CommitRange:     "HEAD~5..HEAD",
+    SkipMergeCommits: true,
+    OutputFormat:    "text",
+})
+
+// Retrieve options from context
+opts := options.GetValidateOptions(ctx)
+commitRange := opts.CommitRange
+```
+
 ## Integration Testing
 
 The architecture includes a dedicated integration test package:
@@ -401,9 +501,9 @@ This approach provides more robust testing than unit tests alone, ensuring that 
 
 ```go
 // In application code
-func CreateValidationService(cfg *config.Config) (*ValidationService, error) {
+func CreateValidationService(ctx context.Context, cfg Config) (ValidationService, error) {
     // Create repository objects
-    repoFactory := git.NewRepositoryFactory("/path/to/repo")
+    repoFactory := git.NewRepositoryFactory(ctx, "/path/to/repo")
     commitService := repoFactory.CreateCommitService()
     infoProvider := repoFactory.CreateRepositoryInfoProvider() 
     
@@ -427,7 +527,7 @@ func CreateValidationService(cfg *config.Config) (*ValidationService, error) {
     engine := validation.NewEngine(ruleRegistry, configAdapter)
     
     // Create and return the service
-    return &ValidationService{
+    return ValidationService{
         commitService: commitService,
         infoProvider:  infoProvider,
         engine:        engine,
@@ -439,17 +539,18 @@ func CreateValidationService(cfg *config.Config) (*ValidationService, error) {
 ### Validating a Commit
 
 ```go
-func ValidateHeadCommit() error {
+func ValidateHeadCommit(ctx context.Context) error {
     // Create validation service
-    validationService, err := CreateValidationService(config.Load())
+    validationService, err := CreateValidationService(ctx, config.Load())
     if err != nil {
         return fmt.Errorf("failed to create validation service: %w", err)
     }
     
-    // Create context
-    ctx := context.Background()
+    // Get logger from context
+    logger := log.GetLogger(ctx)
     
     // Validate HEAD commit
+    logger.Debug().Msg("Validating HEAD commit")
     result, err := validationService.ValidateCommit(ctx, "HEAD")
     if err != nil {
         return fmt.Errorf("validation failed: %w", err)
@@ -485,7 +586,7 @@ type CustomRule struct {
 }
 
 // Implement the Validate method with value semantics
-func (r CustomRule) Validate(commit domain.CommitInfo) []domain.ValidationError {
+func (r CustomRule) Validate(ctx context.Context, commit domain.CommitInfo) []domain.ValidationError {
     // Your validation logic here
     if !strings.Contains(commit.Subject, r.customConfig) {
         return []domain.ValidationError{
@@ -542,6 +643,8 @@ The architecture provides several additional benefits:
 3. **Dedicated Integration Testing**: Comprehensive integration tests ensure components work together correctly
 4. **Explicit Dependencies**: Dependencies are clearly stated and injected, improving testability and flexibility
 5. **Consistent Context Handling**: Context objects are propagated throughout the application for better cancellation and timeout handling
+6. **Structured Logging**: Context-aware logging makes it easier to correlate log entries across component boundaries
+7. **Functional Collection Utilities**: Higher-order functions for collections simplify transformation and filtering operations
 
 ## Error Handling
 
@@ -571,5 +674,10 @@ The testing strategy emphasizes integration testing while maintaining strong uni
 3. **Table-Driven Tests**: Tests use the table-driven pattern for comprehensive coverage
 4. **Test Helpers**: Dedicated helpers simplify test setup
 5. **Realistic Test Data**: Tests use realistic data to better simulate actual usage
+6. **Context-Aware Testing**: Tests properly handle context propagation
 
 This approach provides more robust validation that the system works correctly as a whole.
+
+## For Further Details
+
+For more in-depth information about functional programming patterns and principles used in this codebase, please refer to [FUNCTIONAL_ARCHITECTURE.md](FUNCTIONAL_ARCHITECTURE.md).

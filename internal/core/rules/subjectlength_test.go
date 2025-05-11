@@ -10,11 +10,32 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 	"github.com/stretchr/testify/require"
 )
+
+// createTestSubjectLengthContext creates a context with the given max length setting.
+func createTestSubjectLengthContext(maxLength int) context.Context {
+	cfg := config.Config{
+		Subject: config.SubjectConfig{
+			MaxLength:         maxLength,
+			Case:              "sentence",
+			RequireImperative: true,
+		},
+		Body: config.BodyConfig{
+			Required: false,
+		},
+		Conventional: config.ConventionalConfig{
+			Required: false,
+			Types:    []string{"feat", "fix", "docs", "style", "refactor", "test", "chore"},
+		},
+	}
+
+	return config.WithConfig(context.Background(), cfg)
+}
 
 func TestSubjectLengthRule(t *testing.T) {
 	tests := []struct {
@@ -26,7 +47,7 @@ func TestSubjectLengthRule(t *testing.T) {
 		{
 			name:        "Within default length",
 			subject:     "Fix authentication service",
-			maxLength:   0, // Use default
+			maxLength:   72, // Use default
 			expectError: false,
 		},
 		{
@@ -67,8 +88,10 @@ func TestSubjectLengthRule(t *testing.T) {
 				rule = rules.NewSubjectLengthRule() // Use default
 			}
 
-			ctx := context.Background()
-			// Validate using the stateless method
+			// Create context with configuration
+			ctx := createTestSubjectLengthContext(testCase.maxLength)
+
+			// Validate using the Validate method
 			errors := rule.Validate(ctx, commit)
 
 			// Check result
@@ -86,30 +109,29 @@ func TestSubjectLengthRule(t *testing.T) {
 				require.Equal(t, strconv.Itoa(actualLength), err.Context["actual_length"],
 					"Subject length in context should match expected length")
 
-				// Test pure function implementation explicitly
-				_, updatedRule := rules.ValidateSubjectLengthWithState(rule, commit)
-				require.Equal(t, "Subject too long", updatedRule.Result(errors), "Result message should indicate subject is too long")
-				require.True(t, updatedRule.HasErrors(), "HasErrors should return true for invalid subjects")
+				// Test value-semantics approach
+				require.Equal(t, "❌ Subject length exceeds maximum", rule.Result(errors),
+					"Result message should indicate subject is too long")
+				require.False(t, rule.HasErrors(), "Original rule should remain unchanged")
 			} else {
 				require.Empty(t, errors, "Expected no errors but got: %v", errors)
 
-				// Test pure function implementation explicitly
-				_, updatedRule := rules.ValidateSubjectLengthWithState(rule, commit)
-				require.Equal(t, "Subject length OK", updatedRule.Result(errors), "Result message should indicate length is OK")
-				require.False(t, updatedRule.HasErrors(), "HasErrors should return false for valid subjects")
+				// Test empty result
+				require.Equal(t, "✓ Subject length is valid", rule.Result(errors),
+					"Result message should indicate length is OK")
+				require.False(t, rule.HasErrors(), "HasErrors should return false for valid subjects")
 			}
 
 			// Check name
 			require.Equal(t, "SubjectLength", rule.Name(), "Name should always be 'SubjectLength'")
 
-			// For verbose result and help message, we need a rule with state
-			_, ruleWithState := rules.ValidateSubjectLengthWithState(rule, commit)
-
 			// Check verbose result
-			require.NotEmpty(t, ruleWithState.VerboseResult(errors), "VerboseResult should not be empty")
+			require.NotEmpty(t, rule.VerboseResult(errors), "VerboseResult should not be empty")
 
 			// Check help message
-			require.NotEmpty(t, ruleWithState.Help(errors), "Help should not be empty")
+			if len(errors) > 0 {
+				require.NotEmpty(t, rule.Help(errors), "Help should not be empty for errors")
+			}
 		})
 	}
 }
@@ -125,7 +147,9 @@ func TestSubjectLengthRuleWithConfig(t *testing.T) {
 		Subject: strings.Repeat("a", 51), // One character over the limit
 	}
 
-	ctx := context.Background()
+	// Create context with configuration
+	ctx := createTestSubjectLengthContext(50)
+
 	// Validate and check for error
 	errors := rule.Validate(ctx, commit)
 	require.Len(t, errors, 1, "Should have exactly one error")
@@ -135,6 +159,3 @@ func TestSubjectLengthRuleWithConfig(t *testing.T) {
 	require.Equal(t, "51", errors[0].Context["actual_length"])
 	require.Equal(t, "50", errors[0].Context["max_length"])
 }
-
-// Note: Mock provider implementation has been removed as it's not used in the tests
-// The tests use functional options pattern (rules.WithMaxLength) instead of configuration providers

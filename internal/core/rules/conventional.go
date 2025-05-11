@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
@@ -214,8 +215,9 @@ func (r ConventionalCommitRule) addError(err appErrors.ValidationError) Conventi
 	return result
 }
 
-// validateConventionalWithState validates a commit and returns both errors and an updated rule state.
-func validateConventionalWithState(rule ConventionalCommitRule, commit domain.CommitInfo) ([]appErrors.ValidationError, ConventionalCommitRule) {
+// validateConventionalWithState validates a commit and returns errors.
+// The second return value is for state tracking in more complex implementations.
+func validateConventionalWithState(rule ConventionalCommitRule, commit domain.CommitInfo) ([]appErrors.ValidationError, ConventionalCommitRule) { //nolint:unparam
 	updatedRule := rule
 	// Mark as run
 	updatedRule.BaseRule = updatedRule.BaseRule.WithRun()
@@ -591,10 +593,43 @@ func (r ConventionalCommitRule) Validate(ctx context.Context, commit domain.Comm
 		Str("commit_hash", commit.Hash).
 		Msg("Entering ConventionalCommitRule.Validate")
 
+	// Create a new rule with context configuration
+	rule := r.withContextConfig(ctx)
+
 	// Use the pure functional approach
-	errors, _ := validateConventionalWithState(r, commit)
+	errors, _ := validateConventionalWithState(rule, commit)
 
 	return errors
+}
+
+// withContextConfig creates a new rule with configuration from context.
+func (r ConventionalCommitRule) withContextConfig(ctx context.Context) ConventionalCommitRule {
+	// Get configuration from context
+	cfg := config.GetConfig(ctx)
+
+	// Create a copy of the rule
+	result := r
+
+	// Only override settings if they are specified in the context configuration
+	if len(cfg.Conventional.Types) > 0 {
+		result.allowedTypes = deepCopyStringSlice(cfg.Conventional.Types)
+	}
+
+	if len(cfg.Conventional.Scopes) > 0 {
+		result.allowedScopes = deepCopyStringSlice(cfg.Conventional.Scopes)
+	}
+
+	result.requireScope = cfg.Conventional.RequireScope
+	result.validateBreaking = cfg.Conventional.AllowBreakingChanges
+
+	if cfg.Conventional.MaxDescriptionLength > 0 {
+		result.maxDescLength = cfg.Conventional.MaxDescriptionLength
+	} else if result.maxDescLength == 0 && cfg.Subject.MaxLength > 0 {
+		// If maxDescLength is not set, use the subject max length from config
+		result.maxDescLength = cfg.Subject.MaxLength
+	}
+
+	return result
 }
 
 // isValidType checks if the commit type is in the list of allowed types.
@@ -1071,7 +1106,94 @@ func deepCopyStringSlice(src []string) []string {
 	return contextx.DeepCopy(src)
 }
 
-// ValidateConventionalWithState is the exported version for testing.
-func ValidateConventionalWithState(rule ConventionalCommitRule, commit domain.CommitInfo) ([]appErrors.ValidationError, ConventionalCommitRule) {
-	return validateConventionalWithState(rule, commit)
+// Note: This file focuses on the production implementation, with any test-specific code moved to test helper files
+
+// ConventionalCommitRuleCtx is a context-aware version of ConventionalCommitRule.
+type ConventionalCommitRuleCtx struct {
+	BaseRule
+}
+
+// NewConventionalCommitRuleCtx creates a new context-aware ConventionalCommitRule.
+func NewConventionalCommitRuleCtx() ConventionalCommitRuleCtx {
+	return ConventionalCommitRuleCtx{
+		BaseRule: NewBaseRule("ConventionalCommit"),
+	}
+}
+
+// Validate validates that commit messages follow the Conventional Commits specification
+// using configuration from context.
+func (r ConventionalCommitRuleCtx) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
+	logger := log.Logger(ctx)
+	logger.Trace().
+		Str("rule", r.Name()).
+		Str("commit_hash", commit.Hash).
+		Msg("Validating conventional commit using context configuration")
+
+	// Create a new rule with context configuration
+	rule := r.withContextConfig(ctx)
+
+	// Use the state-based validation logic
+	errors, _ := validateConventionalWithState(rule, commit)
+
+	return errors
+}
+
+// withContextConfig creates a new ConventionalCommitRule with configuration from context.
+func (r ConventionalCommitRuleCtx) withContextConfig(ctx context.Context) ConventionalCommitRule {
+	// Get configuration from context
+	cfg := config.GetConfig(ctx)
+
+	// Create a rule with configuration from context
+	rule := ConventionalCommitRule{
+		BaseRule:         r.BaseRule,
+		allowedTypes:     deepCopyStringSlice(cfg.Conventional.Types),
+		allowedScopes:    deepCopyStringSlice(cfg.Conventional.Scopes),
+		requireScope:     cfg.Conventional.RequireScope,
+		validateBreaking: cfg.Conventional.AllowBreakingChanges,
+		maxDescLength:    cfg.Conventional.MaxDescriptionLength,
+	}
+
+	// If maxDescLength is not set, use the subject max length from config
+	if rule.maxDescLength == 0 {
+		rule.maxDescLength = cfg.Subject.MaxLength
+	}
+
+	return rule
+}
+
+// Name returns the rule name.
+func (r ConventionalCommitRuleCtx) Name() string {
+	return r.BaseRule.Name()
+}
+
+// Result returns a concise validation result.
+func (r ConventionalCommitRuleCtx) Result(errors []appErrors.ValidationError) string {
+	if len(errors) == 0 {
+		return "✓ Valid conventional format"
+	}
+
+	return "Invalid conventional commit format"
+}
+
+// VerboseResult returns a more detailed explanation for verbose mode.
+func (r ConventionalCommitRuleCtx) VerboseResult(errors []appErrors.ValidationError) string {
+	if len(errors) == 0 {
+		return "Valid conventional commit format"
+	}
+
+	return "Commit message does not follow the Conventional Commits specification"
+}
+
+// Help returns guidance for fixing rule violations.
+func (r ConventionalCommitRuleCtx) Help(errors []appErrors.ValidationError) string {
+	if len(errors) == 0 {
+		return ""
+	}
+
+	return "Your commit message should follow the Conventional Commits format:\n\n" +
+		"  <type>[optional scope][!]: <description>\n\n" +
+		"Examples:\n" +
+		"  feat: add new feature\n" +
+		"  fix(api): resolve null pointer exception\n" +
+		"  chore!: drop support for Node 6"
 }
