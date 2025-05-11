@@ -5,6 +5,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/itiquette/gommitlint/internal/config"
@@ -96,6 +97,9 @@ func Execute(version, commitSHA, buildDate string) {
 		os.Exit(1)
 	}
 
+	// Log the configuration for debugging - ADDED THIS LINE
+	debugConfigLoading(configProvider.GetConfig())
+
 	// Print loaded config information to verify
 	cfg := configProvider.GetConfig()
 	log.Logger(ctx).Info().
@@ -173,4 +177,44 @@ func HandleError(ctx context.Context, err error) {
 
 	// Exit with the determined status code
 	os.Exit(exitCode)
+}
+
+// debugConfigLoading logs detailed information about the configuration
+// to help diagnose configuration issues
+func debugConfigLoading(cfg config.Config) {
+	// Create or open a debugging file
+	f, err := os.OpenFile("cli_config_debug.txt", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	// Write configuration information
+	fmt.Fprintf(f, "CLI Configuration Debug\n")
+	fmt.Fprintf(f, "=====================\n\n")
+
+	// Write rule configuration
+	fmt.Fprintf(f, "Rule Configuration:\n")
+	fmt.Fprintf(f, "  Enabled Rules: %v\n", cfg.Rules.EnabledRules)
+	fmt.Fprintf(f, "  Disabled Rules: %v\n", cfg.Rules.DisabledRules)
+
+	// Check if default-disabled rules are explicitly enabled
+	fmt.Fprintf(f, "\nDefault-disabled rules status:\n")
+
+	// For each default-disabled rule, check if it's explicitly enabled
+	for ruleName := range config.DefaultDisabledRules {
+		isEnabled := config.IsRuleEnabled(ruleName, cfg.Rules.EnabledRules, cfg.Rules.DisabledRules)
+		isExplicitlyEnabled := false
+
+		for _, rule := range cfg.Rules.EnabledRules {
+			cleanRule := config.CleanRuleName(rule)
+			if cleanRule == ruleName {
+				isExplicitlyEnabled = true
+				break
+			}
+		}
+
+		fmt.Fprintf(f, "  %s: default-disabled=%v, explicitly-enabled=%v, final-status=%v\n",
+			ruleName, true, isExplicitlyEnabled, isEnabled)
+	}
 }

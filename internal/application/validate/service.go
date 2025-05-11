@@ -609,6 +609,19 @@ func CreateValidationServiceWithContext(
 	// This is mainly to determine which rules to activate
 	cfg := config.GetConfig(ctx)
 
+	// Fix for explicitly enabled default-disabled rules
+	// This ensures that if JiraReference or CommitBody are explicitly enabled in config,
+	// they will be properly activated
+	fixedCfg := fixRuleConfiguration(ctx, cfg)
+
+	// Update the context with the fixed configuration
+	// We can't directly compare structs, so we'll check if the config was modified
+	// by comparing the disabled rules lists
+	if !slicesEqual(fixedCfg.Rules.DisabledRules, cfg.Rules.DisabledRules) {
+		ctx = config.WithConfig(ctx, fixedCfg)
+		cfg = fixedCfg
+	}
+
 	// Create a context-based rule provider that will build rules
 	// which get their configuration from context during validation
 	engineProvider := &ContextRuleProvider{
@@ -625,6 +638,110 @@ func CreateValidationServiceWithContext(
 
 	// Create and return the validation service
 	return NewValidationService(engine, commitService, infoProvider)
+}
+
+// fixRuleConfiguration ensures that explicitly enabled rules (like JiraReference, CommitBody)
+// are properly configured by removing them from the disabledRules list if they're
+// in the enabledRules list.
+func fixRuleConfiguration(ctx context.Context, cfg config.Config) config.Config {
+	// Create a debug file for tracking
+	debugFile, err := os.OpenFile("fixed_rules.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err == nil {
+		defer debugFile.Close()
+
+		fmt.Fprintf(debugFile, "Fixing rule configuration...\n")
+		fmt.Fprintf(debugFile, "Original config: enabled=%v, disabled=%v\n",
+			cfg.Rules.EnabledRules, cfg.Rules.DisabledRules)
+	}
+
+	// Check if any default-disabled rules are explicitly enabled
+	jiraEnabled := false
+	commitBodyEnabled := false
+
+	for _, rule := range cfg.Rules.EnabledRules {
+		cleanRule := strings.TrimSpace(strings.Trim(rule, "\"'"))
+		if cleanRule == "JiraReference" {
+			jiraEnabled = true
+		} else if cleanRule == "CommitBody" {
+			commitBodyEnabled = true
+		}
+	}
+
+	if debugFile != nil {
+		fmt.Fprintf(debugFile, "JiraReference explicitly enabled: %v\n", jiraEnabled)
+		fmt.Fprintf(debugFile, "CommitBody explicitly enabled: %v\n", commitBodyEnabled)
+	}
+
+	// If either rule is explicitly enabled, we need to remove it from the disabled list
+	if !jiraEnabled && !commitBodyEnabled {
+		// No changes needed
+		return cfg
+	}
+
+	// Create a new disabled rules list without the explicitly enabled rules
+	newDisabled := make([]string, 0, len(cfg.Rules.DisabledRules))
+
+	for _, rule := range cfg.Rules.DisabledRules {
+		cleanRule := strings.TrimSpace(strings.Trim(rule, "\"'"))
+
+		if (cleanRule == "JiraReference" && jiraEnabled) ||
+			(cleanRule == "CommitBody" && commitBodyEnabled) {
+			// Skip this rule since it's explicitly enabled
+			if debugFile != nil {
+				fmt.Fprintf(debugFile, "Removing %s from disabled rules (it's explicitly enabled)\n", cleanRule)
+			}
+
+			continue
+		}
+
+		// Include all other rules
+		newDisabled = append(newDisabled, rule)
+	}
+
+	// Update the config with the new disabled rules
+	updatedCfg := cfg.WithRules(cfg.Rules.WithDisabledRules(newDisabled))
+
+	if debugFile != nil {
+		fmt.Fprintf(debugFile, "Updated config: enabled=%v, disabled=%v\n",
+			updatedCfg.Rules.EnabledRules, updatedCfg.Rules.DisabledRules)
+	}
+
+	return updatedCfg
+}
+
+// slicesEqual compares two string slices for equality
+func slicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	// Create maps for faster comparison
+	mapA := make(map[string]bool)
+	mapB := make(map[string]bool)
+
+	for _, item := range a {
+		mapA[item] = true
+	}
+
+	for _, item := range b {
+		mapB[item] = true
+	}
+
+	// Check if all items in a are in b
+	for _, item := range a {
+		if !mapB[item] {
+			return false
+		}
+	}
+
+	// Check if all items in b are in a
+	for _, item := range b {
+		if !mapA[item] {
+			return false
+		}
+	}
+
+	return true
 }
 
 // See context_helpers.go for ContextRuleProvider implementation
@@ -886,7 +1003,7 @@ var standardDomainRuleFactories = map[string]domainRuleFactory{
 			return rules.NewJiraReferenceRule(options...)
 		},
 		requiresAnalyzer: false,
-		condition:        func(config ValidationConfig) bool { return true }, // Always create, controlled by enabled_rules/disabled_rules
+		condition:        func(_ ValidationConfig) bool { return true }, // Always create, controlled by enabled_rules/disabled_rules
 	},
 	"CommitsAhead": {
 		provider: func(config ValidationConfig, analyzer domain.CommitAnalyzer) domain.Rule {

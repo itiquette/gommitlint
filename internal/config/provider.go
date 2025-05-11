@@ -37,13 +37,15 @@ func NewProvider() (*Provider, error) {
 	for ruleName := range DefaultDisabledRules {
 		// Check if the rule is explicitly enabled in the default config
 		isExplicitlyEnabled := false
+
 		for _, enabledRule := range config.Rules.EnabledRules {
 			if enabledRule == ruleName {
 				isExplicitlyEnabled = true
+
 				break
 			}
 		}
-		
+
 		// Only add to disabled list if not explicitly enabled
 		if !isExplicitlyEnabled {
 			defaultDisabledRules = append(defaultDisabledRules, ruleName)
@@ -329,30 +331,35 @@ func resolveRuleConflicts(enabledRules []string, cfg Config) Config {
 	for ruleName := range DefaultDisabledRules {
 		// Skip if already in disabled list (would have been processed above)
 		alreadyInDisabled := false
+
 		for _, disabledRule := range currentDisabled {
 			cleanDisabled := strings.TrimSpace(strings.Trim(disabledRule, "\"'"))
 			if cleanDisabled == ruleName {
 				alreadyInDisabled = true
+
 				break
 			}
 		}
-		
+
 		if alreadyInDisabled {
 			continue // Already processed above
 		}
-		
+
 		// Check if explicitly enabled - if not, add to disabled list
 		isExplicitlyEnabled := false
+
 		for _, enabledRule := range enabledRules {
 			cleanEnabled := strings.TrimSpace(strings.Trim(enabledRule, "\"'"))
 			if cleanEnabled == ruleName {
 				isExplicitlyEnabled = true
+
 				fmt.Fprintf(os.Stderr, "CONFIG: Not adding default-disabled rule '%s' to disabled list (it's explicitly enabled)\n",
 					ruleName)
+
 				break
 			}
 		}
-		
+
 		if !isExplicitlyEnabled {
 			// Add to disabled list since it's default-disabled and not explicitly enabled
 			newDisabled = append(newDisabled, ruleName)
@@ -380,22 +387,32 @@ func (p *Provider) LoadFromPath(configPath string) error {
 	p.UpdateConfig(func(cfg Config) Config {
 		// Process rules in the correct order:
 		// 1. Process enabled rules
-		enabledRules, haveEnabledRules := processEnabledRules(koanfInstance)
+		configEnabledRules, haveEnabledRules := processEnabledRules(koanfInstance)
 
 		if haveEnabledRules {
-			cfg = cfg.WithRules(cfg.Rules.WithEnabledRules(enabledRules))
+			// Use ONLY the explicitly provided enabled rules, don't merge
+			// This is critical for overriding the default configuration
+			cfg = cfg.WithRules(cfg.Rules.WithEnabledRules(configEnabledRules))
+
+			// Log the enabled rules for debugging
+			fmt.Fprintf(os.Stderr, "CONFIG: Set enabled_rules to: %v\n", configEnabledRules)
 		}
 
-		// 3. Process disabled rules
+		// 2. Process disabled rules
 		disabledRules := processDisabledRules(koanfInstance)
 		if len(disabledRules) > 0 {
 			cfg = cfg.WithRules(cfg.Rules.WithDisabledRules(disabledRules))
+
+			// Log the disabled rules for debugging
+			fmt.Fprintf(os.Stderr, "CONFIG: Set disabled_rules to: %v\n", disabledRules)
 		}
 
-		// 4. Resolve conflicts between enabled and disabled rules
-		if haveEnabledRules {
-			cfg = resolveRuleConflicts(enabledRules, cfg)
-		}
+		// 3. Resolve conflicts between enabled and disabled rules
+		cfg = resolveRuleConflicts(cfg.Rules.EnabledRules, cfg)
+
+		// Debug the final config before returning
+		fmt.Fprintf(os.Stderr, "CONFIG: Final enabled_rules: %v\n", cfg.Rules.EnabledRules)
+		fmt.Fprintf(os.Stderr, "CONFIG: Final disabled_rules: %v\n", cfg.Rules.DisabledRules)
 
 		return cfg
 	})

@@ -11,7 +11,6 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/application/report"
 	"github.com/itiquette/gommitlint/internal/application/validate"
-	"github.com/itiquette/gommitlint/internal/contextx"
 	"github.com/itiquette/gommitlint/internal/infrastructure/git"
 	"github.com/itiquette/gommitlint/internal/infrastructure/log"
 	"github.com/spf13/cobra"
@@ -78,19 +77,6 @@ func runNewValidation(ctx context.Context, cmd *cobra.Command) (int, error) {
 	// Create parameters object to encapsulate all inputs
 	params := NewValidationParameters(cmd)
 
-	// Default the git-reference to HEAD if not provided
-	gitRef, _ := cmd.Flags().GetString("git-reference")
-	if gitRef == "" && !cmd.Flags().Changed("revision-range") &&
-		!cmd.Flags().Changed("base-branch") && !cmd.Flags().Changed("message-file") &&
-		!cmd.Flags().Changed("commit-count") {
-		// Set to HEAD if no git reference options were provided
-		if err := cmd.Flags().Set("git-reference", "HEAD"); err != nil {
-			logger.Debug().Err(err).Msg("Failed to set default git-reference, continuing anyway")
-		}
-		// Update params with this change
-		params = NewValidationParameters(cmd)
-	}
-
 	// Create validation service using the context
 	service, err := params.CreateValidationService(ctx)
 	if err != nil {
@@ -131,15 +117,11 @@ func runNewValidation(ctx context.Context, cmd *cobra.Command) (int, error) {
 func constructValidationService(ctx context.Context, deps *AppDependencies, repoPath string) (validate.ValidationService, error) {
 	logger := log.Logger(ctx)
 	logger.Trace().Str("repo_path", repoPath).Msg("Entering constructValidationService")
+	// Get config from manager
+	unifiedConfig := deps.ConfigManager.GetValidationConfig(ctx)
 
-	// Get config from provider
-	cfg := deps.ConfigProvider.GetConfig()
-
-	// Add the config to the context
-	// This is a key change - we are making the config available in the context
-	// for all rules and services to access directly
-	// Use the contextx package to properly type the context key
-	ctx = contextx.WithValue(ctx, contextx.ConfigContextKey, cfg)
+	// Adapt the config to match the ValidationConfig interface
+	validationConfig := NewConfigAdapter(unifiedConfig)
 
 	// Create a repository adapter
 	repoAdapter, err := git.NewRepositoryAdapter(ctx, repoPath)
@@ -147,11 +129,9 @@ func constructValidationService(ctx context.Context, deps *AppDependencies, repo
 		return validate.ValidationService{}, fmt.Errorf("failed to create repository adapter: %w", err)
 	}
 
-	// Create the validation service with the context
-	// The validation service will use the context to get configuration
-	// for all rules and functions that need it
-	return validate.CreateValidationServiceWithContext(
-		ctx,
+	// Return the validation service with dependencies
+	return validate.CreateValidationService(
+		validationConfig,
 		repoAdapter, // GitCommitService
 		repoAdapter, // RepositoryInfoProvider
 		repoAdapter, // CommitAnalyzer
