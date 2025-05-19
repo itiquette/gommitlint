@@ -3,6 +3,26 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 // Package git provides utilities for managing Git repositories during tests.
+// This package contains helpers for creating test repositories, making commits,
+// managing branches, and setting up Git hooks for integration testing.
+//
+// # THIS PACKAGE CONTAINS TEST-ONLY CODE AND SHOULD NOT BE IMPORTED BY PRODUCTION CODE
+//
+// # Functions
+//
+// The package provides several helper functions:
+// - SetupGitRepo: Creates a new Git repository with an initial commit
+// - AddCommit: Adds a new commit to an existing repository
+// - CreateBranch: Creates and checks out a new branch
+// - SwitchBranch: Switches to an existing branch
+// - CreateGitHooksDir: Creates the .git/hooks directory if it doesn't exist
+//
+// # Usage Example
+//
+//	repoPath := t.TempDir()
+//	err := git.SetupGitRepo(repoPath)
+//	hash, err := git.AddCommit(repoPath, "file.txt", "content", "Add file")
+//	err = git.CreateBranch(repoPath, "feature")
 package git
 
 import (

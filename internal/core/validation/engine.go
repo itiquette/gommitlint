@@ -8,45 +8,85 @@ package validation
 import (
 	"context"
 
-	"github.com/itiquette/gommitlint/internal/config"
-	"github.com/itiquette/gommitlint/internal/contextx"
+	"github.com/itiquette/gommitlint/internal/application/factories"
+	"github.com/itiquette/gommitlint/internal/common/contextx"
+	"github.com/itiquette/gommitlint/internal/config/types"
 	"github.com/itiquette/gommitlint/internal/domain"
-	"github.com/itiquette/gommitlint/internal/infrastructure/log"
+	"github.com/itiquette/gommitlint/internal/domain/formatting"
 )
 
-// Engine is responsible for running validation rules against commits.
-// It does not use backward compatibility adapters anymore.
-type Engine struct {
-	ruleProvider domain.RuleProvider
-	// No need to store configuration directly - it's in the context
+// Engine defines the interface for commit validation engines.
+type Engine interface {
+	// ValidateCommit validates a single commit against active rules.
+	ValidateCommit(ctx context.Context, commit domain.CommitInfo) domain.CommitResult
+
+	// ValidateCommits validates multiple commits against active rules.
+	ValidateCommits(ctx context.Context, commits []domain.CommitInfo) domain.ValidationResults
+
+	// GetRegistry returns the rule registry used by this engine.
+	GetRegistry() *domain.RuleRegistry
 }
 
-// CreateEngine creates a validation engine using the configuration and context.
-func CreateEngine(_ context.Context, _ config.Config, _ domain.CommitAnalyzer) Engine {
-	// Now creates the engine with context directly
-	// Parameters are unused as we've moved to context-based configuration
-	return Engine{
-		// Rule provider is now implemented directly in the application layer
-		// using context-based configuration
-		ruleProvider: nil,
+// RegistryEngine is responsible for running validation rules against commits.
+// This implementation uses RuleRegistry directly.
+type RegistryEngine struct {
+	registry *domain.RuleRegistry
+}
+
+// CreateEngine creates a validation engine using the context.
+func CreateEngine(ctx context.Context, _ types.Config, analyzer domain.CommitAnalyzer) Engine {
+	logger := contextx.GetLogger(ctx)
+	logger.Debug("Entering validation.CreateEngine")
+
+	// Create rule registry
+	simpleRegistry := domain.NewRuleRegistry()
+
+	// Create simple rule factory
+	simpleFactory := factories.NewSimpleRuleFactory()
+
+	// Create basic rules
+	basicRules := simpleFactory.CreateBasicRules()
+
+	// Create analyzer rules if we have one
+	if analyzer != nil {
+		analyzerRules := simpleFactory.CreateAnalyzerRules(analyzer)
+		for name, factory := range analyzerRules {
+			basicRules[name] = factory
+		}
+	}
+
+	// Register all rules
+	for name, factory := range basicRules {
+		simpleRegistry.RegisterWithContext(ctx, name, factory)
+	}
+
+	// Create and return the registry engine
+	return &RegistryEngine{
+		registry: simpleRegistry,
 	}
 }
 
-func (e Engine) GetRuleProvider() domain.RuleProvider {
-	return e.ruleProvider
-}
-func (e Engine) ValidateCommit(ctx context.Context, commit domain.CommitInfo) domain.CommitResult {
-	logger := log.Logger(ctx)
-	logger.Trace().
-		Str("commit_hash", commit.Hash).
-		Str("subject", commit.Subject).
-		Bool("is_merge_commit", commit.IsMergeCommit).
-		Msg("Entering Engine.ValidateCommit")
+// ValidateCommit validates a single commit against all active rules.
+func (e *RegistryEngine) ValidateCommit(ctx context.Context, commit domain.CommitInfo) domain.CommitResult {
+	// Get logger from context
+	logger := contextx.GetLogger(ctx)
+	logger.Debug("Entering Engine.ValidateCommit",
+		"commit_hash", commit.Hash,
+		"subject", commit.Subject,
+		"is_merge_commit", commit.IsMergeCommit)
 
-	activeRules := e.ruleProvider.GetActiveRules(ctx)
+	// Get enabled/disabled rules directly from context configuration
+	cfg := contextx.GetConfig(ctx)
+	enabledRules := cfg.GetStringSlice("rules.enabled_rules")
+	disabledRules := cfg.GetStringSlice("rules.disabled_rules")
 
-	// Get the active rules - we no longer need special filtering here
-	// as this is now handled by the rule provider's GetActiveRules method
+	// Log configuration values
+	logger.Debug("Rule configuration from context",
+		"enabled_rules", enabledRules,
+		"disabled_rules", disabledRules)
+
+	// Create active rules using the registry
+	activeRules := e.registry.CreateActiveRules(ctx, enabledRules, disabledRules)
 
 	// Log active rules for debugging
 	activeRuleNames := make([]string, 0, len(activeRules))
@@ -54,138 +94,100 @@ func (e Engine) ValidateCommit(ctx context.Context, commit domain.CommitInfo) do
 		activeRuleNames = append(activeRuleNames, rule.Name())
 	}
 
-	// Print debug info about rules
-	logger.Debug().Strs("active_rules", activeRuleNames).Msg("Active rules for validation")
+	logger.Debug("Active rules for validation", "active_rules", activeRuleNames)
+
+	// Use helper method to validate with the provided rules
+	return e.validateWithRules(ctx, commit, activeRules)
+}
+
+// validateWithRules is a helper method that validates a commit against a set of rules.
+func (e *RegistryEngine) validateWithRules(ctx context.Context, commit domain.CommitInfo, rules []domain.Rule) domain.CommitResult {
+	// Get logger from context
+	logger := contextx.GetLogger(ctx)
+
+	// Handle no active rules case
+	if len(rules) == 0 {
+		logger.Debug("No active rules, returning passing result")
+
+		return domain.CommitResult{
+			CommitInfo:  commit,
+			RuleResults: []domain.RuleResult{},
+			Passed:      true,
+		}
+	}
 
 	// Initialize result
 	result := domain.CommitResult{
 		CommitInfo:  commit,
-		RuleResults: nil, // Will be populated by Map function
+		RuleResults: make([]domain.RuleResult, 0, len(rules)),
 		Passed:      true,
 	}
 
-	// Transform rules into rule results using Map
-	ruleResults := contextx.Map(activeRules, func(rule domain.Rule) domain.RuleResult {
-		// Validate commit against rule
+	// Validate against each rule
+	for _, rule := range rules {
 		ruleErrors := rule.Validate(ctx, commit)
 
-		// Determine status based on errors
 		status := domain.StatusPassed
 		if len(ruleErrors) > 0 {
 			status = domain.StatusFailed
-			result.Passed = false // Side effect: update the overall pass/fail status
+			result.Passed = false
 		}
 
-		// Create rule result
 		ruleResult := domain.RuleResult{
 			RuleID:         rule.Name(),
 			RuleName:       rule.Name(),
 			Status:         status,
-			Message:        rule.Result(ruleErrors),
-			VerboseMessage: rule.VerboseResult(ruleErrors),
-			HelpMessage:    rule.Help(ruleErrors),
+			Message:        formatting.FormatResult(rule.Name(), ruleErrors),
+			VerboseMessage: formatting.FormatVerboseResult(rule.Name(), ruleErrors),
+			HelpMessage:    formatting.FormatHelp(rule.Name(), ruleErrors),
 			Errors:         ruleErrors,
 		}
 
-		return ruleResult
-	})
-
-	// Add all rule results to the commit result
-	result.RuleResults = ruleResults
+		result.RuleResults = append(result.RuleResults, ruleResult)
+	}
 
 	return result
 }
 
 // ValidateCommits validates multiple commits against all active rules.
-func (e Engine) ValidateCommits(ctx context.Context, commits []domain.CommitInfo) domain.ValidationResults {
-	logger := log.Logger(ctx)
-	logger.Trace().
-		Int("commit_count", len(commits)).
-		Msg("Entering Engine.ValidateCommits")
+func (e *RegistryEngine) ValidateCommits(ctx context.Context, commits []domain.CommitInfo) domain.ValidationResults {
+	logger := contextx.GetLogger(ctx)
+	logger.Debug("Entering Engine.ValidateCommits",
+		"commit_count", len(commits))
 
-	// Create a new ValidationResults
+	// Get config from context
+	cfg := contextx.GetConfig(ctx)
+	enabledRules := cfg.GetStringSlice("rules.enabled_rules")
+	disabledRules := cfg.GetStringSlice("rules.disabled_rules")
+
+	// Create active rules once to avoid repeated rule creation
+	activeRules := e.registry.CreateActiveRules(ctx, enabledRules, disabledRules)
+
+	// Create results
 	results := domain.NewValidationResults()
 
-	// Define a validator function
-	validateCommit := func(acc struct {
-		results domain.ValidationResults
-		done    bool
-	}, commit domain.CommitInfo) struct {
-		results domain.ValidationResults
-		done    bool
-	} {
-		// Check if we're already done
-		if acc.done {
-			return struct {
-				results domain.ValidationResults
-				done    bool
-			}{
-				results: acc.results,
-				done:    true,
-			}
-		}
+	for _, commit := range commits {
+		commitResult := e.validateWithRules(ctx, commit, activeRules)
 
-		// Create a new results object to maintain immutability
-		newResults := domain.NewValidationResults()
-
-		// Copy existing results
-		newResults.CommitResults = contextx.DeepCopy(acc.results.CommitResults)
-
-		// Validate the commit and append to results
-		commitResult := e.ValidateCommit(ctx, commit)
-		newResults.CommitResults = append(newResults.CommitResults, commitResult)
-
-		// Update total and passed commits counts
-		newResults.TotalCommits = acc.results.TotalCommits + 1
-		newResults.PassedCommits = acc.results.PassedCommits
+		results.Results = append(results.Results, commitResult)
+		results.TotalCommits++
 
 		if commitResult.Passed {
-			newResults.PassedCommits++
+			results.PassedCommits++
 		}
 
-		// Copy and update rule summary
-		newResults.RuleSummary = contextx.DeepCopyMap(acc.results.RuleSummary)
-
+		// Update rule summary
 		for _, ruleResult := range commitResult.RuleResults {
 			if ruleResult.Status == domain.StatusFailed {
-				newResults.RuleSummary[ruleResult.RuleID]++
+				results.RuleSummary[ruleResult.RuleID]++
 			}
-		}
-
-		return struct {
-			results domain.ValidationResults
-			done    bool
-		}{
-			results: newResults,
-			done:    false,
 		}
 	}
 
-	// Use reduce to process commits in a functional way
-	accumulator := contextx.Reduce(
-		commits,
-		struct {
-			results domain.ValidationResults
-			done    bool
-		}{
-			results: results,
-			done:    false,
-		},
-		func(acc struct {
-			results domain.ValidationResults
-			done    bool
-		}, commit domain.CommitInfo) struct {
-			results domain.ValidationResults
-			done    bool
-		} {
-			// Skip processing if we're already done
-			if acc.done {
-				return acc
-			}
+	return results
+}
 
-			return validateCommit(acc, commit)
-		},
-	)
-
-	return accumulator.results
+// GetRegistry returns the rule registry used by this engine.
+func (e *RegistryEngine) GetRegistry() *domain.RuleRegistry {
+	return e.registry
 }

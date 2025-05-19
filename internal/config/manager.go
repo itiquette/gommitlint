@@ -7,121 +7,75 @@ package config
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
+
+	infra "github.com/itiquette/gommitlint/internal/adapters/outgoing/config"
+	"github.com/itiquette/gommitlint/internal/adapters/outgoing/log"
+	"github.com/itiquette/gommitlint/internal/common/contextx"
+	"github.com/itiquette/gommitlint/internal/config/types"
 )
 
 // Manager provides a simplified configuration management interface
-// that works directly with the configuration system.
+// that works directly with the configuration service.
 type Manager struct {
-	// provider is the underlying configuration provider
-	provider *Provider
-
-	// activeCtx is the context for the manager
-	// Renamed from ctx to avoid "context in struct" linting issues
-	activeCtx context.Context //nolint:containedctx // Deliberate design choice for this manager
-}
-
-// WithUpdatedContext returns a new Manager with the provided context.
-// This satisfies the linter by providing a way to pass context
-// instead of storing it in the struct directly.
-func (m Manager) WithUpdatedContext(ctx context.Context) Manager {
-	result := m
-	result.activeCtx = ctx
-
-	return result
+	// service is the underlying configuration service
+	service *infra.Service
 }
 
 // NewManager creates a new configuration manager.
-func NewManager() (*Manager, error) {
-	// Create a new provider
-	provider, err := NewProvider()
+func NewManager(ctx context.Context) (*Manager, error) {
+	// Use the logger from the context
+	logger := log.Logger(ctx)
+	logger.Trace().Msg("Entering config.NewManager")
+
+	// Create a new service
+	service, err := infra.NewService()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create configuration provider: %w", err)
+		return nil, fmt.Errorf("failed to create configuration service: %w", err)
 	}
 
-	// Create a context with the provider
-	ctx := context.Background()
-	ctx = WithProviderInContext(ctx, provider)
+	// Load configuration
+	if err := service.Load(); err != nil {
+		return nil, fmt.Errorf("failed to load configuration: %w", err)
+	}
 
 	return &Manager{
-		provider:  provider,
-		activeCtx: ctx,
+		service: service,
 	}, nil
 }
 
 // Load loads configuration from files.
 func (m *Manager) Load() error {
-	// Add debug output
-	fmt.Println("Loading configuration from default paths via Manager.Load()")
-
-	return m.provider.Load()
+	return m.service.Load()
 }
 
 // LoadFromPath loads configuration from the specified path.
 func (m *Manager) LoadFromPath(path string) error {
-	// Add debug output
-	fmt.Printf("Loading configuration from specific path: %s via Manager.LoadFromPath()\n", path)
-
-	return m.provider.LoadFromPath(path)
+	return m.service.LoadFromPath(path)
 }
 
 // GetConfig returns the current configuration.
-func (m *Manager) GetConfig() Config {
-	return m.provider.GetConfig()
+func (m *Manager) GetConfig() types.Config {
+	return m.service.GetConfig()
 }
 
 // UpdateConfig updates the configuration with the given options.
-func (m *Manager) UpdateConfig(transform func(Config) Config) {
-	m.provider.UpdateConfig(transform)
+func (m *Manager) UpdateConfig(transform func(types.Config) types.Config) {
+	newService := m.service.UpdateConfig(transform)
+	m.service = newService
 }
 
 // WithGitRepository sets the Git repository path in the configuration.
 func (m *Manager) WithGitRepository(path string) {
-	m.provider.WithGitRepository(path)
-}
+	m.UpdateConfig(func(cfg types.Config) types.Config {
+		cfg.Repository.Path = path
 
-// GetContext returns the context associated with the manager.
-func (m *Manager) GetContext() context.Context {
-	return m.activeCtx
+		return cfg
+	})
 }
 
 // WithContext returns a new context with the manager's configuration added.
 func (m *Manager) WithContext(ctx context.Context) context.Context {
-	return WithProviderInContext(ctx, m.provider)
-}
+	adapter := m.service.GetAdapter()
 
-// GetValidationConfig returns the validation configuration.
-func (m *Manager) GetValidationConfig(ctx context.Context) Config {
-	return GetConfig(ctx)
-}
-
-// WithConfigInContext returns a new context with the given configuration added.
-func (m *Manager) WithConfigInContext(ctx context.Context, config Config) context.Context {
-	return WithConfig(ctx, config)
-}
-
-// SaveDefaultConfig saves the default configuration to the specified path.
-func (m *Manager) SaveDefaultConfig(path string) error {
-	// Create directory if it doesn't exist
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create directory %s: %w", dir, err)
-	}
-
-	// Get default configuration
-	defaultConfig := NewDefaultConfig()
-
-	// Update provider with default configuration
-	m.provider.UpdateConfig(func(_ Config) Config {
-		return defaultConfig
-	})
-
-	// Save configuration
-	return m.provider.Save(path)
-}
-
-// Save saves the current configuration to the specified path.
-func (m *Manager) Save(path string) error {
-	return m.provider.Save(path)
+	return contextx.WithConfig(ctx, adapter)
 }

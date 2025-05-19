@@ -2,15 +2,12 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package errors provides a consolidated error handling system for gommitlint.
-// It defines a structured error type and a factory function approach for creating errors.
 package errors
 
-import (
-	"strconv"
-)
-
 // ValidationErrorCode represents standardized error codes for validation errors.
+// These codes provide a stable interface for programmatic error handling across
+// the application. They are organized by category (format, subject, body, etc.)
+// and follow a consistent naming pattern using snake_case.
 type ValidationErrorCode string
 
 func (v ValidationErrorCode) String() string {
@@ -33,7 +30,9 @@ const (
 	ErrEmptyMessage   ValidationErrorCode = "empty_message"
 
 	// Body errors.
-	ErrInvalidBody ValidationErrorCode = "invalid_body"
+	ErrInvalidBody  ValidationErrorCode = "invalid_body"
+	ErrMissingBody  ValidationErrorCode = "missing_body"
+	ErrBodyTooShort ValidationErrorCode = "body_too_short"
 
 	// Conventional commit errors.
 	ErrInvalidType        ValidationErrorCode = "invalid_type"
@@ -42,8 +41,9 @@ const (
 	ErrDescriptionTooLong ValidationErrorCode = "description_too_long"
 
 	// Jira errors.
-	ErrMissingJira   ValidationErrorCode = "missing_jira"
-	ErrMisplacedJira ValidationErrorCode = "misplaced_jira"
+	ErrMissingJira    ValidationErrorCode = "missing_jira"
+	ErrMisplacedJira  ValidationErrorCode = "misplaced_jira"
+	ErrInvalidProject ValidationErrorCode = "invalid_project"
 
 	// Imperative mood errors.
 	ErrNonImperative ValidationErrorCode = "non_imperative"
@@ -74,8 +74,9 @@ const (
 	ErrMissingSignoff ValidationErrorCode = "missing_signoff"
 
 	// Spelling errors.
-	ErrSpelling       ValidationErrorCode = "spelling_error"
-	ErrMisspelledWord ValidationErrorCode = "misspelled_word"
+	ErrSpelling         ValidationErrorCode = "spelling_error"
+	ErrMisspelledWord   ValidationErrorCode = "misspelled_word"
+	ErrSpellCheckFailed ValidationErrorCode = "spell_check_failed"
 
 	// Commits ahead errors.
 	ErrTooManyCommits ValidationErrorCode = "too_many_commits"
@@ -101,7 +102,7 @@ const (
 )
 
 // Note: Error templates have been removed as they are now handled by specialized error helpers
-// in enhanced_errors.go like FormatError, LengthError, etc. These provide rich context
+// in formatting.go like NewFormatValidationError, etc. These provide rich context
 // and standardized formatting.
 
 // ValidationError represents an error detected during validation.
@@ -115,6 +116,9 @@ type ValidationError struct {
 
 	// Message is a human-readable error message.
 	Message string
+
+	// Help is an optional help text that provides guidance on how to fix the error.
+	Help string
 
 	// Context contains additional information about the error.
 	Context map[string]string
@@ -148,22 +152,22 @@ func (e ValidationError) WithContext(key, value string) ValidationError {
 	return result
 }
 
-// WithIntContext adds an integer context value.
-func (e ValidationError) WithIntContext(key string, value int) ValidationError {
-	return e.WithContext(key, strconv.Itoa(value))
+// WithHelp adds help text to a ValidationError.
+// Note: This implementation follows immutability with functional programming principles.
+func (e ValidationError) WithHelp(help string) ValidationError {
+	result := e
+	result.Help = help
+
+	return result
 }
 
-// ErrorOption defines a function that can modify a ValidationError.
-// Note: This is maintained for backward compatibility but new code should use
-// the functional chaining approach with methods like WithContext().
-type ErrorOption func(*ValidationError)
-
-// CreateBasicError creates a new ValidationError.
-func CreateBasicError(rule string, code ValidationErrorCode, message string) ValidationError {
+// New creates a new ValidationError.
+func New(rule string, code ValidationErrorCode, message string) ValidationError {
 	return ValidationError{
 		Rule:    rule,
 		Code:    string(code),
 		Message: message,
+		Help:    "",
 		Context: make(map[string]string),
 	}
 }

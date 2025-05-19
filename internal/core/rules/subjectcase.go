@@ -10,20 +10,17 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/itiquette/gommitlint/internal/config"
+	"github.com/itiquette/gommitlint/internal/common/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
-	"github.com/itiquette/gommitlint/internal/infrastructure/log"
 )
 
 // SubjectCaseRule validates the case style of commit subjects.
 type SubjectCaseRule struct {
-	baseRule      BaseRule
+	name          string
 	caseChoice    string
 	checkCommit   bool
 	allowNonAlpha bool
-	firstWord     string
-	foundCase     string
 }
 
 // SubjectCaseOption configures a SubjectCaseRule.
@@ -63,7 +60,7 @@ func WithAllowNonAlpha(allow bool) SubjectCaseOption {
 func NewSubjectCaseRule(options ...SubjectCaseOption) SubjectCaseRule {
 	// Create a rule with default values
 	rule := SubjectCaseRule{
-		baseRule:      NewBaseRule("SubjectCase"),
+		name:          "SubjectCase",
 		caseChoice:    "sentence", // Default: Sentence case (first letter uppercase, rest lowercase)
 		checkCommit:   true,       // Default: Check conventional commits
 		allowNonAlpha: false,      // Default: Don't allow non-alpha chars at start
@@ -80,95 +77,69 @@ func NewSubjectCaseRule(options ...SubjectCaseOption) SubjectCaseRule {
 // Validate checks that commit subjects follow the required case style
 // using configuration from context.
 func (r SubjectCaseRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
-	logger := log.Logger(ctx)
-	logger.Trace().
-		Str("rule", r.Name()).
-		Str("commit_hash", commit.Hash).
-		Msg("Validating subject case using context configuration")
+	logger := contextx.GetLogger(ctx)
+	logger.Debug("Validating subject case",
+		"rule", r.Name(),
+		"commit_hash", commit.Hash)
 
-	// Create a new rule with context configuration
-	rule := r.withContextConfig(ctx)
+	// Get config directly from context using standard approach
+	cfg := contextx.GetConfig(ctx)
 
-	// Use the existing validation logic
-	errors, _ := ValidateWithState(rule, commit)
+	// Apply configuration from context
+	caseChoice := r.caseChoice
 
-	return errors
-}
+	// Set default values
+	allowNonAlpha := true // Default to allow non-alpha
 
-// withContextConfig creates a new rule with configuration from context.
-func (r SubjectCaseRule) withContextConfig(ctx context.Context) SubjectCaseRule {
-	// Get configuration from context
-	cfg := config.GetConfig(ctx)
-
-	// Extract configuration values
-	caseChoice := cfg.Subject.Case
-	isConventional := cfg.Conventional.Required
-	allowNonAlpha := cfg.Subject.RequireImperative // Allow non-alpha if imperative is required
-
-	// Create a copy of the rule
-	result := r
-
-	// Update settings from context
-	if caseChoice != "" {
-		result.caseChoice = caseChoice
+	// Get configuration values directly
+	caseStyle := cfg.GetString("subject.case")
+	if caseStyle != "" {
+		caseChoice = caseStyle
+		logger.Debug("Using case style from config",
+			"case_style", caseStyle)
 	}
 
-	result.checkCommit = isConventional
-	result.allowNonAlpha = allowNonAlpha
+	// Get imperative requirement
+	requireImperative := cfg.GetBool("subject.require_imperative")
+	allowNonAlpha = requireImperative || allowNonAlpha
+	logger.Debug("Configured imperative requirement",
+		"require_imperative", requireImperative,
+		"allow_non_alpha", allowNonAlpha)
 
-	// Log configuration at debug level
-	logger := log.Logger(ctx)
-	logger.Debug().
-		Str("case_choice", caseChoice).
-		Bool("is_conventional", isConventional).
-		Bool("allow_non_alpha", allowNonAlpha).
-		Msg("Subject case rule configuration from context")
+	// Check if conventional commit is required
+	checkCommit := cfg.GetBool("conventional.required")
+	logger.Debug("Configured conventional commit check",
+		"conventional_required", checkCommit)
 
-	return result
-}
+	// Log final configuration at debug level
+	logger.Debug("Subject case rule configuration",
+		"case_choice", caseChoice,
+		"is_conventional", checkCommit,
+		"allow_non_alpha", allowNonAlpha)
 
-// Name returns the rule name.
-func (r SubjectCaseRule) Name() string {
-	return r.baseRule.Name()
-}
-
-// WithCaseChoice returns a new rule with the specified case choice.
-func (r SubjectCaseRule) WithCaseChoice(caseStyle string) SubjectCaseRule {
-	result := r
-	result.caseChoice = caseStyle
-
-	return result
-}
-
-// ValidateWithState validates the subject case and returns both the errors and an updated rule.
-func ValidateWithState(rule SubjectCaseRule, commit domain.CommitInfo) ([]appErrors.ValidationError, SubjectCaseRule) {
-	// Special handling for "ignore" case choice - always valid
-	if rule.caseChoice == "ignore" || rule.caseChoice == "any" {
-		return []appErrors.ValidationError{}, rule
+	// Special handling for "ignore" or "any" case choice - always valid
+	if caseChoice == "ignore" || caseChoice == "any" {
+		return nil
 	}
-
-	result := rule
-	result.baseRule = rule.baseRule.WithClearedErrors().WithRun()
 
 	// Extract subject
 	subject := commit.Subject
 
 	// Check for empty subject first
 	if subject == "" {
-		validationErr := appErrors.CreateBasicError(
-			result.baseRule.Name(),
-			appErrors.ErrEmptyDescription,
-			"commit message description is empty",
-		)
-		result.baseRule = result.baseRule.WithError(validationErr)
-
-		return result.baseRule.Errors(), result
+		return []appErrors.ValidationError{
+			appErrors.New(
+				"SubjectCase",
+				appErrors.ErrEmptyDescription,
+				"commit message description is empty",
+			),
+		}
 	}
 
 	// For conventional commits, need to extract the description part
 	var textToCheck string
 
-	if rule.checkCommit {
+	if checkCommit {
 		// Try to parse as conventional commit
 		// Format: type(scope)!: description
 		conventionalRegex := regexp.MustCompile(`^(?:\w+)(?:\([^)]*\))?(?:!)?:\s*(.*)$`)
@@ -179,27 +150,26 @@ func ValidateWithState(rule SubjectCaseRule, commit domain.CommitInfo) ([]appErr
 			// Found conventional format, extract description
 			if matches[1] == "" {
 				// Conventional format but empty description
-				validationErr := appErrors.CreateBasicError(
-					result.baseRule.Name(),
-					appErrors.ErrEmptyDescription,
-					"commit message description is empty",
-				)
-				result.baseRule = result.baseRule.WithError(validationErr)
-
-				return result.baseRule.Errors(), result
+				return []appErrors.ValidationError{
+					appErrors.New(
+						"SubjectCase",
+						appErrors.ErrEmptyDescription,
+						"commit message description is empty",
+					),
+				}
 			}
 
+			// Use the description part after the conventional commit prefix
 			textToCheck = matches[1]
 		} else if isConventionalCommitLike(subject) {
 			// It's trying to be a conventional commit but the format is invalid
-			validationErr := appErrors.CreateBasicError(
-				result.baseRule.Name(),
-				appErrors.ErrInvalidFormat,
-				"commit message does not follow conventional commit format",
-			)
-			result.baseRule = result.baseRule.WithError(validationErr)
-
-			return result.baseRule.Errors(), result
+			return []appErrors.ValidationError{
+				appErrors.New(
+					"SubjectCase",
+					appErrors.ErrInvalidFormat,
+					"commit message does not follow conventional commit format",
+				),
+			}
 		} else {
 			// Not a conventional commit, check whole subject
 			textToCheck = subject
@@ -210,45 +180,55 @@ func ValidateWithState(rule SubjectCaseRule, commit domain.CommitInfo) ([]appErr
 	}
 
 	// Special handling for non-alphabetic starts with allowNonAlpha option
-	if rule.allowNonAlpha && !startsWithAlpha(textToCheck) {
-		return []appErrors.ValidationError{}, result
+	if allowNonAlpha && !startsWithAlpha(textToCheck) {
+		return nil
 	}
 
 	// Get the first word to check its case
-	firstWord := extractFirstWordForCase(textToCheck, rule.allowNonAlpha)
+	firstWord := extractFirstWordForCase(textToCheck, allowNonAlpha)
 	if firstWord == "" {
-		validationErr := appErrors.CreateBasicError(
-			result.baseRule.Name(),
-			appErrors.ErrSubjectCase,
-			"could not find a word to check case",
-		).WithContext("subject", textToCheck)
-
-		result.baseRule = result.baseRule.WithError(validationErr)
-
-		return result.baseRule.Errors(), result
+		return []appErrors.ValidationError{
+			appErrors.New(
+				"SubjectCase",
+				appErrors.ErrSubjectCase,
+				"could not find a word to check case",
+			).WithContext("subject", textToCheck),
+		}
 	}
-
-	// Store the first word for result reporting
-	result.firstWord = firstWord
 
 	// Check the case
-	actualCase, isValid := checkCase(firstWord, rule.caseChoice)
-	result.foundCase = actualCase
+	actualCase, isValid := checkCase(firstWord, caseChoice)
 
 	if !isValid {
-		validationErr := appErrors.CreateBasicError(
-			result.baseRule.Name(),
-			appErrors.ErrSubjectCase,
-			fmt.Sprintf("first word '%s' is not in %s case", firstWord, rule.caseChoice),
-		).
-			WithContext("word", firstWord).
-			WithContext("required_case", rule.caseChoice).
-			WithContext("actual_case", actualCase)
-
-		result.baseRule = result.baseRule.WithError(validationErr)
+		return []appErrors.ValidationError{
+			appErrors.New(
+				"SubjectCase",
+				appErrors.ErrSubjectCase,
+				fmt.Sprintf("first word '%s' is not in %s case", firstWord, caseChoice),
+			).
+				WithContext("word", firstWord).
+				WithContext("required_case", caseChoice).
+				WithContext("actual_case", actualCase),
+		}
 	}
 
-	return result.baseRule.Errors(), result
+	return nil
+}
+
+// Name returns the rule name.
+func (r SubjectCaseRule) Name() string {
+	return r.name
+}
+
+// isConventionalCommitLike checks if a string looks like it's trying to be a conventional commit
+// but doesn't match the full pattern.
+func isConventionalCommitLike(subject string) bool {
+	// Look for partial conventional commit pattern (has type and colon but missing description)
+	partialPattern := regexp.MustCompile(`^(?:\w+)(?:\([^)]*\))?(?:!)?:`)
+	// Also detect incorrect format with something after the colon
+	invalidPattern := regexp.MustCompile(`^(?:[^: ]+):`)
+
+	return partialPattern.MatchString(subject) || invalidPattern.MatchString(subject)
 }
 
 // startsWithAlpha checks if a string starts with an alphabetic character.
@@ -285,18 +265,9 @@ func extractFirstWordForCase(text string, allowNonAlpha bool) string {
 	return firstWord
 }
 
-// isConventionalCommitLike checks if a string looks like it's trying to be a conventional commit
-// but doesn't match the full pattern.
-func isConventionalCommitLike(subject string) bool {
-	// Look for partial conventional commit pattern (has type and colon but missing description)
-	partialPattern := regexp.MustCompile(`^(?:\w+)(?:\([^)]*\))?(?:!)?:`)
-	// Also detect incorrect format with something after the colon
-	invalidPattern := regexp.MustCompile(`^(?:[^: ]+):`)
-
-	return partialPattern.MatchString(subject) || invalidPattern.MatchString(subject)
-}
-
 // checkCase determines the case of a word and checks if it matches the required case.
+//
+//nolint:gocyclo // This function is inherently complex due to the many different case types
 func checkCase(word string, requiredCase string) (string, bool) {
 	if word == "" {
 		return "empty", false
@@ -369,6 +340,9 @@ func checkCase(word string, requiredCase string) (string, bool) {
 		isValid = isFirstUpper && restAllLower
 	case "camel":
 		isValid = (isFirstUpper && !restAllUpper) || actualCase == "sentence"
+	case "title":
+		// For title case, we'll accept both "Sentence" and "Title Case" formats
+		isValid = (isFirstUpper && restAllLower) || (isFirstUpper && !restAllLower && !restAllUpper)
 	default:
 		// Default to sentence case (first uppercase, rest lowercase) if invalid case choice
 		// This matches the default in NewSubjectCaseRule
@@ -376,126 +350,4 @@ func checkCase(word string, requiredCase string) (string, bool) {
 	}
 
 	return actualCase, isValid
-}
-
-// SetErrors sets the errors for this rule and returns an updated rule.
-func (r SubjectCaseRule) SetErrors(errors []appErrors.ValidationError) SubjectCaseRule {
-	result := r
-	result.baseRule = result.baseRule.WithClearedErrors()
-
-	for _, err := range errors {
-		result.baseRule = result.baseRule.WithError(err)
-	}
-
-	return result
-}
-
-// Errors returns all validation errors found by this rule.
-func (r SubjectCaseRule) Errors() []appErrors.ValidationError {
-	return r.baseRule.Errors()
-}
-
-// HasErrors returns true if the rule has found any errors.
-func (r SubjectCaseRule) HasErrors() bool {
-	return r.baseRule.HasErrors()
-}
-
-// Result returns a concise validation result.
-func (r SubjectCaseRule) Result(errors []appErrors.ValidationError) string {
-	if len(errors) == 0 {
-		return "Subject case is correct"
-	}
-
-	// Return based on error code
-	errorCode := appErrors.ValidationErrorCode(errors[0].Code)
-	if errorCode == appErrors.ErrEmptyMessage || errorCode == appErrors.ErrEmptyDescription {
-		return "Subject is empty"
-	}
-
-	if errorCode == appErrors.ErrInvalidFormat {
-		return "Invalid format"
-	}
-
-	return "Subject should start with " + r.caseChoice
-}
-
-// VerboseResult returns a more detailed explanation for verbose mode.
-func (r SubjectCaseRule) VerboseResult(errors []appErrors.ValidationError) string {
-	if len(errors) == 0 {
-		var result string
-
-		switch r.caseChoice {
-		case "upper":
-			result = "Subject starts with an uppercase letter"
-		case "lower":
-			result = "Subject starts with a lowercase letter"
-		case "ignore":
-			result = "Subject case check is disabled"
-		default:
-			result = fmt.Sprintf("Subject correctly uses %s case", r.caseChoice)
-		}
-
-		return result
-	}
-
-	// Return based on error code
-	errorCode := appErrors.ValidationErrorCode(errors[0].Code)
-	if errorCode == appErrors.ErrEmptyMessage || errorCode == appErrors.ErrEmptyDescription {
-		return "Subject is empty and cannot be checked for case"
-	}
-
-	if errorCode == appErrors.ErrInvalidFormat {
-		return "Invalid conventional commit format - cannot check subject case"
-	}
-
-	expected := "lowercase"
-	if r.caseChoice == "upper" {
-		expected = "uppercase"
-	}
-
-	return "Subject should start with an " + expected + " letter"
-}
-
-// Help returns guidance for fixing rule violations.
-func (r SubjectCaseRule) Help(errors []appErrors.ValidationError) string {
-	if len(errors) == 0 {
-		return "No errors to fix"
-	}
-
-	// Based on error code
-	errorCode := appErrors.ValidationErrorCode(errors[0].Code)
-	if errorCode == appErrors.ErrEmptyMessage || errorCode == appErrors.ErrEmptyDescription {
-		return "Provide a non-empty commit message"
-	}
-
-	if errorCode == appErrors.ErrInvalidFormat {
-		return "Format your commit message according to the Conventional Commits specification"
-	}
-
-	help := fmt.Sprintf("The first word in your commit message must be in %s case.\n\n", r.caseChoice)
-
-	if r.caseChoice == "sentence" {
-		help += "Sentence case means the first letter is uppercase and the rest are lowercase.\n"
-		if r.firstWord != "" {
-			help += fmt.Sprintf("Instead of '%s', use proper sentence case", r.firstWord)
-		}
-
-		help += "\nCapitalize the first letter"
-	} else if r.caseChoice == "upper" {
-		help += "Upper case means all letters are uppercase.\n"
-		if r.firstWord != "" {
-			help += fmt.Sprintf("Instead of '%s', use UPPERCASE", r.firstWord)
-		}
-
-		help += "\nCapitalize the first letter"
-	} else if r.caseChoice == "lower" {
-		help += "Lower case means all letters are lowercase.\n"
-		if r.firstWord != "" {
-			help += fmt.Sprintf("Instead of '%s', use lowercase", r.firstWord)
-		}
-
-		help += "\nUse lowercase for the first letter"
-	}
-
-	return help
 }

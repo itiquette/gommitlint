@@ -6,6 +6,11 @@
 Package errors provides a comprehensive error handling system for Gommitlint
 with rich context and functional programming principles.
 
+The package structure consists of:
+  - errors.go: Core types, error codes, and base functions
+  - formatting.go: Formatting methods and helper functions
+  - formatter.go: Output formatters for different formats
+
 # Core Components
 
  1. ValidationError:
@@ -15,13 +20,15 @@ with rich context and functional programming principles.
 
  2. Context System:
     Errors can include rich context information using a key-value map.
-    Common context fields include commit information, rule configuration, etc.
+    All context is added through the WithContext method for consistency.
 
  3. Help Messages:
-    Errors include help text with guidance on how to fix issues.
+    Errors include a dedicated Help field for guidance on fixing issues.
+    Help text is added using WithHelp or in error creation functions.
 
  4. Formatters:
     Multiple formatters for different output formats (text, JSON, Markdown).
+    Each formatter is a concrete type for simplicity.
 
  5. Immutable Operations:
     All operations on errors follow functional programming principles and
@@ -35,37 +42,18 @@ Creating errors:
 	baseErr := errors.New("RuleName", errors.ErrSubjectTooLong, "Subject too long")
 
 	// Add help text
-	withHelp := errors.EnhanceValidationError(baseErr, "Keep subject under 50 chars")
+	errWithHelp := baseErr.WithHelp("Keep subject under 50 chars")
 
 	// Add context
-	enhancedErr := withHelp.WithContext("subject_length", "60")
-	enhancedErr = enhancedErr.WithContext("max_length", "50")
-	enhancedErr = enhancedErr.WithCommitSHA("abc123")
+	enhancedErr := errWithHelp.WithContext("subject_length", "60")
+		.WithContext("max_length", "50")
+		.WithContext("commit_sha", "abc123")
 
 	// Get help message
-	helpText := enhancedErr.GetHelp(errors []errors.ValidationError)
+	helpText := enhancedErr.GetHelp() // Returns the help field directly
 
 	// Format as text
 	textOutput := enhancedErr.FormatAsText(true) // verbose
-
-Using context collection:
-
-	// Create a context with commit information
-	ctx := errors.NewContext().WithCommit(
-	    "abc123",     // commit hash
-	    "Full message", // commit message
-	    "Subject",    // subject line
-	    "Body",       // body text
-	)
-
-	// Create an error with the context
-	err := errors.CreateRichError(
-	    "RuleName",
-	    errors.ErrSubjectTooLong,
-	    "Subject length exceeds maximum",
-	    "Keep subject under 50 characters",
-	    ctx,
-	)
 
 Using formatters:
 
@@ -81,14 +69,14 @@ Using formatters:
 
 # Advanced Features
 
- 1. Specialized Context Methods:
-    Helper methods like WithCommitSHA for commonly used context values.
-
- 2. Multiple Output Formats:
+ 1. Multiple Output Formats:
     Supports text (with verbose and concise modes), JSON, and Markdown.
 
- 3. Code-Based Help:
-    Help messages can be generated based on error codes.
+ 2. Code-Based Error Types:
+    Comprehensive set of error codes organized by category.
+
+ 3. NewFormatValidationError Helper:
+    A convenience function that creates errors with common format validation patterns.
 
 # Functional Programming Approach
 
@@ -113,10 +101,10 @@ Example
 	    subjectLength, rule.MaxLength)
 
 	err := errors.New(rule.Name(), errors.ErrSubjectTooLong, errorMessage)
-	err = errors.EnhanceValidationError(err, rule.Help(errors []errors.ValidationError))
+	err = err.WithHelp(rule.Help())
 	err = err.WithContext("subject_length", fmt.Sprintf("%d", subjectLength))
 	    .WithContext("max_length", fmt.Sprintf("%d", rule.MaxLength))
 	    .WithContext("subject", commit.Subject)
-	    .WithCommitSHA(commit.Hash)
+	    .WithContext("commit_sha", commit.Hash)
 */
 package errors

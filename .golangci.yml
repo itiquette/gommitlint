@@ -95,7 +95,7 @@ linters:
     - staticcheck
     - stylecheck
     - tagalign
-    - tagliatelle
+    # - tagliatelle  # Disabled: JSON/YAML tag naming conventions are project-specific
     # - tenv
     - testableexamples
     - testifylint

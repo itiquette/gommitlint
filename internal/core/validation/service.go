@@ -12,10 +12,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/itiquette/gommitlint/internal/config"
+	"github.com/itiquette/gommitlint/internal/adapters/outgoing/git"
+	"github.com/itiquette/gommitlint/internal/common/contextx"
+	"github.com/itiquette/gommitlint/internal/config/types"
 	"github.com/itiquette/gommitlint/internal/domain"
-	"github.com/itiquette/gommitlint/internal/infrastructure/git"
-	"github.com/itiquette/gommitlint/internal/infrastructure/log"
 )
 
 // Note: Engine implementation and methods are now defined in engine.go
@@ -47,7 +47,7 @@ type ServiceDependencies struct {
 	Engine Engine
 
 	// CommitService for retrieving commit information
-	CommitService domain.GitCommitService
+	CommitService domain.CommitRepository
 
 	// InfoProvider for repository information
 	InfoProvider domain.RepositoryInfoProvider
@@ -60,11 +60,11 @@ type ServiceDependencies struct {
 // It is designed with value semantics for functional programming.
 type Service struct {
 	dependencies ServiceDependencies
-	config       config.Config
+	config       types.Config
 }
 
 // NewService creates a new Service.
-func NewService(deps ServiceDependencies, cfg config.Config) Service {
+func NewService(deps ServiceDependencies, cfg types.Config) Service {
 	return Service{
 		dependencies: deps,
 		config:       cfg,
@@ -80,7 +80,7 @@ func (s Service) WithDependencies(deps ServiceDependencies) Service {
 }
 
 // WithConfig returns a new Service with the specified configuration.
-func (s Service) WithConfig(cfg config.Config) Service {
+func (s Service) WithConfig(cfg types.Config) Service {
 	return Service{
 		dependencies: s.dependencies,
 		config:       cfg,
@@ -89,8 +89,8 @@ func (s Service) WithConfig(cfg config.Config) Service {
 
 // ValidateCommit validates a single commit.
 func (s Service) ValidateCommit(ctx context.Context, hash string) (domain.CommitResult, error) {
-	logger := log.Logger(ctx)
-	logger.Trace().Str("hash", hash).Msg("Entering Service.ValidateCommit")
+	logger := contextx.GetLogger(ctx)
+	logger.Debug("Entering Service.ValidateCommit", "hash", hash)
 
 	// Get the commit from the git repository
 	commit, err := s.dependencies.CommitService.GetCommit(ctx, hash)
@@ -104,8 +104,8 @@ func (s Service) ValidateCommit(ctx context.Context, hash string) (domain.Commit
 
 // ValidateHeadCommits validates the specified number of commits from HEAD.
 func (s Service) ValidateHeadCommits(ctx context.Context, count int, skipMerge bool) (domain.ValidationResults, error) {
-	logger := log.Logger(ctx)
-	logger.Trace().Int("count", count).Bool("skip_merge", skipMerge).Msg("Entering Service.ValidateHeadCommits")
+	logger := contextx.GetLogger(ctx)
+	logger.Debug("Entering Service.ValidateHeadCommits", "count", count, "skip_merge", skipMerge)
 
 	// Get the commits from the git repository
 	commits, err := s.dependencies.CommitService.GetHeadCommits(ctx, count)
@@ -120,17 +120,16 @@ func (s Service) ValidateHeadCommits(ctx context.Context, count int, skipMerge b
 	}
 
 	// Validate the commits
-	return s.dependencies.Engine.ValidateCommits(ctx, collection.All()), nil
+	return s.dependencies.Engine.ValidateCommits(ctx, []domain.CommitInfo(collection)), nil
 }
 
 // ValidateCommitRange validates all commits in the given range.
 func (s Service) ValidateCommitRange(ctx context.Context, fromHash, toHash string, skipMerge bool) (domain.ValidationResults, error) {
-	logger := log.Logger(ctx)
-	logger.Trace().
-		Str("from_hash", fromHash).
-		Str("to_hash", toHash).
-		Bool("skip_merge", skipMerge).
-		Msg("Entering Service.ValidateCommitRange")
+	logger := contextx.GetLogger(ctx)
+	logger.Debug("Entering Service.ValidateCommitRange",
+		"from_hash", fromHash,
+		"to_hash", toHash,
+		"skip_merge", skipMerge)
 
 	// Get the commits from the git repository
 	commits, err := s.dependencies.CommitService.GetCommitRange(ctx, fromHash, toHash)
@@ -145,13 +144,13 @@ func (s Service) ValidateCommitRange(ctx context.Context, fromHash, toHash strin
 	}
 
 	// Validate the commits
-	return s.dependencies.Engine.ValidateCommits(ctx, collection.All()), nil
+	return s.dependencies.Engine.ValidateCommits(ctx, []domain.CommitInfo(collection)), nil
 }
 
 // ValidateMessageFile validates a commit message from a file.
 func (s Service) ValidateMessageFile(ctx context.Context, filePath string) (domain.ValidationResults, error) {
-	logger := log.Logger(ctx)
-	logger.Trace().Str("file_path", filePath).Msg("Entering Service.ValidateMessageFile")
+	logger := contextx.GetLogger(ctx)
+	logger.Debug("Entering Service.ValidateMessageFile", "file_path", filePath)
 
 	// Read the message file
 	messageBytes, err := os.ReadFile(filePath)
@@ -182,22 +181,21 @@ func (s Service) ValidateMessageFile(ctx context.Context, filePath string) (doma
 
 	// Create validation results
 	results := domain.NewValidationResults()
-	results.AddCommitResult(result)
+	results = results.WithResult(result)
 
 	return results, nil
 }
 
 // ValidateWithOptions validates commits according to the provided options.
 func (s Service) ValidateWithOptions(ctx context.Context, opts Options) (domain.ValidationResults, error) {
-	logger := log.Logger(ctx)
-	logger.Trace().
-		Str("commit_hash", opts.CommitHash).
-		Str("from_hash", opts.FromHash).
-		Str("to_hash", opts.ToHash).
-		Str("message_file", opts.MessageFile).
-		Int("commit_count", opts.CommitCount).
-		Bool("skip_merge", opts.SkipMergeCommits).
-		Msg("Entering Service.ValidateWithOptions")
+	logger := contextx.GetLogger(ctx)
+	logger.Debug("Entering Service.ValidateWithOptions",
+		"commit_hash", opts.CommitHash,
+		"from_hash", opts.FromHash,
+		"to_hash", opts.ToHash,
+		"message_file", opts.MessageFile,
+		"commit_count", opts.CommitCount,
+		"skip_merge", opts.SkipMergeCommits)
 
 	// Create validation results
 	results := domain.NewValidationResults()
@@ -216,7 +214,7 @@ func (s Service) ValidateWithOptions(ctx context.Context, opts Options) (domain.
 
 		// Create validation results
 		results := domain.NewValidationResults()
-		results.AddCommitResult(result)
+		results = results.WithResult(result)
 
 		return results, nil
 	}
@@ -237,16 +235,16 @@ func (s Service) ValidateWithOptions(ctx context.Context, opts Options) (domain.
 		return results, err
 	}
 
-	results.AddCommitResult(result)
+	results = results.WithResult(result)
 
 	return results, nil
 }
 
 // CreateService creates a validation service with the configuration.
 // This now uses context directly for configuration.
-func CreateService(ctx context.Context, config config.Config, repoPath string) (Service, error) {
-	logger := log.Logger(ctx)
-	logger.Trace().Str("repo_path", repoPath).Msg("Entering CreateService")
+func CreateService(ctx context.Context, config types.Config, repoPath string) (Service, error) {
+	logger := contextx.GetLogger(ctx)
+	logger.Debug("Entering CreateService", "repo_path", repoPath)
 
 	// Create the repository adapter
 	repoAdapter, err := git.NewRepositoryAdapter(ctx, repoPath)

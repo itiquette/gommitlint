@@ -13,6 +13,7 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/application/report"
 	"github.com/itiquette/gommitlint/internal/domain"
+	testcontext "github.com/itiquette/gommitlint/internal/testutils/context"
 	"github.com/stretchr/testify/require"
 )
 
@@ -149,7 +150,7 @@ func TestGenerateReport(t *testing.T) {
 			Writer: buf,
 		}, formatter)
 
-		err := generator.GenerateReport(context.Background(), results)
+		err := generator.GenerateReport(testcontext.CreateTestContext(), results)
 		require.NoError(t, err, "GenerateReport should not return an error for successful validation")
 		require.Contains(t, buf.String(), "Test formatted output", "Output should contain formatted text")
 	})
@@ -178,7 +179,7 @@ func TestGenerateReport(t *testing.T) {
 			Writer: os.Stdout, // Must use os.Stdout to trigger the error condition
 		}, formatter)
 
-		err := generator.GenerateReport(context.Background(), failedResults)
+		err := generator.GenerateReport(testcontext.CreateTestContext(), failedResults)
 		require.Error(t, err, "GenerateReport should return an error for failed validation")
 		require.Contains(t, err.Error(), "validation failed", "Error should indicate validation failed")
 
@@ -212,7 +213,7 @@ func TestGenerateSummary(t *testing.T) {
 			Writer: buf,
 		}, formatter)
 
-		err := generator.GenerateSummary(context.Background(), results)
+		err := generator.GenerateSummary(testcontext.CreateTestContext(), results)
 		require.NoError(t, err, "GenerateSummary should not return an error for successful validation")
 		require.Contains(t, buf.String(), "All commits passed", "Output should indicate success")
 	})
@@ -237,7 +238,7 @@ func TestGenerateSummary(t *testing.T) {
 			Writer: os.Stdout, // Must use os.Stdout to trigger the error condition
 		}, formatter)
 
-		err := generator.GenerateSummary(context.Background(), failedResults)
+		err := generator.GenerateSummary(testcontext.CreateTestContext(), failedResults)
 		require.Error(t, err, "GenerateSummary should return an error for failed validation")
 		require.Contains(t, err.Error(), "validation failed", "Error should indicate validation failed")
 

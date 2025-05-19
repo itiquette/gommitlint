@@ -2,6 +2,42 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Configuration Access Pattern
+
+Always use `contextx.GetConfig(ctx)` to access configuration throughout the codebase. This is the standard pattern for accessing configuration in gommitlint.
+
+Example:
+```go
+// Get configuration directly from context
+cfg := contextx.GetConfig(ctx)
+
+// Access configuration values using key-based access
+maxLength := cfg.GetInt("subject.max_length")
+isBodyRequired := cfg.GetBool("body.required")
+enabledRules := cfg.GetStringSlice("rules.enabled_rules")
+```
+
+The configuration is stored in the context early in the application lifecycle and should be accessed directly from there. This approach ensures:
+1. Consistent access pattern throughout the codebase
+2. Clean dependency management
+3. No need to deal with provider interfaces
+
+## Context Key Architecture
+
+Gommitlint uses a hybrid approach for context key management:
+
+- **Public keys** (`internal/common/contextkeys`): Used for cross-cutting concerns like logging and CLI options
+- **Private keys**: Used within packages (like `configKey{}` in `common/config`) to enforce encapsulation
+
+This design follows hexagonal architecture principles by:
+- Preventing direct access to package internals via context
+- Forcing interaction through defined interfaces
+- Maintaining clear boundaries between architectural layers
+
+Most configuration access uses private keys to ensure it goes through the `GetConfig()` interface rather than direct context access.
+
+> **IMPORTANT**: The old `domain.GetConfigProviderFromContext(ctx)` pattern has been deprecated and completely removed. All code must use the `contextx.GetConfig(ctx)` pattern.
+
 ## Rule Logic
 
 Rules in gommitlint can have three states which follow a specific priority order:
@@ -187,7 +223,7 @@ func WithRetries(count int) Option {
 }
 
 func New(opts ...Option) Config {
-    config := DefaultConfig()
+    config := NewDefaultConfig()
     for _, opt := range opts {
         config = opt(config)
     }
@@ -634,11 +670,11 @@ Notice the format:
 
 Use the following tools to verify your documentation:
 
-```
-// Check documentation coverage
+```bash
+# Check documentation coverage
 go doc -all .
 
-// Run a local godoc server
+# Run a local godoc server
 godoc -http=:6060
 ```
 
@@ -657,7 +693,7 @@ This pattern both documents and verifies that the type implements the interface.
 
 For larger projects, organize related packages in a structure that aids discoverability:
 
-```
+```txt
 /pkg
   /validation      # Core validation components
     doc.go         # Package overview documentation
@@ -683,7 +719,7 @@ Each level should have appropriate documentation explaining its purpose in the o
 
 Every source file should have a corresponding test file:
 
-```
+```txt
 validation.go → validation_test.go
 rule.go → rule_test.go
 engine.go → engine_test.go
@@ -793,7 +829,7 @@ Create helper functions for common test setup and mark them with `t.Helper()`:
 func setupValidator(t *testing.T, rules ...Rule) *Validator {
     t.Helper()
     
-    config := DefaultConfig()
+    config := NewDefaultConfig()
     validator, err := NewValidator(config)
     require.NoError(t, err)
     
@@ -987,7 +1023,7 @@ func ExampleValidator_Validate() {
 
 Always use a `testdata` directory adjacent to your test files for test fixtures:
 
-```
+```txt
 package/
   ├── file.go
   ├── file_test.go
@@ -1092,7 +1128,7 @@ Run with:
 go test -tags=integration ./...
 ```
 
-## Best Practices
+## Testing Best Practices
 
 1. **Test behavior, not implementation details**
 2. **Use subtests for better organization**
@@ -1119,7 +1155,7 @@ go test -tags=integration ./...
 
 Organize code in layers with domain logic at the center:
 
-```
+```txt
 project/
 ├── cmd/                     # Application entrypoints
 │   └── myapp/
@@ -1411,7 +1447,7 @@ func (c *CommitValidator) ValidateCommit(hash string) (Result, error) {
 }
 ```
 
-## Error Handling
+## Standard Error Handling
 
 Use standard error handling patterns:
 
@@ -1515,7 +1551,7 @@ Keep architecture only as complex as needed:
 - **Medium projects**: Basic separation of concerns with packages
 - **Large projects**: Full hexagonal architecture with clean separation
 
-## Best Practices
+## Architecture Best Practices
 
 1. **Start simple**: Add complexity only when needed
 2. **Design for maintainability**: Optimize for readability and change

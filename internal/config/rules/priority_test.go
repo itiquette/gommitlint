@@ -1,0 +1,151 @@
+// SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
+package rules
+
+import (
+	"testing"
+
+	"github.com/itiquette/gommitlint/internal/testutils/logger"
+	"github.com/stretchr/testify/require"
+)
+
+func TestRulePriority(t *testing.T) {
+	// Since we're now using domain.GetDefaultDisabledRules(), we need to test
+	// with the actual domain defaults
+	// Test cases
+	tests := []struct {
+		name          string
+		ruleName      string
+		enabledRules  []string
+		disabledRules []string
+		expected      bool
+	}{
+		{
+			name:          "Explicitly enabled rule should be included",
+			ruleName:      "ExplicitlyEnabled",
+			enabledRules:  []string{"ExplicitlyEnabled"},
+			disabledRules: []string{},
+			expected:      true,
+		},
+		{
+			name:          "Explicitly disabled rule should be excluded",
+			ruleName:      "ExplicitlyDisabled",
+			enabledRules:  []string{},
+			disabledRules: []string{"ExplicitlyDisabled"},
+			expected:      false,
+		},
+		{
+			name:          "Default-disabled rule should be excluded (JiraReference)",
+			ruleName:      "JiraReference",
+			enabledRules:  []string{},
+			disabledRules: []string{},
+			expected:      false,
+		},
+		{
+			name:          "Rule enabled by default and not explicitly disabled should be included (Spell)",
+			ruleName:      "Spell",
+			enabledRules:  []string{},
+			disabledRules: []string{},
+			expected:      true,
+		},
+		{
+			name:          "Explicitly disabled rule overrides explicitly enabled rule",
+			ruleName:      "ExplicitlyEnabledAndDisabled",
+			enabledRules:  []string{"ExplicitlyEnabledAndDisabled"},
+			disabledRules: []string{"ExplicitlyEnabledAndDisabled"},
+			expected:      false,
+		},
+		{
+			name:          "Explicitly enabled rule overrides default-disabled rule (JiraReference)",
+			ruleName:      "JiraReference",
+			enabledRules:  []string{"JiraReference"},
+			disabledRules: []string{},
+			expected:      true,
+		},
+		{
+			name:          "Rule with quotes and whitespace in name should be normalized",
+			ruleName:      "RuleWithQuotes",
+			enabledRules:  []string{" \"RuleWithQuotes\" "},
+			disabledRules: []string{},
+			expected:      true,
+		},
+		{
+			name:          "Rule with different capitalization should match",
+			ruleName:      "RuleWithDifferentCase",
+			enabledRules:  []string{"RuLeWiThDiFfErEnTcAsE"}, // Different case in config
+			disabledRules: []string{},
+			expected:      true, // Should match regardless of case
+		},
+	}
+
+	// Run tests
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			// Create a test logger
+			testLogger := logger.NewTestLogger()
+
+			// Call the function
+			result := RulePriority(testCase.ruleName, testCase.enabledRules, testCase.disabledRules, testLogger)
+
+			// Check the result
+			require.Equal(t, testCase.expected, result, "RulePriority returned unexpected result")
+		})
+	}
+}
+
+func TestMakeRuleMap(t *testing.T) {
+	tests := []struct {
+		name      string
+		ruleNames []string
+		expected  map[string]bool
+	}{
+		{
+			name:      "Empty slice",
+			ruleNames: []string{},
+			expected:  map[string]bool{},
+		},
+		{
+			name:      "Simple rule names",
+			ruleNames: []string{"Rule1", "Rule2", "Rule3"},
+			expected: map[string]bool{
+				"Rule1": true,
+				"Rule2": true,
+				"Rule3": true,
+			},
+		},
+		{
+			name:      "Rule names with quotes and whitespace",
+			ruleNames: []string{" \"Rule1\" ", "'Rule2'", "  Rule3  "},
+			expected: map[string]bool{
+				"Rule1": true,
+				"Rule2": true,
+				"Rule3": true,
+			},
+		},
+		{
+			name:      "Rule names with comments",
+			ruleNames: []string{"Rule1", "#Rule2", "Rule3"},
+			expected: map[string]bool{
+				"Rule1": true,
+				"Rule3": true,
+			},
+		},
+		{
+			name:      "Empty and commented rule names",
+			ruleNames: []string{"", "#", "  #Comment  "},
+			expected:  map[string]bool{},
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			// Call the function
+			result := makeRuleMap(testCase.ruleNames)
+
+			// Check the result
+			require.Equal(t, testCase.expected, result, "makeRuleMap returned unexpected result")
+		})
+	}
+}

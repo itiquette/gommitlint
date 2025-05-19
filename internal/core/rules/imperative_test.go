@@ -7,32 +7,37 @@ import (
 	"context"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
+	infraConfig "github.com/itiquette/gommitlint/internal/adapters/outgoing/config"
+	"github.com/itiquette/gommitlint/internal/common/contextx"
 	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
+	"github.com/stretchr/testify/require"
 )
 
-// createTestContext creates a context with test configuration.
-func createTestContext() context.Context {
-	cfg := config.Config{
-		Subject: config.SubjectConfig{
-			MaxLength:         72,
-			Case:              "sentence",
-			RequireImperative: true,
-		},
-		Body: config.BodyConfig{
-			Required: false,
-		},
-		Conventional: config.ConventionalConfig{
-			Required: false,
-			Types:    []string{"feat", "fix", "docs", "style", "refactor", "test", "chore"},
-		},
-	}
+// createImperativeBaseTestContext creates a new context for testing.
+// This is the only place in this test file where context.Background() should be called.
+func createImperativeBaseTestContext() context.Context {
+	return context.Background()
+}
 
-	return config.WithConfig(context.Background(), cfg)
+// createImperativeTestContext creates a context with test configuration.
+func createImperativeTestContext() context.Context {
+	// Create a base config to adapt
+	cfg := config.NewDefaultConfig()
+	cfg.Subject.RequireImperative = true
+	cfg.Subject.MaxLength = 72
+	cfg.Subject.Case = "sentence"
+	cfg.Body.Required = false
+	cfg.Conventional.Required = false
+	cfg.Conventional.Types = []string{"feat", "fix", "docs", "style", "refactor", "test", "chore"}
+
+	// Add the test config to the context using direct adapter pattern
+	ctx := createImperativeBaseTestContext()
+	adapter := infraConfig.NewAdapter(cfg)
+
+	return contextx.WithConfig(ctx, adapter)
 }
 
 func TestImperativeVerbRule(t *testing.T) {
@@ -118,7 +123,7 @@ func TestImperativeVerbRule(t *testing.T) {
 			rule := rules.NewImperativeVerbRule(options...)
 
 			// Create context with test configuration
-			ctx := createTestContext()
+			ctx := createImperativeTestContext()
 
 			// Validate and get errors
 			errors := rule.Validate(ctx, commitInfo)
@@ -161,7 +166,7 @@ func TestImperativeVerbRuleOptions(t *testing.T) {
 		)
 
 		// Create context with test configuration
-		ctx := createTestContext()
+		ctx := createImperativeTestContext()
 
 		errors := rule.Validate(ctx, commitInfo)
 
@@ -186,7 +191,7 @@ func TestImperativeVerbRuleOptions(t *testing.T) {
 		)
 
 		// Create context with test configuration
-		ctx := createTestContext()
+		ctx := createImperativeTestContext()
 
 		defaultErrors := rule.Validate(ctx, commitInfo)
 

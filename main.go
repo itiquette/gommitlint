@@ -8,10 +8,9 @@ import (
 	"context"
 	"os"
 
-	"github.com/itiquette/gommitlint/internal/config"
-	"github.com/itiquette/gommitlint/internal/domain"
-	customlog "github.com/itiquette/gommitlint/internal/infrastructure/log"
-	"github.com/itiquette/gommitlint/internal/ports/cli"
+	"github.com/itiquette/gommitlint/internal/adapters/incoming/cli"
+	"github.com/itiquette/gommitlint/internal/application/options"
+	"github.com/itiquette/gommitlint/internal/composition"
 	"github.com/rs/zerolog"
 	stdlog "github.com/rs/zerolog/log"
 )
@@ -36,39 +35,36 @@ func main() {
 		NoColor:    false,
 	})
 
-	// Create the root context
+	// Create the root context - this is the ONLY context.Background() in the application
 	ctx := context.Background()
 
-	// Add default CLI options to context
-	ctx = domain.WithCLIOptions(ctx, domain.DefaultCLIOptions())
-
-	// Add logger to the context for future use
+	// Add logger to the context for future use - this will be replaced by a proper logger in cli.ExecuteWithContext
 	logger := stdlog.Logger
 	ctx = logger.WithContext(ctx)
 
-	// Create dependencies
-	// This is the composition root where all dependencies are wired together
+	// No need to register domain logger provider anymore
+	// Logger is accessed via context
 
-	// Create config provider using the context
-	// Use the config provider which provides configuration
-	configProvider, err := config.NewProvider()
-	if err != nil {
-		customlog.Logger(ctx).Error().Err(err).Msg("Failed to create configuration provider")
+	// Add default CLI options to context
+	defaultOptions := options.CLIOptions{
+		Verbosity:           "brief",
+		Quiet:               false,
+		VerbosityWithCaller: false,
+		OutputFormat:        "text",
+	}
+	ctx = options.WithCLIOptions(ctx, defaultOptions)
+
+	// Initialize composition root
+	root := composition.NewRoot()
+	if err := root.Initialize(ctx); err != nil {
+		logger.Err(err).Msg("Failed to initialize application")
 		os.Exit(1)
 	}
 
-	// Add provider to context
-	ctx = config.WithProviderInContext(ctx, configProvider)
+	// Pass dependencies to CLI
+	ctx = cli.WithDependencies(ctx, root.GetCLIDependencies())
 
-	// Execute root command with our dependencies
-	// This approach allows us to replace dependencies for testing
-	cli.ExecuteWithDependencies(
-		ctx,
-		version,
-		commit,
-		date,
-		&cli.AppDependencies{
-			ConfigProvider: configProvider,
-		},
-	)
+	// Pass the context directly to cli.ExecuteWithContext
+	// All dependencies and configuration are now set up
+	cli.ExecuteWithContext(ctx, version, commit, date)
 }

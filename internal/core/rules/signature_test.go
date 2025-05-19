@@ -9,11 +9,15 @@ import (
 	"strings"
 	"testing"
 
+	infraConfig "github.com/itiquette/gommitlint/internal/adapters/outgoing/config"
+	"github.com/itiquette/gommitlint/internal/common/contextx"
 	"github.com/itiquette/gommitlint/internal/config"
+	"github.com/itiquette/gommitlint/internal/config/types"
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
-	"github.com/itiquette/gommitlint/internal/testutils/core"
+	testcontext "github.com/itiquette/gommitlint/internal/testutils/context"
+	testdomain "github.com/itiquette/gommitlint/internal/testutils/domain"
 	"github.com/stretchr/testify/require"
 )
 
@@ -45,7 +49,7 @@ LwAAACRrZXktMS11c2VyQHVuaXQuZXhhbXBsZQAAAAAAAAAAAAAAAA==
 		expectedValid  bool
 		expectedCode   string
 		errorContains  string
-		configModifier func(config.Config) config.Config
+		configModifier func(types.Config) types.Config
 	}{
 		{
 			name:          "Valid GPG signature",
@@ -93,12 +97,14 @@ LwAAACRrZXktMS11c2VyQHVuaXQuZXhhbXBsZQAAAAAAAAAAAAAAAA==
 		{
 			name:      "With custom allowed signature types",
 			signature: validGPGSignature,
-			configModifier: func(c config.Config) config.Config {
-				// Use our new testutils package for immutable updates
-				newSecurity := c.Security
-				newSecurity.AllowedSignatureTypes = []string{"gpg"}
+			configModifier: func(c types.Config) types.Config {
+				// Value-based immutable transformation
+				result := c
+				result.Security = types.SecurityConfig{
+					AllowedSignatureTypes: []string{"gpg"},
+				}
 
-				return WithConfigSecurity(c, newSecurity)
+				return result
 			},
 			expectedValid: true,
 		},
@@ -115,15 +121,17 @@ LwAAACRrZXktMS11c2VyQHVuaXQuZXhhbXBsZQAAAAAAAAAAAAAAAA==
 			}
 
 			// Create a context with configuration if needed
-			ctx := context.Background()
+			ctx := testcontext.CreateTestContext()
 
 			// Add test override flag to trigger test-specific logic in the Validate method
-			ctx = context.WithValue(ctx, core.SignatureTestOverrideKey, true)
+			ctx = context.WithValue(ctx, testdomain.SignatureTestOverrideKey, true)
 
 			if testCase.configModifier != nil {
-				cfg := config.DefaultConfig()
+				cfg := config.NewDefaultConfig()
 				cfg = testCase.configModifier(cfg)
-				ctx = config.WithConfig(ctx, cfg)
+				// Convert config to common interface directly
+				adapter := infraConfig.NewAdapter(cfg)
+				ctx = contextx.WithConfig(ctx, adapter)
 			}
 
 			// Execute validation
@@ -132,11 +140,6 @@ LwAAACRrZXktMS11c2VyQHVuaXQuZXhhbXBsZQAAAAAAAAAAAAAAAA==
 			// Check for expected validation result
 			if testCase.expectedValid {
 				require.Empty(t, errors, "Expected no validation errors")
-				// Verify Result(errors []errors.ValidationError) and VerboseResult(errors []errors.ValidationError) methods return expected messages
-				require.Contains(t, rule.Result(errors), "signature", "Expected valid message")
-				require.Contains(t, rule.VerboseResult(errors), "signature", "Verbose result should indicate valid signature")
-				// Test Help on valid case
-				require.Equal(t, "", rule.Help(errors), "Help for valid message should indicate nothing to fix")
 			} else {
 				require.NotEmpty(t, errors, "Expected errors but found none")
 				// Check error code if specified
@@ -144,7 +147,7 @@ LwAAACRrZXktMS11c2VyQHVuaXQuZXhhbXBsZQAAAAAAAAAAAAAAAA==
 					require.Equal(t, testCase.expectedCode, errors[0].Code,
 						"Error code should match expected")
 				}
-				// Log actual error message for debugging
+
 				if len(errors) > 0 {
 					for i, err := range errors {
 						t.Logf("Error %d message: %s", i+1, err.Error())
@@ -170,10 +173,6 @@ LwAAACRrZXktMS11c2VyQHVuaXQuZXhhbXBsZQAAAAAAAAAAAAAAAA==
 				if len(errors) > 0 {
 					require.Equal(t, "Signature", errors[0].Rule, "Rule name should be set in ValidationError")
 				}
-				// Test result methods on error case
-				require.Contains(t, rule.Result(errors), "❌", "Result should indicate error")
-				require.Contains(t, rule.VerboseResult(errors), "❌", "Verbose result should indicate error")
-				require.NotEmpty(t, rule.Help(errors), "Help should provide guidance")
 			}
 
 			// Always check name

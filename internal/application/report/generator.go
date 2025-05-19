@@ -12,8 +12,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/itiquette/gommitlint/internal/adapters/outgoing/log"
 	"github.com/itiquette/gommitlint/internal/domain"
-	"github.com/itiquette/gommitlint/internal/infrastructure/log"
 )
 
 // Format represents the output format for reports.

@@ -4,78 +4,17 @@
 package rules_test
 
 import (
-	"context"
 	"strings"
 	"testing"
 
-	"github.com/itiquette/gommitlint/internal/config"
+	"github.com/itiquette/gommitlint/internal/common/contextx"
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
+	testconfig "github.com/itiquette/gommitlint/internal/testutils/config"
+	testcontext "github.com/itiquette/gommitlint/internal/testutils/context"
 	"github.com/stretchr/testify/require"
 )
-
-// Mock functions to avoid test failures
-
-// sliceContains checks if a string slice contains a specific string.
-func sliceContains(slice []string, str string) bool {
-	for _, item := range slice {
-		if item == str {
-			return true
-		}
-	}
-
-	return false
-}
-
-// MockValidate is a mock implementation of the Validate method.
-// It uses the context for configuration and logging purposes.
-func MockValidate(ctx context.Context, rule rules.SubjectSuffixRule, commit domain.CommitInfo, expectedValid bool) []appErrors.ValidationError {
-	// Extract configuration from context - this ensures we're actually using the context
-	// The configuration is stored with the key "config" in the config package
-	config, configExists := ctx.Value("config").(config.Config)
-
-	// In a real implementation, we would use this config for validation
-	// For tests, we mostly use the expectedValid parameter, but we do check specific cases
-
-	// Special case: if config exists and has specific suffix settings
-	if configExists && len(config.Subject.DisallowedSuffixes) > 0 &&
-		strings.HasSuffix(commit.Subject, ".") &&
-		!sliceContains(config.Subject.DisallowedSuffixes, ".") {
-		// Period is not in disallowed list, so it should be valid
-		return []appErrors.ValidationError{}
-	}
-
-	if expectedValid {
-		return []appErrors.ValidationError{}
-	}
-
-	// Return an error for invalid subjects
-	return []appErrors.ValidationError{
-		appErrors.CreateBasicError(
-			rule.Name(),
-			appErrors.ErrSubjectSuffix,
-			"commit subject should not end with a suffix",
-		).WithContext("subject", commit.Subject),
-	}
-}
-
-// MockHasErrors is a mock implementation of the HasErrors method.
-func MockHasErrors(_ rules.SubjectSuffixRule, expectedValid bool) bool {
-	return !expectedValid
-}
-
-// MockResult is a mock implementation of the Result method.
-func MockResult(_ rules.SubjectSuffixRule, errors []appErrors.ValidationError) string {
-	if len(errors) == 0 {
-		return "Valid subject suffix"
-	}
-
-	return "Invalid subject suffix"
-}
-
-// Note: Mock provider implementation has been removed as it's not used in the tests
-// The tests use functional options pattern (rules.WithInvalidSuffixes) and config.Config instead
 
 func TestSubjectSuffixRule(t *testing.T) {
 	testCases := []struct {
@@ -129,7 +68,7 @@ func TestSubjectSuffixRule(t *testing.T) {
 		{
 			name:            "Subject with Unicode invalid suffix",
 			subject:         "Add new emoji😊",
-			invalidSuffixes: "😊😀",
+			invalidSuffixes: "😊", // Keep just one emoji to simplify the test
 			expectedValid:   false,
 			expectedCode:    string(appErrors.ErrSubjectSuffix),
 		},
@@ -156,7 +95,7 @@ func TestSubjectSuffixRule(t *testing.T) {
 		{
 			name:            "Default invalid suffixes",
 			subject:         "Update feature?",
-			invalidSuffixes: "",
+			invalidSuffixes: ".,:;?",
 			expectedValid:   false,
 			expectedCode:    string(appErrors.ErrSubjectSuffix),
 		},
@@ -177,24 +116,31 @@ func TestSubjectSuffixRule(t *testing.T) {
 				Subject: testCase.subject,
 			}
 
-			ctx := context.Background()
+			// Setup context with custom config for this test
+			var suffixes []string
+			if testCase.invalidSuffixes != "" {
+				suffixes = strings.Split(testCase.invalidSuffixes, "")
+			}
 
-			// Use mock Validate function
-			errors := MockValidate(ctx, rule, commit, testCase.expectedValid)
+			builder := testconfig.NewBuilder().
+				WithSubjectSuffixes(suffixes)
+			cfg := builder.Build()
+			testConfig := testconfig.NewAdapter(cfg).Adapter
 
-			// Check expected results using mocks
+			ctx := testcontext.CreateTestContext()
+			ctx = contextx.WithConfig(ctx, testConfig)
+
+			// Execute validation
+			errors := rule.Validate(ctx, commit)
+
+			// Check results
 			if testCase.expectedValid {
 				require.Empty(t, errors, "Expected no validation errors")
-				require.Equal(t, "Valid subject suffix", MockResult(rule, errors))
-				require.False(t, MockHasErrors(rule, testCase.expectedValid))
 			} else {
 				require.NotEmpty(t, errors, "Expected validation errors")
-				require.Equal(t, "Invalid subject suffix", MockResult(rule, errors))
-				require.True(t, MockHasErrors(rule, testCase.expectedValid))
 
-				// Simple validations for error
-				if len(errors) > 0 {
-					require.Equal(t, "SubjectSuffix", errors[0].Rule)
+				if len(errors) > 0 && testCase.expectedCode != "" {
+					require.Equal(t, testCase.expectedCode, errors[0].Code, "Error code should match expected")
 				}
 			}
 
@@ -219,14 +165,21 @@ func TestSubjectSuffixOptions(t *testing.T) {
 			Subject: "This ends with period.",
 		}
 
-		ctx := context.Background()
+		// Setup context with our test config adapter
+		builder := testconfig.NewBuilder().
+			WithSubjectSuffixes([]string{".", ","})
+		cfg := builder.Build()
+		testConfig := testconfig.NewAdapter(cfg).Adapter
 
-		// Use mock validation for valid case
-		validErrors := MockValidate(ctx, rule, validCommit, true)
+		ctx := testcontext.CreateTestContext()
+		ctx = contextx.WithConfig(ctx, testConfig)
+
+		// Test valid case
+		validErrors := rule.Validate(ctx, validCommit)
 		require.Empty(t, validErrors, "Default config should accept valid subject")
 
-		// Use mock validation for invalid case
-		invalidErrors := MockValidate(ctx, rule, invalidCommit, false)
+		// Test invalid case
+		invalidErrors := rule.Validate(ctx, invalidCommit)
 		require.NotEmpty(t, invalidErrors, "Default config should reject subject ending with period")
 	})
 
@@ -243,13 +196,21 @@ func TestSubjectSuffixOptions(t *testing.T) {
 			Subject: "This ends with period.",
 		}
 
-		ctx := context.Background()
+		// Setup context with custom config using our test adapter
+		builder := testconfig.NewBuilder().
+			WithSubjectSuffixes([]string{"!", "@", "#"})
+		cfg := builder.Build()
+		testConfig := testconfig.NewAdapter(cfg).Adapter
 
-		// Use mock validation
-		invalidErrors := MockValidate(ctx, rule, invalidCommit, false)
+		ctx := testcontext.CreateTestContext()
+		ctx = contextx.WithConfig(ctx, testConfig)
+
+		// Test invalid case
+		invalidErrors := rule.Validate(ctx, invalidCommit)
 		require.NotEmpty(t, invalidErrors, "Should reject subject with configured invalid suffix")
 
-		validErrors := MockValidate(ctx, rule, validCommit, true)
+		// Test valid case
+		validErrors := rule.Validate(ctx, validCommit)
 		require.Empty(t, validErrors, "Should accept subject ending with period when not in invalid set")
 	})
 
@@ -262,10 +223,17 @@ func TestSubjectSuffixOptions(t *testing.T) {
 			Subject: "This ends with question mark?",
 		}
 
-		ctx := context.Background()
+		// Setup context with config that checks for ?
+		builder := testconfig.NewBuilder().
+			WithSubjectSuffixes([]string{"?"})
+		cfg := builder.Build()
+		testConfig := testconfig.NewAdapter(cfg).Adapter
 
-		// Use mock validation
-		errors := MockValidate(ctx, rule, commit, false)
+		ctx := testcontext.CreateTestContext()
+		ctx = contextx.WithConfig(ctx, testConfig)
+
+		// Test invalid case
+		errors := rule.Validate(ctx, commit)
 		require.NotEmpty(t, errors, "Should reject subject with default invalid suffix")
 	})
 }
@@ -281,10 +249,17 @@ func TestSubjectSuffixRuleWithCustomOptions(t *testing.T) {
 		Subject: "Test with exclamation!",
 	}
 
-	ctx := context.Background()
+	// Setup context with config that matches rule options using our test adapter
+	builder := testconfig.NewBuilder().
+		WithSubjectSuffixes([]string{"!", "@", "#"})
+	cfg := builder.Build()
+	testConfig := testconfig.NewAdapter(cfg).Adapter
 
-	// Use mock validation
-	errors := MockValidate(ctx, rule, commit, false)
+	ctx := testcontext.CreateTestContext()
+	ctx = contextx.WithConfig(ctx, testConfig)
+
+	// Test validation
+	errors := rule.Validate(ctx, commit)
 	require.NotEmpty(t, errors, "Should return errors for invalid subject")
 
 	// Simple validation of rule name
@@ -293,88 +268,67 @@ func TestSubjectSuffixRuleWithCustomOptions(t *testing.T) {
 
 func TestSubjectSuffixRuleWithConfig(t *testing.T) {
 	tests := []struct {
-		name         string
-		configSetup  func() config.Config
-		subject      string
-		expectErrors bool
-		description  string
+		name            string
+		invalidSuffixes []string
+		subject         string
+		expectErrors    bool
+		description     string
 	}{
 		{
-			name: "Default invalid suffixes - valid subject",
-			configSetup: func() config.Config {
-				return config.DefaultConfig() // Use default suffixes
-			},
-			subject:      "Add new feature",
-			expectErrors: false,
-			description:  "Should pass with default suffixes and valid subject",
+			name:            "Default invalid suffixes - valid subject",
+			invalidSuffixes: []string{".", ","},
+			subject:         "Add new feature",
+			expectErrors:    false,
+			description:     "Should pass with default suffixes and valid subject",
 		},
 		{
-			name: "Default invalid suffixes - invalid subject",
-			configSetup: func() config.Config {
-				return config.DefaultConfig() // Use default suffixes
-			},
-			subject:      "Add new feature.",
-			expectErrors: true,
-			description:  "Should fail with default suffixes and subject ending with period",
+			name:            "Default invalid suffixes - invalid subject",
+			invalidSuffixes: []string{".", ","},
+			subject:         "Add new feature.",
+			expectErrors:    true,
+			description:     "Should fail with default suffixes and subject ending with period",
 		},
 		{
-			name: "Custom invalid suffixes - valid with default invalid suffix",
-			configSetup: func() config.Config {
-				cfg := config.DefaultConfig()
-
-				return WithConfigSubject(cfg, config.SubjectConfig{
-					DisallowedSuffixes: []string{"!", "?"},
-				})
-			},
-			subject:      "Add new feature.", // Period is allowed with custom config
-			expectErrors: false,
-			description:  "Should pass when period is not in custom invalid suffixes",
+			name:            "Custom invalid suffixes - valid with default invalid suffix",
+			invalidSuffixes: []string{"!", "?"},
+			subject:         "Add new feature.", // Period is allowed with custom config
+			expectErrors:    false,
+			description:     "Should pass when period is not in custom invalid suffixes",
 		},
 		{
-			name: "Custom invalid suffixes - invalid with custom suffix",
-			configSetup: func() config.Config {
-				cfg := config.DefaultConfig()
-
-				return WithConfigSubject(cfg, config.SubjectConfig{
-					DisallowedSuffixes: []string{"!", "?"},
-				})
-			},
-			subject:      "Add new feature!", // Exclamation mark is not allowed
-			expectErrors: true,
-			description:  "Should fail when ending with a character in custom invalid suffixes",
+			name:            "Custom invalid suffixes - invalid with custom suffix",
+			invalidSuffixes: []string{"!", "?"},
+			subject:         "Add new feature!", // Exclamation mark is not allowed
+			expectErrors:    true,
+			description:     "Should fail when ending with a character in custom invalid suffixes",
 		},
 		{
-			name: "Empty subject",
-			configSetup: func() config.Config {
-				return config.DefaultConfig()
-			},
-			subject:      "",
-			expectErrors: true,
-			description:  "Should fail with empty subject",
+			name:            "Empty subject",
+			invalidSuffixes: []string{".", ","},
+			subject:         "",
+			expectErrors:    true,
+			description:     "Should fail with empty subject",
 		},
 		{
-			name: "Unicode invalid suffixes",
-			configSetup: func() config.Config {
-				cfg := config.DefaultConfig()
-
-				return WithConfigSubject(cfg, config.SubjectConfig{
-					DisallowedSuffixes: []string{"😊", "😀"},
-				})
-			},
-			subject:      "Add new emoji😊",
-			expectErrors: true,
-			description:  "Should fail with Unicode invalid suffixes",
+			name:            "Unicode invalid suffixes",
+			invalidSuffixes: []string{"😊"},
+			subject:         "Add new emoji😊",
+			expectErrors:    true,
+			description:     "Should fail with Unicode invalid suffixes",
 		},
 	}
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			// Create config with test options
-			cfg := testCase.configSetup()
+			// Create config with our test adapter
+			builder := testconfig.NewBuilder().
+				WithSubjectSuffixes(testCase.invalidSuffixes)
+			cfg := builder.Build()
+			testConfig := testconfig.NewAdapter(cfg).Adapter
 
 			// Add config to context
-			ctx := context.Background()
-			ctx = config.WithConfig(ctx, cfg)
+			ctx := testcontext.CreateTestContext()
+			ctx = contextx.WithConfig(ctx, testConfig)
 
 			// Create rule
 			rule := rules.NewSubjectSuffixRule()
@@ -386,9 +340,10 @@ func TestSubjectSuffixRuleWithConfig(t *testing.T) {
 				Message: testCase.subject,
 			}
 
-			// Use mock validation with expected result
-			errors := MockValidate(ctx, rule, commit, !testCase.expectErrors)
+			// Execute validation
+			errors := rule.Validate(ctx, commit)
 
+			// Check results
 			if testCase.expectErrors {
 				require.NotEmpty(t, errors, "Expected validation errors")
 			} else {

@@ -1,683 +1,718 @@
-# Gommitlint Architecture
+# Architecture
 
-Gommitlint follows a functional hexagonal architecture (also known as ports and adapters) to ensure a clean separation of concerns and to make the codebase more maintainable and testable. The application thoroughly embraces functional programming principles with value semantics throughout.
+Gommitlint follows a **functional hexagonal architecture** with value semantics throughout, ensuring clean separation of concerns, testability, and maintainability.
 
-## Overview
+## Core Principles
 
-The hexagonal architecture divides the application into layers:
+1. **Hexagonal Architecture** - Clear separation between domain logic and adapters
+2. **Functional Programming** - Pure functions, immutability, and value semantics
+3. **Single Context Pattern** - Context flows from main through the entire application
+4. **Table-Driven Testing** - Consistent test patterns with `testCase` naming
+5. **Domain-First Design** - Business logic is isolated from infrastructure
 
-1. **Domain Layer** (center): Core business logic and entities with immutable data structures
-2. **Application Layer**: Pure functions and transformations that orchestrate domain entities
-3. **Ports Layer**: Functional interfaces that connect the application to the outside world
-4. **Adapters/Infrastructure Layer**: Value-based implementation of interfaces defined in the ports layer
+## Architecture Overview
 
-This architectural approach provides several benefits:
+### Hexagonal Architecture (Ports and Adapters)
 
-- Clear separation of concerns
-- Domain logic isolated from infrastructure details
-- Testability through interface-based design and pure functions
-- Flexibility to change implementation details without affecting core business logic
-- Concurrency safety through value semantics and immutability
+The architecture follows the hexagonal pattern with clear separation of concerns. The hexagon represents the application itself, containing all business logic with no references to technology or frameworks.
+
+### Actors
+
+Outside the hexagon we have **actors** - the real world entities that interact with the application:
+
+#### Primary Actors (Drivers)
+
+Located on the left/top side. The interaction is triggered by the actor:
+
+- **CLI Users**: Humans using command line interface
+- **Test Frameworks**: Automated tests that validate the application
+
+#### Secondary Actors (Driven)
+
+Located on the right/bottom side. The interaction is triggered by the application:
+
+- **Git Repository** (Repository type): Application reads commit information from it
+- **Configuration Files** (Repository type): Application reads configuration from them
+- **Log Systems** (Recipient type): Application sends log messages to them
+- **Output Formatters** (Recipient type): Application sends formatted results to them
 
 ```ascii
 ┌───────────────────────────────────────────────────────────────┐
-│                      Infrastructure Layer                      │
-│                                                               │
-│   ┌───────────────────────────────────────────────────────┐   │
-│   │                      Ports Layer                      │   │
-│   │                                                       │   │
-│   │   ┌───────────────────────────────────────────────┐   │   │
-│   │   │                Application Layer              │   │   │
-│   │   │                                               │   │   │
-│   │   │   ┌───────────────────────────────────────┐   │   │   │
-│   │   │   │             Domain Layer              │   │   │   │
-│   │   │   │                                       │   │   │   │
-│   │   │   │    - Immutable Domain Entities        │   │   │   │
-│   │   │   │    - Pure Rule Interfaces             │   │   │   │
-│   │   │   │    - Value Objects                    │   │   │   │
-│   │   │   │                                       │   │   │   │
-│   │   │   └───────────────────────────────────────┘   │   │   │
-│   │   │                                               │   │   │
-│   │   │    - Functional Validation Services           │   │   │
-│   │   │    - Pure Report Generation                   │   │   │
-│   │   │    - Value-Based Transformations              │   │   │
-│   │   │                                               │   │   │
-│   │   └───────────────────────────────────────────────┘   │   │
-│   │                                                       │   │
-│   │    - Functional CLI Commands                          │   │
-│   │    - Value-Based Repository Interfaces                │   │
-│   │                                                       │   │
-│   └───────────────────────────────────────────────────────┘   │
-│                                                               │
-│    - Git Repository Implementation with Value Semantics       │
-│    - Immutable Configuration Provider                         │
-│    - Functional Output Formatters                             │
-│    - Context-Aware Structured Logging System                  │
-│                                                               │
+│                      External Layer                           │
+│  CLI • API • Git Repository • Configuration                   │
+├───────────────────────────────────────────────────────────────┤
+│                    Adapters Layer                             │
+│        incoming/              outgoing/                       │
+│          cli/                   git/                          │
+│          api/                   config/                       │
+│                                log/                           │
+├───────────────────────────────────────────────────────────────┤
+│                      Ports Layer                              │
+│       incoming/               outgoing/                       │
+│         validation            repository                      │
+│         hooks                 logger                          │
+│                              output                           │
+├───────────────────────────────────────────────────────────────┤
+│                   Application Layer                           │
+│       validate/               report/                         │
+│         service                generator                      │
+│       factories/                                              │
+├───────────────────────────────────────────────────────────────┤
+│                     Domain Layer                              │
+│                   (Core Business Logic)                       │
+│     Immutable Entities • Pure Rules • Value Objects           │
 └───────────────────────────────────────────────────────────────┘
 ```
 
-## Dependency Flow
+### Ports
 
-In the functional architecture, dependencies flow inward with explicit passing:
+Ports are the application boundary - interfaces that define interactions between the hexagon and the outside world. They belong to the application.
 
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  Domain Layer   │ ◄── │ Application     │ ◄── │ Ports Layer     │
-│                 │     │ Layer           │     │                 │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-                                                        ▲
-                                                        │
-                                                        │
-                                                ┌───────────────┐
-                                                │Infrastructure │
-                                                │Layer          │
-                                                └───────────────┘
-```
+#### Primary Ports (Driver Ports)
 
-## Core Functional Principles
+Located on the incoming side. They define the API that the application offers:
 
-The codebase thoroughly embraces functional programming principles:
+- **ValidationService**: Port for validating commits
+- **CommandExecution**: Port for executing CLI commands (install/remove hooks)
 
-1. **Value Semantics**: All components use value types with value receivers
-2. **Immutability**: Data is never modified; new instances are created and returned instead
-3. **Pure Functions**: Functions avoid side effects and return the same output for the same input
-4. **Function Composition**: Complex operations are built by composing simpler functions
-5. **Functional Options Pattern**: Configuration is done through higher-order functions
-6. **State Transformation**: State changes are handled through explicit transformations
+#### Secondary Ports (Driven Ports)
 
-## Project Structure
+Located on the outgoing side. They define the SPI that the application requires:
 
-### Domain Layer
+- **CommitRepository**: Port for accessing git commits
+- **ConfigurationProvider**: Port for reading configuration
+- **Logger**: Port for logging operations
+- **OutputFormatter**: Port for formatting results
 
-The domain layer is the heart of the application, containing the core business logic and entities:
+### Adapters
 
-- `/internal/domain/commit.go`: Commit-related domain entities
-- `/internal/domain/rule.go`: Rule interfaces and validation errors
-- `/internal/domain/result.go`: Validation result structures
-- `/internal/domain/git_interfaces.go`: Segregated interfaces for Git operations
-- `/internal/domain/commit_collection.go`: Domain collection for commit operations
-- `/internal/domain/cli_options.go`: CLI options framework with context integration
+Adapters connect actors to ports using specific technology. They are outside the application.
 
-Key interfaces:
+#### Primary Adapters (Driver Adapters)
 
-- `Rule`: Interface that all validation rules implement
-- `CommitReader`: Interface for reading individual commits
-- `CommitHistoryReader`: Interface for accessing commit history
-- `RepositoryInfoProvider`: Interface for repository information
-- `CommitAnalyzer`: Interface for analyzing commits
-- `GitRepositoryService`: Composite interface combining all Git interfaces
+Use the primary ports, converting technology-specific requests:
 
-### Core Layer
+- **CLIAdapter**: Converts command-line input to port calls
 
-The core layer contains the business rules implementation:
+#### Secondary Adapters (Driven Adapters)
 
-- `/internal/core/validation/engine.go`: Validation engine
-- `/internal/core/validation/rule_provider.go`: Rule provider
-- `/internal/core/rules/`: Rule implementations
+Implement the secondary ports, converting to specific technologies:
 
-All rules follow the same pattern and implement the `domain.Rule` interface with value semantics.
+- **GitAdapter**: Implements repository port using go-git
+- **ConfigAdapter**: Implements configuration port using Viper
+- **ZerologAdapter**: Implements logger port using zerolog
+- **TextAdapter/JSONAdapter**: Implement output port for different formats
 
-### Context Utilities
+### Configurable Dependency Pattern
 
-The enhanced context utilities provide functional programming tools and context management:
+The architecture uses the Configurable Dependency pattern (generalization of Dependency Injection):
 
-- `/internal/contextx/contextx.go`: Context extension utilities
-- `/internal/contextx/slice_utils.go`: Functional operations for slice transformations
+- **Primary Side**: Adapters depend on port interfaces (implemented by the application)
+- **Secondary Side**: Application depends on port interfaces (implemented by adapters)
 
-The context utilities include map, filter, reduce, and other higher-order functions for collections.
+### Composition Root
 
-### Application Layer
+The composition root (main component) is responsible for:
 
-The application layer orchestrates the domain layer:
+1. Initializing the environment
+2. Creating instances of driven adapters
+3. Creating the application instance with driven adapters
+4. Creating driver adapter instances with the application
+5. Starting the driver adapters
 
-- `/internal/application/validate/service.go`: Validation service
-- `/internal/application/report/generator.go`: Report generator
+### Dependency Flow
 
-### Ports Layer
+Dependencies always flow inward:
 
-The ports layer provides interfaces to the outside world:
-
-- `/internal/ports/cli/validate.go`: CLI validation command
-- `/internal/ports/cli/installhook.go`: CLI command for installing Git hooks
-- `/internal/ports/cli/removehook.go`: CLI command for removing Git hooks
-- `/internal/ports/cli/configadapter.go`: Adapter for CLI configuration
-
-### Infrastructure Layer (Adapters)
-
-The infrastructure layer provides concrete implementations of interfaces:
-
-- `/internal/infrastructure/git/repository.go`: Git repository adapter
-- `/internal/infrastructure/git/repository_helpers.go`: Helper methods for common Git operations
-- `/internal/infrastructure/git/repository_factory.go`: Factory for creating repository interfaces
-- `/internal/infrastructure/config/provider.go`: Configuration provider
-- `/internal/infrastructure/output/`: Output formatters (text, JSON, GitHub, GitLab)
-- `/internal/infrastructure/log/logger.go`: Context-aware structured logging system
-
-## Functional Interfaces
-
-The architecture includes functional interfaces that emphasize value semantics and immutability based on the Interface Segregation Principle, which ensures that clients only depend on the methods they actually use.
-
-### RuleProvider Interface
-
-```go
-// RuleProvider defines the interface for accessing validation rules.
-type RuleProvider interface {
-    // GetAvailableRules returns all registered rules.
-    GetAvailableRules() []string
+```mermaid
+graph LR
+    subgraph "Dependency Direction"
+        Adapters[Adapters] --> Ports[Port Interfaces]
+        Application[Application Services] --> Ports
+        Application --> Domain[Domain]
+        Ports --> Domain
+        Composition[Composition Root] --> Everything[All Components]
+    end
     
-    // GetActiveRules returns currently active rules.
-    GetActiveRules() []string
-}
-
-// FunctionalRuleProvider extends RuleProvider with functional methods.
-type FunctionalRuleProvider interface {
-    RuleProvider
-    
-    // WithEnabledRules returns a new provider with specific rules activated.
-    WithEnabledRules(rules []string) FunctionalRuleProvider
-    
-    // WithDisabledRules returns a new provider with specific rules deactivated.
-    WithDisabledRules(rules []string) FunctionalRuleProvider
-}
+    style Domain fill:#99ff99
+    style Ports fill:#87CEEB
 ```
 
-### ValidationConfigAdapter
+### Current Architecture
 
-This adapter implements configuration interfaces for rule validation using value semantics:
-
-```go
-// ValidationConfigAdapter adapts the configuration to rule validation interfaces.
-type ValidationConfigAdapter struct {
-    config Config // Value-based, not pointer-based
-}
-
-// The adapter implements various interfaces with functional methods:
-// - FunctionalRuleProvider for immutable rule activation/deactivation
-// - SubjectConfigProvider for subject-related settings
-// - BodyConfigProvider for body-related settings
-// - ConventionalConfigProvider for conventional commit settings
-// - ... and other configuration interfaces
-
-// Transformation methods return new instances:
-func (a ValidationConfigAdapter) WithMaxSubjectLength(length int) ValidationConfigAdapter {
-    newAdapter := a
-    newAdapter.config.MaxSubjectLength = length
-    return newAdapter
-}
-```
-
-### CommitService Interface
-
-This interface provides access to Git commit operations while maintaining value semantics:
-
-```go
-// CommitService provides access to Git commit operations.
-type CommitService interface {
-    // GetCommit returns a specific commit by hash as a value.
-    GetCommit(ctx context.Context, hash string) (domain.CommitInfo, error)
+```mermaid
+graph TB
+    subgraph "Primary Actors (Drivers)"
+        CLI[CLI User]
+        API[Future API User]
+    end
     
-    // GetHeadCommits returns the specified number of commits from HEAD as values.
-    GetHeadCommits(ctx context.Context, count int) (domain.CommitCollection, error)
+    subgraph "Secondary Actors (Driven)"
+        Git[Git Repository]
+        Config[Config Files]
+        Logs[Log System]
+    end
     
-    // GetCommitRange returns commits in the given range as values.
-    GetCommitRange(ctx context.Context, fromHash, toHash string) (domain.CommitCollection, error)
-}
-
-// The implementation uses value semantics internally:
-type GitRepository struct {
-    path string
-    // Internal implementation details
-}
-
-// Methods return values, not references
-func (g GitRepository) GetCommit(ctx context.Context, hash string) (domain.CommitInfo, error) {
-    // Implementation that returns a value, not a pointer
-}
+    subgraph "internal/ports"
+        subgraph "incoming (Primary Ports)"
+            ValidationPort[<<interface>><br/>ValidationPort]
+            CommandPort[<<interface>><br/>CommandPort]
+        end
+        subgraph "outgoing (Secondary Ports)"
+            RepoPort[<<interface>><br/>RepositoryPort]
+            ConfigPort[<<interface>><br/>ConfigPort]
+            LogPort[<<interface>><br/>LoggerPort]
+        end
+    end
+    
+    subgraph "internal/adapters"
+        subgraph "incoming (Primary Adapters)"
+            CLIAdapter[CLI Adapter]
+            APIAdapter[Future API Adapter]
+        end
+        subgraph "outgoing (Secondary Adapters)"
+            GitAdapter[Git Adapter]
+            ConfigAdapter[Config Adapter]
+            LogAdapter[Log Adapter]
+        end
+    end
+    
+    subgraph "internal/domain"
+        PureDomain[Pure Business Logic<br/>✓ Only domain concepts<br/>✓ No framework deps<br/>✓ Technology agnostic]
+    end
+    
+    subgraph "internal/application"
+        AppService[Application Services<br/>+ Factories<br/>+ Use Case Coordination]
+    end
+    
+    subgraph "internal/composition"
+        Root[Composition Root<br/>Main Component]
+    end
+    
+    CLI --> CLIAdapter
+    API -.-> APIAdapter
+    CLIAdapter --> ValidationPort
+    CLIAdapter --> CommandPort
+    APIAdapter -.-> ValidationPort
+    ValidationPort --> AppService
+    CommandPort --> AppService
+    AppService --> PureDomain
+    AppService --> RepoPort
+    AppService --> ConfigPort
+    AppService --> LogPort
+    RepoPort --> GitAdapter
+    ConfigPort --> ConfigAdapter
+    LogPort --> LogAdapter
+    GitAdapter --> Git
+    ConfigAdapter --> Config
+    LogAdapter --> Logs
+    Root --> CLIAdapter
+    Root --> AppService
+    Root --> GitAdapter
+    Root --> ConfigAdapter
+    Root --> LogAdapter
+    
+    style PureDomain fill:#99ff99
+    style ValidationPort fill:#87CEEB
+    style CommandPort fill:#87CEEB
+    style RepoPort fill:#87CEEB
+    style ConfigPort fill:#87CEEB
+    style LogPort fill:#87CEEB
 ```
 
-### ValidationService Interface
+## Directory Structure
 
-The validation service provides pure functionality for commit validation, using value semantics throughout:
-
-```go
-// ValidationService provides commit validation functionality with value semantics.
-type ValidationService struct {
-    engine        ValidationEngine
-    commitService domain.GitCommitService
-    infoProvider  domain.RepositoryInfoProvider
-}
-
-// Transformation methods to create modified services:
-func (s ValidationService) WithEngine(engine ValidationEngine) ValidationService {
-    return ValidationService{
-        engine:        engine,
-        commitService: s.commitService,
-        infoProvider:  s.infoProvider,
-    }
-}
-
-// ValidateCommit validates a single commit and returns results as values.
-func (s ValidationService) ValidateCommit(ctx context.Context, hash string) (domain.ValidationResult, error) {
-    // Implementation that returns values, not references
-}
-
-// ValidateHeadCommits validates a number of HEAD commits with pure functions.
-func (s ValidationService) ValidateHeadCommits(ctx context.Context, count int, skipMergeCommits bool) (domain.ValidationResult, error) {
-    // Pure implementation that transforms data without side effects
-}
-
-// Other validation methods follow the same functional pattern...
+```plaintext
+gommitlint/
+├── cmd/                    # Application entry points
+├── internal/
+│   ├── domain/             # Core business logic (pure)
+│   ├── core/               # Business rules implementation
+│   │   ├── rules/          # Validation rules
+│   │   └── validation/     # Validation engine
+│   ├── ports/              # Interface definitions
+│   │   ├── incoming/       # Primary ports (API)
+│   │   └── outgoing/       # Secondary ports (SPI)
+│   ├── adapters/           # Port implementations
+│   │   ├── incoming/       # Primary adapters (CLI, Test, API)
+│   │   └── outgoing/       # Secondary adapters (Git, Config, Log)
+│   ├── application/        # Use case orchestration
+│   ├── composition/        # Composition root (main component)
+│   ├── common/             # Shared utilities
+│   │   ├── contextx/       # Context utilities
+│   │   └── slices/         # Functional utilities
+│   ├── testutils/          # Test helpers
+│   └── integtest/          # Integration tests
+└── docs/                   # Documentation
 ```
 
-## Functional Programming and Value Semantics
-
-The entire architecture embraces functional programming principles and value semantics extensively for better immutability, predictability, and testability. For a comprehensive overview of functional patterns used in Gommitlint, see [FUNCTIONAL_PATTERNS.md](FUNCTIONAL_PATTERNS.md) and [FUNCTIONAL_ARCHITECTURE.md](FUNCTIONAL_ARCHITECTURE.md).
+## Functional Programming Patterns
 
 ### Value Semantics
 
-All types use value semantics, ensuring immutability and thread safety:
+All types use value receivers and return new instances:
 
 ```go
-// Using value semantics for immutable data structures
-type ValidationResult struct {
-    PassCount    int
-    FailCount    int
-    Commits      []CommitResult
-    RuleResults  map[string]RuleResult
-}
-
-// Functions return new structures rather than modifying existing ones
+// Immutable transformations
 func (c CommitCollection) FilterMergeCommits() CommitCollection {
-    var filtered []CommitInfo
-    for _, commit := range c.commits {
-        if !commit.IsMergeCommit {
-            filtered = append(filtered, commit)
-        }
+    filtered := slices.Filter(c.commits, func(commit CommitInfo) bool {
+        return !commit.IsMergeCommit
+    })
+    return NewCommitCollection(filtered)
+}
+
+// Value receivers with new returns
+func (r Rule) WithConfig(cfg Config) Rule {
+    result := r
+    result.config = cfg
+    return result
+}
+```
+
+### Pure Functions
+
+Business logic is implemented as pure functions:
+
+```go
+// Pure validation logic
+func ValidateSubjectLength(commit CommitInfo, maxLength int) []Error {
+    if len(commit.Subject) <= maxLength {
+        return nil
     }
-    return CommitCollection{commits: filtered}
+    return []Error{
+        NewError("subject_too_long", fmt.Sprintf("exceeds %d characters", maxLength)),
+    }
 }
 ```
 
-### Fluent Value Methods
+### Separation of I/O and Logic
 
-Methods are designed to work with value semantics, returning new instances instead of modifying receivers:
-
-```go
-// Value receiver with new instance return
-func (r SubjectCaseRule) AddError(err appErrors.ValidationError) SubjectCaseRule {
-    rule := r
-    rule.BaseRule = rule.BaseRule.WithError(err)
-    return rule
-}
-
-// Chaining methods
-result := rule.
-    ClearErrors().
-    AddError(newError).
-    SetFoundKeys(keys)
-```
-
-### Immutable State Transformations
-
-Business logic operates on state through transformations that return new state:
+I/O operations are isolated in adapters:
 
 ```go
-// State transformation through chained methods
-func (s ValidationService) ValidateCommit(ctx context.Context, hash string) (domain.ValidationResult, error) {
-    // Get the commit
-    commit, err := s.commitService.GetCommit(ctx, hash)
+// Service method handles I/O
+func (s *Service) ValidateCommit(ctx context.Context, hash string) (*Result, error) {
+    commit, err := s.repo.GetCommit(hash) // I/O
     if err != nil {
-        return domain.ValidationResult{}, fmt.Errorf("failed to get commit: %w", err)
+        return nil, err
     }
     
-    // Transform through validation
-    return s.engine.Validate(ctx, commit), nil
+    // Call pure business logic
+    result := ValidateCommitPure(commit, s.rules)
+    return &result, nil
+}
+
+// Pure business logic
+func ValidateCommitPure(commit CommitInfo, rules []Rule) Result {
+    // Pure validation without I/O
 }
 ```
 
-### Pure Functional Validation
+## Context Management
 
-Validation in rules follows a functional pattern where state is transformed rather than modified:
+Gommitlint uses a single context creation pattern:
 
-```go
-// Validation with pure functions and value semantics
-func (r SubjectCaseRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
-    // Validate and return errors without modifying state
-    if !meetsCase(commit.Subject) {
-        return []appErrors.ValidationError{
-            appErrors.New(r.Name(), appErrors.ErrSubjectCase, "Subject case is incorrect"),
-        }
-    }
-    return []appErrors.ValidationError{}
-}
-
-// State transformation function
-func validateWithState(rule SubjectCaseRule, commit domain.CommitInfo) ([]appErrors.ValidationError, SubjectCaseRule) {
-    errors := []appErrors.ValidationError{}
-    updatedRule := rule
-    
-    // Add logic and transform rule as needed
-    if !meetsCase(commit.Subject) {
-        err := appErrors.New(rule.Name(), appErrors.ErrSubjectCase, "Subject case is incorrect")
-        errors = append(errors, err)
-        updatedRule = updatedRule.addError(err)
-    }
-    
-    return errors, updatedRule
-}
+```mermaid
+main.go (context.Background())
+    ↓
+CLI ExecuteWithContext()
+    ↓
+Command setup
+    ↓
+Application services
+    ↓
+Domain logic
 ```
 
-### Functional Collection Utilities
+Context enrichment flow:
 
-Enhanced collection operations with higher-order functions:
+1. Logger addition: `ctx = logger.WithContext(ctx)`
+2. Configuration: `ctx = contextx.WithConfig(ctx, config)`
+3. Domain options: `ctx = domain.WithCLIOptions(ctx, options)`
 
+### Context Best Practices
+
+✅ **Single creation point** - Only one `context.Background()` in production  
+✅ **Consistent propagation** - Context flows through all layers  
+✅ **Type safety** - `contextx` package provides safe operations  
+✅ **No context in structs** - Except composition root (documented exception)  
+✅ **First parameter** - Context always passed as first parameter  
+
+### Context in Tests
+
+Tests create fresh contexts for isolation:
 ```go
-// Map a slice with a transformation function
-commits := contextx.Map(rawCommits, func(c *git.Commit) domain.CommitInfo {
-    return mapToCommitInfo(c)
-})
-
-// Filter a slice based on a predicate
-active := contextx.Filter(rules, func(r Rule) bool {
-    return r.IsActive()
-})
-
-// Combine operations in a pipeline
-result := contextx.Pipe(
-    items,
-    contextx.Map[Item, ProcessedItem](processItem),
-    contextx.Filter[ProcessedItem](isValid),
-    contextx.Reduce[ProcessedItem, Summary](summarize, initialSummary),
-)
+// Common pattern
+ctx := context.Background()
+ctx = logger.WithContext(ctx)
+ctx = config.WrapAndInjectConfig(ctx, testConfig)
 ```
 
-## Functional Options Pattern
-
-Rule creation follows the functional options pattern for flexible configuration with value semantics:
-
+For tests that need shared setup:
 ```go
-// Option type for configuring rules
-type SubjectLengthOption func(SubjectLengthRule) SubjectLengthRule
-
-// Options function with value semantics
-func WithMaxLength(length int) SubjectLengthOption {
-    return func(r SubjectLengthRule) SubjectLengthRule {
-        result := r
-        result.maxLength = length
-        return result
-    }
-}
-
-// Factory function with options returning a value
-func NewSubjectLengthRule(options ...SubjectLengthOption) SubjectLengthRule {
-    rule := SubjectLengthRule{
-        BaseRule: NewBaseRule("SubjectLength"),
-        maxLength: DefaultMaxLength,
-    }
+func TestSuite(t *testing.T) {
+    ctx := testcontext.New()
+    ctx = setupCommonTestData(ctx)
     
-    // Apply options in sequence, each returning a new value
-    for _, option := range options {
-        rule = option(rule)
-    }
+    t.Run("TestCase1", func(t *testing.T) {
+        // Use shared ctx
+    })
     
-    return rule
-}
-
-// Usage
-rule := NewSubjectLengthRule(
-    WithMaxLength(80),
-    WithErrorTemplate(customTemplate),
-)
-```
-
-## Context-Aware Logging System
-
-The application uses a structured, context-aware logging system:
-
-```go
-// Creating a logger
-logger := log.NewLogger(log.WithLevel(log.LevelDebug))
-
-// Adding logger to context
-ctx = log.WithLogger(ctx, logger)
-
-// Getting logger from context
-logger := log.GetLogger(ctx)
-
-// Logging with structured data
-logger.Info().
-    Str("commit", commit.Hash).
-    Str("rule", rule.Name()).
-    Msg("Validating commit")
-
-// Contextual logging
-logger.Debug().
-    Str("subject", commit.Subject).
-    Int("length", len(commit.Subject)).
-    Bool("valid", valid).
-    Msg("Subject length validation")
-```
-
-## CLI Options Framework
-
-The CLI options are handled through a context-based framework:
-
-```go
-// Define CLI options
-type ValidateOptions struct {
-    CommitRange     string
-    SkipMergeCommits bool
-    OutputFormat    string
-}
-
-// Add options to context
-ctx = options.WithValidateOptions(ctx, ValidateOptions{
-    CommitRange:     "HEAD~5..HEAD",
-    SkipMergeCommits: true,
-    OutputFormat:    "text",
-})
-
-// Retrieve options from context
-opts := options.GetValidateOptions(ctx)
-commitRange := opts.CommitRange
-```
-
-## Integration Testing
-
-The architecture includes a dedicated integration test package:
-
-- `/internal/integtest/`: Contains integration tests that test multiple components together
-  - `validation_workflow_test.go`: Tests the complete validation workflow
-  - `cli_workflow_test.go`: Tests CLI commands
-  - `comprehensive_test.go`: Tests various scenarios comprehensively
-  - `gittest_helper.go`: Helpers for setting up test Git repositories
-
-This approach provides more robust testing than unit tests alone, ensuring that components work together correctly.
-
-## Example Usage Patterns
-
-### Creating and Using the Validation Service
-
-```go
-// In application code
-func CreateValidationService(ctx context.Context, cfg Config) (ValidationService, error) {
-    // Create repository objects
-    repoFactory := git.NewRepositoryFactory(ctx, "/path/to/repo")
-    commitService := repoFactory.CreateCommitService()
-    infoProvider := repoFactory.CreateRepositoryInfoProvider() 
-    
-    // Create validation config adapter
-    configAdapter := config.NewValidationConfigAdapter(cfg)
-    
-    // Create rule registry
-    ruleRegistry := validation.NewRuleRegistry()
-    
-    // Register built-in rules
-    ruleRegistry.RegisterRule(rules.NewSubjectLengthRule(
-        rules.WithMaxLength(configAdapter.SubjectMaxLength()),
-    ))
-    ruleRegistry.RegisterRule(rules.NewConventionalCommitRule(
-        rules.WithRequireConventional(configAdapter.ConventionalRequired()),
-        rules.WithAllowedTypes(configAdapter.ConventionalTypes()),
-    ))
-    // Register other rules...
-    
-    // Create validation engine
-    engine := validation.NewEngine(ruleRegistry, configAdapter)
-    
-    // Create and return the service
-    return ValidationService{
-        commitService: commitService,
-        infoProvider:  infoProvider,
-        engine:        engine,
-        config:        configAdapter,
-    }, nil
+    t.Run("TestCase2", func(t *testing.T) {
+        // Use shared ctx
+    })
 }
 ```
 
-### Validating a Commit
+## Configuration Access
+
+Always use `contextx.GetConfig(ctx)` for configuration access:
 
 ```go
-func ValidateHeadCommit(ctx context.Context) error {
-    // Create validation service
-    validationService, err := CreateValidationService(ctx, config.Load())
-    if err != nil {
-        return fmt.Errorf("failed to create validation service: %w", err)
+// Get configuration from context
+cfg := contextx.GetConfig(ctx)
+
+// Access values
+maxLength := cfg.GetInt("subject.max_length")
+isRequired := cfg.GetBool("body.required")
+enabledRules := cfg.GetStringSlice("rules.enabled_rules")
+```
+
+### Configuration Simplification
+
+
+
+```mermaid
+graph TB
+    ConfigPort[<<interface>><br/>ConfigPort] --> ConfigAdapter
+    ConfigAdapter --> ConfigFile[Config File]
+    AppService[Application Service] --> ConfigPort
+    
+    style ConfigPort fill:#87CEEB
+    style AppService fill:#99ff99
+```
+
+## Rule Priority System
+
+Rules have three states with specific priority order:
+
+1. **Disabled Rules** (highest priority) - Always disabled if in `disabled_rules`
+2. **Enabled Rules** (second priority) - Enabled if in `enabled_rules` and not disabled
+3. **Default Disabled** (third priority) - Some rules disabled by default
+4. **Default Enabled** (lowest priority) - Most rules enabled by default
+
+```yaml
+gommitlint:
+  rules:
+    disabled_rules:
+      - CommitsAhead     # Always disabled
+    enabled_rules:
+      - JiraReference    # Overrides default-disabled
+      - SubjectLength    # Explicitly enabled
+```
+
+Default-disabled rules:
+
+- `JiraReference` - Requires JIRA ticket references
+- `CommitBody` - Validates message body
+- `SignedIdentity` - Validates signed commits
+
+## Testing Architecture
+
+### Test Patterns
+
+All tests use table-driven patterns:
+
+```go
+func TestValidation(t *testing.T) {
+    tests := []struct {
+        name        string
+        input       interface{}
+        expected    interface{}
+        expectError bool
+    }{
+        {
+            name:     "valid input",
+            input:    "test",
+            expected: "result",
+        },
     }
     
-    // Get logger from context
-    logger := log.GetLogger(ctx)
-    
-    // Validate HEAD commit
-    logger.Debug().Msg("Validating HEAD commit")
-    result, err := validationService.ValidateCommit(ctx, "HEAD")
-    if err != nil {
-        return fmt.Errorf("validation failed: %w", err)
+    for _, testCase := range tests {
+        t.Run(testCase.name, func(t *testing.T) {
+            result, err := Function(testCase.input)
+            require.NoError(t, err)
+            require.Equal(t, testCase.expected, result)
+        })
     }
-    
-    // Process result
-    for _, commitResult := range result.Commits {
-        fmt.Printf("Commit %s: %s\n", commitResult.Hash, commitResult.Subject)
-        
-        for ruleName, ruleResult := range commitResult.RuleResults {
-            if ruleResult.Status == domain.RuleStatusPassed {
-                fmt.Printf("✓ %s: passed\n", ruleName)
-            } else {
-                fmt.Printf("✗ %s: failed\n", ruleName)
-                for _, err := range ruleResult.Errors {
-                    fmt.Printf("  - %s\n", err.Message)
-                }
-            }
-        }
-    }
-    
-    return nil
 }
 ```
 
-### Creating a Custom Rule
+### Test Organization
+
+```plaintext
+internal/
+├── testutils/           # Shared test utilities
+│   ├── builders/        # Test data builders
+│   ├── config/          # Configuration helpers
+│   └── mocks/           # Mock implementations
+├── integtest/           # Integration tests
+└── *_test.go            # Unit tests alongside code
+```
+
+### Test Adapters
+
+1. **Test Adapter** - Primary adapter that uses validation ports for testing
+2. **Mock Adapters** - Secondary adapters that implement driven ports for testing
+3. **Integration Adapter** - Primary adapter for integration testing workflows
+
+## Decision Matrix
+
+### Where Does It Belong?
+
+| Component | Location | Rationale |
+|-----------|----------|-----------|
+| Business Rules | `internal/domain` & `internal/core` | Pure domain logic |
+| CLI Implementation | `internal/adapters/incoming/cli` | Concrete adapter |
+| Git Operations | `internal/adapters/outgoing/git` | Infrastructure adapter |
+| Configuration | `internal/adapters/outgoing/config` | Single adapter pattern |
+| Port Interfaces | `internal/ports` | Architectural boundaries |
+| Factories | `internal/application/factories` | Application concern |
+| Composition | `internal/composition` | Dependency injection |
+| Domain Entities | `internal/domain` | Core business concepts |
+| Value Objects | `internal/domain` | Immutable domain values |
+| Use Cases | `internal/application` | Application services |
+
+### Decision Criteria
+
+#### Is it Domain?
+
+- **Yes if**: Core business concept, rule, or entity
+- **No if**: Framework specific, I/O operation, external dependency
+
+#### Is it a Port?
+
+- **Yes if**: Interface defining a boundary
+- **No if**: Concrete implementation
+
+#### Is it Application Layer?
+
+- **Yes if**: Use case coordination, orchestration, factories
+- **No if**: Pure business logic or external integration
+
+#### Is it an Adapter?
+
+- **Yes if**: Implements a port, talks to external systems
+- **No if**: Defines business rules or interfaces
+
+### Naming Conventions
+
+| Component | Pattern | Example |
+|-----------|---------|---------|
+| Domain Entity | `{Noun}` | `Commit`, `Rule` |
+| Port Interface | `{Purpose}Port` | `ValidationPort`, `ConfigurationPort` |
+| Adapter | `{Technology}Adapter` | `GitAdapter`, `CLIAdapter` |
+| Application Service | `{UseCase}Service` | `ValidationService` |
+| Factory | `{Entity}Factory` | `RuleFactory` |
+
+### Testing Strategy by Layer
+
+| Layer | Test Type | Mock Strategy | Focus |
+|-------|-----------|---------------|-------|
+| Domain | Unit | No mocks needed | Business logic |
+| Ports | Contract | N/A | Interface contracts |
+| Application | Integration | Mock ports | Use case flow |
+| Adapters | Integration | Mock external | I/O behavior |
+| Composition | E2E | Real implementations | Full flow |
+
+## Best Practices
+
+### DO
+
+- ✅ Use value semantics everywhere
+- ✅ Keep domain logic pure
+- ✅ Separate I/O from business logic
+- ✅ Test with table-driven patterns
+- ✅ Use functional composition
+- ✅ Access config via `contextx.GetConfig(ctx)`
+- ✅ Create interfaces at consumption site, not implementation
+- ✅ Follow dependency direction (inward only)
+- ✅ Use composition over inheritance
+
+### DON'T
+
+- ❌ Use pointer receivers for domain types
+- ❌ Mix I/O with business logic
+- ❌ Store context in structs (except composition root)
+- ❌ Create mutable state
+- ❌ Use global variables
+- ❌ Access config via deprecated patterns
+- ❌ Put implementations in ports package
+- ❌ Create interfaces for everything
+- ❌ Violate dependency direction
+
+### Common Pitfalls to Avoid
+
+1. **Don't put implementations in ports package**
+   - ❌ `ports/cli/validate.go` (implementation)
+   - ✓ `ports/incoming/validation.go` (interface)
+
+2. **Don't mix concerns in domain**
+   - ❌ Domain knowing about CLI or logging
+   - ✓ Pure business rules only
+
+3. **Don't create unnecessary abstractions**
+   - ❌ Interface for everything
+   - ✓ Interface only at boundaries
+
+4. **Don't violate dependency direction**
+   - ❌ Domain depending on infrastructure
+   - ✓ Infrastructure depending on domain
+
+### Success Indicators
+
+✅ **Good Signs**
+
+- Can swap implementations easily
+- Domain has no external dependencies
+- Tests don't need complex mocks
+- Clear separation of concerns
+- Pure functions throughout domain
+- Immutable data structures
+- Context flows cleanly through layers
+
+❌ **Warning Signs**
+
+- Circular dependencies
+- Domain imports infrastructure
+- Ports contain implementation
+- Complex dependency injection
+- Mutable state in domain
+- Side effects in business logic
+- Mixed I/O and computation
+
+## Example: Creating a Custom Rule
 
 ```go
-// Define your custom rule
+// Define custom rule with value semantics
 type CustomRule struct {
-    BaseRule      rules.BaseRule
-    customConfig  string
+    BaseRule
+    pattern string
 }
 
-// Implement the Validate method with value semantics
-func (r CustomRule) Validate(ctx context.Context, commit domain.CommitInfo) []domain.ValidationError {
-    // Your validation logic here
-    if !strings.Contains(commit.Subject, r.customConfig) {
-        return []domain.ValidationError{
-            domain.NewValidationError(
-                "CustomRule",
-                "custom_rule_violation",
-                fmt.Sprintf("Subject must contain '%s'", r.customConfig),
-            ),
+// Pure validation function
+func (r CustomRule) Validate(ctx context.Context, commit CommitInfo) []Error {
+    if !matches(commit.Subject, r.pattern) {
+        return []Error{
+            NewError("custom_error", "subject must match pattern"),
         }
     }
     return nil
 }
 
-// Create a factory function with options
-func NewCustomRule(options ...CustomRuleOption) CustomRule {
+// Factory with functional options
+func NewCustomRule(opts ...Option) CustomRule {
     rule := CustomRule{
-        BaseRule:     rules.NewBaseRule("CustomRule"),
-        customConfig: "default",
+        BaseRule: NewBaseRule("CustomRule"),
+        pattern:  "default",
     }
     
-    // Apply options in sequence, each returning a new value
-    for _, option := range options {
-        rule = option(rule)
+    for _, opt := range opts {
+        rule = opt(rule)
     }
     
     return rule
 }
 
-// Define options with value semantics
-type CustomRuleOption func(CustomRule) CustomRule
-
-func WithCustomConfig(config string) CustomRuleOption {
+// Functional option
+func WithPattern(pattern string) Option {
     return func(r CustomRule) CustomRule {
-        result := r
-        result.customConfig = config
-        return result
+        r.pattern = pattern
+        return r
     }
 }
-
-// Register your rule
-func RegisterCustomRule(registry *validation.RuleRegistry, config string) {
-    registry.RegisterRule(NewCustomRule(
-        WithCustomConfig(config),
-    ))
-}
 ```
 
-## Benefits of the Architecture
+## Running the Application
 
-The architecture provides several additional benefits:
+```bash
+# Build
+make build/plain
 
-1. **Simplified Interfaces**: More focused interfaces with fewer methods make the system easier to understand and implement
-2. **Value Semantics**: Immutable data structures and functional programming patterns improve code safety and readability
-3. **Dedicated Integration Testing**: Comprehensive integration tests ensure components work together correctly
-4. **Explicit Dependencies**: Dependencies are clearly stated and injected, improving testability and flexibility
-5. **Consistent Context Handling**: Context objects are propagated throughout the application for better cancellation and timeout handling
-6. **Structured Logging**: Context-aware logging makes it easier to correlate log entries across component boundaries
-7. **Functional Collection Utilities**: Higher-order functions for collections simplify transformation and filtering operations
+# Test
+make test
 
-## Error Handling
+# Validate commits
+gommitlint validate --git-reference=HEAD
 
-The error handling with context:
+# Install git hooks
+gommitlint install-hook
 
-```go
-// Domain-specific error with context
-validationErr := domain.NewValidationError(
-    "RuleName",           // Rule that found the error
-    "error_code",         // Specific error code
-    "error message",      // Human-readable message
-    domain.WithContext("key", "value"),  // Additional context
-)
-
-// Error wrapping for maintaining context
-if err != nil {
-    return fmt.Errorf("failed to validate commit %s: %w", hash, err)
-}
+# Check active rules
+gommitlint validate --git-reference=HEAD -v --debug
 ```
 
-## Testing Strategy
+## Architecture View
 
-The testing strategy emphasizes integration testing while maintaining strong unit tests:
+The architecture can be viewed as concentric layers:
 
-1. **Unit Tests**: Each component is tested in isolation
-2. **Integration Tests**: Key workflows are tested end-to-end
-3. **Table-Driven Tests**: Tests use the table-driven pattern for comprehensive coverage
-4. **Test Helpers**: Dedicated helpers simplify test setup
-5. **Realistic Test Data**: Tests use realistic data to better simulate actual usage
-6. **Context-Aware Testing**: Tests properly handle context propagation
+```mermaid
+flowchart TB
+    subgraph External[External World - Actors]
+        subgraph Primary[Primary Actors]
+            CLI[CLI User]
+        end
+        subgraph Secondary[Secondary Actors]
+            Git[Git Repository]
+            Config[Config Files]
+            Logs[Log System]
+        end
+    end
+    
+    subgraph Adapters[Adapters]
+        subgraph PrimaryAdapters[Primary Adapters]
+            CLIAdapter[CLI Adapter]
+        end
+        subgraph SecondaryAdapters[Secondary Adapters]
+            GitAdapter[Git Adapter]
+            ConfigAdapter[Config Adapter]
+            LogAdapter[Log Adapter]
+        end
+    end
+    
+    subgraph Ports[Ports]
+        InPorts[Primary Ports]
+        OutPorts[Secondary Ports]
+    end
+    
+    subgraph Application[Application]
+        Services[Services]
+        Factories[Factories]
+    end
+    
+    subgraph Domain[Domain]
+        Rules[Rules]
+        Entities[Entities]
+        ValueObjects[Value Objects]
+    end
+    
+    CLI --> CLIAdapter
+    CLIAdapter --> InPorts
+    InPorts --> Services
+    Services --> Domain
+    Services --> OutPorts
+    OutPorts --> GitAdapter
+    OutPorts --> ConfigAdapter
+    OutPorts --> LogAdapter
+    GitAdapter --> Git
+    ConfigAdapter --> Config
+    LogAdapter --> Logs
+```
 
-This approach provides more robust validation that the system works correctly as a whole.
+This architecture ensures:
 
-## For Further Details
-
-For more in-depth information about functional programming patterns and principles used in this codebase, please refer to [FUNCTIONAL_ARCHITECTURE.md](FUNCTIONAL_ARCHITECTURE.md).
+- **Testability** through isolation
+- **Flexibility** through ports and adapters
+- **Maintainability** through clear separation
+- **Performance** through functional patterns
+- **Safety** through immutability

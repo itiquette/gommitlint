@@ -7,8 +7,6 @@ package domain
 
 import (
 	"strings"
-
-	"github.com/itiquette/gommitlint/internal/contextx"
 )
 
 // CommitInfo represents information about a Git commit.
@@ -62,57 +60,51 @@ func SplitCommitMessage(message string) (string, string) {
 	return subject, body
 }
 
-// CommitService provides domain operations for commits.
-type CommitService interface {
-	// IsValidCommitSubject checks if a commit subject follows domain rules.
-	IsValidCommitSubject(subject string) bool
+// HasBody returns true if the commit has a body.
+func (c CommitInfo) HasBody() bool {
+	return strings.TrimSpace(c.Body) != ""
+}
 
-	// ContainsSignature checks if a commit contains a valid signature.
-	ContainsSignature(commit *CommitInfo) bool
+// IsValid returns true if the commit has basic required fields.
+func (c CommitInfo) IsValid() bool {
+	return c.Hash != "" && strings.TrimSpace(c.Subject) != ""
+}
 
-	// IsValidCommitMessage checks if a commit message follows domain rules.
-	IsValidCommitMessage(message string) bool
+// IsSigned returns true if the commit has a signature.
+func (c CommitInfo) IsSigned() bool {
+	return c.Signature != ""
+}
 
-	// ExtractJiraTickets extracts JIRA ticket IDs from a commit message.
-	ExtractJiraTickets(message string, pattern string) []string
+// IsValidCommitSubject checks if a commit subject follows domain rules (pure function).
+func IsValidCommitSubject(subject string) bool {
+	return len(strings.TrimSpace(subject)) > 0
+}
+
+// ContainsSignature checks if a commit contains a valid signature (pure function).
+func ContainsSignature(commit CommitInfo) bool {
+	return commit.Signature != ""
+}
+
+// IsValidCommitMessage checks if a commit message follows domain rules (pure function).
+func IsValidCommitMessage(message string) bool {
+	return len(strings.TrimSpace(message)) > 0
+}
+
+// ExtractJiraTickets extracts JIRA ticket IDs from a commit message (pure function).
+func ExtractJiraTickets(message string, _ string) []string {
+	parts := strings.Split(message, " ")
+
+	// Filter parts that look like JIRA tickets
+	result := []string{}
+
+	for _, part := range parts {
+		if strings.Contains(part, "-") && len(part) >= 3 {
+			result = append(result, part)
+		}
+	}
+
+	return result
 }
 
 // Note: CommitReader, CommitHistoryReader, CommitAnalyzer, and
 // RepositoryInfoProvider interfaces are defined in git_interfaces.go
-
-// DefaultCommitService provides domain services for commits.
-type DefaultCommitService struct{}
-
-// NewCommitService creates a new DefaultCommitService.
-func NewCommitService() *DefaultCommitService {
-	return &DefaultCommitService{}
-}
-
-// IsValidCommitSubject checks if a commit subject follows domain rules.
-func (s *DefaultCommitService) IsValidCommitSubject(subject string) bool {
-	// A valid subject must not be empty
-	return len(strings.TrimSpace(subject)) > 0
-}
-
-// ContainsSignature checks if a commit contains a valid signature.
-func (s *DefaultCommitService) ContainsSignature(commit *CommitInfo) bool {
-	return commit.Signature != ""
-}
-
-// IsValidCommitMessage checks if a commit message follows domain rules.
-func (s *DefaultCommitService) IsValidCommitMessage(message string) bool {
-	// A valid message must not be empty
-	return len(strings.TrimSpace(message)) > 0
-}
-
-// ExtractJiraTickets extracts JIRA ticket IDs from a commit message.
-func (s *DefaultCommitService) ExtractJiraTickets(message string, _ string) []string {
-	// This is a simplified implementation
-	// In a real application, you would use regex matching
-	parts := strings.Split(message, " ")
-
-	// Filter parts that look like JIRA tickets (containing "-" and at least 3 chars)
-	return contextx.Filter(parts, func(part string) bool {
-		return strings.Contains(part, "-") && len(part) >= 3
-	})
-}

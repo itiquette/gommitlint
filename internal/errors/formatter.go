@@ -8,14 +8,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/itiquette/gommitlint/internal/contextx"
+	"github.com/itiquette/gommitlint/internal/common/slices"
 )
-
-// ErrorFormatter defines an interface for formatting validation errors.
-type ErrorFormatter interface {
-	FormatError(err ValidationError) string
-	FormatErrors(errs []ValidationError) string
-}
 
 // TextFormatter formats errors as text.
 type TextFormatter struct {
@@ -40,11 +34,11 @@ func (f TextFormatter) FormatErrors(errs []ValidationError) string {
 		return "No validation errors found."
 	}
 
-	formatted := contextx.Map(errs, func(err ValidationError) string {
+	formatted := slices.Map(errs, func(err ValidationError) string {
 		return f.FormatError(err)
 	})
 
-	return contextx.Reduce(formatted, "", func(acc string, errStr string) string {
+	return slices.Reduce(formatted, "", func(acc string, errStr string) string {
 		if acc == "" {
 			return errStr
 		}
@@ -86,14 +80,14 @@ func (JSONFormatter) FormatErrors(errs []ValidationError) string {
 	}
 
 	// Transform ValidationError to errorRepresentation using Map
-	representations := contextx.Map(errs, func(err ValidationError) errorRepresentation {
+	representations := slices.Map(errs, func(err ValidationError) errorRepresentation {
 		helpText := ""
 		if help, ok := err.Context["help"]; ok {
 			helpText = help
 		}
 
 		// Filter context excluding help using FilterMapKeys
-		contextMap := contextx.FilterMapKeys(err.Context, []string{"help"})
+		contextMap := slices.FilterMapKeys(err.Context, []string{"help"})
 
 		return errorRepresentation{
 			Rule:    err.Rule,
@@ -137,11 +131,11 @@ func (MarkdownFormatter) FormatErrors(errs []ValidationError) string {
 
 	header := fmt.Sprintf("# Validation Errors (%d)\n\n", len(errs))
 
-	formattedErrors := contextx.Map(errs, func(err ValidationError) string {
+	formattedErrors := slices.Map(errs, func(err ValidationError) string {
 		return err.FormatAsMarkdown()
 	})
 
-	errorContent := contextx.Reduce(formattedErrors, "", func(acc string, errStr string) string {
+	errorContent := slices.Reduce(formattedErrors, "", func(acc string, errStr string) string {
 		return acc + errStr + "\n"
 	})
 

@@ -18,7 +18,7 @@ path = [
   "**/*/MIGRATION*.md",
   "**/*ASSESSEMENT.md",
   "**/*SECURITY_ASSESSMENT.md",
-  "**/*CONFIGURATION*.md",
+  "**/*.md",
 ]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>"

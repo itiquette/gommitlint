@@ -9,36 +9,25 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/itiquette/gommitlint/internal/config"
+	"github.com/itiquette/gommitlint/internal/common/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
-	"github.com/itiquette/gommitlint/internal/infrastructure/log"
 )
 
 // JiraReferenceRule validates that commit messages reference JIRA issues.
 type JiraReferenceRule struct {
-	baseRule              BaseRule
+	name                  string
 	pattern               string
 	prefixes              []string
 	excludedTypes         []string
-	references            []string
 	searchInBody          bool
 	checkConventionalOnly bool
+	requiredForTypes      []string
 }
 
 // Name returns the rule name.
 func (r JiraReferenceRule) Name() string {
-	return r.baseRule.Name()
-}
-
-// Errors returns all validation errors found by this rule.
-func (r JiraReferenceRule) Errors() []appErrors.ValidationError {
-	return r.baseRule.Errors()
-}
-
-// HasErrors returns true if the rule has found any errors.
-func (r JiraReferenceRule) HasErrors() bool {
-	return r.baseRule.HasErrors()
+	return r.name
 }
 
 // JiraReferenceOption configures a JiraReferenceRule.
@@ -102,11 +91,6 @@ func WithConventionalCommit() JiraReferenceOption {
 	}
 }
 
-// WithBodyRefChecking is an alias for WithJiraBodySearch for backward compatibility.
-func WithBodyRefChecking() JiraReferenceOption {
-	return WithJiraBodySearch(true)
-}
-
 // WithValidProjects sets the valid JIRA project prefixes.
 func WithValidProjects(projects []string) JiraReferenceOption {
 	return WithJiraPrefixes(projects)
@@ -116,7 +100,7 @@ func WithValidProjects(projects []string) JiraReferenceOption {
 func NewJiraReferenceRule(options ...JiraReferenceOption) JiraReferenceRule {
 	// Create rule with default values
 	rule := JiraReferenceRule{
-		baseRule:      NewBaseRule("JiraReference"),
+		name:          "JiraReference",
 		pattern:       `[A-Z]+-\d+`,
 		prefixes:      []string{},
 		excludedTypes: []string{"docs", "chore", "style", "refactor", "test"},
@@ -132,63 +116,98 @@ func NewJiraReferenceRule(options ...JiraReferenceOption) JiraReferenceRule {
 }
 
 // Helper function to check if a commit message follows conventional commit format.
-func isConventionalCommit(message string) bool {
-	conventionalRegex := regexp.MustCompile(`^(?P<type>\w+)(?:\([^)]*\))?(?:!)?:`)
-
-	return conventionalRegex.MatchString(message)
-}
 
 // Helper function to check if a JIRA reference is in the scope part of a conventional commit.
-func isScopeJiraReference(message string) bool {
-	// This matches patterns like feat(PROJ-123): message or feat(scope PROJ-123): message
-	// or feat(scope-PROJ-123): message - any pattern where JIRA is in the scope
-	scopeRegex := regexp.MustCompile(`^(?P<type>\w+)\((?:[^)]*)?([A-Z]+-\d+)(?:[^)]*)\):`)
-
-	return scopeRegex.MatchString(message)
-}
 
 // Validate checks a commit for Jira reference compliance using context-based configuration.
 func (r JiraReferenceRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
-	logger := log.Logger(ctx)
-	logger.Trace().
-		Str("rule", r.Name()).
-		Str("commit_hash", commit.Hash).
-		Msg("Validating Jira references using context configuration")
+	logger := contextx.GetLogger(ctx)
+	logger.Debug("Validating Jira references using context configuration", "rule", r.Name(), "commit_hash", commit.Hash)
 
 	// Create a new rule with context configuration
 	rule := r.withContextConfig(ctx)
 
-	// Add check for JIRA in middle of conventional commit if both are required
-	if rule.checkConventionalOnly && isConventionalCommit(commit.Subject) {
-		// Check if JIRA reference is in the middle (scope) rather than at the end
-		if isScopeJiraReference(commit.Subject) {
-			tempRule := rule
-			validationErr := appErrors.CreateBasicError(
-				tempRule.baseRule.Name(),
-				appErrors.ErrMisplacedJira,
-				"JIRA reference should be at the end of the commit message, not in the scope",
-			).WithContext("subject", commit.Subject)
-			tempRule.baseRule = tempRule.baseRule.WithError(validationErr)
+	// Check if this commit type should be excluded from JIRA validation
+	if shouldExcludeCommitType(commit.Subject, rule.excludedTypes) {
+		return nil
+	}
 
-			return tempRule.baseRule.Errors()
+	// Check if JIRA is required for this commit type
+	if !isJiraRequiredForType(commit.Subject, rule.requiredForTypes) && rule.checkConventionalOnly {
+		return nil
+	}
+
+	// Prepare the text to search
+	textToSearch := commit.Subject
+	if rule.searchInBody && commit.Body != "" {
+		textToSearch = fmt.Sprintf("%s\n%s", commit.Subject, commit.Body)
+	}
+
+	// Extract JIRA references
+	references := extractJiraReferences(textToSearch, rule.pattern, rule.prefixes)
+
+	// If no references found and they're required
+	if len(references) == 0 {
+		return []appErrors.ValidationError{
+			appErrors.New(
+				"JiraReference",
+				appErrors.ErrMissingJira,
+				"commit message must reference a JIRA issue",
+			),
 		}
 	}
 
-	// Use the existing validation logic
-	errors, _ := validateJiraWithState(rule, commit)
+	// Validate projects if configured
+	if len(rule.prefixes) > 0 {
+		for _, ref := range references {
+			project := extractProjectFromReference(ref)
+			if !isValidProject(project, rule.prefixes) {
+				return []appErrors.ValidationError{
+					appErrors.New(
+						"JiraReference",
+						appErrors.ErrInvalidProject,
+						fmt.Sprintf("invalid JIRA project '%s'", project),
+					).WithContext("project", project).
+						WithContext("valid_projects", strings.Join(rule.prefixes, ", ")),
+				}
+			}
+		}
+	}
 
-	return errors
+	// Check reference placement in conventional commits
+	if rule.checkConventionalOnly && isConventionalCommit(commit.Subject) {
+		conventionalType, _, _ := parseConventionalCommit(commit.Subject)
+
+		// For merge commits, we're more lenient
+		if conventionalType == "merge" {
+			return nil
+		}
+
+		// Check if JIRA is in the correct position (not in description)
+		if hasJiraInDescription(commit.Subject, rule.pattern) {
+			return []appErrors.ValidationError{
+				appErrors.New(
+					"JiraReference",
+					appErrors.ErrMisplacedJira,
+					"JIRA reference should be in scope, not description",
+				),
+			}
+		}
+	}
+
+	return nil
 }
 
 // withContextConfig creates a new rule with configuration from context.
 func (r JiraReferenceRule) withContextConfig(ctx context.Context) JiraReferenceRule {
-	// Get configuration from context
-	cfg := config.GetConfig(ctx)
+	// Get configuration directly from context
+	cfg := contextx.GetConfig(ctx)
 
 	// Extract configuration values
-	isConventional := cfg.Conventional.Required
-	validateBodyRef := cfg.Jira.BodyRef
-	validProjects := cfg.Jira.Projects
+	isConventional := cfg.GetBool("conventional.required")
+	validateBodyRef := cfg.GetBool("jira.body_ref")
+	validProjects := cfg.GetStringSlice("jira.projects")
+	pattern := cfg.GetString("jira.pattern")
 
 	// Create a copy of the rule
 	result := r
@@ -207,88 +226,150 @@ func (r JiraReferenceRule) withContextConfig(ctx context.Context) JiraReferenceR
 		copy(result.prefixes, validProjects)
 	}
 
+	if pattern != "" {
+		result.pattern = pattern
+	}
+
 	// Log configuration at debug level
-	logger := log.Logger(ctx)
-	logger.Debug().
-		Bool("conventional_required", isConventional).
-		Bool("body_ref_checking", validateBodyRef).
-		Strs("valid_projects", validProjects).
-		Msg("Jira reference rule configuration from context")
+	logger := contextx.GetLogger(ctx)
+	logger.Debug("Jira reference rule configuration from context",
+		"conventional_required", isConventional,
+		"body_ref_checking", validateBodyRef,
+		"valid_projects", validProjects,
+		"pattern", pattern)
 
 	return result
 }
 
 // validateJiraWithState validates the JIRA references and returns both the errors and an updated rule.
-func validateJiraWithState(rule JiraReferenceRule, commit domain.CommitInfo) ([]appErrors.ValidationError, JiraReferenceRule) {
-	result := rule
-	result.baseRule = rule.baseRule.WithClearedErrors().WithRun()
-
-	// Skip validation for merge commits
-	if commit.IsMergeCommit {
-		return result.baseRule.Errors(), result
-	}
-
-	// Check if this is a conventional commit type that's excluded
-	commitType := extractCommitType(commit.Subject)
-	if isExcludedType(commitType, rule.excludedTypes) {
-		return result.baseRule.Errors(), result
-	}
-
-	// Find JIRA references
-	var references []string
-
-	// Check subject
-	subjectRefs := findJiraReferences(commit.Subject, rule.pattern, rule.prefixes)
-	references = append(references, subjectRefs...)
-
-	// Check body if enabled
-	if rule.searchInBody && commit.Body != "" {
-		bodyRefs := findJiraReferences(commit.Body, rule.pattern, rule.prefixes)
-		references = append(references, bodyRefs...)
-	}
-
-	// Update the rule with found references
-	result.references = references
-
-	// Validate that at least one reference was found
-	if len(references) == 0 {
-		validationErr := appErrors.CreateBasicError(
-			result.baseRule.Name(),
-			appErrors.ErrMissingJira,
-			"Commit message does not reference a JIRA ticket",
-		)
-
-		if len(rule.prefixes) > 0 {
-			validationErr = validationErr.WithContext("allowed_prefixes", strings.Join(rule.prefixes, ", "))
-		}
-
-		result.baseRule = result.baseRule.WithError(validationErr)
-	}
-
-	return result.baseRule.Errors(), result
-}
 
 // extractCommitType extracts the type from a conventional commit message.
-func extractCommitType(subject string) string {
-	// Conventional commit format: type(scope): description
-	conventionalRegex := regexp.MustCompile(`^(?P<type>\w+)(?:\([^)]*\))?(?:!)?:`)
 
-	matches := conventionalRegex.FindStringSubmatch(subject)
+// isExcludedType checks if a commit type is in the excluded list.
+
+// findJiraReferences finds all JIRA references in a text.
+
+// SetErrors is no longer used since we don't have baseRule.
+// Validation errors are returned directly from the Validate method.
+
+// shouldExcludeCommitType checks if a commit type should be excluded from JIRA validation.
+func shouldExcludeCommitType(subject string, excludedTypes []string) bool {
+	if len(excludedTypes) == 0 {
+		return false
+	}
+
+	// Extract type from conventional commit format
+	regex := regexp.MustCompile(`^(\w+)(?:\([^)]*\))?!?:`)
+	matches := regex.FindStringSubmatch(subject)
+
 	if len(matches) > 1 {
-		return matches[1]
+		commitType := matches[1]
+		for _, excluded := range excludedTypes {
+			if commitType == excluded {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// isJiraRequiredForType checks if JIRA reference is required for a commit type.
+func isJiraRequiredForType(subject string, requiredTypes []string) bool {
+	if len(requiredTypes) == 0 {
+		return true // Required for all types if not specified
+	}
+
+	// Extract type from conventional commit format
+	regex := regexp.MustCompile(`^(\w+)(?:\([^)]*\))?!?:`)
+	matches := regex.FindStringSubmatch(subject)
+
+	if len(matches) > 1 {
+		commitType := matches[1]
+		for _, required := range requiredTypes {
+			if commitType == required {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// extractJiraReferences extracts JIRA references from text.
+func extractJiraReferences(text, pattern string, prefixes []string) []string {
+	var references []string
+
+	// Use custom pattern if provided
+	if pattern != "" {
+		regex := regexp.MustCompile(pattern)
+		matches := regex.FindAllString(text, -1)
+		references = append(references, matches...)
+	} else {
+		// Default pattern: PROJECT-123 format
+		defaultPattern := `\b[A-Z]+-\d+\b`
+		regex := regexp.MustCompile(defaultPattern)
+		matches := regex.FindAllString(text, -1)
+
+		// Filter by prefixes if provided
+		if len(prefixes) > 0 {
+			for _, match := range matches {
+				for _, prefix := range prefixes {
+					if strings.HasPrefix(match, prefix+"-") {
+						references = append(references, match)
+
+						break
+					}
+				}
+			}
+		} else {
+			references = matches
+		}
+	}
+
+	// Also check for body references with explicit markers
+	bodyRefPattern := `(?i)(?:refs?|references?|see|fixes?|closes?):\s*([A-Z]+-\d+(?:\s*,\s*[A-Z]+-\d+)*)`
+	bodyRe := regexp.MustCompile(bodyRefPattern)
+	bodyMatches := bodyRe.FindAllStringSubmatch(text, -1)
+
+	for _, match := range bodyMatches {
+		if len(match) > 1 {
+			// Split multiple references
+			refs := regexp.MustCompile(`[A-Z]+-\d+`).FindAllString(match[1], -1)
+			references = append(references, refs...)
+		}
+	}
+
+	// Deduplicate references
+	seen := make(map[string]bool)
+
+	var unique []string
+
+	for _, ref := range references {
+		if !seen[ref] {
+			seen[ref] = true
+
+			unique = append(unique, ref)
+		}
+	}
+
+	return unique
+}
+
+// extractProjectFromReference extracts the project key from a JIRA reference.
+func extractProjectFromReference(reference string) string {
+	parts := strings.Split(reference, "-")
+	if len(parts) >= 2 {
+		return parts[0]
 	}
 
 	return ""
 }
 
-// isExcludedType checks if a commit type is in the excluded list.
-func isExcludedType(commitType string, excludedTypes []string) bool {
-	if commitType == "" {
-		return false
-	}
-
-	for _, excluded := range excludedTypes {
-		if commitType == excluded {
+// isValidProject checks if a project key is in the valid projects list.
+func isValidProject(project string, validProjects []string) bool {
+	for _, valid := range validProjects {
+		if project == valid {
 			return true
 		}
 	}
@@ -296,93 +377,50 @@ func isExcludedType(commitType string, excludedTypes []string) bool {
 	return false
 }
 
-// findJiraReferences finds all JIRA references in a text.
-func findJiraReferences(text string, pattern string, prefixes []string) []string {
-	// Compile regex
-	regex := regexp.MustCompile(pattern)
+// isConventionalCommit checks if a subject follows conventional commit format.
+func isConventionalCommit(subject string) bool {
+	regex := regexp.MustCompile(`^[a-z]+(?:\([^)]*\))?!?:`)
 
-	// Find all matches
-	allMatches := regex.FindAllString(text, -1)
+	return regex.MatchString(subject)
+}
 
-	// If no prefixes specified, return all matches
-	if len(prefixes) == 0 {
-		return allMatches
+// parseConventionalCommit parses a conventional commit and returns type, scope, and description.
+func parseConventionalCommit(subject string) (string, string, string) {
+	regex := regexp.MustCompile(`^(\w+)(?:\(([^)]*)\))?!?:\s*(.*)`)
+	matches := regex.FindStringSubmatch(subject)
+
+	if len(matches) >= 4 {
+		return matches[1], matches[2], matches[3]
 	}
 
-	// Filter by prefixes
-	var filtered []string
+	return "", "", ""
+}
 
-	for _, match := range allMatches {
-		for _, prefix := range prefixes {
-			if strings.HasPrefix(match, prefix+"-") {
-				filtered = append(filtered, match)
+// hasJiraInDescription checks if JIRA reference is ONLY in the description and NOT at the end.
+// Returns true if JIRA is misplaced (not at the end).
+func hasJiraInDescription(subject string, pattern string) bool {
+	conventionalType, scope, description := parseConventionalCommit(subject)
 
-				break
+	if conventionalType == "" {
+		return false
+	}
+
+	// Check if JIRA is in the scope - this is misplaced
+	regex := regexp.MustCompile(pattern)
+	if scope != "" && regex.MatchString(scope) {
+		return true
+	}
+
+	// Check if JIRA is in the middle of the description (not at the end)
+	if regex.MatchString(description) {
+		matches := regex.FindAllStringIndex(description, -1)
+		for _, match := range matches {
+			// If there's text after the JIRA reference, it's misplaced
+			if match[1] < len(description) && strings.TrimSpace(description[match[1]:]) != "" {
+				return true
 			}
 		}
 	}
 
-	return filtered
-}
-
-// SetErrors sets the errors for this rule and returns an updated rule.
-func (r JiraReferenceRule) SetErrors(errors []appErrors.ValidationError) JiraReferenceRule {
-	result := r
-	result.baseRule = result.baseRule.WithClearedErrors()
-
-	for _, err := range errors {
-		result.baseRule = result.baseRule.WithError(err)
-	}
-
-	return result
-}
-
-// Result returns a concise validation result.
-func (r JiraReferenceRule) Result(errors []appErrors.ValidationError) string {
-	if len(errors) > 0 {
-		return "❌ No JIRA reference found"
-	}
-
-	return "✓ Found JIRA: " + strings.Join(r.references, ", ")
-}
-
-// VerboseResult returns a more detailed explanation for verbose mode.
-func (r JiraReferenceRule) VerboseResult(errors []appErrors.ValidationError) string {
-	if len(errors) > 0 {
-		msg := "❌ Commit message does not reference a JIRA ticket"
-		if len(r.prefixes) > 0 {
-			msg += " with allowed prefix(es): " + strings.Join(r.prefixes, ", ")
-		}
-
-		return msg
-	}
-
-	return "✓ Found JIRA reference(s): " + strings.Join(r.references, ", ")
-}
-
-// Help returns guidance for fixing rule violations.
-func (r JiraReferenceRule) Help(errors []appErrors.ValidationError) string {
-	if len(errors) == 0 {
-		return ""
-	}
-
-	message := "Your commit message should reference a JIRA ticket.\n\n"
-
-	if len(r.prefixes) > 0 {
-		message += fmt.Sprintf("The JIRA reference should start with one of these prefixes: %s\n",
-			strings.Join(r.prefixes, ", "))
-	} else {
-		message += "The JIRA reference should follow the pattern: PROJECT-123\n"
-	}
-
-	message += "\nExamples:\n"
-	message += "- \"fix: handle null pointer exception (ABC-123)\"\n"
-	message += "- \"ABC-123: update documentation\"\n"
-	message += "- \"feat: add new feature\n\nImplements ABC-123\"\n"
-
-	if len(r.excludedTypes) > 0 {
-		message += "\nNote: These commit types don't require JIRA references: " + strings.Join(r.excludedTypes, ", ")
-	}
-
-	return message
+	return false
 }

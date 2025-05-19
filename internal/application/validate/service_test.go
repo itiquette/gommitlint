@@ -8,28 +8,31 @@ import (
 	"context"
 	"testing"
 
+	"github.com/itiquette/gommitlint/internal/adapters/outgoing/log"
 	"github.com/itiquette/gommitlint/internal/application/validate"
+	"github.com/itiquette/gommitlint/internal/core/validation"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
-	"github.com/itiquette/gommitlint/internal/infrastructure/log"
+	testcontext "github.com/itiquette/gommitlint/internal/testutils/context"
 	"github.com/stretchr/testify/require"
 )
 
-// mockGitCommitService implements the domain.GitCommitService interface for testing.
-type mockGitCommitService struct {
+// mockCommitRepository implements the domain.CommitRepository interface for testing.
+type mockCommitRepository struct {
 	commits     map[string]domain.CommitInfo
 	headCommits []domain.CommitInfo
 	ranges      map[string]map[string][]domain.CommitInfo
 }
 
-func (m mockGitCommitService) GetCommit(_ context.Context, hash string) (domain.CommitInfo, error) {
+func (m mockCommitRepository) GetCommit(_ context.Context, hash string) (domain.CommitInfo, error) {
 	if commit, ok := m.commits[hash]; ok {
 		return commit, nil
 	}
 
-	return domain.CommitInfo{}, appErrors.CreateBasicError("MockService", appErrors.ErrCommitNotFound, "commit not found")
+	return domain.CommitInfo{}, appErrors.New("MockService", appErrors.ErrCommitNotFound, "commit not found")
 }
-func (m mockGitCommitService) GetHeadCommits(_ context.Context, count int) ([]domain.CommitInfo, error) {
+
+func (m mockCommitRepository) GetCommits(_ context.Context, count int) ([]domain.CommitInfo, error) {
 	if count <= 0 {
 		return []domain.CommitInfo{}, nil
 	}
@@ -42,14 +45,27 @@ func (m mockGitCommitService) GetHeadCommits(_ context.Context, count int) ([]do
 	return m.headCommits[:count], nil
 }
 
-func (m mockGitCommitService) GetCommitRange(_ context.Context, fromHash, toHash string) ([]domain.CommitInfo, error) {
+func (m mockCommitRepository) GetHeadCommits(_ context.Context, count int) ([]domain.CommitInfo, error) {
+	if count <= 0 {
+		return []domain.CommitInfo{}, nil
+	}
+
+	// Take the minimum of count or the available number of commits
+	if count > len(m.headCommits) {
+		count = len(m.headCommits)
+	}
+
+	return m.headCommits[:count], nil
+}
+
+func (m mockCommitRepository) GetCommitRange(_ context.Context, fromHash, toHash string) ([]domain.CommitInfo, error) {
 	if toRanges, ok := m.ranges[toHash]; ok {
 		if commits, ok := toRanges[fromHash]; ok {
 			return commits, nil
 		}
 	}
 
-	return nil, appErrors.CreateBasicError("MockService", appErrors.ErrRangeNotFound, "range not found")
+	return nil, appErrors.New("MockService", appErrors.ErrRangeNotFound, "range not found")
 }
 
 // mockInfoProvider implements the domain.RepositoryInfoProvider interface for testing.
@@ -67,13 +83,11 @@ func (m mockInfoProvider) GetRepositoryName(_ context.Context) string {
 	return m.repoName
 }
 
-func (m mockInfoProvider) IsValid(_ context.Context) bool {
-	return m.isValid
+func (m mockInfoProvider) IsValid(_ context.Context) (bool, error) {
+	return m.isValid, nil
 }
 
-// CustomRule is defined below
-
-// Implements ValidationEngine interface.
+// mockValidationEngine implements validation.Engine interface.
 type mockValidationEngine struct{}
 
 func (m mockValidationEngine) ValidateCommit(_ context.Context, commit domain.CommitInfo) domain.CommitResult {
@@ -88,411 +102,14 @@ func (m mockValidationEngine) ValidateCommits(ctx context.Context, commits []dom
 
 	for _, commit := range commits {
 		result := m.ValidateCommit(ctx, commit)
-		results.AddCommitResult(result)
+		results = results.WithResult(result)
 	}
 
 	return results
 }
 
-// mockValidationEngineWithCustomRules extends mockValidationEngine with custom rules.
-// The full implementation is below.
-
-func TestValidationService_Functional(t *testing.T) {
-	// Create mocks
-	mockCommit := &mockGitCommitService{
-		commits: map[string]domain.CommitInfo{
-			"abc123": {
-				Hash:    "abc123",
-				Subject: "Test commit",
-				Body:    "Test body",
-			},
-		},
-	}
-
-	mockInfo := &mockInfoProvider{
-		currentBranch: "main",
-		repoName:      "gommitlint",
-		isValid:       true,
-	}
-
-	mockEngine := &mockValidationEngine{}
-
-	// Create service with mock engine
-	service := validate.NewValidationService(
-		mockEngine,
-		mockCommit,
-		mockInfo,
-	)
-
-	// Test the functional "With" methods
-	serviceWithNewEngine := service.WithEngine(&mockValidationEngine{})
-	// Instead of comparing structs directly, verify the fields are correctly changed
-	require.Equal(t, &mockValidationEngine{}, serviceWithNewEngine.Engine())
-	require.Equal(t, mockCommit, serviceWithNewEngine.CommitService())
-	require.Equal(t, mockInfo, serviceWithNewEngine.InfoProvider())
-
-	newMockCommit := &mockGitCommitService{
-		commits: map[string]domain.CommitInfo{
-			"xyz789": {
-				Hash:    "xyz789",
-				Subject: "New commit",
-			},
-		},
-	}
-	serviceWithNewCommit := service.WithCommitService(newMockCommit)
-	// Verify the individual fields
-	require.Equal(t, mockEngine, serviceWithNewCommit.Engine())
-	require.Equal(t, newMockCommit, serviceWithNewCommit.CommitService())
-	require.Equal(t, mockInfo, serviceWithNewCommit.InfoProvider())
-
-	newMockInfo := &mockInfoProvider{
-		currentBranch: "feature",
-		repoName:      "new-repo",
-		isValid:       true,
-	}
-	serviceWithNewInfo := service.WithInfoProvider(newMockInfo)
-	// Verify individual fields
-	require.Equal(t, mockEngine, serviceWithNewInfo.Engine())
-	require.Equal(t, mockCommit, serviceWithNewInfo.CommitService())
-	require.Equal(t, newMockInfo, serviceWithNewInfo.InfoProvider())
-
-	// Test that functional composition works
-	result, err := service.WithEngine(&mockValidationEngine{}).
-		WithCommitService(newMockCommit).
-		WithInfoProvider(newMockInfo).
-		ValidateCommit(context.Background(), "xyz789")
-
-	require.NoError(t, err)
-	require.Equal(t, "xyz789", result.CommitInfo.Hash)
-
-	// Test that original service remains unchanged
-	_, err = service.ValidateCommit(context.Background(), "xyz789")
-	require.Error(t, err) // Original service doesn't have "xyz789" commit
-}
-
-// TestValueSemantics verifies that value semantics are properly maintained
-// throughout the validation service and its components.
-func TestValueSemantics(t *testing.T) {
-	// Create a test commit
-	testCommit := domain.CommitInfo{
-		Hash:    "test123",
-		Subject: "Test value semantics",
-		Body:    "This is a test of value semantics",
-	}
-
-	// Create mocks
-	mockCommit := &mockGitCommitService{
-		commits: map[string]domain.CommitInfo{
-			"test123": testCommit,
-		},
-	}
-	mockInfo := &mockInfoProvider{}
-
-	// Test context-based validation instead of explicit ValidationEngine
-	t.Run("ContextBasedValidation", func(t *testing.T) {
-		// Skip this test since we're migrating to value-based approach
-		t.Skip("Skipping context-based validation test during migration to value-based approach")
-	})
-
-	// Test DomainRuleProvider immutability
-	t.Run("DomainRuleProvider immutability", func(t *testing.T) {
-		// Create a custom validation rule
-		customRule := &CustomRule{
-			name: "TestCustomRule",
-		}
-
-		// Create an engine with rule provider
-		engine := &mockValidationEngineWithCustomRules{
-			customRules: []domain.Rule{},
-		}
-
-		// Create service with mock engine
-		service := validate.NewValidationService(
-			engine,
-			mockCommit,
-			mockInfo,
-		)
-
-		// Add a custom rule
-		var err error
-		service, err = service.WithCustomRule(customRule)
-		require.NoError(t, err)
-
-		// Use WithCustomRule (should create a new service)
-		serviceCopy, err := service.WithCustomRule(customRule)
-		require.NoError(t, err)
-
-		// Verify the custom rule is correctly added to the engine in the copy
-		if engineWithCustomRules, ok := serviceCopy.Engine().(*mockValidationEngineWithCustomRules); ok {
-			// Don't test the exact length, since the implementation might have added the rule to the original
-			// engine as well. Instead verify that it contains the rule we added.
-			found := false
-
-			for _, rule := range engineWithCustomRules.customRules {
-				if rule.Name() == customRule.Name() {
-					found = true
-
-					break
-				}
-			}
-
-			require.True(t, found, "Custom rule should be registered in the engine")
-		} else {
-			require.Fail(t, "Engine should be of type *mockValidationEngineWithCustomRules")
-		}
-	})
-
-	// Test function composition maintains value semantics
-	t.Run("Function composition", func(t *testing.T) {
-		// Create validation service
-		service := validate.NewValidationService(
-			&mockValidationEngine{},
-			mockCommit,
-			mockInfo,
-		)
-
-		// Create a chain of transformations
-		transformedService := service.
-			WithEngine(&mockValidationEngine{}).
-			WithCommitService(mockCommit).
-			WithInfoProvider(mockInfo)
-
-		// Verify components individually rather than comparing whole structs
-		// This ensures we're testing the behavior, not just the struct layout
-		require.IsType(t, &mockValidationEngine{}, transformedService.Engine())
-		require.Equal(t, mockCommit, transformedService.CommitService())
-		require.Equal(t, mockInfo, transformedService.InfoProvider())
-	})
-}
-
-func TestValidationService_ValidateCommit(t *testing.T) {
-	// Create mocks
-	mockCommit := &mockGitCommitService{
-		commits: map[string]domain.CommitInfo{
-			"abc123": {
-				Hash:    "abc123",
-				Subject: "Test commit",
-				Body:    "Test body",
-			},
-			"HEAD": {
-				Hash:    "def456",
-				Subject: "Head commit",
-			},
-		},
-	}
-
-	mockInfo := &mockInfoProvider{
-		currentBranch: "main",
-		repoName:      "gommitlint",
-		isValid:       true,
-	}
-
-	// Create mock engine
-	mockEngine := &mockValidationEngine{}
-
-	// Create service with mock engine
-	service := validate.NewValidationService(
-		mockEngine,
-		mockCommit,
-		mockInfo,
-	)
-
-	// Test ValidateCommit
-	t.Run("Validate existing commit", func(t *testing.T) {
-		result, err := service.ValidateCommit(context.Background(), "abc123")
-		require.NoError(t, err)
-		require.Equal(t, "abc123", result.CommitInfo.Hash)
-	})
-
-	t.Run("Validate non-existent commit", func(t *testing.T) {
-		_, err := service.ValidateCommit(context.Background(), "nonexistent")
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "commit not found")
-	})
-}
-
-func TestValidationService_ValidateHeadCommits(t *testing.T) {
-	// Create test commits
-	commits := []domain.CommitInfo{
-		{
-			Hash:          "abc123",
-			Subject:       "Test commit 1",
-			IsMergeCommit: false,
-		},
-		{
-			Hash:          "def456",
-			Subject:       "Merge branch",
-			IsMergeCommit: true,
-		},
-		{
-			Hash:          "ghi789",
-			Subject:       "Test commit 3",
-			IsMergeCommit: false,
-		},
-	}
-
-	// Create mocks
-	mockCommit := &mockGitCommitService{
-		headCommits: commits,
-	}
-	mockInfo := &mockInfoProvider{}
-
-	// Create mock engine
-	mockEngine := mockValidationEngine{}
-
-	// Create service with mock engine
-	service := validate.NewValidationService(
-		mockEngine,
-		mockCommit,
-		mockInfo,
-	)
-
-	// Test ValidateHeadCommits
-	t.Run("Validate head commits without filtering", func(t *testing.T) {
-		results, err := service.ValidateHeadCommits(context.Background(), 3, false)
-		require.NoError(t, err)
-		require.Equal(t, 3, results.Count())
-	})
-
-	t.Run("Validate head commits with merge filtering", func(t *testing.T) {
-		results, err := service.ValidateHeadCommits(context.Background(), 3, true)
-		require.NoError(t, err)
-		require.Equal(t, 2, results.Count())
-	})
-}
-
-func TestValidationService_ValidateCommitRange(t *testing.T) {
-	// Create test commits
-	commits := []domain.CommitInfo{
-		{
-			Hash:          "abc123",
-			Subject:       "Test commit 1",
-			IsMergeCommit: false,
-		},
-		{
-			Hash:          "def456",
-			Subject:       "Merge branch",
-			IsMergeCommit: true,
-		},
-		{
-			Hash:          "ghi789",
-			Subject:       "Test commit 3",
-			IsMergeCommit: false,
-		},
-	}
-
-	// Create mocks
-	mockCommit := &mockGitCommitService{
-		ranges: map[string]map[string][]domain.CommitInfo{
-			"master": {
-				"feature": commits,
-			},
-		},
-	}
-	mockInfo := &mockInfoProvider{}
-
-	// Create mock engine
-	mockEngine := &mockValidationEngine{}
-
-	// Create service with mock engine
-	service := validate.NewValidationService(
-		mockEngine,
-		mockCommit,
-		mockInfo,
-	)
-
-	// Test ValidateCommitRange
-	t.Run("Validate commit range without filtering", func(t *testing.T) {
-		results, err := service.ValidateCommitRange(context.Background(), "feature", "master", false)
-		require.NoError(t, err)
-		require.Equal(t, 3, results.Count())
-	})
-
-	t.Run("Validate commit range with merge filtering", func(t *testing.T) {
-		results, err := service.ValidateCommitRange(context.Background(), "feature", "master", true)
-		require.NoError(t, err)
-		require.Equal(t, 2, results.Count())
-	})
-
-	t.Run("Validate non-existent range", func(t *testing.T) {
-		_, err := service.ValidateCommitRange(context.Background(), "nonexistent", "master", false)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "range not found")
-	})
-}
-
-func TestValidationService_ValidateWithOptions(t *testing.T) {
-	// Create mocks with test data
-	testCommit := domain.CommitInfo{
-		Hash:          "abc123",
-		Subject:       "Test commit",
-		Body:          "Test body",
-		IsMergeCommit: false,
-	}
-
-	// Create mocks
-	mockCommit := &mockGitCommitService{
-		commits: map[string]domain.CommitInfo{
-			"abc123": testCommit,
-			"HEAD":   testCommit,
-		},
-		headCommits: []domain.CommitInfo{testCommit},
-		ranges: map[string]map[string][]domain.CommitInfo{
-			"to": {
-				"from": []domain.CommitInfo{testCommit},
-			},
-		},
-	}
-
-	mockInfo := mockInfoProvider{}
-
-	// Create mock engine
-	mockEngine := mockValidationEngine{}
-
-	// Create service with mock engine
-	service := validate.NewValidationService(
-		mockEngine,
-		mockCommit,
-		mockInfo,
-	)
-
-	// Test different options
-	t.Run("Validate specific commit", func(t *testing.T) {
-		opts := validate.ValidationOptions{
-			CommitHash: "abc123",
-		}
-		results, err := service.ValidateWithOptions(context.Background(), opts)
-		require.NoError(t, err)
-		require.Equal(t, 1, results.Count())
-	})
-
-	t.Run("Validate head commits", func(t *testing.T) {
-		opts := validate.ValidationOptions{
-			CommitCount:      1,
-			SkipMergeCommits: false,
-		}
-		results, err := service.ValidateWithOptions(context.Background(), opts)
-		require.NoError(t, err)
-		require.Equal(t, 1, results.Count())
-	})
-
-	t.Run("Validate commit range", func(t *testing.T) {
-		opts := validate.ValidationOptions{
-			FromHash:         "from",
-			ToHash:           "to",
-			SkipMergeCommits: false,
-		}
-		results, err := service.ValidateWithOptions(context.Background(), opts)
-		require.NoError(t, err)
-		require.Equal(t, 1, results.Count())
-	})
-
-	t.Run("Default to HEAD", func(t *testing.T) {
-		opts := validate.ValidationOptions{}
-		results, err := service.ValidateWithOptions(context.Background(), opts)
-		require.NoError(t, err)
-		require.Equal(t, 1, results.Count())
-	})
+func (m mockValidationEngine) GetRegistry() *domain.RuleRegistry {
+	return domain.NewRuleRegistry()
 }
 
 // CustomRule is a simple example of a custom validation rule for testing.
@@ -559,7 +176,7 @@ type mockValidationEngineWithCustomRules struct {
 }
 
 // WithCustomRule returns a new engine with the custom rule added.
-func (m *mockValidationEngineWithCustomRules) WithCustomRule(rule domain.Rule) validate.ValidationEngine {
+func (m *mockValidationEngineWithCustomRules) WithCustomRule(rule domain.Rule) validation.Engine {
 	// Create a new rules array directly with capacity for the new rule
 	newCustomRules := make([]domain.Rule, 0, len(m.customRules)+1)
 
@@ -586,4 +203,521 @@ func (m *mockValidationEngineWithCustomRules) GetAvailableRuleNames(ctx context.
 	}
 
 	return names
+}
+
+// TestValidationService_ValidateCommit tests the ValidateCommit method using table-driven tests.
+func TestValidationService_ValidateCommit(t *testing.T) {
+	tests := []struct {
+		name         string
+		commitHash   string
+		setupService func() validate.ValidationService
+		wantErr      bool
+		errContains  string
+		assertResult func(t *testing.T, result domain.CommitResult)
+	}{
+		{
+			name:       "Valid existing commit",
+			commitHash: "abc123",
+			setupService: func() validate.ValidationService {
+				mockCommit := &mockCommitRepository{
+					commits: map[string]domain.CommitInfo{
+						"abc123": {
+							Hash:    "abc123",
+							Subject: "Test commit",
+							Body:    "Test body",
+						},
+					},
+				}
+				mockInfo := &mockInfoProvider{
+					currentBranch: "main",
+					repoName:      "gommitlint",
+					isValid:       true,
+				}
+				mockEngine := &mockValidationEngine{}
+
+				return validate.NewValidationService(mockEngine, mockCommit, mockInfo)
+			},
+			wantErr: false,
+			assertResult: func(t *testing.T, result domain.CommitResult) { //nolint:thelper
+				require.Equal(t, "abc123", result.CommitInfo.Hash)
+				require.True(t, result.Passed)
+			},
+		},
+		{
+			name:       "Non-existent commit",
+			commitHash: "nonexistent",
+			setupService: func() validate.ValidationService {
+				mockCommit := &mockCommitRepository{
+					commits: map[string]domain.CommitInfo{},
+				}
+				mockInfo := &mockInfoProvider{}
+				mockEngine := &mockValidationEngine{}
+
+				return validate.NewValidationService(mockEngine, mockCommit, mockInfo)
+			},
+			wantErr:     true,
+			errContains: "commit not found",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			service := testCase.setupService()
+			result, err := service.ValidateCommit(testcontext.CreateTestContext(), testCase.commitHash)
+
+			if testCase.wantErr {
+				require.Error(t, err)
+
+				if testCase.errContains != "" {
+					require.Contains(t, err.Error(), testCase.errContains)
+				}
+
+				return
+			}
+
+			require.NoError(t, err)
+
+			if testCase.assertResult != nil {
+				testCase.assertResult(t, result)
+			}
+		})
+	}
+}
+
+// TestValidationService_ValidateLastNCommits tests the ValidateLastNCommits method using table-driven tests.
+func TestValidationService_ValidateLastNCommits(t *testing.T) {
+	// Define test commits
+	testCommits := []domain.CommitInfo{
+		{
+			Hash:          "abc123",
+			Subject:       "Test commit 1",
+			IsMergeCommit: false,
+		},
+		{
+			Hash:          "def456",
+			Subject:       "Merge branch",
+			IsMergeCommit: true,
+		},
+		{
+			Hash:          "ghi789",
+			Subject:       "Test commit 3",
+			IsMergeCommit: false,
+		},
+	}
+
+	tests := []struct {
+		name             string
+		count            int
+		skipMergeCommits bool
+		setupService     func() validate.ValidationService
+		wantCount        int
+	}{
+		{
+			name:             "All commits without filtering",
+			count:            3,
+			skipMergeCommits: false,
+			setupService: func() validate.ValidationService {
+				mockCommit := &mockCommitRepository{
+					headCommits: testCommits,
+				}
+				mockInfo := &mockInfoProvider{}
+				mockEngine := &mockValidationEngine{}
+
+				return validate.NewValidationService(mockEngine, mockCommit, mockInfo)
+			},
+			wantCount: 3,
+		},
+		{
+			name:             "All commits with merge filtering",
+			count:            3,
+			skipMergeCommits: true,
+			setupService: func() validate.ValidationService {
+				mockCommit := &mockCommitRepository{
+					headCommits: testCommits,
+				}
+				mockInfo := &mockInfoProvider{}
+				mockEngine := &mockValidationEngine{}
+
+				return validate.NewValidationService(mockEngine, mockCommit, mockInfo)
+			},
+			wantCount: 2, // Excluding merge commit
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			service := testCase.setupService()
+			results, err := service.ValidateLastNCommits(testcontext.CreateTestContext(), testCase.count, testCase.skipMergeCommits)
+
+			require.NoError(t, err)
+			require.Equal(t, testCase.wantCount, results.Count())
+		})
+	}
+}
+
+// TestValidationService_ValidateCommitRange tests the ValidateCommitRange method using table-driven tests.
+func TestValidationService_ValidateCommitRange(t *testing.T) {
+	// Define test commits
+	testCommits := []domain.CommitInfo{
+		{
+			Hash:          "abc123",
+			Subject:       "Test commit 1",
+			IsMergeCommit: false,
+		},
+		{
+			Hash:          "def456",
+			Subject:       "Merge branch",
+			IsMergeCommit: true,
+		},
+		{
+			Hash:          "ghi789",
+			Subject:       "Test commit 3",
+			IsMergeCommit: false,
+		},
+	}
+
+	tests := []struct {
+		name             string
+		fromHash         string
+		toHash           string
+		skipMergeCommits bool
+		setupService     func() validate.ValidationService
+		wantCount        int
+		wantErr          bool
+		errContains      string
+	}{
+		{
+			name:             "Valid range without filtering",
+			fromHash:         "feature",
+			toHash:           "master",
+			skipMergeCommits: false,
+			setupService: func() validate.ValidationService {
+				mockCommit := &mockCommitRepository{
+					ranges: map[string]map[string][]domain.CommitInfo{
+						"master": {
+							"feature": testCommits,
+						},
+					},
+				}
+				mockInfo := &mockInfoProvider{}
+				mockEngine := &mockValidationEngine{}
+
+				return validate.NewValidationService(mockEngine, mockCommit, mockInfo)
+			},
+			wantCount: 3,
+		},
+		{
+			name:             "Valid range with merge filtering",
+			fromHash:         "feature",
+			toHash:           "master",
+			skipMergeCommits: true,
+			setupService: func() validate.ValidationService {
+				mockCommit := &mockCommitRepository{
+					ranges: map[string]map[string][]domain.CommitInfo{
+						"master": {
+							"feature": testCommits,
+						},
+					},
+				}
+				mockInfo := &mockInfoProvider{}
+				mockEngine := &mockValidationEngine{}
+
+				return validate.NewValidationService(mockEngine, mockCommit, mockInfo)
+			},
+			wantCount: 2, // Excluding merge commit
+		},
+		{
+			name:             "Non-existent range",
+			fromHash:         "nonexistent",
+			toHash:           "master",
+			skipMergeCommits: false,
+			setupService: func() validate.ValidationService {
+				mockCommit := &mockCommitRepository{
+					ranges: map[string]map[string][]domain.CommitInfo{},
+				}
+				mockInfo := &mockInfoProvider{}
+				mockEngine := &mockValidationEngine{}
+
+				return validate.NewValidationService(mockEngine, mockCommit, mockInfo)
+			},
+			wantErr:     true,
+			errContains: "range not found",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			service := testCase.setupService()
+			results, err := service.ValidateCommitRange(testcontext.CreateTestContext(), testCase.fromHash, testCase.toHash, testCase.skipMergeCommits)
+
+			if testCase.wantErr {
+				require.Error(t, err)
+
+				if testCase.errContains != "" {
+					require.Contains(t, err.Error(), testCase.errContains)
+				}
+
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, testCase.wantCount, results.Count())
+		})
+	}
+}
+
+// TestValidationService_ValidateWithOptions tests the ValidateWithOptions method using table-driven tests.
+func TestValidationService_ValidateWithOptions(t *testing.T) {
+	// Define test data
+	testCommit := domain.CommitInfo{
+		Hash:    "abc123",
+		Subject: "Test commit",
+		Body:    "Test body",
+	}
+
+	tests := []struct {
+		name         string
+		options      validate.ValidationOptions
+		setupService func() validate.ValidationService
+		wantCount    int
+		wantErr      bool
+	}{
+		{
+			name: "Validate specific commit",
+			options: validate.ValidationOptions{
+				CommitHash: "abc123",
+			},
+			setupService: func() validate.ValidationService {
+				mockCommit := &mockCommitRepository{
+					commits: map[string]domain.CommitInfo{
+						"abc123": testCommit,
+					},
+				}
+				mockInfo := &mockInfoProvider{}
+				mockEngine := &mockValidationEngine{}
+
+				return validate.NewValidationService(mockEngine, mockCommit, mockInfo)
+			},
+			wantCount: 1,
+		},
+		{
+			name: "Validate head commits",
+			options: validate.ValidationOptions{
+				CommitCount:      1,
+				SkipMergeCommits: false,
+			},
+			setupService: func() validate.ValidationService {
+				mockCommit := &mockCommitRepository{
+					headCommits: []domain.CommitInfo{testCommit},
+				}
+				mockInfo := &mockInfoProvider{}
+				mockEngine := &mockValidationEngine{}
+
+				return validate.NewValidationService(mockEngine, mockCommit, mockInfo)
+			},
+			wantCount: 1,
+		},
+		{
+			name: "Validate commit range",
+			options: validate.ValidationOptions{
+				FromHash:         "from",
+				ToHash:           "to",
+				SkipMergeCommits: false,
+			},
+			setupService: func() validate.ValidationService {
+				mockCommit := &mockCommitRepository{
+					ranges: map[string]map[string][]domain.CommitInfo{
+						"to": {
+							"from": []domain.CommitInfo{testCommit},
+						},
+					},
+				}
+				mockInfo := &mockInfoProvider{}
+				mockEngine := &mockValidationEngine{}
+
+				return validate.NewValidationService(mockEngine, mockCommit, mockInfo)
+			},
+			wantCount: 1,
+		},
+		{
+			name:    "Default to HEAD",
+			options: validate.ValidationOptions{},
+			setupService: func() validate.ValidationService {
+				mockCommit := &mockCommitRepository{
+					headCommits: []domain.CommitInfo{testCommit},
+				}
+				mockInfo := &mockInfoProvider{}
+				mockEngine := &mockValidationEngine{}
+
+				return validate.NewValidationService(mockEngine, mockCommit, mockInfo)
+			},
+			wantCount: 1,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			service := testCase.setupService()
+			results, err := service.ValidateWithOptions(testcontext.CreateTestContext(), testCase.options)
+
+			if testCase.wantErr {
+				require.Error(t, err)
+
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, testCase.wantCount, results.Count())
+		})
+	}
+}
+
+// TestValidationService_Functional tests the functional "With" methods.
+func TestValidationService_Functional(t *testing.T) {
+	// Create base mocks
+	baseMockCommit := &mockCommitRepository{
+		commits: map[string]domain.CommitInfo{
+			"abc123": {
+				Hash:    "abc123",
+				Subject: "Test commit",
+				Body:    "Test body",
+			},
+		},
+	}
+	mockInfo := &mockInfoProvider{
+		currentBranch: "main",
+		repoName:      "gommitlint",
+		isValid:       true,
+	}
+	mockEngine := &mockValidationEngine{}
+
+	tests := []struct {
+		name     string
+		testFunc func(t *testing.T, service validate.ValidationService)
+	}{
+		{
+			name: "WithEngine creates new service",
+			testFunc: func(t *testing.T, service validate.ValidationService) { //nolint:thelper
+				newEngine := &mockValidationEngine{}
+				newService := service.WithEngine(newEngine)
+
+				require.Equal(t, newEngine, newService.Engine())
+				require.Equal(t, service.CommitService(), newService.CommitService())
+				require.Equal(t, service.InfoProvider(), newService.InfoProvider())
+			},
+		},
+		{
+			name: "WithCommitService creates new service",
+			testFunc: func(t *testing.T, service validate.ValidationService) { //nolint:thelper
+				newCommitService := &mockCommitRepository{
+					commits: map[string]domain.CommitInfo{
+						"xyz789": {
+							Hash:    "xyz789",
+							Subject: "New commit",
+						},
+					},
+				}
+				newService := service.WithCommitService(newCommitService)
+
+				require.Equal(t, service.Engine(), newService.Engine())
+				require.Equal(t, newCommitService, newService.CommitService())
+				require.Equal(t, service.InfoProvider(), newService.InfoProvider())
+			},
+		},
+		{
+			name: "WithInfoProvider creates new service",
+			testFunc: func(t *testing.T, service validate.ValidationService) { //nolint:thelper
+				newInfoProvider := &mockInfoProvider{
+					currentBranch: "feature",
+					repoName:      "new-repo",
+					isValid:       true,
+				}
+				newService := service.WithInfoProvider(newInfoProvider)
+
+				require.Equal(t, service.Engine(), newService.Engine())
+				require.Equal(t, service.CommitService(), newService.CommitService())
+				require.Equal(t, newInfoProvider, newService.InfoProvider())
+			},
+		},
+		{
+			name: "Functional composition maintains immutability",
+			testFunc: func(t *testing.T, service validate.ValidationService) { //nolint:thelper
+				newCommitService := &mockCommitRepository{
+					commits: map[string]domain.CommitInfo{
+						"xyz789": {
+							Hash:    "xyz789",
+							Subject: "New commit",
+						},
+					},
+				}
+
+				// Compose new service
+				composedService := service.
+					WithEngine(&mockValidationEngine{}).
+					WithCommitService(newCommitService)
+
+				// Test composed service
+				result, err := composedService.ValidateCommit(testcontext.CreateTestContext(), "xyz789")
+				require.NoError(t, err)
+				require.Equal(t, "xyz789", result.CommitInfo.Hash)
+
+				// Test original service remains unchanged
+				_, err = service.ValidateCommit(testcontext.CreateTestContext(), "xyz789")
+				require.Error(t, err) // Original doesn't have xyz789
+			},
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			service := validate.NewValidationService(mockEngine, baseMockCommit, mockInfo)
+			testCase.testFunc(t, service)
+		})
+	}
+}
+
+// TestValueSemantics verifies that value semantics are properly maintained.
+func TestValueSemantics(t *testing.T) {
+	// Need to update this test to properly handle context-based validation
+	// The test expects ValidationResults but ValidateCommit returns CommitResult
+	// This test would need to be restructured based on actual API
+	t.Run("WithCustomRule maintains immutability", func(t *testing.T) {
+		// Create a custom validation rule
+		customRule := &CustomRule{
+			name: "TestCustomRule",
+		}
+
+		// Create an engine that supports custom rules
+		engine := &mockValidationEngineWithCustomRules{
+			customRules: []domain.Rule{},
+		}
+
+		// Create service
+		service := validate.NewValidationService(
+			engine,
+			&mockCommitRepository{},
+			&mockInfoProvider{},
+		)
+
+		// Add a custom rule
+		serviceCopy, err := service.WithCustomRule(customRule)
+		require.NoError(t, err)
+
+		// Verify the custom rule is correctly added to the engine in the copy
+		if engineWithCustomRules, ok := serviceCopy.Engine().(*mockValidationEngineWithCustomRules); ok {
+			found := false
+
+			for _, rule := range engineWithCustomRules.customRules {
+				if rule.Name() == customRule.Name() {
+					found = true
+
+					break
+				}
+			}
+
+			require.True(t, found, "Custom rule should be registered in the engine")
+		} else {
+			require.Fail(t, "Engine should be of type *mockValidationEngineWithCustomRules")
+		}
+	})
 }
