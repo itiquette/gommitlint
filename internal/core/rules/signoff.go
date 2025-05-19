@@ -173,18 +173,6 @@ func (r SignOffRule) Name() string {
 	return r.name
 }
 
-// SetErrors sets the errors for this rule and returns an updated rule.
-func (r SignOffRule) SetErrors(_ []appErrors.ValidationError) SignOffRule {
-	// This method isn't used in the new implementation but kept for compatibility
-	return r
-}
-
-// SetSignOffInfo sets sign-off information for detailed output and returns an updated rule.
-func (r SignOffRule) SetSignOffInfo(_ bool, _ string) SignOffRule {
-	// This method isn't used in the new implementation but kept for compatibility
-	return r
-}
-
 // hasSignOffLine checks if a commit body contains a sign-off line.
 func hasSignOffLine(body string, acceptAltFormat bool) bool {
 	// Standard format: "Signed-off-by: Name <email@example.com>"

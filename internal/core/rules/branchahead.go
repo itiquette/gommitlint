@@ -172,9 +172,3 @@ func (r BranchAheadRule) withContextConfig(ctx context.Context) BranchAheadRule 
 func (r BranchAheadRule) Name() string {
 	return r.name
 }
-
-// SetErrors sets the errors for this rule and returns an updated rule.
-func (r BranchAheadRule) SetErrors(_ []appErrors.ValidationError) BranchAheadRule {
-	// This method isn't used in the new implementation but kept for compatibility
-	return r
-}

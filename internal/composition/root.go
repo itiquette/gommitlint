@@ -13,7 +13,6 @@ import (
 	"github.com/itiquette/gommitlint/internal/config/types"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/ports/incoming"
-	"github.com/itiquette/gommitlint/internal/ports/outgoing"
 )
 
 // Root represents the composition root for the application.
@@ -62,16 +61,6 @@ func (r *Root) Initialize(ctx context.Context) error {
 }
 
 // Getters for dependencies.
-
-func (r *Root) GetConfig() types.Config {
-	return r.config
-}
-
-func (r *Root) GetLogger() outgoing.Logger {
-	// Logger should be retrieved from context
-	// This method is a placeholder for backward compatibility
-	return nil
-}
 
 func (r *Root) GetGitRepository() domain.CommitRepository {
 	return r.gitRepository

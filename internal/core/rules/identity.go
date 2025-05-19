@@ -212,9 +212,6 @@ func (r IdentityRule) SetIdentityInfo(identity, sigType string) IdentityRule {
 	return result
 }
 
-// SetErrors is no longer used since we don't have baseRule.
-// Validation errors are returned directly from the Validate method.
-
 // isIdentityMatch checks if the signature identity matches the author identity.
 func isIdentityMatch(signerIdentity, authorIdentity string) bool {
 	// Simple exact match

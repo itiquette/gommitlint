@@ -148,12 +148,6 @@ func (r ImperativeVerbRule) Name() string {
 	return r.name
 }
 
-// SetErrors sets the errors for this rule and returns an updated rule.
-func (r ImperativeVerbRule) SetErrors(_ []appErrors.ValidationError) ImperativeVerbRule {
-	// This method isn't used in the new implementation but kept for compatibility
-	return r
-}
-
 // Validate checks if the commit message uses imperative mood.
 // This implementation uses context to retrieve configuration.
 func (r ImperativeVerbRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
