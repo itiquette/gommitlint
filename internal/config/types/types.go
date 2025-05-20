@@ -24,21 +24,20 @@ type Config struct {
 type SubjectConfig struct {
 	Case               string   `json:"case"                yaml:"case"`
 	MaxLength          int      `json:"max_length"          yaml:"max_length"`
-	RequireImperative  bool     `json:"require_imperative"  yaml:"require_imperative"`
+	Imperative         bool     `json:"imperative"          yaml:"imperative"`
 	DisallowedSuffixes []string `json:"disallowed_suffixes" yaml:"disallowed_suffixes"`
 }
 
 // BodyConfig contains configuration options for commit body validation.
 type BodyConfig struct {
-	Required         bool `json:"required"            yaml:"required"`
 	MinLength        int  `json:"min_length"          yaml:"min_length"`
-	MinimumLines     int  `json:"minimum_lines"       yaml:"minimum_lines"`
+	MinLines         int  `json:"min_lines"           yaml:"min_lines"`
 	AllowSignOffOnly bool `json:"allow_sign_off_only" yaml:"allow_sign_off_only"`
+	RequireSignOff   bool `json:"require_sign_off"    yaml:"require_sign_off"`
 }
 
 // ConventionalConfig contains configuration options for conventional commit format validation.
 type ConventionalConfig struct {
-	Required             bool     `json:"required"               yaml:"required"`
 	RequireScope         bool     `json:"require_scope"          yaml:"require_scope"`
 	Types                []string `json:"types"                  yaml:"types"`
 	Scopes               []string `json:"scopes"                 yaml:"scopes"`
@@ -48,19 +47,18 @@ type ConventionalConfig struct {
 
 // RulesConfig contains configuration for enabled and disabled validation rules.
 type RulesConfig struct {
-	EnabledRules  []string `json:"enabled_rules"  yaml:"enabled_rules"`
-	DisabledRules []string `json:"disabled_rules" yaml:"disabled_rules"`
+	Enabled  []string `json:"enabled"  yaml:"enabled"`
+	Disabled []string `json:"disabled" yaml:"disabled"`
 }
 
 // SecurityConfig contains configuration options for security-related validations.
 type SecurityConfig struct {
-	SignOffRequired       bool     `json:"sign_off_required"        yaml:"sign_off_required"`
-	GPGRequired           bool     `json:"gpg_required"             yaml:"gpg_required"`
-	KeyDirectory          string   `json:"key_directory"            yaml:"key_directory"`
-	AllowedSignatureTypes []string `json:"allowed_signature_types"  yaml:"allowed_signature_types"`
-	AllowedKeyrings       []string `json:"allowed_keyrings"         yaml:"allowed_keyrings"`
-	AllowedIdentities     []string `json:"allowed_identities"       yaml:"allowed_identities"`
-	AllowMultipleSignOffs bool     `json:"allow_multiple_sign_offs" yaml:"allow_multiple_sign_offs"`
+	GPGRequired           bool     `json:"gpg_required"            yaml:"gpg_required"`
+	KeyDirectory          string   `json:"key_directory"           yaml:"key_directory"`
+	AllowedSignatureTypes []string `json:"allowed_signature_types" yaml:"allowed_signature_types"`
+	AllowedKeyrings       []string `json:"allowed_keyrings"        yaml:"allowed_keyrings"`
+	AllowedIdentities     []string `json:"allowed_identities"      yaml:"allowed_identities"`
+	MultipleSignoffs      bool     `json:"multiple_signoffs"       yaml:"multiple_signoffs"`
 }
 
 // RepositoryConfig contains configuration options related to the Git repository.
@@ -69,7 +67,6 @@ type RepositoryConfig struct {
 	ReferenceBranch    string `json:"reference_branch"     yaml:"reference_branch"`
 	MaxCommitsAhead    int    `json:"max_commits_ahead"    yaml:"max_commits_ahead"`
 	MaxHistoryDays     int    `json:"max_history_days"     yaml:"max_history_days"`
-	OutputFormat       string `json:"output_format"        yaml:"output_format"`
 	IgnoreMergeCommits bool   `json:"ignore_merge_commits" yaml:"ignore_merge_commits"`
 }
 
@@ -83,7 +80,6 @@ type OutputConfig struct {
 
 // SpellCheckConfig contains configuration options for spell checking.
 type SpellCheckConfig struct {
-	Enabled          bool     `json:"enabled"           yaml:"enabled"`
 	Language         string   `json:"language"          yaml:"language"`
 	IgnoreCase       bool     `json:"ignore_case"       yaml:"ignore_case"`
 	CustomDictionary []string `json:"custom_dictionary" yaml:"custom_dictionary"`

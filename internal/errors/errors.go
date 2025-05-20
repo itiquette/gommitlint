@@ -4,6 +4,10 @@
 
 package errors
 
+import (
+	"fmt"
+)
+
 // ValidationErrorCode represents standardized error codes for validation errors.
 // These codes provide a stable interface for programmatic error handling across
 // the application. They are organized by category (format, subject, body, etc.)
@@ -35,10 +39,15 @@ const (
 	ErrBodyTooShort ValidationErrorCode = "body_too_short"
 
 	// Conventional commit errors.
-	ErrInvalidType        ValidationErrorCode = "invalid_type"
-	ErrInvalidScope       ValidationErrorCode = "invalid_scope"
-	ErrEmptyDescription   ValidationErrorCode = "empty_description"
-	ErrDescriptionTooLong ValidationErrorCode = "description_too_long"
+	ErrInvalidType               ValidationErrorCode = "invalid_type"
+	ErrInvalidScope              ValidationErrorCode = "invalid_scope"
+	ErrEmptyDescription          ValidationErrorCode = "empty_description"
+	ErrDescriptionTooLong        ValidationErrorCode = "description_too_long"
+	ErrInvalidConventionalFormat ValidationErrorCode = "invalid_conventional_format"
+	ErrInvalidConventionalType   ValidationErrorCode = "invalid_conventional_type"
+	ErrMissingConventionalScope  ValidationErrorCode = "missing_conventional_scope"
+	ErrInvalidConventionalScope  ValidationErrorCode = "invalid_conventional_scope"
+	ErrConventionalDescTooLong   ValidationErrorCode = "conventional_desc_too_long"
 
 	// Jira errors.
 	ErrMissingJira    ValidationErrorCode = "missing_jira"
@@ -157,6 +166,41 @@ func (e ValidationError) WithContext(key, value string) ValidationError {
 func (e ValidationError) WithHelp(help string) ValidationError {
 	result := e
 	result.Help = help
+
+	return result
+}
+
+// WithUserMessage updates the error message with a user-friendly version.
+// This allows providing clearer, more actionable messages while preserving the original technical message.
+func (e ValidationError) WithUserMessage(format string, args ...interface{}) ValidationError {
+	result := e
+	result.Message = fmt.Sprintf(format, args...)
+
+	return result
+}
+
+// WithContextMap adds multiple context values at once to a ValidationError.
+// This simplifies adding multiple context entries and maintains immutability.
+func (e ValidationError) WithContextMap(ctx map[string]string) ValidationError {
+	result := e
+
+	// Create new context map if needed
+	if result.Context == nil {
+		result.Context = make(map[string]string, len(ctx))
+	} else {
+		// Copy existing context
+		newContext := make(map[string]string, len(result.Context)+len(ctx))
+		for k, v := range result.Context {
+			newContext[k] = v
+		}
+
+		result.Context = newContext
+	}
+
+	// Add new context values
+	for k, v := range ctx {
+		result.Context[k] = v
+	}
 
 	return result
 }

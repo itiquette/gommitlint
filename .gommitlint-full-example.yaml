@@ -1,0 +1,124 @@
+# SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+# Complete gommitlint configuration file with all possible fields
+# This file shows every configuration option available in gommitlint
+
+# Subject line configuration
+subject:
+  max_length: 72 # Maximum allowed length for subject line
+  imperative: false # Require imperative mood (e.g., "Add" not "Added")
+  case: "sentence" # Case style: "sentence", "lower", "upper", "title"
+  disallowed_suffixes: # List of forbidden subject line endings
+    - "."
+    - "!"
+
+# Commit body configuration
+body:
+  min_length: 10 # Minimum number of characters in body
+  min_lines: 3 # Minimum number of lines in body
+  allow_sign_off_only: false # Allow commits with only sign-off lines in body
+  require_sign_off: false # Require sign-off line in commits
+
+# Conventional commits configuration
+conventional:
+  require_scope: false # Require scope in conventional format (e.g., "feat(scope):")
+  types: # Allowed conventional commit types
+    - "feat"
+    - "fix"
+    - "docs"
+    - "style"
+    - "refactor"
+    - "perf"
+    - "test"
+    - "build"
+    - "ci"
+    - "chore"
+    - "revert"
+  scopes: [] # If empty, any scope is allowed
+  allow_breaking_changes: true # Allow breaking change indicator (!)
+  max_description_length: 72 # Max length for description after type/scope
+
+# Rules configuration
+rules:
+  enabled: [] # Explicitly enabled rules (overrides defaults)
+  disabled: [] # Explicitly disabled rules
+
+# Security configuration
+security:
+  gpg_required: false # Require GPG signatures on commits
+  multiple_signoffs: false # Allow multiple sign-off lines
+  allowed_identities: [] # If non-empty, only these identities can sign commits
+
+# Repository configuration
+repository:
+  path: "." # Path to git repository
+  max_commits_ahead: 10 # Maximum commits ahead of reference branch before warning
+  reference_branch: "main" # Reference branch for commit validation
+  ignore_merge_commits: true # Skip validation of merge commits
+
+# Output configuration
+output:
+  format: "text" # Output format: "text", "json", "github", "gitlab"
+
+# JIRA integration configuration
+jira:
+  pattern: "" # Regex pattern for JIRA ticket references
+  projects: [] # List of valid JIRA project keys
+  body_ref: false # Allow JIRA references in body (not just subject)
+
+# Spell check configuration
+spell_check:
+  language: "en_US" # Spell check language code
+  custom_dictionary: [] # Custom words to ignore in spell checking
+
+# Example of a configuration with various settings:
+#
+# subject:
+#   max_length: 50
+#   imperative: true
+#   case: "sentence"
+#   disallowed_suffixes: ["."]
+#
+# body:
+#   min_length: 10
+#   min_lines: 3
+#   allow_sign_off_only: false
+#   require_sign_off: true
+#
+# conventional:
+#   require_scope: true
+#   types: ["feat", "fix", "docs", "test"]
+#   scopes: ["api", "ui", "db", "auth"]
+#   allow_breaking_changes: false
+#   max_description_length: 50
+#
+# rules:
+#   enabled: ["SubjectLength", "CommitBody", "Conventional", "JiraReference"]
+#   disabled: ["Spell", "SignedIdentity"]
+#
+# security:
+#   gpg_required: true
+#   multiple_signoffs: false
+#   allowed_identities:
+#     - "John Doe <john@example.com>"
+#     - "Jane Smith <jane@example.com>"
+#
+# repository:
+#   path: "."
+#   max_commits_ahead: 5
+#   reference_branch: "develop"
+#   ignore_merge_commits: false
+#
+# output:
+#   format: "json"
+#
+# jira:
+#   pattern: "^(PROJ|OTHER)-\\d+:"
+#   projects: ["PROJ", "OTHER"]
+#   body_ref: true
+#
+# spell_check:
+#   language: "en_GB"
+#   custom_dictionary: ["gommitlint", "API", "webhook"]

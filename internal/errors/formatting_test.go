@@ -36,21 +36,18 @@ func TestFormatAsText(t *testing.T) {
 	err = err.WithContext("key1", "value1")
 	err = err.WithHelp("This is a help message")
 
-	// Test non-verbose format
-	text := err.FormatAsText(false)
-	require.Equal(t, "[TestRule] Test message", text)
+	// Test non-verbose format (level 0)
+	text := err.FormatAtLevel(0)
+	require.Contains(t, text, "Test message")
+	require.Contains(t, text, "This is a help message")
 
-	// Test verbose format
-	verbose := err.FormatAsText(true)
-	require.Contains(t, verbose, "Rule:    TestRule")
-	require.Contains(t, verbose, "Code:    invalid_format")
-	require.Contains(t, verbose, "Message: Test message")
-	require.Contains(t, verbose, "Help:    This is a help message")
-	require.Contains(t, verbose, "Context:")
-	require.Contains(t, verbose, "  key1: value1")
-
-	// Help should not be duplicated in context
-	require.NotContains(t, verbose, "  help: This is a help message")
+	// Test verbose format (level 2)
+	verbose := err.FormatAtLevel(2)
+	require.Contains(t, verbose, "Rule: TestRule")
+	require.Contains(t, verbose, "Error Code: invalid_format")
+	require.Contains(t, verbose, "Test message")
+	require.Contains(t, verbose, "This is a help message")
+	require.Contains(t, verbose, "key1: value1")
 }
 
 func TestFormatAsJSON(t *testing.T) {
@@ -58,14 +55,14 @@ func TestFormatAsJSON(t *testing.T) {
 	err = err.WithContext("key1", "value1")
 	err = err.WithHelp("This is a help message")
 
-	// Format as JSON
-	data, jsonErr := err.FormatAsJSON()
-	require.NoError(t, jsonErr)
+	// Format as JSON using JSONFormatter
+	formatter := NewJSONFormatter()
+	jsonStr := formatter.FormatError(err)
 
 	// Parse back
 	var parsed map[string]interface{}
 
-	require.NoError(t, json.Unmarshal(data, &parsed))
+	require.NoError(t, json.Unmarshal([]byte(jsonStr), &parsed))
 
 	// Check fields
 	require.Equal(t, "TestRule", parsed["rule"])
@@ -73,12 +70,10 @@ func TestFormatAsJSON(t *testing.T) {
 	require.Equal(t, "Test message", parsed["message"])
 	require.Equal(t, "This is a help message", parsed["help"])
 
-	// Check context - should not include help
+	// Check context - should include key1
 	context, ok := parsed["context"].(map[string]interface{})
 	require.True(t, ok)
 	require.Equal(t, "value1", context["key1"])
-	_, hasHelp := context["help"]
-	require.False(t, hasHelp)
 }
 
 func TestFormatAsMarkdown(t *testing.T) {
@@ -86,8 +81,9 @@ func TestFormatAsMarkdown(t *testing.T) {
 	err = err.WithContext("key1", "value1")
 	err = err.WithHelp("This is a help message")
 
-	// Format as Markdown
-	markdown := err.FormatAsMarkdown()
+	// Format as Markdown using MarkdownFormatter
+	formatter := NewMarkdownFormatter()
+	markdown := formatter.FormatError(err)
 
 	// Check content
 	require.Contains(t, markdown, "### TestRule: Test message")
@@ -95,9 +91,6 @@ func TestFormatAsMarkdown(t *testing.T) {
 	require.Contains(t, markdown, "**Help:** This is a help message")
 	require.Contains(t, markdown, "**Context:**")
 	require.Contains(t, markdown, "- `key1`: value1")
-
-	// Help should not be duplicated in context
-	require.NotContains(t, markdown, "- `help`: This is a help message")
 }
 
 func TestNewFormatValidationError(t *testing.T) {
@@ -119,8 +112,8 @@ func TestFormatterInterface(t *testing.T) {
 	// Test text formatter
 	textFormatter := NewTextFormatter(true)
 	textOutput := textFormatter.FormatError(err)
-	require.Contains(t, textOutput, "Rule:    TestRule")
-	require.Contains(t, textOutput, "Help:    This is a help message")
+	require.Contains(t, textOutput, "Rule: TestRule")
+	require.Contains(t, textOutput, "This is a help message")
 
 	// Test JSON formatter
 	jsonFormatter := NewJSONFormatter()

@@ -59,7 +59,7 @@ func (l *Loader) LoadFromPath(configPath string) (types.Config, error) {
 	config := NewDefaultConfig()
 
 	// Store original default disabled rules to preserve
-	defaultDisabledRules := config.Rules.DisabledRules
+	defaultDisabledRules := config.Rules.Disabled
 
 	// Unmarshal the root configuration
 	// Use yaml tag instead of json to properly load yaml files
@@ -68,12 +68,12 @@ func (l *Loader) LoadFromPath(configPath string) (types.Config, error) {
 	}
 
 	// Merge default disabled rules with YAML disabled rules
-	if koanfConfig.Exists("gommitlint.rules.disabled_rules") {
-		// YAML has disabled_rules, apply priority logic
+	if koanfConfig.Exists("gommitlint.rules.disabled") {
+		// YAML has disabled, apply priority logic
 		l.applyRulePriority(&config)
 	} else {
-		// No disabled_rules in YAML, apply defaults and merge
-		config.Rules.DisabledRules = l.mergeDefaultDisabledRules(config.Rules.EnabledRules, defaultDisabledRules)
+		// No disabled in YAML, apply defaults and merge
+		config.Rules.Disabled = l.mergeDefaultDisabledRules(config.Rules.Enabled, defaultDisabledRules)
 	}
 
 	return config, nil
@@ -84,24 +84,24 @@ func (l *Loader) LoadFromPath(configPath string) (types.Config, error) {
 func (l *Loader) applyRulePriority(config *types.Config) {
 	// Create a map of disabled rules for efficient lookup
 	disabledMap := make(map[string]bool)
-	for _, rule := range config.Rules.DisabledRules {
+	for _, rule := range config.Rules.Disabled {
 		disabledMap[rule] = true
 	}
 
 	// Filter enabled rules to remove any that are also disabled
 	var filteredEnabled []string
 
-	for _, rule := range config.Rules.EnabledRules {
+	for _, rule := range config.Rules.Enabled {
 		if !disabledMap[rule] {
 			filteredEnabled = append(filteredEnabled, rule)
 		}
 	}
 
-	config.Rules.EnabledRules = filteredEnabled
+	config.Rules.Enabled = filteredEnabled
 }
 
 // mergeDefaultDisabledRules merges default disabled rules with the current configuration.
-// When no disabled_rules are specified in YAML, we keep default disabled rules
+// When no disabled are specified in YAML, we keep default disabled rules
 // even if they're explicitly enabled (both lists can contain the rule).
 func (l *Loader) mergeDefaultDisabledRules(_ []string, defaultDisabledRules []string) []string {
 	// Just return the default disabled rules - they coexist with enabled rules

@@ -26,9 +26,7 @@ func createTestSubjectLengthContext(maxLength int) context.Context {
 	cfg := config.NewDefaultConfig()
 	cfg.Subject.MaxLength = maxLength
 	cfg.Subject.Case = "sentence"
-	cfg.Subject.RequireImperative = true
-	cfg.Body.Required = false
-	cfg.Conventional.Required = false
+	cfg.Subject.Imperative = true
 	cfg.Conventional.Types = []string{"feat", "fix", "docs", "style", "refactor", "test", "chore"}
 
 	// Add to context using direct adapter pattern
@@ -105,30 +103,30 @@ func TestSubjectLengthRule(t *testing.T) {
 				require.Len(t, errors, 1, "Expected exactly one error")
 				require.Equal(t, "SubjectLength", errors[0].Rule, "Rule name should be SubjectLength")
 				require.Equal(t, string(appErrors.ErrMaxLengthExceeded), errors[0].Code, "Error code should be ErrMaxLengthExceeded")
-				require.Contains(t, errors[0].Error(), "exceeds", "Error message should contain 'exceeds'")
+				require.Contains(t, errors[0].Error(), "too long", "Error message should contain 'too long'")
 
 				// Check context values
-				actualLengthStr, hasActualLength := errors[0].Context["actual_length"]
-				require.True(t, hasActualLength, "Error should have actual_length context")
+				actualLengthStr, hasActualLength := errors[0].Context["actual"]
+				require.True(t, hasActualLength, "Error should have actual context")
 
 				actualLength, err := strconv.Atoi(actualLengthStr)
-				require.NoError(t, err, "actual_length should be a valid integer")
-				require.Equal(t, len(testCase.subject), actualLength, "actual_length should match subject length")
+				require.NoError(t, err, "actual should be a valid integer")
+				require.Equal(t, len(testCase.subject), actualLength, "actual should match subject length")
 
-				maxLengthStr, hasMaxLength := errors[0].Context["max_length"]
-				require.True(t, hasMaxLength, "Error should have max_length context")
+				maxLengthStr, hasMaxLength := errors[0].Context["max"]
+				require.True(t, hasMaxLength, "Error should have max context")
 
 				maxLength, err := strconv.Atoi(maxLengthStr)
-				require.NoError(t, err, "max_length should be a valid integer")
-				require.Equal(t, testCase.maxLength, maxLength, "max_length should match configured max length")
+				require.NoError(t, err, "max should be a valid integer")
+				require.Equal(t, testCase.maxLength, maxLength, "max should match configured max length")
 
 				subject, hasSubject := errors[0].Context["subject"]
 				require.True(t, hasSubject, "Error should have subject context")
 				require.Equal(t, testCase.subject, subject, "subject context should match original subject")
 
-				help, hasHelp := errors[0].Context["help"]
-				require.True(t, hasHelp, "Error should have help context")
-				require.NotEmpty(t, help, "help context should not be empty")
+				// Help is now accessible through GetHelp() method
+				help := errors[0].GetHelp()
+				require.NotEmpty(t, help, "Error should have help text")
 			} else {
 				require.Empty(t, errors, "Expected no validation errors")
 			}
@@ -174,7 +172,7 @@ func TestSubjectLengthRuleWithoutContext(t *testing.T) {
 	require.NotEmpty(t, errors, "Should return error when subject exceeds default max length")
 	require.Len(t, errors, 1, "Should return exactly one error")
 	require.Equal(t, string(appErrors.ErrMaxLengthExceeded), errors[0].Code, "Error code should be ErrMaxLengthExceeded")
-	require.Contains(t, errors[0].Error(), "72", "Error should mention default max length of 72")
+	require.Contains(t, errors[0].Error(), "28 characters too long", "Error should indicate how many characters over the limit")
 }
 
 // Test that UTF-8 characters are counted correctly (by bytes, not runes).

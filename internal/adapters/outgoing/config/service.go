@@ -23,7 +23,7 @@ func NewService() (*Service, error) {
 	config := NewDefaultConfig()
 
 	// Apply default disabled rules
-	defaultDisabledRules := append([]string{}, config.Rules.DisabledRules...)
+	defaultDisabledRules := append([]string{}, config.Rules.Disabled...)
 
 	// Add rules that should be disabled by default from the central list
 	domainDefaultDisabled := domain.GetDefaultDisabledRules()
@@ -31,7 +31,7 @@ func NewService() (*Service, error) {
 		// Check if the rule is explicitly enabled in the default config
 		isExplicitlyEnabled := false
 
-		for _, enabledRule := range config.Rules.EnabledRules {
+		for _, enabledRule := range config.Rules.Enabled {
 			if enabledRule == ruleName {
 				isExplicitlyEnabled = true
 
@@ -45,7 +45,7 @@ func NewService() (*Service, error) {
 		}
 	}
 
-	config.Rules.DisabledRules = defaultDisabledRules
+	config.Rules.Disabled = defaultDisabledRules
 
 	return &Service{
 		config: config,
@@ -121,24 +121,23 @@ func NewDefaultConfig() types.Config {
 		Subject: types.SubjectConfig{
 			Case:               "sentence",
 			MaxLength:          72,
-			RequireImperative:  false,
+			Imperative:         false,
 			DisallowedSuffixes: []string{"."},
 		},
 		Body: types.BodyConfig{
-			Required:         true,
 			MinLength:        10,
-			MinimumLines:     3,
+			MinLines:         3,
 			AllowSignOffOnly: false,
+			RequireSignOff:   false,
 		},
 		Conventional: types.ConventionalConfig{
-			Required:             true,
 			RequireScope:         false,
 			Types:                []string{"feat", "fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore", "revert"},
 			AllowBreakingChanges: true,
 			MaxDescriptionLength: 72,
 		},
 		Rules: types.RulesConfig{
-			EnabledRules: []string{
+			Enabled: []string{
 				"SubjectLength",
 				"Body",
 				"Conventional",
@@ -146,12 +145,11 @@ func NewDefaultConfig() types.Config {
 				"SubjectCase",
 				"SubjectSuffix",
 			},
-			DisabledRules: disabledRules,
+			Disabled: disabledRules,
 		},
 		Security: types.SecurityConfig{
-			GPGRequired:           false,
-			SignOffRequired:       false,
-			AllowMultipleSignOffs: false,
+			GPGRequired:      false,
+			MultipleSignoffs: false,
 		},
 		Repository: types.RepositoryConfig{
 			Path:               ".",
@@ -163,7 +161,6 @@ func NewDefaultConfig() types.Config {
 			Format: "text",
 		},
 		SpellCheck: types.SpellCheckConfig{
-			Enabled:          false,
 			Language:         "en_US",
 			CustomDictionary: []string{},
 		},
@@ -180,7 +177,7 @@ func NewDefaultConfig() types.Config {
 		// Check if the rule is explicitly enabled
 		isEnabled := false
 
-		for _, enabledRule := range config.Rules.EnabledRules {
+		for _, enabledRule := range config.Rules.Enabled {
 			if enabledRule == ruleName {
 				isEnabled = true
 
@@ -194,7 +191,7 @@ func NewDefaultConfig() types.Config {
 		}
 	}
 
-	config.Rules.DisabledRules = domainDisabledRules
+	config.Rules.Disabled = domainDisabledRules
 
 	return config
 }

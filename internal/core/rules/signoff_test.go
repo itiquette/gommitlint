@@ -71,7 +71,7 @@ This is a detailed description of the feature.`,
 			allowMultiple:  true,
 			expectedValid:  false,
 			expectedCode:   string(appErrors.ErrMissingSignoff),
-			errorContains:  "missing a sign-off line",
+			errorContains:  "Missing sign-off",
 		},
 		{
 			name: "Missing sign-off (not required)",
@@ -88,7 +88,7 @@ This is a detailed description of the feature.`,
 			allowMultiple:  true,
 			expectedValid:  false,
 			expectedCode:   string(appErrors.ErrMissingSignoff),
-			errorContains:  "missing a sign-off line",
+			errorContains:  "Missing sign-off",
 		},
 		{
 			name:           "Whitespace only message",
@@ -97,7 +97,7 @@ This is a detailed description of the feature.`,
 			allowMultiple:  true,
 			expectedValid:  false,
 			expectedCode:   string(appErrors.ErrMissingSignoff),
-			errorContains:  "missing a sign-off line",
+			errorContains:  "Missing sign-off",
 		},
 		// Custom regex functionality isn't fully implemented in value semantics approach
 	}
@@ -112,9 +112,9 @@ This is a detailed description of the feature.`,
 			}
 
 			if testCase.allowMultiple {
-				options = append(options, rules.WithAllowMultipleSignOffs(true))
+				options = append(options, rules.WithMultipleSignoffs(true))
 			} else {
-				options = append(options, rules.WithAllowMultipleSignOffs(false))
+				options = append(options, rules.WithMultipleSignoffs(false))
 			}
 
 			// Create rule with options
@@ -128,8 +128,8 @@ This is a detailed description of the feature.`,
 			ctx := createSignoffTestContext()
 			// Add config to context if needed
 			cfg := config.NewDefaultConfig()
-			cfg.Security.SignOffRequired = testCase.requireSignOff
-			cfg.Security.AllowMultipleSignOffs = testCase.allowMultiple
+			cfg.Body.RequireSignOff = testCase.requireSignOff
+			cfg.Security.MultipleSignoffs = testCase.allowMultiple
 			// Use direct adapter pattern instead of the deprecated AdaptConfigForTesting
 			adapter := infraConfig.NewAdapter(cfg)
 			ctx = contextx.WithConfig(ctx, adapter)
@@ -187,8 +187,8 @@ func TestSignOffRuleWithConfig(t *testing.T) {
 This is a commit without a sign-off.`,
 			configSetup: func() types.Config {
 				config := config.NewDefaultConfig()
-				config.Security.SignOffRequired = true
-				config.Security.AllowMultipleSignOffs = false
+				config.Body.RequireSignOff = true
+				config.Security.MultipleSignoffs = false
 
 				return config
 			},
@@ -200,8 +200,8 @@ This is a commit without a sign-off.`,
 This is a detailed description.`,
 			configSetup: func() types.Config {
 				config := config.NewDefaultConfig()
-				config.Security.SignOffRequired = false
-				config.Security.AllowMultipleSignOffs = false
+				config.Body.RequireSignOff = false
+				config.Security.MultipleSignoffs = false
 
 				return config
 			},
@@ -214,8 +214,8 @@ Signed-off-by: Laval Lion <laval.lion@cavora.org>
 Signed-off-by: Cragger Crocodile <cragger@svamp.org>`,
 			configSetup: func() types.Config {
 				config := config.NewDefaultConfig()
-				config.Security.SignOffRequired = true
-				config.Security.AllowMultipleSignOffs = true
+				config.Body.RequireSignOff = true
+				config.Security.MultipleSignoffs = true
 
 				return config
 			},
@@ -236,13 +236,13 @@ Signed-off-by: Cragger Crocodile <cragger@svamp.org>`,
 
 			// Create rule with options explicitly set based on config
 			options := []rules.SignOffOption{}
-			if !cfg.Security.SignOffRequired {
+			if !cfg.Body.RequireSignOff {
 				options = append(options, rules.WithRequireSignOff(false))
 			}
 			// Check for multiple sign-offs configuration
 
-			if cfg.Security.AllowMultipleSignOffs {
-				options = append(options, rules.WithAllowMultipleSignOffs(true))
+			if cfg.Security.MultipleSignoffs {
+				options = append(options, rules.WithMultipleSignoffs(true))
 			}
 
 			rule := rules.NewSignOffRule(options...)

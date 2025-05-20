@@ -7,6 +7,8 @@ package errors
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/itiquette/gommitlint/internal/common/slices"
 )
@@ -25,7 +27,13 @@ func NewTextFormatter(verbose bool) TextFormatter {
 
 // FormatError formats a single error as text.
 func (f TextFormatter) FormatError(err ValidationError) string {
-	return err.FormatAsText(f.Verbose)
+	// Map verbose flag to level
+	level := 0
+	if f.Verbose {
+		level = 2 // Full details
+	}
+
+	return err.FormatAtLevel(level)
 }
 
 // FormatErrors formats multiple errors as text.
@@ -57,7 +65,22 @@ func NewJSONFormatter() JSONFormatter {
 
 // FormatError formats a single error as JSON.
 func (JSONFormatter) FormatError(err ValidationError) string {
-	data, jsonErr := err.FormatAsJSON()
+	// Create a representation with help as a first-class field
+	representation := struct {
+		Rule    string            `json:"rule"`
+		Code    string            `json:"code"`
+		Message string            `json:"message"`
+		Help    string            `json:"help,omitempty"`
+		Context map[string]string `json:"context,omitempty"`
+	}{
+		Rule:    err.Rule,
+		Code:    err.Code,
+		Message: err.Message,
+		Help:    err.Help,
+		Context: err.Context,
+	}
+
+	data, jsonErr := json.Marshal(representation)
 	if jsonErr != nil {
 		return fmt.Sprintf(`{"error":"Failed to format error as JSON: %s"}`, jsonErr)
 	}
@@ -120,7 +143,34 @@ func NewMarkdownFormatter() MarkdownFormatter {
 
 // FormatError formats a single error as Markdown.
 func (MarkdownFormatter) FormatError(err ValidationError) string {
-	return err.FormatAsMarkdown()
+	var builder strings.Builder
+
+	fmt.Fprintf(&builder, "### %s: %s\n\n", err.Rule, err.Message)
+	fmt.Fprintf(&builder, "**Code:** `%s`\n\n", err.Code)
+
+	if err.Help != "" {
+		fmt.Fprintf(&builder, "**Help:** %s\n\n", err.Help)
+	}
+
+	// Print all context entries
+	if len(err.Context) > 0 {
+		fmt.Fprintf(&builder, "**Context:**\n\n")
+
+		// Format each context entry as a Markdown list item
+		contextEntries := make([]string, 0, len(err.Context))
+		for k, v := range err.Context {
+			contextEntries = append(contextEntries, fmt.Sprintf("- `%s`: %s", k, v))
+		}
+
+		// Sort for consistent output
+		sort.Strings(contextEntries)
+
+		// Join all formatted entries with newlines
+		builder.WriteString(strings.Join(contextEntries, "\n"))
+		builder.WriteString("\n\n")
+	}
+
+	return builder.String()
 }
 
 // FormatErrors formats multiple errors as Markdown.
@@ -132,7 +182,7 @@ func (MarkdownFormatter) FormatErrors(errs []ValidationError) string {
 	header := fmt.Sprintf("# Validation Errors (%d)\n\n", len(errs))
 
 	formattedErrors := slices.Map(errs, func(err ValidationError) string {
-		return err.FormatAsMarkdown()
+		return MarkdownFormatter{}.FormatError(err)
 	})
 
 	errorContent := slices.Reduce(formattedErrors, "", func(acc string, errStr string) string {

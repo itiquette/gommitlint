@@ -5,6 +5,7 @@ package rules
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -36,8 +37,8 @@ func WithRequireSignOff(required bool) SignOffOption {
 	}
 }
 
-// WithAllowMultipleSignOffs configures whether multiple sign-offs are allowed.
-func WithAllowMultipleSignOffs(allow bool) SignOffOption {
+// WithMultipleSignoffs configures whether multiple sign-offs are allowed.
+func WithMultipleSignoffs(allow bool) SignOffOption {
 	return func(r SignOffRule) SignOffRule {
 		result := r
 		result.acceptAltFormat = allow // Reuse this flag
@@ -102,10 +103,11 @@ func (r SignOffRule) Validate(ctx context.Context, commit domain.CommitInfo) []a
 	// Handle empty message cases separately - only if both Message and Body are empty
 	if messageText == "" && bodyText == "" {
 		return []appErrors.ValidationError{
-			appErrors.New(
-				"SignOff",
+			appErrors.NewSignOffError(
 				appErrors.ErrMissingSignoff,
-				"commit is missing a sign-off line",
+				"SignOff",
+				"Missing sign-off",
+				"Add 'Signed-off-by: Your Name <email@example.com>'",
 			),
 		}
 	}
@@ -121,11 +123,14 @@ func (r SignOffRule) Validate(ctx context.Context, commit domain.CommitInfo) []a
 	hasSignOff := hasSignOffLine(textToCheck, rule.acceptAltFormat)
 	if !hasSignOff {
 		return []appErrors.ValidationError{
-			appErrors.New(
-				"SignOff",
+			appErrors.NewSignOffError(
 				appErrors.ErrMissingSignoff,
-				"commit is missing a sign-off line",
-			).WithContext("author", commit.AuthorName+" <"+commit.AuthorEmail+">"),
+				"SignOff",
+				"Missing sign-off",
+				"Add 'Signed-off-by: Your Name <email@example.com>'",
+			).WithContextMap(map[string]string{
+				"author": fmt.Sprintf("%s <%s>", commit.AuthorName, commit.AuthorEmail),
+			}),
 		}
 	}
 
@@ -147,7 +152,7 @@ func (r SignOffRule) withContextConfig(ctx context.Context) SignOffRule {
 			requireSignOff = true
 		}
 
-		if cfg.GetBool("security.allow_multiple_signoffs") {
+		if cfg.GetBool("security.multiple_signoffs") {
 			acceptAltFormat = true
 		}
 	}

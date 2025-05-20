@@ -100,16 +100,16 @@ func (r SubjectCaseRule) Validate(ctx context.Context, commit domain.CommitInfo)
 	}
 
 	// Get imperative requirement
-	requireImperative := cfg.GetBool("subject.require_imperative")
+	requireImperative := cfg.GetBool("subject.imperative")
 	allowNonAlpha = requireImperative || allowNonAlpha
 	logger.Debug("Configured imperative requirement",
 		"require_imperative", requireImperative,
 		"allow_non_alpha", allowNonAlpha)
 
-	// Check if conventional commit is required
-	checkCommit := cfg.GetBool("conventional.required")
+	// Check if conventional commit is enabled
+	checkCommit := IsRuleEnabled(ctx, "Conventional")
 	logger.Debug("Configured conventional commit check",
-		"conventional_required", checkCommit)
+		"conventional_enabled", checkCommit)
 
 	// Log final configuration at debug level
 	logger.Debug("Subject case rule configuration",
@@ -128,10 +128,11 @@ func (r SubjectCaseRule) Validate(ctx context.Context, commit domain.CommitInfo)
 	// Check for empty subject first
 	if subject == "" {
 		return []appErrors.ValidationError{
-			appErrors.New(
-				"SubjectCase",
+			appErrors.NewCaseError(
 				appErrors.ErrEmptyDescription,
-				"commit message description is empty",
+				"SubjectCase",
+				"Commit message must have a description",
+				"Add a meaningful description after your commit type",
 			),
 		}
 	}
@@ -151,10 +152,11 @@ func (r SubjectCaseRule) Validate(ctx context.Context, commit domain.CommitInfo)
 			if matches[1] == "" {
 				// Conventional format but empty description
 				return []appErrors.ValidationError{
-					appErrors.New(
-						"SubjectCase",
+					appErrors.NewCaseError(
 						appErrors.ErrEmptyDescription,
-						"commit message description is empty",
+						"SubjectCase",
+						"Conventional commit requires a description after the type",
+						"Format: type(scope): description",
 					),
 				}
 			}
@@ -164,10 +166,11 @@ func (r SubjectCaseRule) Validate(ctx context.Context, commit domain.CommitInfo)
 		} else if isConventionalCommitLike(subject) {
 			// It's trying to be a conventional commit but the format is invalid
 			return []appErrors.ValidationError{
-				appErrors.New(
-					"SubjectCase",
+				appErrors.NewCaseError(
 					appErrors.ErrInvalidFormat,
-					"commit message does not follow conventional commit format",
+					"SubjectCase",
+					"Invalid conventional commit format",
+					"Use format: type(scope): description",
 				),
 			}
 		} else {
@@ -188,10 +191,11 @@ func (r SubjectCaseRule) Validate(ctx context.Context, commit domain.CommitInfo)
 	firstWord := extractFirstWordForCase(textToCheck, allowNonAlpha)
 	if firstWord == "" {
 		return []appErrors.ValidationError{
-			appErrors.New(
-				"SubjectCase",
+			appErrors.NewCaseError(
 				appErrors.ErrSubjectCase,
-				"could not find a word to check case",
+				"SubjectCase",
+				"Unable to extract a word to validate case",
+				"Ensure your commit message starts with an alphabetic character",
 			).WithContext("subject", textToCheck),
 		}
 	}
@@ -201,14 +205,16 @@ func (r SubjectCaseRule) Validate(ctx context.Context, commit domain.CommitInfo)
 
 	if !isValid {
 		return []appErrors.ValidationError{
-			appErrors.New(
-				"SubjectCase",
+			appErrors.NewCaseError(
 				appErrors.ErrSubjectCase,
-				fmt.Sprintf("first word '%s' is not in %s case", firstWord, caseChoice),
-			).
-				WithContext("word", firstWord).
-				WithContext("required_case", caseChoice).
-				WithContext("actual_case", actualCase),
+				"SubjectCase",
+				fmt.Sprintf("First word '%s' should be in %s case", firstWord, caseChoice),
+				fmt.Sprintf("Change '%s' to %s case", firstWord, caseChoice),
+			).WithContextMap(map[string]string{
+				"word":          firstWord,
+				"required_case": caseChoice,
+				"actual_case":   actualCase,
+			}),
 		}
 	}
 

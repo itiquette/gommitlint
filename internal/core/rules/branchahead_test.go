@@ -143,8 +143,7 @@ func TestBranchAheadRuleTooManyCommits(t *testing.T) {
 	validationErr := errors[0]
 	require.Equal(t, string(appErrors.ErrTooManyCommits), validationErr.Code)
 	// Error message format is "Branch is X commits ahead of reference branch 'Y'"
-	require.Contains(t, validationErr.Message, "Branch is 5 commits ahead")
-	require.Contains(t, validationErr.Message, "of reference branch 'main'")
+	require.Contains(t, validationErr.Message, "Your branch is 5 commits ahead of 'main' (max allowed: 4)")
 }
 
 func TestBranchAheadHelpMessage(t *testing.T) {

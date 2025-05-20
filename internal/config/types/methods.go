@@ -98,10 +98,10 @@ func (c SubjectConfig) WithCase(caseStyle string) SubjectConfig {
 	return result
 }
 
-// WithRequireImperative returns a new SubjectConfig with the updated imperative requirement.
-func (c SubjectConfig) WithRequireImperative(required bool) SubjectConfig {
+// WithImperative returns a new SubjectConfig with the updated imperative requirement.
+func (c SubjectConfig) WithImperative(required bool) SubjectConfig {
 	result := c
-	result.RequireImperative = required
+	result.Imperative = required
 
 	return result
 }
@@ -118,14 +118,6 @@ func (c SubjectConfig) WithDisallowedSuffixes(suffixes []string) SubjectConfig {
 // BodyConfig transformation methods
 // =========================================================================
 
-// WithRequired returns a new BodyConfig with the updated required setting.
-func (c BodyConfig) WithRequired(required bool) BodyConfig {
-	result := c
-	result.Required = required
-
-	return result
-}
-
 // WithMinLength returns a new BodyConfig with the updated minimum length setting.
 func (c BodyConfig) WithMinLength(minLength int) BodyConfig {
 	result := c
@@ -134,10 +126,10 @@ func (c BodyConfig) WithMinLength(minLength int) BodyConfig {
 	return result
 }
 
-// WithMinimumLines returns a new BodyConfig with the updated minimum lines setting.
-func (c BodyConfig) WithMinimumLines(minLines int) BodyConfig {
+// WithMinLines returns a new BodyConfig with the updated minimum lines setting.
+func (c BodyConfig) WithMinLines(minLines int) BodyConfig {
 	result := c
-	result.MinimumLines = minLines
+	result.MinLines = minLines
 
 	return result
 }
@@ -150,16 +142,16 @@ func (c BodyConfig) WithAllowSignOffOnly(allow bool) BodyConfig {
 	return result
 }
 
-// ConventionalConfig transformation methods
-// =========================================================================
-
-// WithRequired returns a new ConventionalConfig with the updated required setting.
-func (c ConventionalConfig) WithRequired(required bool) ConventionalConfig {
+// WithRequireSignOff returns a new BodyConfig with the updated require sign-off setting.
+func (c BodyConfig) WithRequireSignOff(require bool) BodyConfig {
 	result := c
-	result.Required = required
+	result.RequireSignOff = require
 
 	return result
 }
+
+// ConventionalConfig transformation methods
+// =========================================================================
 
 // WithRequireScope returns a new ConventionalConfig with the updated scope requirement.
 func (c ConventionalConfig) WithRequireScope(require bool) ConventionalConfig {
@@ -206,34 +198,34 @@ func (c ConventionalConfig) WithMaxDescriptionLength(maxLength int) Conventional
 // RulesConfig transformation methods
 // =========================================================================
 
-// WithEnabledRules returns a new RulesConfig with the updated enabled rules.
-func (c RulesConfig) WithEnabledRules(rules []string) RulesConfig {
+// WithEnabled returns a new RulesConfig with the updated enabled rules.
+func (c RulesConfig) WithEnabled(rules []string) RulesConfig {
 	result := c
-	result.EnabledRules = make([]string, len(rules))
-	copy(result.EnabledRules, rules)
+	result.Enabled = make([]string, len(rules))
+	copy(result.Enabled, rules)
 
 	return result
 }
 
-// WithDisabledRules returns a new RulesConfig with the updated disabled rules.
-func (c RulesConfig) WithDisabledRules(rules []string) RulesConfig {
+// WithDisabled returns a new RulesConfig with the updated disabled rules.
+func (c RulesConfig) WithDisabled(rules []string) RulesConfig {
 	result := c
-	result.DisabledRules = make([]string, len(rules))
-	copy(result.DisabledRules, rules)
+	result.Disabled = make([]string, len(rules))
+	copy(result.Disabled, rules)
 
 	return result
 }
 
-// DisabledRules returns the list of disabled rule names from the Config.
-func (c Config) DisabledRules() []string {
-	return c.Rules.DisabledRules
+// Disabled returns the list of disabled rule names from the Config.
+func (c Config) Disabled() []string {
+	return c.Rules.Disabled
 }
 
-// WithDisabledRules returns a new Config with the updated disabled rules.
+// WithDisabled returns a new Config with the updated disabled rules.
 // This is a convenience method that updates the Rules component of the Config.
-func (c Config) WithDisabledRules(rules []string) Config {
+func (c Config) WithDisabled(rules []string) Config {
 	result := c
-	result.Rules = result.Rules.WithDisabledRules(rules)
+	result.Rules = result.Rules.WithDisabled(rules)
 
 	return result
 }
@@ -243,25 +235,25 @@ func (c RulesConfig) EnableRule(rule string) RulesConfig {
 	result := c
 
 	// Check if rule is in the enabled list
-	for _, r := range result.EnabledRules {
+	for _, r := range result.Enabled {
 		if r == rule {
 			return result // Already enabled
 		}
 	}
 
 	// Add to enabled rules
-	result.EnabledRules = append(result.EnabledRules, rule)
+	result.Enabled = append(result.Enabled, rule)
 
 	// Remove from disabled rules if present
 	var newDisabled []string
 
-	for _, r := range result.DisabledRules {
+	for _, r := range result.Disabled {
 		if r != rule {
 			newDisabled = append(newDisabled, r)
 		}
 	}
 
-	result.DisabledRules = newDisabled
+	result.Disabled = newDisabled
 
 	return result
 }
@@ -271,39 +263,31 @@ func (c RulesConfig) DisableRule(rule string) RulesConfig {
 	result := c
 
 	// Check if rule is in the disabled list
-	for _, r := range result.DisabledRules {
+	for _, r := range result.Disabled {
 		if r == rule {
 			return result // Already disabled
 		}
 	}
 
 	// Add to disabled rules
-	result.DisabledRules = append(result.DisabledRules, rule)
+	result.Disabled = append(result.Disabled, rule)
 
 	// Remove from enabled rules if present
 	var newEnabled []string
 
-	for _, r := range result.EnabledRules {
+	for _, r := range result.Enabled {
 		if r != rule {
 			newEnabled = append(newEnabled, r)
 		}
 	}
 
-	result.EnabledRules = newEnabled
+	result.Enabled = newEnabled
 
 	return result
 }
 
 // SecurityConfig transformation methods
 // =========================================================================
-
-// WithSignOffRequired returns a new SecurityConfig with the updated sign-off required flag.
-func (c SecurityConfig) WithSignOffRequired(required bool) SecurityConfig {
-	result := c
-	result.SignOffRequired = required
-
-	return result
-}
 
 // WithGPGRequired returns a new SecurityConfig with the updated GPG required flag.
 func (c SecurityConfig) WithGPGRequired(required bool) SecurityConfig {
@@ -348,10 +332,10 @@ func (c SecurityConfig) WithAllowedIdentities(identities []string) SecurityConfi
 	return result
 }
 
-// WithAllowMultipleSignOffs returns a new SecurityConfig with the updated multiple sign-offs setting.
-func (c SecurityConfig) WithAllowMultipleSignOffs(allow bool) SecurityConfig {
+// WithMultipleSignoffs returns a new SecurityConfig with the updated multiple sign-offs setting.
+func (c SecurityConfig) WithMultipleSignoffs(allow bool) SecurityConfig {
 	result := c
-	result.AllowMultipleSignOffs = allow
+	result.MultipleSignoffs = allow
 
 	return result
 }
@@ -387,14 +371,6 @@ func (c RepositoryConfig) WithMaxCommitsAhead(maxCommits int) RepositoryConfig {
 func (c RepositoryConfig) WithMaxHistoryDays(days int) RepositoryConfig {
 	result := c
 	result.MaxHistoryDays = days
-
-	return result
-}
-
-// WithOutputFormat returns a new RepositoryConfig with the updated output format.
-func (c RepositoryConfig) WithOutputFormat(format string) RepositoryConfig {
-	result := c
-	result.OutputFormat = format
 
 	return result
 }
@@ -444,14 +420,6 @@ func (c OutputConfig) WithColor(color bool) OutputConfig {
 
 // SpellCheckConfig transformation methods
 // =========================================================================
-
-// WithEnabled returns a new SpellCheckConfig with the updated enabled setting.
-func (c SpellCheckConfig) WithEnabled(enabled bool) SpellCheckConfig {
-	result := c
-	result.Enabled = enabled
-
-	return result
-}
 
 // WithLanguage returns a new SpellCheckConfig with the updated language.
 func (c SpellCheckConfig) WithLanguage(language string) SpellCheckConfig {

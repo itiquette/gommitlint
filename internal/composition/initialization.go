@@ -43,8 +43,8 @@ func (r *Root) initializeCore(ctx context.Context) error {
 
 	configLogger := contextx.GetLogger(configuredCtx)
 	configLogger.Info("Configuration loaded",
-		"enabled_rules", r.config.Rules.EnabledRules,
-		"disabled_rules", r.config.Rules.DisabledRules)
+		"enabled_rules", r.config.Rules.Enabled,
+		"disabled_rules", r.config.Rules.Disabled)
 
 	return nil
 }
@@ -134,8 +134,8 @@ func (r *Root) initializeRuleRegistry(ctx context.Context) {
 
 	logger := contextx.GetLogger(ctx)
 	logger.Debug("Simple rule registry initialized",
-		"enabled_rules", r.config.Rules.EnabledRules,
-		"disabled_rules", r.config.Rules.DisabledRules)
+		"enabled_rules", r.config.Rules.Enabled,
+		"disabled_rules", r.config.Rules.Disabled)
 }
 
 // initializeValidationService creates and configures the validation service.

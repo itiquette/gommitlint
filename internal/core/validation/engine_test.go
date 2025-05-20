@@ -96,11 +96,11 @@ func withConfigMap(ctx context.Context, configMap map[string]interface{}) contex
 	// Set the rule configuration directly based on the map
 	if rulesMap, ok := configMap["rules"].(map[string]interface{}); ok {
 		if enabledRules, ok := rulesMap["enabled_rules"].([]string); ok {
-			testConfig.Rules.EnabledRules = enabledRules
+			testConfig.Rules.Enabled = enabledRules
 		}
 
 		if disabledRules, ok := rulesMap["disabled_rules"].([]string); ok {
-			testConfig.Rules.DisabledRules = disabledRules
+			testConfig.Rules.Disabled = disabledRules
 		}
 	}
 

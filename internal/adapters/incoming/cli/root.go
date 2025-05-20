@@ -95,8 +95,8 @@ func ExecuteWithContext(ctx context.Context, version, commitSHA, buildDate strin
 	// Print loaded config information to verify
 	configLogger := contextx.GetLogger(ctx)
 	configLogger.Info("Loaded configuration",
-		"enabled_rules", cfg.Rules.EnabledRules,
-		"disabled_rules", cfg.Rules.DisabledRules)
+		"enabled_rules", cfg.Rules.Enabled,
+		"disabled_rules", cfg.Rules.Disabled)
 
 	configLogger.Debug("Added config directly to context using contextx.WithConfig")
 

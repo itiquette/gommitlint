@@ -87,10 +87,11 @@ func (r BranchAheadRule) Validate(ctx context.Context, commit domain.CommitInfo)
 		// This should not happen in normal operation
 		// Create a clear error when repository getter is unavailable
 		return []appErrors.ValidationError{
-			appErrors.New(
-				"BranchAhead",
+			appErrors.NewBranchError(
 				appErrors.ErrInvalidRepo,
+				"BranchAhead",
 				"Repository analyzer unavailable - cannot verify commit distance",
+				"Ensure the repository is properly initialized",
 			),
 		}
 	}
@@ -100,10 +101,11 @@ func (r BranchAheadRule) Validate(ctx context.Context, commit domain.CommitInfo)
 		// This is another error that should not happen in normal operation
 		// Without a repository, we can't validate
 		return []appErrors.ValidationError{
-			appErrors.New(
-				"BranchAhead",
+			appErrors.NewBranchError(
 				appErrors.ErrInvalidRepo,
+				"BranchAhead",
 				"Repository analyzer unavailable - cannot verify commit distance",
+				"Ensure the repository is properly initialized",
 			),
 		}
 	}
@@ -113,11 +115,15 @@ func (r BranchAheadRule) Validate(ctx context.Context, commit domain.CommitInfo)
 	if err != nil {
 		// Handle errors from the repository
 		return []appErrors.ValidationError{
-			appErrors.New(
-				"BranchAhead",
+			appErrors.NewBranchError(
 				appErrors.ErrGitOperationFailed,
+				"BranchAhead",
 				"Failed to get commits ahead of reference",
-			).WithContext("reference", rule.reference).WithContext("error", err.Error()),
+				fmt.Sprintf("Check if the reference branch '%s' exists", rule.reference),
+			).WithContextMap(map[string]string{
+				"reference": rule.reference,
+				"error":     err.Error(),
+			}),
 		}
 	}
 
@@ -127,15 +133,17 @@ func (r BranchAheadRule) Validate(ctx context.Context, commit domain.CommitInfo)
 	// Validate against the maximum
 	if rule.maxCommitsAhead > 0 && commitsAhead > rule.maxCommitsAhead {
 		return []appErrors.ValidationError{
-			appErrors.New(
-				"BranchAhead",
+			appErrors.NewBranchError(
 				appErrors.ErrTooManyCommits,
-				fmt.Sprintf("Branch is %d commits ahead of reference branch '%s'",
-					commitsAhead, rule.reference),
-			).
-				WithContext("reference", rule.reference).
-				WithContext("commits_ahead", strconv.Itoa(commitsAhead)).
-				WithContext("max_allowed", strconv.Itoa(rule.maxCommitsAhead)),
+				"BranchAhead",
+				fmt.Sprintf("Your branch is %d commits ahead of '%s' (max allowed: %d)",
+					commitsAhead, rule.reference, rule.maxCommitsAhead),
+				fmt.Sprintf("Rebase on %s or squash some commits to reduce the distance", rule.reference),
+			).WithContextMap(map[string]string{
+				"reference":     rule.reference,
+				"commits_ahead": strconv.Itoa(commitsAhead),
+				"max_allowed":   strconv.Itoa(rule.maxCommitsAhead),
+			}),
 		}
 	}
 

@@ -6,6 +6,7 @@ package rules
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -47,37 +48,47 @@ func (r CommitBodyRule) Validate(ctx context.Context, commit domain.CommitInfo) 
 		return nil
 	}
 
+	// Check if this rule is enabled
+	if !IsRuleEnabled(ctx, r.Name()) {
+		logger.Debug("Body rule is disabled, skipping validation")
+
+		return nil
+	}
+
 	errors := []appErrors.ValidationError{}
 
-	// Check if body is required
-	required := cfg.GetBool("body.required")
-	if required && strings.TrimSpace(commit.Body) == "" {
-		err := appErrors.New(
-			r.Name(),
+	// Check if body is empty
+	if strings.TrimSpace(commit.Body) == "" {
+		err := appErrors.NewBodyError(
 			appErrors.ErrMissingBody,
-			"commit message must have a body",
-		).WithContext("commit", commit.Hash).
-			WithContext("help", "Add a blank line after the subject, followed by a detailed description of your changes.")
+			r.Name(),
+			"Commit message body is missing",
+			"is empty",
+			"Add a blank line after the subject, followed by a detailed description of your changes",
+		).WithContext("commit", commit.Hash)
 		errors = append(errors, err)
 	}
 
 	// Check minimum body length
 	minLength := cfg.GetInt("body.min_length")
 	if minLength > 0 && len(strings.TrimSpace(commit.Body)) < minLength {
-		err := appErrors.New(
-			r.Name(),
+		actualLength := len(strings.TrimSpace(commit.Body))
+		err := appErrors.NewBodyError(
 			appErrors.ErrBodyTooShort,
-			"commit body is too short",
-		).WithContext("commit", commit.Hash).
-			WithContext("min_length", strconv.Itoa(minLength)).
-			WithContext("actual_length", strconv.Itoa(len(strings.TrimSpace(commit.Body)))).
-			WithContext("help", "Provide more detail in your commit body.")
+			r.Name(),
+			fmt.Sprintf("Commit body is too short (%d chars, minimum: %d)", actualLength, minLength),
+			fmt.Sprintf("has %d characters", actualLength),
+			fmt.Sprintf("Provide at least %d characters of detail in your commit body", minLength),
+		).WithContextMap(map[string]string{
+			"commit":        commit.Hash,
+			"min_length":    strconv.Itoa(minLength),
+			"actual_length": strconv.Itoa(actualLength),
+		})
 		errors = append(errors, err)
 	}
 
 	logger.Debug("Commit body validation complete",
 		"error_count", len(errors),
-		"required", required,
 		"min_length", minLength)
 
 	return errors

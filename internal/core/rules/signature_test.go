@@ -5,7 +5,6 @@ package rules_test
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -66,7 +65,7 @@ LwAAACRrZXktMS11c2VyQHVuaXQuZXhhbXBsZQAAAAAAAAAAAAAAAA==
 			signature:     "",
 			expectedValid: false,
 			expectedCode:  string(appErrors.ErrMissingSignature),
-			errorContains: "missing a cryptographic signature",
+			errorContains: "Commit must be cryptographically signed",
 		},
 		{
 			name:      "Missing signature when not required",
@@ -159,8 +158,14 @@ LwAAACRrZXktMS11c2VyQHVuaXQuZXhhbXBsZQAAAAAAAAAAAAAAAA==
 					found := false
 
 					for _, err := range errors {
-						msg := fmt.Sprintf("%s: %v", err.Error(), err.Context)
-						if strings.Contains(strings.ToLower(msg), strings.ToLower(testCase.errorContains)) {
+						// Check in the main error message
+						if strings.Contains(strings.ToLower(err.Error()), strings.ToLower(testCase.errorContains)) {
+							found = true
+
+							break
+						}
+						// Also check in the Message field
+						if strings.Contains(strings.ToLower(err.Message), strings.ToLower(testCase.errorContains)) {
 							found = true
 
 							break

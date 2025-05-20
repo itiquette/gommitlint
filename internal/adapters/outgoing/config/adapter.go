@@ -114,12 +114,12 @@ func (a *Adapter) GetStringSlice(key string) []string {
 
 // EnabledRules returns the list of explicitly enabled rules.
 func (a *Adapter) EnabledRules() []string {
-	return a.cfg.Rules.EnabledRules
+	return a.cfg.Rules.Enabled
 }
 
 // DisabledRules returns the list of explicitly disabled rules.
 func (a *Adapter) DisabledRules() []string {
-	return a.cfg.Rules.DisabledRules
+	return a.cfg.Rules.Disabled
 }
 
 // SubjectMaxLength returns the maximum length for commit subjects.
@@ -131,19 +131,9 @@ func (a *Adapter) SubjectMaxLength() int {
 	return a.cfg.Subject.MaxLength
 }
 
-// BodyRequired returns whether a commit body is required.
-func (a *Adapter) BodyRequired() bool {
-	return a.cfg.Body.Required
-}
-
 // BodyAllowSignOffOnly returns whether a sign-off alone is sufficient for the body.
 func (a *Adapter) BodyAllowSignOffOnly() bool {
 	return a.cfg.Body.AllowSignOffOnly
-}
-
-// ConventionalRequired returns whether conventional commit format is required.
-func (a *Adapter) ConventionalRequired() bool {
-	return a.cfg.Conventional.Required
 }
 
 // ConventionalTypes returns the allowed types for conventional commits.
@@ -166,9 +156,9 @@ func (a *Adapter) SubjectCase() string {
 	return a.cfg.Subject.Case
 }
 
-// SubjectRequireImperative returns whether commit subjects must use imperative mood.
-func (a *Adapter) SubjectRequireImperative() bool {
-	return a.cfg.Subject.RequireImperative
+// SubjectImperative returns whether commit subjects must use imperative mood.
+func (a *Adapter) SubjectImperative() bool {
+	return a.cfg.Subject.Imperative
 }
 
 // SubjectInvalidSuffixes returns a list of suffixes that are not allowed in commit subjects.
@@ -184,11 +174,6 @@ func (a *Adapter) JiraBodyRef() bool {
 // JiraProjects returns the list of valid JIRA project prefixes.
 func (a *Adapter) JiraProjects() []string {
 	return a.cfg.Jira.Projects
-}
-
-// SpellEnabled returns whether spell checking is enabled.
-func (a *Adapter) SpellEnabled() bool {
-	return a.cfg.SpellCheck.Enabled
 }
 
 // SpellLocale returns the locale to use for spell checking.
@@ -245,14 +230,14 @@ func (a *Adapter) ConventionalMaxDescriptionLength() int {
 // IsRuleEnabled checks if a specific rule is enabled.
 func (a *Adapter) IsRuleEnabled(ruleName string) bool {
 	// First, check if it's explicitly enabled
-	for _, rule := range a.cfg.Rules.EnabledRules {
+	for _, rule := range a.cfg.Rules.Enabled {
 		if rule == ruleName {
 			return true
 		}
 	}
 
 	// Then check if it's explicitly disabled
-	for _, rule := range a.cfg.Rules.DisabledRules {
+	for _, rule := range a.cfg.Rules.Disabled {
 		if rule == ruleName {
 			return false
 		}
@@ -271,14 +256,14 @@ func (a *Adapter) IsRuleEnabled(ruleName string) bool {
 // IsRuleDisabled checks if a specific rule is disabled.
 func (a *Adapter) IsRuleDisabled(ruleName string) bool {
 	// If explicitly enabled, it's not disabled
-	for _, rule := range a.cfg.Rules.EnabledRules {
+	for _, rule := range a.cfg.Rules.Enabled {
 		if rule == ruleName {
 			return false
 		}
 	}
 
 	// If explicitly disabled, it's disabled
-	for _, rule := range a.cfg.Rules.DisabledRules {
+	for _, rule := range a.cfg.Rules.Disabled {
 		if rule == ruleName {
 			return true
 		}
@@ -292,12 +277,12 @@ func (a *Adapter) IsRuleDisabled(ruleName string) bool {
 
 // GetEnabledRules returns the list of explicitly enabled rules.
 func (a *Adapter) GetEnabledRules() []string {
-	return a.cfg.Rules.EnabledRules
+	return a.cfg.Rules.Enabled
 }
 
 // GetDisabledRules returns the list of explicitly disabled rules.
 func (a *Adapter) GetDisabledRules() []string {
-	return a.cfg.Rules.DisabledRules
+	return a.cfg.Rules.Disabled
 }
 
 // GetRuleConfig returns configuration for a specific rule.
@@ -312,27 +297,24 @@ func (a *Adapter) GetRuleConfig(ruleName string) map[string]interface{} {
 	case "SubjectSuffix":
 		config["disallowed_suffixes"] = a.cfg.Subject.DisallowedSuffixes
 	case "ConventionalCommit":
-		config["required"] = a.cfg.Conventional.Required
 		config["require_scope"] = a.cfg.Conventional.RequireScope
 		config["types"] = a.cfg.Conventional.Types
 		config["scopes"] = a.cfg.Conventional.Scopes
 		config["max_description_length"] = a.cfg.Conventional.MaxDescriptionLength
 	case "CommitBody":
-		config["required"] = a.cfg.Body.Required
 		config["min_length"] = a.cfg.Body.MinLength
-		config["minimum_lines"] = a.cfg.Body.MinimumLines
+		config["minimum_lines"] = a.cfg.Body.MinLines
 	case "JiraReference":
 		config["pattern"] = a.cfg.Jira.Pattern
 		config["projects"] = a.cfg.Jira.Projects
 		config["body_ref"] = a.cfg.Jira.BodyRef
 	case "SignOff":
-		config["sign_off_required"] = a.cfg.Security.SignOffRequired
+		config["sign_off_required"] = a.cfg.Body.RequireSignOff
 	case "Signature":
 		config["gpg_required"] = a.cfg.Security.GPGRequired
 	case "SignedIdentity":
 		config["allowed_identities"] = a.cfg.Security.AllowedIdentities
 	case "Spell":
-		config["enabled"] = a.cfg.SpellCheck.Enabled
 		config["language"] = a.cfg.SpellCheck.Language
 		config["custom_dictionary"] = a.cfg.SpellCheck.CustomDictionary
 	}
@@ -353,7 +335,7 @@ func (a *Adapter) getSubjectValue(parts []string) interface{} {
 	case "max_length":
 		return a.cfg.Subject.MaxLength
 	case "require_imperative":
-		return a.cfg.Subject.RequireImperative
+		return a.cfg.Subject.Imperative
 	case "disallowed_suffixes":
 		return a.cfg.Subject.DisallowedSuffixes
 	default:
@@ -367,14 +349,14 @@ func (a *Adapter) getBodyValue(parts []string) interface{} {
 	}
 
 	switch parts[0] {
-	case "required":
-		return a.cfg.Body.Required
 	case "min_length":
 		return a.cfg.Body.MinLength
-	case "minimum_lines":
-		return a.cfg.Body.MinimumLines
+	case "minimum_lines", "min_lines":
+		return a.cfg.Body.MinLines
 	case "allow_sign_off_only":
 		return a.cfg.Body.AllowSignOffOnly
+	case "require_sign_off":
+		return a.cfg.Body.RequireSignOff
 	default:
 		return nil
 	}
@@ -386,8 +368,6 @@ func (a *Adapter) getConventionalValue(parts []string) interface{} {
 	}
 
 	switch parts[0] {
-	case "required":
-		return a.cfg.Conventional.Required
 	case "require_scope":
 		return a.cfg.Conventional.RequireScope
 	case "types":
@@ -409,10 +389,10 @@ func (a *Adapter) getRulesValue(parts []string) interface{} {
 	}
 
 	switch parts[0] {
-	case "enabled_rules":
-		return a.cfg.Rules.EnabledRules
-	case "disabled_rules":
-		return a.cfg.Rules.DisabledRules
+	case "enabled_rules", "enabled":
+		return a.cfg.Rules.Enabled
+	case "disabled_rules", "disabled":
+		return a.cfg.Rules.Disabled
 	default:
 		return nil
 	}
@@ -424,8 +404,6 @@ func (a *Adapter) getSecurityValue(parts []string) interface{} {
 	}
 
 	switch parts[0] {
-	case "sign_off_required":
-		return a.cfg.Security.SignOffRequired
 	case "gpg_required":
 		return a.cfg.Security.GPGRequired
 	case "key_directory":
@@ -437,7 +415,7 @@ func (a *Adapter) getSecurityValue(parts []string) interface{} {
 	case "allowed_identities":
 		return a.cfg.Security.AllowedIdentities
 	case "allow_multiple_sign_offs":
-		return a.cfg.Security.AllowMultipleSignOffs
+		return a.cfg.Security.MultipleSignoffs
 	default:
 		return nil
 	}
@@ -457,8 +435,6 @@ func (a *Adapter) getRepositoryValue(parts []string) interface{} {
 		return a.cfg.Repository.MaxCommitsAhead
 	case "max_history_days":
 		return a.cfg.Repository.MaxHistoryDays
-	case "output_format":
-		return a.cfg.Repository.OutputFormat
 	case "ignore_merge_commits":
 		return a.cfg.Repository.IgnoreMergeCommits
 	default:
@@ -489,8 +465,6 @@ func (a *Adapter) getSpellValue(parts []string) interface{} {
 	}
 
 	switch parts[0] {
-	case "enabled":
-		return a.cfg.SpellCheck.Enabled
 	case "language":
 		return a.cfg.SpellCheck.Language
 	case "ignore_case":

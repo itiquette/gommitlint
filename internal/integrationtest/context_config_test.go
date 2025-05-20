@@ -384,20 +384,20 @@ func TestContextConfigImmutability(t *testing.T) {
 
 	// Set some initial values
 	baseConfig = baseConfig.WithSubject(baseConfig.Subject.WithMaxLength(10))
-	baseConfig = baseConfig.WithConventional(baseConfig.Conventional.WithRequired(true))
+	baseConfig = baseConfig.WithConventional(baseConfig.Conventional.WithRequireScope(true))
 
 	// Modify the config
 	modifiedConfig := baseConfig.
 		WithSubject(baseConfig.Subject.WithMaxLength(100)).
-		WithConventional(baseConfig.Conventional.WithRequired(false))
+		WithConventional(baseConfig.Conventional.WithRequireScope(false))
 
 	// Original config should remain unchanged
 	require.Equal(t, 10, baseConfig.Subject.MaxLength, "Original subject max length should still be 10")
-	require.True(t, baseConfig.Conventional.Required, "Original conventional required should still be true")
+	require.True(t, baseConfig.Conventional.RequireScope, "Original conventional require scope should still be true")
 
 	// Modified config should have new values
 	require.Equal(t, 100, modifiedConfig.Subject.MaxLength, "Modified subject max length should be 100")
-	require.False(t, modifiedConfig.Conventional.Required, "Modified conventional required should be false")
+	require.False(t, modifiedConfig.Conventional.RequireScope, "Modified conventional require scope should be false")
 }
 
 // Helper function to create a config manager for testing.
@@ -424,12 +424,11 @@ func createConfigManager(t *testing.T, configPath string) *config.Manager {
 
 	t.Logf("Explicitly setting max subject length to 10 for test")
 
-	configObj = configObj.WithConventional(configObj.Conventional.WithRequired(true))
 	// Update rules config - ensure only the rules we need are active
 	// Explicitly enable these rules (they'll run unless disabled)
-	configObj = configObj.WithRules(configObj.Rules.WithEnabledRules(
+	configObj = configObj.WithRules(configObj.Rules.WithEnabled(
 		[]string{"SubjectLength", "ConventionalCommit"},
-	).WithDisabledRules([]string{
+	).WithDisabled([]string{
 		"SignOff", "Signature", "CommitBody", "JiraReference",
 		"ImperativeVerb", "SubjectCase", "Spell", "SubjectSuffix", "CommitsAhead",
 		// Add any other rules that might be enabled by default

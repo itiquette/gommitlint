@@ -84,10 +84,11 @@ func (r SignatureRule) Validate(ctx context.Context, commit domain.CommitInfo) [
 	// Check if signature exists
 	if commit.Signature == "" {
 		return []appErrors.ValidationError{
-			appErrors.New(
-				"Signature",
+			appErrors.NewSignatureError(
 				appErrors.ErrMissingSignature,
-				"Commit is missing a cryptographic signature",
+				"Signature",
+				"Commit must be cryptographically signed",
+				"Sign your commits using 'git commit -S' for GPG or 'git commit --signoff' for DCO",
 			),
 		}
 	}
@@ -110,12 +111,15 @@ func (r SignatureRule) Validate(ctx context.Context, commit domain.CommitInfo) [
 
 		if !isAllowed {
 			return []appErrors.ValidationError{
-				appErrors.New(
-					"Signature",
+				appErrors.NewSignatureError(
 					appErrors.ErrDisallowedSigType,
-					fmt.Sprintf("Signature type '%s' is not allowed", sigType),
-				).WithContext("found_type", sigType).
-					WithContext("allowed_types", strings.Join(rule.allowedSigTypes, ", ")),
+					"Signature",
+					fmt.Sprintf("Signature type '%s' is not allowed; allowed types: %s", sigType, strings.Join(rule.allowedSigTypes, ", ")),
+					"Use one of the allowed signature types: "+strings.Join(rule.allowedSigTypes, ", "),
+				).WithContextMap(map[string]string{
+					"found_type":    sigType,
+					"allowed_types": strings.Join(rule.allowedSigTypes, ", "),
+				}),
 			}
 		}
 	}

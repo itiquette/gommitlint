@@ -6,6 +6,7 @@ package rules_test
 import (
 	"testing"
 
+	"github.com/itiquette/gommitlint/internal/common/contextx"
 	"github.com/itiquette/gommitlint/internal/config/types"
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
@@ -34,7 +35,7 @@ This commit adds new validation rules for:
 - Username requirements`,
 			configFunc: func() types.Config {
 				return testconfig.NewBuilder().
-					WithBodyRequired(true).
+					EnableRule("CommitBody").
 					Build()
 			},
 			expectError:    false,
@@ -50,7 +51,7 @@ Add more examples
 Signed-off-by: Laval Lion <laval@cavora.org>`,
 			configFunc: func() types.Config {
 				return testconfig.NewBuilder().
-					WithBodyRequired(true).
+					EnableRule("CommitBody").
 					WithBodyMinLines(0).
 					Build()
 			},
@@ -62,7 +63,7 @@ Signed-off-by: Laval Lion <laval@cavora.org>`,
 			message: "Add new feature",
 			configFunc: func() types.Config {
 				return testconfig.NewBuilder().
-					WithBodyRequired(true).
+					EnableRule("CommitBody").
 					Build()
 			},
 			expectError:    true,
@@ -74,7 +75,7 @@ Signed-off-by: Laval Lion <laval@cavora.org>`,
 			message: "Minor fix",
 			configFunc: func() types.Config {
 				return testconfig.NewBuilder().
-					WithBodyRequired(false).
+					DisableRule("CommitBody").
 					WithBodyMinLength(0).
 					Build()
 			},
@@ -89,7 +90,7 @@ Signed-off-by: Laval Lion <laval@cavora.org>`,
 		// Signed-off-by: Laval Lion <laval@cavora.org>`,
 		// 	configFunc: func() types.Config {
 		// 		return testconfig.NewBuilder().
-		// 			WithBodyRequired(true).
+		// 			EnableRule("CommitBody").
 		// 			WithBodySignOffOnly(false).
 		// 			Build()
 		// 	},
@@ -104,7 +105,7 @@ Signed-off-by: Laval Lion <laval@cavora.org>`,
 Signed-off-by: Laval Lion <laval@cavora.org>`,
 			configFunc: func() types.Config {
 				return testconfig.NewBuilder().
-					WithBodyRequired(true).
+					EnableRule("CommitBody").
 					WithBodySignOffOnly(true).
 					Build()
 			},
@@ -119,7 +120,7 @@ Signed-off-by: Laval Lion <laval@cavora.org>`,
 		// Short description`,
 		// 	configFunc: func() types.Config {
 		// 		return testconfig.NewBuilder().
-		// 			WithBodyRequired(true).
+		// 			EnableRule("CommitBody").
 		// 			WithBodyMinLines(3).
 		// 			Build()
 		// 	},
@@ -136,7 +137,7 @@ for password complexity
 and email format checks`,
 			configFunc: func() types.Config {
 				return testconfig.NewBuilder().
-					WithBodyRequired(true).
+					EnableRule("CommitBody").
 					WithBodyMinLines(3).
 					Build()
 			},
@@ -150,7 +151,7 @@ and email format checks`,
 X`,
 			configFunc: func() types.Config {
 				return testconfig.NewBuilder().
-					WithBodyRequired(true).
+					EnableRule("CommitBody").
 					WithBodyMinLength(10).
 					Build()
 			},
@@ -170,13 +171,9 @@ X`,
 
 			if testCase.configFunc != nil {
 				cfg := testCase.configFunc()
-				builder := testconfig.NewBuilder()
-				// Copy config values to builder
-				builder = builder.WithBodyRequired(cfg.Body.Required).
-					WithBodySignOffOnly(cfg.Body.AllowSignOffOnly).
-					WithBodyMinLines(cfg.Body.MinimumLines).
-					WithBodyMinLength(cfg.Body.MinLength)
-				ctx = builder.BuildContext(ctx)
+				// Use the config directly with the adapter
+				adapter := testconfig.NewAdapter(cfg)
+				ctx = contextx.WithConfig(ctx, adapter)
 			}
 
 			// Create commit

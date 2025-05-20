@@ -247,7 +247,7 @@ func createError(code appErrors.ValidationErrorCode, message string, context map
 	ruleName := "SignedIdentity"
 
 	// Create a basic error
-	err := appErrors.New(ruleName, code, message)
+	err := appErrors.NewValidationError(code, ruleName, message, message)
 
 	// Add context if provided
 	for key, value := range context {

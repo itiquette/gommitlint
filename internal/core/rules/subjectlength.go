@@ -7,7 +7,6 @@ package rules
 import (
 	"context"
 	"fmt"
-	"strconv"
 
 	"github.com/itiquette/gommitlint/internal/common/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
@@ -65,21 +64,14 @@ func (r SubjectLengthRule) Validate(ctx context.Context, commit domain.CommitInf
 		return nil
 	}
 
-	// Create validation error
-	err := appErrors.New(
-		"SubjectLength",
+	// Create validation error with improved user message
+	err := appErrors.NewLengthError(
 		appErrors.ErrMaxLengthExceeded,
-		fmt.Sprintf(
-			"Commit subject exceeds %d characters. Current length: %d - Subject: %s",
-			maxLength,
-			len(subject),
-			subject,
-		),
-	).WithContext("actual_length", strconv.Itoa(len(subject))).
-		WithContext("max_length", strconv.Itoa(maxLength)).
-		WithContext("subject", subject).
-		WithContext("help", fmt.Sprintf("Shorten your commit subject to %d characters or less. Current length: %d characters.",
-			maxLength, len(subject)))
+		"SubjectLength",
+		fmt.Sprintf("Commit subject is %d characters too long", len(subject)-maxLength),
+		len(subject),
+		maxLength,
+	).WithContext("subject", subject)
 
 	// Log the error at error level
 	logger.Debug("Subject length validation failed", "error", err.Error())

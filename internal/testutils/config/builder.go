@@ -50,7 +50,7 @@ func (b Builder) WithSubjectCase(caseStyle string) Builder {
 
 // WithSubjectImperative sets just the subject imperative requirement.
 func (b Builder) WithSubjectImperative(required bool) Builder {
-	b.config.Subject.RequireImperative = required
+	b.config.Subject.Imperative = required
 
 	return b
 }
@@ -71,13 +71,6 @@ func (b Builder) WithBody(body types.BodyConfig) Builder {
 	return b
 }
 
-// WithBodyRequired sets just the body required flag.
-func (b Builder) WithBodyRequired(required bool) Builder {
-	b.config.Body.Required = required
-
-	return b
-}
-
 // WithBodyMinLength sets just the body minimum length.
 func (b Builder) WithBodyMinLength(minLength int) Builder {
 	b.config.Body.MinLength = minLength
@@ -87,7 +80,7 @@ func (b Builder) WithBodyMinLength(minLength int) Builder {
 
 // WithBodyMinLines sets just the body minimum lines.
 func (b Builder) WithBodyMinLines(minLines int) Builder {
-	b.config.Body.MinimumLines = minLines
+	b.config.Body.MinLines = minLines
 
 	return b
 }
@@ -99,16 +92,16 @@ func (b Builder) WithBodySignOffOnly(allow bool) Builder {
 	return b
 }
 
-// WithConventional sets the conventional configuration.
-func (b Builder) WithConventional(conventional types.ConventionalConfig) Builder {
-	b.config.Conventional = conventional
+// WithBodyRequireSignOff sets just the body sign-off requirement.
+func (b Builder) WithBodyRequireSignOff(required bool) Builder {
+	b.config.Body.RequireSignOff = required
 
 	return b
 }
 
-// WithConventionalRequired sets just the conventional required flag.
-func (b Builder) WithConventionalRequired(required bool) Builder {
-	b.config.Conventional.Required = required
+// WithConventional sets the conventional configuration.
+func (b Builder) WithConventional(conventional types.ConventionalConfig) Builder {
+	b.config.Conventional = conventional
 
 	return b
 }
@@ -148,16 +141,16 @@ func (b Builder) WithRules(rules types.RulesConfig) Builder {
 	return b
 }
 
-// WithEnabledRules sets just the enabled rules.
-func (b Builder) WithEnabledRules(rules []string) Builder {
-	b.config.Rules.EnabledRules = rules
+// WithEnabled sets just the enabled rules.
+func (b Builder) WithEnabled(rules []string) Builder {
+	b.config.Rules.Enabled = rules
 
 	return b
 }
 
-// WithDisabledRules sets just the disabled rules.
-func (b Builder) WithDisabledRules(rules []string) Builder {
-	b.config.Rules.DisabledRules = rules
+// WithDisabled sets just the disabled rules.
+func (b Builder) WithDisabled(rules []string) Builder {
+	b.config.Rules.Disabled = rules
 
 	return b
 }
@@ -165,25 +158,25 @@ func (b Builder) WithDisabledRules(rules []string) Builder {
 // EnableRule adds a rule to the enabled rules list.
 func (b Builder) EnableRule(rule string) Builder {
 	// Check if already enabled
-	for _, r := range b.config.Rules.EnabledRules {
+	for _, r := range b.config.Rules.Enabled {
 		if r == rule {
 			return b
 		}
 	}
 
 	// Add to enabled rules
-	b.config.Rules.EnabledRules = append(b.config.Rules.EnabledRules, rule)
+	b.config.Rules.Enabled = append(b.config.Rules.Enabled, rule)
 
 	// Remove from disabled rules if present
 	newDisabled := make([]string, 0)
 
-	for _, r := range b.config.Rules.DisabledRules {
+	for _, r := range b.config.Rules.Disabled {
 		if r != rule {
 			newDisabled = append(newDisabled, r)
 		}
 	}
 
-	b.config.Rules.DisabledRules = newDisabled
+	b.config.Rules.Disabled = newDisabled
 
 	return b
 }
@@ -191,25 +184,25 @@ func (b Builder) EnableRule(rule string) Builder {
 // DisableRule adds a rule to the disabled rules list.
 func (b Builder) DisableRule(rule string) Builder {
 	// Check if already disabled
-	for _, r := range b.config.Rules.DisabledRules {
+	for _, r := range b.config.Rules.Disabled {
 		if r == rule {
 			return b
 		}
 	}
 
 	// Add to disabled rules
-	b.config.Rules.DisabledRules = append(b.config.Rules.DisabledRules, rule)
+	b.config.Rules.Disabled = append(b.config.Rules.Disabled, rule)
 
 	// Remove from enabled rules if present
 	newEnabled := make([]string, 0)
 
-	for _, r := range b.config.Rules.EnabledRules {
+	for _, r := range b.config.Rules.Enabled {
 		if r != rule {
 			newEnabled = append(newEnabled, r)
 		}
 	}
 
-	b.config.Rules.EnabledRules = newEnabled
+	b.config.Rules.Enabled = newEnabled
 
 	return b
 }
@@ -251,7 +244,7 @@ func (b Builder) WithSecurity(security types.SecurityConfig) Builder {
 
 // WithSignOffRequired sets just the sign-off requirement.
 func (b Builder) WithSignOffRequired(required bool) Builder {
-	b.config.Security.SignOffRequired = required
+	b.config.Body.RequireSignOff = required
 
 	return b
 }
@@ -342,11 +335,10 @@ func Default() Builder {
 // Minimal returns a new builder with minimal test configuration (most rules disabled).
 func Minimal() Builder {
 	return NewBuilder().
-		WithBodyRequired(false).
-		WithConventionalRequired(false).
+		DisableRule("CommitBody").
+		DisableRule("Conventional").
 		DisableRule("SubjectCase").
 		DisableRule("SubjectSuffix").
-		DisableRule("CommitBody").
 		DisableRule("JiraReference").
 		DisableRule("SignedIdentity")
 }

@@ -5,6 +5,7 @@ package rules
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/common/contextx"
@@ -98,10 +99,11 @@ func (r SubjectSuffixRule) Validate(ctx context.Context, commit domain.CommitInf
 	// Empty subject is always an error
 	if len(commit.Subject) == 0 {
 		return []appErrors.ValidationError{
-			appErrors.New(
-				"SubjectSuffix",
+			appErrors.NewSuffixError(
 				appErrors.ErrMissingSubject,
-				"Commit subject cannot be empty",
+				"SubjectSuffix",
+				"Commit subject is missing",
+				"Add a descriptive subject line to your commit",
 			).WithContext("subject", ""),
 		}
 	}
@@ -129,15 +131,17 @@ func (r SubjectSuffixRule) Validate(ctx context.Context, commit domain.CommitInf
 			// If the last character is an invalid suffix, create an error
 			if suffixContainsLastChar {
 				return []appErrors.ValidationError{
-					appErrors.New(
-						"SubjectSuffix",
+					appErrors.NewSuffixError(
 						appErrors.ErrSubjectSuffix,
-						"Commit subject should not end with '"+lastChar+"'",
-					).
-						WithContext("subject", commit.Subject).
-						WithContext("invalid_suffix", lastChar).
-						WithContext("last_char", lastChar).
-						WithContext("invalid_suffixes", invalidSuffixes),
+						"SubjectSuffix",
+						fmt.Sprintf("Subject ends with invalid character '%s'", lastChar),
+						fmt.Sprintf("Remove the trailing '%s' from your commit subject", lastChar),
+					).WithContextMap(map[string]string{
+						"subject":          commit.Subject,
+						"invalid_suffix":   lastChar,
+						"last_char":        lastChar,
+						"invalid_suffixes": invalidSuffixes,
+					}),
 				}
 			}
 		}

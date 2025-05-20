@@ -350,8 +350,8 @@ func (s ValidationService) ValidateWithOptions(ctx context.Context, opts Validat
 	}
 }
 
-// WithEnabledRules returns a new ValidationService with specific rules enabled.
-func (s ValidationService) WithEnabledRules(rules []string) ValidationService {
+// WithEnabled returns a new ValidationService with specific rules enabled.
+func (s ValidationService) WithEnabled(rules []string) ValidationService {
 	return ValidationService{
 		engine:        s.engine,
 		commitService: s.commitService,
@@ -361,8 +361,8 @@ func (s ValidationService) WithEnabledRules(rules []string) ValidationService {
 	}
 }
 
-// WithDisabledRules returns a new ValidationService with specific rules disabled.
-func (s ValidationService) WithDisabledRules(rules []string) ValidationService {
+// WithDisabled returns a new ValidationService with specific rules disabled.
+func (s ValidationService) WithDisabled(rules []string) ValidationService {
 	return ValidationService{
 		engine:        s.engine,
 		commitService: s.commitService,
@@ -403,11 +403,11 @@ func CreateValidationService(
 		disabledRules := cfg.GetStringSlice("rules.disabled_rules")
 
 		if len(enabledRules) > 0 {
-			service = service.WithEnabledRules(enabledRules)
+			service = service.WithEnabled(enabledRules)
 		}
 
 		if len(disabledRules) > 0 {
-			service = service.WithDisabledRules(disabledRules)
+			service = service.WithDisabled(disabledRules)
 		}
 	}
 

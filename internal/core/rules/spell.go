@@ -60,9 +60,9 @@ func (r SpellRule) Validate(ctx context.Context, commit domain.CommitInfo) []app
 		return nil
 	}
 
-	// Check if spell checking is enabled
-	if !cfg.GetBool("spell.enabled") {
-		logger.Debug("Spell checking disabled")
+	// Check if this rule is enabled
+	if !IsRuleEnabled(ctx, r.Name()) {
+		logger.Debug("Spell rule is disabled, skipping validation")
 
 		return nil
 	}
@@ -144,16 +144,10 @@ func (r SpellRule) Validate(ctx context.Context, commit domain.CommitInfo) []app
 			contextData["context"] = contextSnippet
 		}
 
-		var err appErrors.ValidationError
-		err = appErrors.New(
-			r.Name(),
-			appErrors.ErrSpellCheckFailed,
-			fmt.Sprintf("Spelling error: '%s'", misspelling.word),
-		)
-
-		// Add all context data
-		for k, v := range contextData {
-			err = err.WithContext(k, v)
+		err := appErrors.NewSpellingError(r.Name(), misspelling.word, misspelling.position)
+		// Add verbose context if needed
+		if r.verbosity == "verbose" && contextData["context"] != "" {
+			err = err.WithContext("context", contextData["context"])
 		}
 
 		errors = append(errors, err)

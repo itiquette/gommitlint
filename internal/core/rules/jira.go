@@ -148,12 +148,13 @@ func (r JiraReferenceRule) Validate(ctx context.Context, commit domain.CommitInf
 
 	// If no references found and they're required
 	if len(references) == 0 {
+		expectedPattern := "ABC-123"
+		if len(rule.prefixes) > 0 {
+			expectedPattern = rule.prefixes[0] + "-123"
+		}
+
 		return []appErrors.ValidationError{
-			appErrors.New(
-				"JiraReference",
-				appErrors.ErrMissingJira,
-				"commit message must reference a JIRA issue",
-			),
+			appErrors.NewMissingJiraError("JiraReference", textToSearch, expectedPattern),
 		}
 	}
 
@@ -163,12 +164,15 @@ func (r JiraReferenceRule) Validate(ctx context.Context, commit domain.CommitInf
 			project := extractProjectFromReference(ref)
 			if !isValidProject(project, rule.prefixes) {
 				return []appErrors.ValidationError{
-					appErrors.New(
-						"JiraReference",
+					appErrors.NewJiraError(
 						appErrors.ErrInvalidProject,
-						fmt.Sprintf("invalid JIRA project '%s'", project),
-					).WithContext("project", project).
-						WithContext("valid_projects", strings.Join(rule.prefixes, ", ")),
+						"JiraReference",
+						fmt.Sprintf("Invalid JIRA project '%s'; allowed projects: %s", project, strings.Join(rule.prefixes, ", ")),
+						"Use one of: "+strings.Join(rule.prefixes, ", "),
+					).WithContextMap(map[string]string{
+						"project":        project,
+						"valid_projects": strings.Join(rule.prefixes, ", "),
+					}),
 				}
 			}
 		}
@@ -186,10 +190,11 @@ func (r JiraReferenceRule) Validate(ctx context.Context, commit domain.CommitInf
 		// Check if JIRA is in the correct position (not in description)
 		if hasJiraInDescription(commit.Subject, rule.pattern) {
 			return []appErrors.ValidationError{
-				appErrors.New(
-					"JiraReference",
+				appErrors.NewJiraError(
 					appErrors.ErrMisplacedJira,
+					"JiraReference",
 					"JIRA reference should be in scope, not description",
+					"Use format: type(JIRA-123): description",
 				),
 			}
 		}
@@ -204,17 +209,19 @@ func (r JiraReferenceRule) withContextConfig(ctx context.Context) JiraReferenceR
 	cfg := contextx.GetConfig(ctx)
 
 	// Extract configuration values
-	isConventional := cfg.GetBool("conventional.required")
 	validateBodyRef := cfg.GetBool("jira.body_ref")
 	validProjects := cfg.GetStringSlice("jira.projects")
 	pattern := cfg.GetString("jira.pattern")
+
+	// Check if conventional rule is enabled
+	isConventionalEnabled := IsRuleEnabled(ctx, "Conventional")
 
 	// Create a copy of the rule
 	result := r
 
 	// Apply configuration settings
-	if isConventional {
-		result.checkConventionalOnly = isConventional
+	if isConventionalEnabled {
+		result.checkConventionalOnly = isConventionalEnabled
 	}
 
 	if validateBodyRef {
@@ -233,7 +240,7 @@ func (r JiraReferenceRule) withContextConfig(ctx context.Context) JiraReferenceR
 	// Log configuration at debug level
 	logger := contextx.GetLogger(ctx)
 	logger.Debug("Jira reference rule configuration from context",
-		"conventional_required", isConventional,
+		"conventional_enabled", isConventionalEnabled,
 		"body_ref_checking", validateBodyRef,
 		"valid_projects", validProjects,
 		"pattern", pattern)

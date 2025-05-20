@@ -79,19 +79,18 @@ gommitlint:
 	cfg.Subject.MaxLength = 50
 
 	// Update conventional config
-	cfg.Conventional.Required = true
 	cfg.Conventional.Types = []string{"feat", "fix", "docs"}
 
 	// Update body config
-	cfg.Body.Required = false
+	// Note: body.required is now handled via rules
 
 	// Update rules config - ensure only the rules we need are active
 	// Explicitly enable these rules (they'll run unless disabled)
-	cfg.Rules.EnabledRules = []string{"SubjectLength", "ConventionalCommit"}
+	cfg.Rules.Enabled = []string{"SubjectLength", "ConventionalCommit"}
 
 	// Explicitly disable ALL other rules to ensure only our enabled ones run
 	// This approach is compatible with the rule priority system
-	cfg.Rules.DisabledRules = []string{
+	cfg.Rules.Disabled = []string{
 		"SignOff", "Signature", "CommitBody", "JiraReference",
 		"ImperativeVerb", "SubjectCase", "Spell", "SubjectSuffix", "CommitsAhead",
 		// Add any other rules that might be enabled by default

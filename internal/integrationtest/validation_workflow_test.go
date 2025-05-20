@@ -190,9 +190,9 @@ gommitlint:
   body:
     required: false
     allow_signoff_only: true
+    require_sign_off: false
   security:
     signature_required: false
-    signoff_required: false
   rules:
     enabled_rules:
       - SubjectLength
@@ -367,9 +367,9 @@ gommitlint:
   body:
     required: false
     allow_signoff_only: true
+    require_sign_off: false
   security:
     signature_required: false
-    signoff_required: false
   rules:
     enabled_rules:
       - SubjectLength
@@ -591,15 +591,13 @@ gommitlint:
 	cfg.Subject.MaxLength = 60
 
 	// Update conventional config
-	cfg.Conventional.Required = true
 	cfg.Conventional.Types = []string{"feat", "fix", "docs", "custom"}
 
 	// Update body config
-	cfg.Body.Required = false
 
 	// Update rules config
-	cfg.Rules.EnabledRules = []string{"SubjectLength", "SubjectCase", "ConventionalCommit"}
-	cfg.Rules.DisabledRules = []string{"JiraReference"}
+	cfg.Rules.Enabled = []string{"SubjectLength", "SubjectCase", "ConventionalCommit"}
+	cfg.Rules.Disabled = []string{"JiraReference"}
 
 	// Set the updated config in the manager
 	cfgService.UpdateConfig(func(types.Config) types.Config {
@@ -634,24 +632,22 @@ func applyTestConfiguration(cfg types.Config) types.Config {
 	cfg.Subject.MaxLength = 50
 
 	// Update conventional config
-	cfg.Conventional.Required = true
 	cfg.Conventional.Types = []string{"feat", "fix", "docs"}
 
 	// Update body config
-	cfg.Body.Required = false
 	cfg.Body.AllowSignOffOnly = true
+	cfg.Body.RequireSignOff = false
 
 	// Update security config
 	cfg.Security.GPGRequired = false
-	cfg.Security.SignOffRequired = false
 
 	// Update rules config - ensure only the rules we need are active
 	// Explicitly enable these rules (they'll run unless disabled)
-	cfg.Rules.EnabledRules = []string{"SubjectLength", "ConventionalCommit"}
+	cfg.Rules.Enabled = []string{"SubjectLength", "ConventionalCommit"}
 
 	// Explicitly disable ALL other rules to ensure only our enabled ones run
 	// This approach is compatible with the rule priority system
-	cfg.Rules.DisabledRules = []string{
+	cfg.Rules.Disabled = []string{
 		"SignOff", "Signature", "CommitBody", "JiraReference",
 		"ImperativeVerb", "SubjectCase", "Spell", "SubjectSuffix", "CommitsAhead",
 		// Add any other rules that might be enabled by default

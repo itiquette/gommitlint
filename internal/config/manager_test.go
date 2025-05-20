@@ -24,7 +24,7 @@ func TestLoadConfigFromYAML(t *testing.T) {
 	configPath := filepath.Join(tempDir, ".gommitlint.yaml")
 	configContent := `gommitlint:
   rules:
-    enabled_rules:
+    enabled:
       - JiraReference
 `
 	err = os.WriteFile(configPath, []byte(configContent), 0600)
@@ -42,14 +42,14 @@ func TestLoadConfigFromYAML(t *testing.T) {
 	config := manager.GetConfig()
 
 	// Log what we actually got
-	t.Logf("Enabled rules: %v", config.Rules.EnabledRules)
-	t.Logf("Disabled rules: %v", config.Rules.DisabledRules)
+	t.Logf("Enabled rules: %v", config.Rules.Enabled)
+	t.Logf("Disabled rules: %v", config.Rules.Disabled)
 
 	// After our rule priority changes, JiraReference might be in disabled_rules
 	// Check if it's there
 	foundInDisabled := false
 
-	for _, rule := range config.Rules.DisabledRules {
+	for _, rule := range config.Rules.Disabled {
 		if rule == "JiraReference" {
 			foundInDisabled = true
 
@@ -67,7 +67,7 @@ func TestLoadConfigFromYAML(t *testing.T) {
 	// Only check that it's in enabled_rules if that's what the YAML says
 	foundInEnabled := false
 
-	for _, rule := range config.Rules.EnabledRules {
+	for _, rule := range config.Rules.Enabled {
 		if rule == "JiraReference" {
 			foundInEnabled = true
 
@@ -95,9 +95,9 @@ func TestDisabledOverridesEnabled(t *testing.T) {
 	configPath := filepath.Join(tempDir, ".gommitlint.yaml")
 	configContent := `gommitlint:
   rules:
-    enabled_rules:
+    enabled:
       - JiraReference
-    disabled_rules:
+    disabled:
       - JiraReference
 `
 	err = os.WriteFile(configPath, []byte(configContent), 0600)
@@ -108,7 +108,7 @@ func TestDisabledOverridesEnabled(t *testing.T) {
 	require.NoError(t, err)
 
 	// The manager should add JiraReference to disabled_rules by default
-	disabledRules := manager.GetConfig().Rules.DisabledRules
+	disabledRules := manager.GetConfig().Rules.Disabled
 	t.Logf("Default disabled rules: %v", disabledRules)
 
 	// Check if JiraReference is in the default disabled rules in domain
@@ -139,8 +139,8 @@ func TestDisabledOverridesEnabled(t *testing.T) {
 	config := manager.GetConfig()
 
 	// Print the full config for debugging
-	t.Logf("Enabled rules: %v", config.Rules.EnabledRules)
-	t.Logf("Disabled rules: %v", config.Rules.DisabledRules)
+	t.Logf("Enabled rules: %v", config.Rules.Enabled)
+	t.Logf("Disabled rules: %v", config.Rules.Disabled)
 
 	// With our updated priority logic, JiraReference should be in disabled_rules
 	// and NOT in enabled_rules when it appears in both lists
@@ -149,7 +149,7 @@ func TestDisabledOverridesEnabled(t *testing.T) {
 	// Verify that JiraReference is in the disabled_rules
 	foundInDisabled = false
 
-	for _, rule := range config.Rules.DisabledRules {
+	for _, rule := range config.Rules.Disabled {
 		if rule == "JiraReference" {
 			foundInDisabled = true
 
@@ -162,7 +162,7 @@ func TestDisabledOverridesEnabled(t *testing.T) {
 	// Verify that JiraReference is NOT in the enabled_rules
 	foundInEnabled := false
 
-	for _, rule := range config.Rules.EnabledRules {
+	for _, rule := range config.Rules.Enabled {
 		if rule == "JiraReference" {
 			foundInEnabled = true
 

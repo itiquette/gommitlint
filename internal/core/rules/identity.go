@@ -66,10 +66,11 @@ func (r IdentityRule) Validate(ctx context.Context, commit domain.CommitInfo) []
 	// If no signature, we can't validate identity
 	if commit.Signature == "" {
 		return []appErrors.ValidationError{
-			appErrors.New(
-				"Identity",
+			appErrors.NewIdentityError(
 				appErrors.ErrMissingSignature,
-				"commit has no signature to verify identity",
+				"Identity",
+				"commit is not signed",
+				"Sign commits with: git commit -S",
 			),
 		}
 	}
@@ -87,11 +88,14 @@ func (r IdentityRule) Validate(ctx context.Context, commit domain.CommitInfo) []
 		signerIdentity, err := sigverify.VerifyGPGSignature(commitData, commit.Signature, rule.keyDir)
 		if err != nil {
 			return []appErrors.ValidationError{
-				appErrors.New(
-					"Identity",
+				appErrors.NewIdentityError(
 					appErrors.ErrVerificationFailed,
-					"failed to verify GPG signature: "+err.Error(),
-				),
+					"Identity",
+					"GPG signature verification failed",
+					"Ensure your GPG key is valid and properly configured",
+				).WithContextMap(map[string]string{
+					"error": err.Error(),
+				}),
 			}
 		}
 
@@ -100,12 +104,15 @@ func (r IdentityRule) Validate(ctx context.Context, commit domain.CommitInfo) []
 		// Compare with author identity
 		if !isIdentityMatch(signerIdentity, commit.AuthorEmail) {
 			return []appErrors.ValidationError{
-				appErrors.New(
-					"Identity",
+				appErrors.NewIdentityError(
 					appErrors.ErrInvalidSignature,
-					"signature identity does not match commit author",
-				).WithContext("signer", signerIdentity).
-					WithContext("author", commit.AuthorEmail),
+					"Identity",
+					"signature identity mismatch",
+					"Commit author must match signature identity",
+				).WithContextMap(map[string]string{
+					"signer": signerIdentity,
+					"author": commit.AuthorEmail,
+				}),
 			}
 		}
 	} else if strings.Contains(commit.Signature, "BEGIN SSH SIGNATURE") {
@@ -122,11 +129,14 @@ func (r IdentityRule) Validate(ctx context.Context, commit domain.CommitInfo) []
 		signerIdentity, err := sigverify.VerifySSHSignature(commitData, format, blob, rule.keyDir)
 		if err != nil {
 			return []appErrors.ValidationError{
-				appErrors.New(
-					"Identity",
+				appErrors.NewIdentityError(
 					appErrors.ErrVerificationFailed,
-					"failed to verify SSH signature: "+err.Error(),
-				),
+					"Identity",
+					"SSH signature verification failed",
+					"Ensure your SSH key is valid and properly configured",
+				).WithContextMap(map[string]string{
+					"error": err.Error(),
+				}),
 			}
 		}
 
@@ -135,21 +145,25 @@ func (r IdentityRule) Validate(ctx context.Context, commit domain.CommitInfo) []
 		// Compare with author identity
 		if !isIdentityMatch(signerIdentity, commit.AuthorEmail) {
 			return []appErrors.ValidationError{
-				appErrors.New(
-					"Identity",
+				appErrors.NewIdentityError(
 					appErrors.ErrInvalidSignature,
-					"signature identity does not match commit author",
-				).WithContext("signer", signerIdentity).
-					WithContext("author", commit.AuthorEmail),
+					"Identity",
+					"signature identity mismatch",
+					"Commit author must match signature identity",
+				).WithContextMap(map[string]string{
+					"signer": signerIdentity,
+					"author": commit.AuthorEmail,
+				}),
 			}
 		}
 	} else {
 		// Unknown signature format
 		return []appErrors.ValidationError{
-			appErrors.New(
-				"Identity",
+			appErrors.NewIdentityError(
 				appErrors.ErrUnknownSigFormat,
+				"Identity",
 				"unrecognized signature format",
+				"Use GPG or SSH keys for commit signing",
 			),
 		}
 	}

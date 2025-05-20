@@ -71,7 +71,6 @@ func TestJiraReferenceRule_Validate(t *testing.T) {
 			configSetup: func() types.Config {
 				return testConfig.NewBuilder().
 					WithJiraProjects([]string{"PROJ", "TEAM"}).
-					WithConventionalRequired(true).
 					Build()
 			},
 			commit: domain.CommitInfo{
@@ -86,7 +85,6 @@ func TestJiraReferenceRule_Validate(t *testing.T) {
 			configSetup: func() types.Config {
 				return testConfig.NewBuilder().
 					WithJiraProjects([]string{"PROJ", "TEAM"}).
-					WithConventionalRequired(true).
 					Build()
 			},
 			commit: domain.CommitInfo{

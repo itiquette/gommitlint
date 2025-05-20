@@ -150,8 +150,8 @@ func (f TextFormatter) Format(ctx context.Context, results domain.ValidationResu
 		// Create a basic config with rule information from context
 		cfg = types.Config{
 			Rules: types.RulesConfig{
-				EnabledRules:  ctxConfig.GetStringSlice("rules.enabled_rules"),
-				DisabledRules: ctxConfig.GetStringSlice("rules.disabled_rules"),
+				Enabled:  ctxConfig.GetStringSlice("rules.enabled_rules"),
+				Disabled: ctxConfig.GetStringSlice("rules.disabled_rules"),
 			},
 			Subject: types.SubjectConfig{
 				MaxLength: ctxConfig.GetInt("subject.max_length"),
@@ -161,13 +161,13 @@ func (f TextFormatter) Format(ctx context.Context, results domain.ValidationResu
 		// Create default config
 		cfg = types.Config{
 			Rules: types.RulesConfig{
-				EnabledRules:  []string{},
-				DisabledRules: []string{},
+				Enabled:  []string{},
+				Disabled: []string{},
 			},
 			Subject: types.SubjectConfig{
-				MaxLength:         50,
-				Case:              "sentence",
-				RequireImperative: true,
+				MaxLength:  50,
+				Case:       "sentence",
+				Imperative: true,
 			},
 		}
 	}
@@ -281,8 +281,8 @@ func (f TextFormatter) formatRuleResults(ctx context.Context, builder *strings.B
 
 	// Log rule configuration
 	logger.Debug("Text formatter received configuration",
-		"enabled_rules", cfg.Rules.EnabledRules,
-		"disabled_rules", cfg.Rules.DisabledRules)
+		"enabled_rules", cfg.Rules.Enabled,
+		"disabled_rules", cfg.Rules.Disabled)
 
 	// Log initial rule results before filtering
 	ruleNames := make([]string, 0, len(commitResult.RuleResults))
@@ -389,23 +389,41 @@ func (f TextFormatter) formatPassedRule(builder *strings.Builder, ruleName strin
 func (f TextFormatter) formatFailedRule(builder *strings.Builder, ruleName string, ruleResult domain.RuleResult) {
 	// Basic output
 	builder.WriteString(fmt.Sprintf("%s %s: ", f.symbols.fail, ruleName))
-	builder.WriteString("\n  \n")
+	builder.WriteString("\n")
 
-	// Format errors
+	// Format errors with progressive detail based on formatter settings
 	for _, err := range ruleResult.Errors {
-		builder.WriteString(fmt.Sprintf("    %s\n", f.colors.Error(err.Error())))
+		// Determine verbosity level from formatter flags
+		verbosityLevel := 0
+		if f.verbose {
+			verbosityLevel = 1
+		}
+
+		if f.showHelp {
+			verbosityLevel = 2
+		}
+
+		// Use progressive formatting
+		// Since err is already of type ValidationError, we don't need type assertion
+		{
+			formatted := err.FormatAtLevel(verbosityLevel)
+			// Split by newlines and indent each line
+			lines := strings.Split(formatted, "\n")
+			for _, line := range lines {
+				if line != "" {
+					builder.WriteString(fmt.Sprintf("    %s\n", line))
+				}
+			}
+		}
 	}
 
 	// Add a blank line for spacing
 	builder.WriteString("\n")
 
-	// Show help if available
+	// Show help at the rule level if available (deprecated in favor of error-level help)
 	if f.showHelp && ruleResult.HelpMessage != "" {
 		builder.WriteString(fmt.Sprintf("  %s\n", f.colors.HelpText(ruleResult.HelpMessage)))
 		builder.WriteString("\n")
-	} else {
-		// Otherwise just show a hint on how to get help
-		builder.WriteString(fmt.Sprintf("  %s\n\n", f.colors.Muted(fmt.Sprintf("Run with '--rulehelp=%s' for specific guidance on this rule.", ruleResult.RuleName))))
 	}
 }
 

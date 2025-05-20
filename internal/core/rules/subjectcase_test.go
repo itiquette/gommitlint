@@ -7,7 +7,6 @@ package rules_test
 // These tests verify the behavior of the rule against various commit subject formats.
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/itiquette/gommitlint/internal/common/contextx"
@@ -150,12 +149,6 @@ func TestSubjectCaseRule(t *testing.T) {
 			// Setup context with TestConfigAdapter
 			builder := testconfig.NewBuilder().
 				WithSubjectCase(testCase.caseChoice)
-
-			// For conventional commit tests, enable conventional commit checking
-			if strings.Contains(testCase.subject, ":") &&
-				!strings.HasPrefix(testCase.subject, "http") {
-				builder = builder.WithConventionalRequired(true)
-			}
 
 			cfg := builder.Build()
 			testConfig := testconfig.NewAdapter(cfg).Adapter
@@ -352,8 +345,7 @@ func TestSubjectCaseWithConventionalCommit(t *testing.T) {
 
 			// Setup context with TestConfigAdapter
 			builder := testconfig.NewBuilder().
-				WithSubjectCase(testCase.caseType).
-				WithConventionalRequired(true)
+				WithSubjectCase(testCase.caseType)
 			cfg := builder.Build()
 			testConfig := testconfig.NewAdapter(cfg).Adapter
 

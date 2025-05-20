@@ -178,10 +178,11 @@ func (r ImperativeVerbRule) Validate(ctx context.Context, commit domain.CommitIn
 	firstWord := extractFirstWord(subject)
 	if firstWord == "" {
 		return []appErrors.ValidationError{
-			appErrors.New(
-				"ImperativeVerb",
+			appErrors.NewValidationError(
 				appErrors.ErrNoFirstWord,
-				"cannot extract first word from commit message",
+				"ImperativeVerb",
+				"Cannot extract first word from commit message",
+				"Ensure your commit message starts with a verb",
 			).WithContext("subject", subject),
 		}
 	}
@@ -192,32 +193,76 @@ func (r ImperativeVerbRule) Validate(ctx context.Context, commit domain.CommitIn
 	category, isViolation := categorizeVerb(firstWord, rule.verbCategories, rule.baseFormsEndingWithED)
 
 	if isViolation {
-		var message string
+		// Build suggestions based on category
+		var suggestions []string
 
+		switch category {
+		case "past_tense":
+			// Convert past tense to imperative
+			if strings.HasSuffix(firstWord, "ed") {
+				base := strings.TrimSuffix(firstWord, "ed")
+				base = strings.TrimSuffix(base, "d")
+
+				suggestions = []string{base}
+			} else {
+				suggestions = []string{"add", "fix", "update"}
+			}
+		case "gerund":
+			// Convert gerund to imperative
+			if strings.HasSuffix(firstWord, "ing") {
+				base := strings.TrimSuffix(firstWord, "ing")
+				if strings.HasSuffix(base, "nn") {
+					base = strings.TrimSuffix(base, "n") // running -> run
+				}
+
+				suggestions = []string{base}
+			} else {
+				suggestions = []string{"add", "fix", "update"}
+			}
+		case "third_person":
+			// Convert third person to imperative
+			if strings.HasSuffix(firstWord, "s") || strings.HasSuffix(firstWord, "es") {
+				base := strings.TrimSuffix(firstWord, "s")
+				base = strings.TrimSuffix(base, "e")
+
+				suggestions = []string{base}
+			} else {
+				suggestions = []string{"add", "fix", "update"}
+			}
+		default:
+			suggestions = []string{"add", "fix", "update", "remove", "improve", "implement"}
+		}
+
+		// Map category to specific error code
 		var errorCode appErrors.ValidationErrorCode
 
 		switch category {
 		case "past_tense":
-			message = fmt.Sprintf("use imperative mood for commit message, not past tense (detected '%s')", firstWord)
 			errorCode = appErrors.ErrPastTense
 		case "gerund":
-			message = fmt.Sprintf("use imperative mood for commit message, not gerund (detected '%s')", firstWord)
 			errorCode = appErrors.ErrGerund
 		case "third_person":
-			message = fmt.Sprintf("use imperative mood for commit message, not third person (detected '%s')", firstWord)
 			errorCode = appErrors.ErrThirdPerson
 		default:
-			message = fmt.Sprintf("use imperative mood for commit message (detected non-imperative '%s')", firstWord)
 			errorCode = appErrors.ErrNonImperative
 		}
 
+		// Create error with specific code based on category
+		help := fmt.Sprintf("Use the imperative form of '%s'", firstWord)
+		if len(suggestions) > 0 {
+			help = "Try: " + strings.Join(suggestions, ", ")
+		}
+
 		return []appErrors.ValidationError{
-			appErrors.New(
-				"ImperativeVerb",
+			appErrors.NewValidationError(
 				errorCode,
-				message,
-			).WithContext("word", firstWord).
-				WithContext("category", category),
+				"ImperativeVerb",
+				fmt.Sprintf("Word '%s' is not in imperative mood", firstWord),
+				help,
+			).WithContextMap(map[string]string{
+				"word":        firstWord,
+				"suggestions": strings.Join(suggestions, ", "),
+			}),
 		}
 	}
 
@@ -231,19 +276,21 @@ func (r ImperativeVerbRule) withContextConfig(ctx context.Context) ImperativeVer
 
 	// Extract configuration values
 	isImperativeRequired := cfg.GetBool("subject.require_imperative") // Default to true if not set
-	isConventional := cfg.GetBool("conventional.required")
+
+	// Check if conventional rule is enabled
+	isConventionalEnabled := IsRuleEnabled(ctx, "Conventional")
 
 	// Log configuration at debug level
 	logger := contextx.GetLogger(ctx)
 	logger.Debug("ImperativeVerb rule configuration from context",
 		"require_imperative", isImperativeRequired,
-		"is_conventional", isConventional)
+		"conventional_enabled", isConventionalEnabled)
 
 	// Create a copy of the rule
 	result := r
 
-	// Set conventional flag if needed
-	if isConventional {
+	// Set conventional flag if the Conventional rule is enabled
+	if isConventionalEnabled {
 		result.checkConventionalCommits = true
 		result.conventionalDescriptionOnly = true
 	}

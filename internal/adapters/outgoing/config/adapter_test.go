@@ -20,24 +20,22 @@ func TestAdapter_InterfaceCompliance(t *testing.T) {
 			MaxLength: 72,
 		},
 		Body: configTypes.BodyConfig{
-			Required:  true,
-			MinLength: 10,
+			MinLength:        10,
+			AllowSignOffOnly: true,
 		},
 		Rules: configTypes.RulesConfig{
-			EnabledRules:  []string{"subject.max_length", "body.required"},
-			DisabledRules: []string{"spell"},
+			Enabled:  []string{"subject.max_length", "body.required"},
+			Disabled: []string{"spell"},
 		},
 		Security: configTypes.SecurityConfig{
-			GPGRequired:           true,
-			SignOffRequired:       true,
-			AllowMultipleSignOffs: false,
+			GPGRequired:      true,
+			MultipleSignoffs: false,
 		},
 		Jira: configTypes.JiraConfig{
 			Projects: []string{"PROJ1", "PROJ2"},
 		},
 		Conventional: configTypes.ConventionalConfig{
-			Required: true,
-			Types:    []string{"feat", "fix", "docs"},
+			Types: []string{"feat", "fix", "docs"},
 		},
 	}
 
@@ -59,15 +57,15 @@ func TestAdapter_ConfigMethods(t *testing.T) {
 			MaxLength: 72,
 		},
 		Body: configTypes.BodyConfig{
-			Required:  true,
-			MinLength: 10,
+			MinLength:        10,
+			AllowSignOffOnly: true,
 		},
 		Jira: configTypes.JiraConfig{
 			Projects: []string{"PROJ1", "PROJ2"},
 		},
 		Rules: configTypes.RulesConfig{
-			EnabledRules:  []string{"SubjectLength"},
-			DisabledRules: []string{"spell"},
+			Enabled:  []string{"SubjectLength"},
+			Disabled: []string{"spell"},
 		},
 	}
 
@@ -99,8 +97,9 @@ func TestAdapter_ConfigMethods(t *testing.T) {
 	})
 
 	t.Run("GetBool", func(t *testing.T) {
-		bodyRequired := adapter.GetBool("body.required")
-		require.True(t, bodyRequired)
+		// Check a valid boolean field
+		allowSignOffOnly := adapter.GetBool("body.allow_sign_off_only")
+		require.True(t, allowSignOffOnly) // Set to true in test config
 
 		// Non-existent key returns false
 		nonExistent := adapter.GetBool("non.existent")
@@ -147,23 +146,21 @@ func TestAdapter_ValidationConfigMethods(t *testing.T) {
 			MaxLength: 72,
 		},
 		Body: configTypes.BodyConfig{
-			Required:  true,
-			MinLength: 10,
+			MinLength:        10,
+			AllowSignOffOnly: true,
 		},
 		Security: configTypes.SecurityConfig{
-			GPGRequired:     true,
-			SignOffRequired: true,
+			GPGRequired: true,
 		},
 		Jira: configTypes.JiraConfig{
 			Projects: []string{"PROJ1", "PROJ2"},
 		},
 		Conventional: configTypes.ConventionalConfig{
-			Required: true,
-			Types:    []string{"feat", "fix"},
+			Types: []string{"feat", "fix"},
 		},
 		Rules: configTypes.RulesConfig{
-			EnabledRules:  []string{"subject.max_length"},
-			DisabledRules: []string{"spell"},
+			Enabled:  []string{"subject.max_length"},
+			Disabled: []string{"spell"},
 		},
 	}
 
@@ -172,16 +169,14 @@ func TestAdapter_ValidationConfigMethods(t *testing.T) {
 
 	// Test ValidationConfig interface methods
 	t.Run("ValidationConfig methods", func(t *testing.T) {
-		require.Equal(t, cfg.Rules.EnabledRules, adapter.EnabledRules())
-		require.Equal(t, cfg.Rules.DisabledRules, adapter.DisabledRules())
+		require.Equal(t, cfg.Rules.Enabled, adapter.EnabledRules())
+		require.Equal(t, cfg.Rules.Disabled, adapter.DisabledRules())
 		require.Equal(t, cfg.Subject.MaxLength, adapter.SubjectMaxLength())
-		require.Equal(t, cfg.Subject.RequireImperative, adapter.SubjectRequireImperative())
-		require.Equal(t, cfg.Body.Required, adapter.BodyRequired())
+		require.Equal(t, cfg.Subject.Imperative, adapter.SubjectImperative())
 		require.Equal(t, cfg.Body.MinLength, adapter.BodyMinLength())
 		// Note: GPGRequired and SignOffRequired are part of SecurityConfig but not exposed in ValidationConfig interface
 		// They are accessed through the config.Get methods instead
 		require.Equal(t, cfg.Jira.Projects, adapter.JiraProjects())
-		require.Equal(t, cfg.Conventional.Required, adapter.ConventionalRequired())
 		require.Equal(t, cfg.Conventional.Types, adapter.ConventionalTypes())
 	})
 }
@@ -190,15 +185,16 @@ func TestAdapter_RulesConfigMethods(t *testing.T) {
 	// Create a test config
 	cfg := configTypes.Config{
 		Body: configTypes.BodyConfig{
-			MinLength: 10,
+			MinLength:        10,
+			AllowSignOffOnly: true,
 		},
 		Repository: configTypes.RepositoryConfig{
 			ReferenceBranch: "main",
 			MaxCommitsAhead: 15,
 		},
 		Rules: configTypes.RulesConfig{
-			EnabledRules:  []string{"body.min_length"},
-			DisabledRules: []string{"spell"},
+			Enabled:  []string{"body.min_length"},
+			Disabled: []string{"spell"},
 		},
 		SpellCheck: configTypes.SpellCheckConfig{
 			CustomDictionary: []string{"gommitlint", "golang"},
@@ -226,8 +222,8 @@ func TestAdapter_RuleConfigurationMethods(t *testing.T) {
 	// Create a test config with rules that have default disabled states
 	cfg := configTypes.Config{
 		Rules: configTypes.RulesConfig{
-			EnabledRules:  []string{"SubjectLength", "SignedIdentity"}, // Force enable SignedIdentity
-			DisabledRules: []string{"spell"},
+			Enabled:  []string{"SubjectLength", "SignedIdentity"}, // Force enable SignedIdentity
+			Disabled: []string{"spell"},
 		},
 	}
 

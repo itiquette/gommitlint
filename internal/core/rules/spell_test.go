@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/itiquette/gommitlint/internal/common/contextx"
-	"github.com/itiquette/gommitlint/internal/config/types"
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 )
@@ -52,7 +51,7 @@ func TestSpellRule(t *testing.T) {
 
 		// Create a context with spell checking disabled
 		cfg := testconfig.NewBuilder().
-			WithSpellCheck(types.SpellCheckConfig{Enabled: false}).
+			DisableRule("Spell").
 			Build()
 		configAdapter := testconfig.NewAdapter(cfg)
 		ctx := testcontext.CreateTestContext()
@@ -70,7 +69,7 @@ func TestSpellRule(t *testing.T) {
 
 		// Create a context with spell checking enabled
 		cfg := testconfig.NewBuilder().
-			WithSpellCheck(types.SpellCheckConfig{Enabled: true}).
+			EnableRule("Spell").
 			Build()
 		configAdapter := testconfig.NewAdapter(cfg)
 		ctx := testcontext.CreateTestContext()

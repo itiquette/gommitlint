@@ -26,11 +26,9 @@ func createImperativeBaseTestContext() context.Context {
 func createImperativeTestContext() context.Context {
 	// Create a base config to adapt
 	cfg := config.NewDefaultConfig()
-	cfg.Subject.RequireImperative = true
+	cfg.Subject.Imperative = true
 	cfg.Subject.MaxLength = 72
 	cfg.Subject.Case = "sentence"
-	cfg.Body.Required = false
-	cfg.Conventional.Required = false
 	cfg.Conventional.Types = []string{"feat", "fix", "docs", "style", "refactor", "test", "chore"}
 
 	// Add the test config to the context using direct adapter pattern
