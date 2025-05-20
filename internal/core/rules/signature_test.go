@@ -99,8 +99,8 @@ LwAAACRrZXktMS11c2VyQHVuaXQuZXhhbXBsZQAAAAAAAAAAAAAAAA==
 			configModifier: func(c types.Config) types.Config {
 				// Value-based immutable transformation
 				result := c
-				result.Security = types.SecurityConfig{
-					AllowedSignatureTypes: []string{"gpg"},
+				result.Signing = types.SigningConfig{
+					RequireGPG: true,
 				}
 
 				return result

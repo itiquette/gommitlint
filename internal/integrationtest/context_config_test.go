@@ -40,29 +40,27 @@ func TestContextBasedConfigWorkflow(t *testing.T) {
 	configPath := filepath.Join(tempDir, ".gommitlint.yaml")
 	configContent := `
 gommitlint:
-  validation:
-    enabled: true
-  subject:
-    max_length: 50
-    case: lower
+  message:
+    subject:
+      max_length: 50
+      case: lower
+    body:
+      required: false
+      allow_signoff_only: true
+      require_sign_off: false
   conventional:
-    enabled: true
     required: true
     types:
       - feat
       - fix
       - docs
-  body:
-    required: false
-    allow_signoff_only: true
-  security:
-    signature_required: false
-    signoff_required: false
+  signing:
+    require_signature: false
   rules:
-    enabled_rules:
+    enabled:
       - SubjectLength
       - ConventionalCommit
-    disabled_rules:
+    disabled:
       - SignOff
       - Signature
       - CommitBody
@@ -223,10 +221,10 @@ gommitlint:
     signature_required: false
     signoff_required: false
   rules:
-    enabled_rules:
+    enabled:
       - SubjectLength
       - ConventionalCommit
-    disabled_rules:
+    disabled:
       - SignOff
       - Signature
       - CommitBody
@@ -383,20 +381,20 @@ func TestContextConfigImmutability(t *testing.T) {
 	baseConfig := types.Config{}
 
 	// Set some initial values
-	baseConfig = baseConfig.WithSubject(baseConfig.Subject.WithMaxLength(10))
+	baseConfig = baseConfig.WithMessage(baseConfig.Message.WithSubject(baseConfig.Message.Subject.WithMaxLength(10)))
 	baseConfig = baseConfig.WithConventional(baseConfig.Conventional.WithRequireScope(true))
 
 	// Modify the config
 	modifiedConfig := baseConfig.
-		WithSubject(baseConfig.Subject.WithMaxLength(100)).
+		WithMessage(baseConfig.Message.WithSubject(baseConfig.Message.Subject.WithMaxLength(100))).
 		WithConventional(baseConfig.Conventional.WithRequireScope(false))
 
 	// Original config should remain unchanged
-	require.Equal(t, 10, baseConfig.Subject.MaxLength, "Original subject max length should still be 10")
+	require.Equal(t, 10, baseConfig.Message.Subject.MaxLength, "Original subject max length should still be 10")
 	require.True(t, baseConfig.Conventional.RequireScope, "Original conventional require scope should still be true")
 
 	// Modified config should have new values
-	require.Equal(t, 100, modifiedConfig.Subject.MaxLength, "Modified subject max length should be 100")
+	require.Equal(t, 100, modifiedConfig.Message.Subject.MaxLength, "Modified subject max length should be 100")
 	require.False(t, modifiedConfig.Conventional.RequireScope, "Modified conventional require scope should be false")
 }
 
@@ -420,15 +418,15 @@ func createConfigManager(t *testing.T, configPath string) *config.Manager {
 
 	// Explicitly set required configuration values and enable rules
 	// This is the key fix for the failing tests
-	configObj = configObj.WithSubject(configObj.Subject.WithMaxLength(10))
+	configObj = configObj.WithMessage(configObj.Message.WithSubject(configObj.Message.Subject.WithMaxLength(10)))
 
 	t.Logf("Explicitly setting max subject length to 10 for test")
 
 	// Update rules config - ensure only the rules we need are active
 	// Explicitly enable these rules (they'll run unless disabled)
-	configObj = configObj.WithRules(configObj.Rules.WithEnabled(
+	configObj = configObj.WithRules(configObj.Rules.WithEnable(
 		[]string{"SubjectLength", "ConventionalCommit"},
-	).WithDisabled([]string{
+	).WithDisable([]string{
 		"SignOff", "Signature", "CommitBody", "JiraReference",
 		"ImperativeVerb", "SubjectCase", "Spell", "SubjectSuffix", "CommitsAhead",
 		// Add any other rules that might be enabled by default

@@ -150,11 +150,13 @@ func (f TextFormatter) Format(ctx context.Context, results domain.ValidationResu
 		// Create a basic config with rule information from context
 		cfg = types.Config{
 			Rules: types.RulesConfig{
-				Enabled:  ctxConfig.GetStringSlice("rules.enabled_rules"),
-				Disabled: ctxConfig.GetStringSlice("rules.disabled_rules"),
+				Enabled:  ctxConfig.GetStringSlice("rules.enabled"),
+				Disabled: ctxConfig.GetStringSlice("rules.disabled"),
 			},
-			Subject: types.SubjectConfig{
-				MaxLength: ctxConfig.GetInt("subject.max_length"),
+			Message: types.MessageConfig{
+				Subject: types.SubjectConfig{
+					MaxLength: ctxConfig.GetInt("message.subject.max_length"),
+				},
 			},
 		}
 	} else {
@@ -164,10 +166,12 @@ func (f TextFormatter) Format(ctx context.Context, results domain.ValidationResu
 				Enabled:  []string{},
 				Disabled: []string{},
 			},
-			Subject: types.SubjectConfig{
-				MaxLength:  50,
-				Case:       "sentence",
-				Imperative: true,
+			Message: types.MessageConfig{
+				Subject: types.SubjectConfig{
+					MaxLength:         50,
+					Case:              "sentence",
+					RequireImperative: true,
+				},
 			},
 		}
 	}
@@ -308,8 +312,8 @@ func (f TextFormatter) formatRuleResults(ctx context.Context, builder *strings.B
 
 	// Get configuration directly from context using the standard pattern
 	if ctxConfig := contextx.GetConfig(ctx); ctxConfig != nil {
-		enabledRules = ctxConfig.GetStringSlice("rules.enabled_rules")
-		disabledRules = ctxConfig.GetStringSlice("rules.disabled_rules")
+		enabledRules = ctxConfig.GetStringSlice("rules.enabled")
+		disabledRules = ctxConfig.GetStringSlice("rules.disabled")
 	}
 
 	// Use the centralized rule priority service

@@ -131,20 +131,22 @@ func GetConfig(ctx context.Context) config.Config {
 // taking precedence over values from the first context. This is useful when
 // you need to override specific context values while preserving others.
 //
-// If either context is nil, it is treated as context.Background().
+// Both contexts must be non-nil or this function will panic.
 // The function iterates through all known context keys and copies values
 // from ctx2 to the result, overriding any existing values from ctx1.
 //
 // Example:
 //
-//	baseCtx := contextx.WithValue(context.Background(), contextkeys.LoggerKey, logger1)
-//	overrideCtx := contextx.WithValue(context.Background(), contextkeys.LoggerKey, logger2)
+//	baseCtx := someExistingContext
+//	overrideCtx := contextx.WithValue(baseCtx, contextkeys.LoggerKey, customLogger)
 //	merged := contextx.MergeContext(baseCtx, overrideCtx)
-//	// merged will have LoggerKey=logger2
+//	// merged will have the customLogger
 func MergeContext(ctx1, ctx2 context.Context) context.Context {
-	// Handle nil contexts by substituting with background context
+	// Handle nil contexts
 	if ctx1 == nil {
-		ctx1 = context.Background()
+		// Instead of creating a new context.Background(), we should indicate this is invalid
+		// and let the caller handle it properly
+		panic("MergeContext: ctx1 cannot be nil - only main.go should create context.Background()")
 	}
 
 	if ctx2 == nil {

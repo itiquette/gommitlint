@@ -128,8 +128,8 @@ This is a detailed description of the feature.`,
 			ctx := createSignoffTestContext()
 			// Add config to context if needed
 			cfg := config.NewDefaultConfig()
-			cfg.Body.RequireSignOff = testCase.requireSignOff
-			cfg.Security.MultipleSignoffs = testCase.allowMultiple
+			cfg.Message.Body.RequireSignoff = testCase.requireSignOff
+			cfg.Signing.AllowMultipleSignoffs = testCase.allowMultiple
 			// Use direct adapter pattern instead of the deprecated AdaptConfigForTesting
 			adapter := infraConfig.NewAdapter(cfg)
 			ctx = contextx.WithConfig(ctx, adapter)
@@ -187,8 +187,8 @@ func TestSignOffRuleWithConfig(t *testing.T) {
 This is a commit without a sign-off.`,
 			configSetup: func() types.Config {
 				config := config.NewDefaultConfig()
-				config.Body.RequireSignOff = true
-				config.Security.MultipleSignoffs = false
+				config.Message.Body.RequireSignoff = true
+				config.Signing.AllowMultipleSignoffs = false
 
 				return config
 			},
@@ -200,8 +200,8 @@ This is a commit without a sign-off.`,
 This is a detailed description.`,
 			configSetup: func() types.Config {
 				config := config.NewDefaultConfig()
-				config.Body.RequireSignOff = false
-				config.Security.MultipleSignoffs = false
+				config.Message.Body.RequireSignoff = false
+				config.Signing.AllowMultipleSignoffs = false
 
 				return config
 			},
@@ -214,8 +214,8 @@ Signed-off-by: Laval Lion <laval.lion@cavora.org>
 Signed-off-by: Cragger Crocodile <cragger@svamp.org>`,
 			configSetup: func() types.Config {
 				config := config.NewDefaultConfig()
-				config.Body.RequireSignOff = true
-				config.Security.MultipleSignoffs = true
+				config.Message.Body.RequireSignoff = true
+				config.Signing.AllowMultipleSignoffs = true
 
 				return config
 			},
@@ -236,12 +236,12 @@ Signed-off-by: Cragger Crocodile <cragger@svamp.org>`,
 
 			// Create rule with options explicitly set based on config
 			options := []rules.SignOffOption{}
-			if !cfg.Body.RequireSignOff {
+			if !cfg.Message.Body.RequireSignoff {
 				options = append(options, rules.WithRequireSignOff(false))
 			}
 			// Check for multiple sign-offs configuration
 
-			if cfg.Security.MultipleSignoffs {
+			if cfg.Signing.AllowMultipleSignoffs {
 				options = append(options, rules.WithMultipleSignoffs(true))
 			}
 

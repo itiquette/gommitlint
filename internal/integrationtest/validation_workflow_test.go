@@ -194,10 +194,10 @@ gommitlint:
   security:
     signature_required: false
   rules:
-    enabled_rules:
+    enabled:
       - SubjectLength
       - ConventionalCommit
-    disabled_rules:
+    disabled:
       - SignOff
       - Signature
       - CommitBody
@@ -371,10 +371,10 @@ gommitlint:
   security:
     signature_required: false
   rules:
-    enabled_rules:
+    enabled:
       - SubjectLength
       - ConventionalCommit
-    disabled_rules:
+    disabled:
       - SignOff
       - Signature
       - CommitBody
@@ -565,11 +565,11 @@ gommitlint:
   body:
     required: false
   rules:
-    enabled_rules:
+    enabled:
       - SubjectLength
       - SubjectCase
       - ConventionalCommit
-    disabled_rules:
+    disabled:
       - JiraReference
 `
 	err = os.WriteFile(configPath, []byte(configContent), 0600)
@@ -587,8 +587,8 @@ gommitlint:
 	cfg := cfgService.GetConfig()
 
 	// Update the config directly
-	cfg.Subject.Case = "sentence"
-	cfg.Subject.MaxLength = 60
+	cfg.Message.Subject.Case = "sentence"
+	cfg.Message.Subject.MaxLength = 60
 
 	// Update conventional config
 	cfg.Conventional.Types = []string{"feat", "fix", "docs", "custom"}
@@ -629,17 +629,17 @@ gommitlint:
 func applyTestConfiguration(cfg types.Config) types.Config {
 	// Use the types config API directly without helper functions
 	// Update subject config
-	cfg.Subject.MaxLength = 50
+	cfg.Message.Subject.MaxLength = 50
 
 	// Update conventional config
 	cfg.Conventional.Types = []string{"feat", "fix", "docs"}
 
 	// Update body config
-	cfg.Body.AllowSignOffOnly = true
-	cfg.Body.RequireSignOff = false
+	cfg.Message.Body.AllowSignoffOnly = true
+	cfg.Message.Body.RequireSignoff = false
 
-	// Update security config
-	cfg.Security.GPGRequired = false
+	// Update signing config
+	cfg.Signing.RequireGPG = false
 
 	// Update rules config - ensure only the rules we need are active
 	// Explicitly enable these rules (they'll run unless disabled)

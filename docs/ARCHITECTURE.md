@@ -409,7 +409,7 @@ cfg := contextx.GetConfig(ctx)
 // Access values
 maxLength := cfg.GetInt("subject.max_length")
 isRequired := cfg.GetBool("body.required")
-enabledRules := cfg.GetStringSlice("rules.enabled_rules")
+enabledRules := cfg.GetStringSlice("rules.enabled")
 ```
 
 ### Configuration Notes
@@ -423,19 +423,19 @@ enabledRules := cfg.GetStringSlice("rules.enabled_rules")
 
 Rules have three states with specific priority order:
 
-1. **Enabled Rules** (highest priority) - Always enabled if in `enabled_rules`
-2. **Disabled Rules** (second priority) - Disabled if in `disabled_rules` and not enabled
+1. **Enabled Rules** (highest priority) - Always enabled if in `enabled`
+2. **Disabled Rules** (second priority) - Disabled if in `disabled` and not enabled
 3. **Default Disabled** (third priority) - Some rules disabled by default
 4. **Default Enabled** (lowest priority) - Most rules enabled by default
 
 ```yaml
 gommitlint:
   rules:
-    enabled_rules:
+    enabled:
       - JiraReference    # Overrides default-disabled
       - SubjectLength    # Explicitly enabled
-    disabled_rules:
-      - CommitsAhead     # Always disabled (unless also in enabled_rules)
+    disabled:
+      - CommitsAhead     # Always disabled (unless also in enabled)
 ```
 
 Default-disabled rules:
@@ -447,9 +447,9 @@ Default-disabled rules:
 ### Rule Priority Logic
 
 ```
-if rule in enabled_rules:
+if rule in enabled:
     include rule
-else if rule in disabled_rules:
+else if rule in disabled:
     exclude rule
 else if rule in DefaultDisabledRules:
     exclude rule

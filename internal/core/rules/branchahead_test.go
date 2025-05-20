@@ -40,8 +40,8 @@ func createConfigContext(maxCommitsAhead int, referenceBranch string) context.Co
 	// Create config with repository values
 	builder := testconfig.NewBuilder()
 	cfg := builder.Build()
-	cfg.Repository.MaxCommitsAhead = maxCommitsAhead
-	cfg.Repository.ReferenceBranch = referenceBranch
+	cfg.Repo.MaxCommitsAhead = maxCommitsAhead
+	cfg.Repo.Branch = referenceBranch
 
 	contextAdapter := testconfig.NewAdapter(cfg)
 
@@ -312,9 +312,9 @@ func TestBranchAheadRuleWithConfig(t *testing.T) {
 			name: "commits ahead check enabled, within limit",
 			configSetup: func() types.Config {
 				return config.NewDefaultConfig().
-					WithRepository(types.RepositoryConfig{
+					WithRepo(types.RepoConfig{
 						MaxCommitsAhead: 5,
-						ReferenceBranch: "main",
+						Branch:          "main",
 					})
 			},
 			analyzer: &mockCommitAnalyzer{
@@ -328,9 +328,9 @@ func TestBranchAheadRuleWithConfig(t *testing.T) {
 			name: "commits ahead check enabled, exceeds limit",
 			configSetup: func() types.Config {
 				return config.NewDefaultConfig().
-					WithRepository(types.RepositoryConfig{
+					WithRepo(types.RepoConfig{
 						MaxCommitsAhead: 5,
-						ReferenceBranch: "main",
+						Branch:          "main",
 					})
 			},
 			analyzer: &mockCommitAnalyzer{
@@ -344,9 +344,9 @@ func TestBranchAheadRuleWithConfig(t *testing.T) {
 			name: "commits ahead check disabled",
 			configSetup: func() types.Config {
 				return config.NewDefaultConfig().
-					WithRepository(types.RepositoryConfig{
+					WithRepo(types.RepoConfig{
 						MaxCommitsAhead: 0, // Disabled
-						ReferenceBranch: "main",
+						Branch:          "main",
 					})
 			},
 			analyzer: &mockCommitAnalyzer{
@@ -360,9 +360,9 @@ func TestBranchAheadRuleWithConfig(t *testing.T) {
 			name: "commits ahead check enabled, analyzer error",
 			configSetup: func() types.Config {
 				return config.NewDefaultConfig().
-					WithRepository(types.RepositoryConfig{
+					WithRepo(types.RepoConfig{
 						MaxCommitsAhead: 5,
-						ReferenceBranch: "main",
+						Branch:          "main",
 					})
 			},
 			analyzer: &mockCommitAnalyzer{
@@ -376,9 +376,9 @@ func TestBranchAheadRuleWithConfig(t *testing.T) {
 			name: "custom reference branch",
 			configSetup: func() types.Config {
 				return config.NewDefaultConfig().
-					WithRepository(types.RepositoryConfig{
+					WithRepo(types.RepoConfig{
 						MaxCommitsAhead: 5,
-						ReferenceBranch: "develop",
+						Branch:          "develop",
 					})
 			},
 			analyzer: &mockCommitAnalyzer{
@@ -400,8 +400,8 @@ func TestBranchAheadRuleWithConfig(t *testing.T) {
 			// Create context with test config
 			builder := testconfig.NewBuilder()
 			builderCfg := builder.Build()
-			builderCfg.Repository.MaxCommitsAhead = cfg.Repository.MaxCommitsAhead
-			builderCfg.Repository.ReferenceBranch = cfg.Repository.ReferenceBranch
+			builderCfg.Repo.MaxCommitsAhead = cfg.Repo.MaxCommitsAhead
+			builderCfg.Repo.Branch = cfg.Repo.Branch
 
 			contextAdapter := testconfig.NewAdapter(builderCfg)
 			ctx = contextx.WithConfig(ctx, contextAdapter.Adapter)

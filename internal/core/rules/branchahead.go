@@ -156,8 +156,8 @@ func (r BranchAheadRule) withContextConfig(ctx context.Context) BranchAheadRule 
 	cfg := contextx.GetConfig(ctx)
 
 	// Extract configuration values
-	maxCommitsAhead := cfg.GetInt("repository.max_commits_ahead")
-	ref := cfg.GetString("repository.reference_branch")
+	maxCommitsAhead := cfg.GetInt("repo.max_commits_ahead")
+	ref := cfg.GetString("repo.branch")
 
 	// Log configuration at debug level
 	logger := contextx.GetLogger(ctx)

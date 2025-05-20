@@ -2,34 +2,38 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
+// Package config provides configuration handling for gommitlint.
 package config_test
 
 import (
+	"context"
 	"testing"
 
-	infra "github.com/itiquette/gommitlint/internal/adapters/outgoing/config"
-	commonConfig "github.com/itiquette/gommitlint/internal/common/config"
-	configTypes "github.com/itiquette/gommitlint/internal/config/types"
 	"github.com/stretchr/testify/require"
+
+	"github.com/itiquette/gommitlint/internal/adapters/outgoing/config"
+	configTypes "github.com/itiquette/gommitlint/internal/config/types"
 )
 
 func TestAdapter_InterfaceCompliance(t *testing.T) {
 	// Create a test config
 	cfg := configTypes.Config{
-		Subject: configTypes.SubjectConfig{
-			MaxLength: 72,
-		},
-		Body: configTypes.BodyConfig{
-			MinLength:        10,
-			AllowSignOffOnly: true,
+		Message: configTypes.MessageConfig{
+			Subject: configTypes.SubjectConfig{
+				MaxLength: 72,
+			},
+			Body: configTypes.BodyConfig{
+				MinLength:        10,
+				AllowSignoffOnly: true,
+			},
 		},
 		Rules: configTypes.RulesConfig{
 			Enabled:  []string{"subject.max_length", "body.required"},
 			Disabled: []string{"spell"},
 		},
-		Security: configTypes.SecurityConfig{
-			GPGRequired:      true,
-			MultipleSignoffs: false,
+		Signing: configTypes.SigningConfig{
+			RequireGPG:            true,
+			AllowMultipleSignoffs: false,
 		},
 		Jira: configTypes.JiraConfig{
 			Projects: []string{"PROJ1", "PROJ2"},
@@ -37,212 +41,142 @@ func TestAdapter_InterfaceCompliance(t *testing.T) {
 		Conventional: configTypes.ConventionalConfig{
 			Types: []string{"feat", "fix", "docs"},
 		},
-	}
-
-	// Create adapter
-	adapter := infra.NewAdapter(cfg)
-
-	// Ensure adapter implements all required interfaces
-	t.Run("Implements Config", func(t *testing.T) {
-		var _ commonConfig.Config = adapter
-
-		require.NotNil(t, adapter)
-	})
-}
-
-func TestAdapter_ConfigMethods(t *testing.T) {
-	// Create a test config
-	cfg := configTypes.Config{
-		Subject: configTypes.SubjectConfig{
-			MaxLength: 72,
-		},
-		Body: configTypes.BodyConfig{
-			MinLength:        10,
-			AllowSignOffOnly: true,
-		},
-		Jira: configTypes.JiraConfig{
-			Projects: []string{"PROJ1", "PROJ2"},
-		},
-		Rules: configTypes.RulesConfig{
-			Enabled:  []string{"SubjectLength"},
-			Disabled: []string{"spell"},
+		Repo: configTypes.RepoConfig{
+			Path: "/test/repo",
 		},
 	}
 
-	// Create adapter
-	adapter := infra.NewAdapter(cfg)
+	// Create the adapter
+	adapter := config.NewAdapter(cfg)
 
-	// Test Config interface methods
-	t.Run("Get", func(t *testing.T) {
-		// Test nested access
-		subjectMaxLength := adapter.Get("subject.max_length")
-		require.Equal(t, 72, subjectMaxLength)
+	// Test common config methods
+	require.Equal(t, 72, adapter.GetInt("message.subject.max_length"))
+	require.True(t, adapter.GetBool("message.body.allow_signoff_only"))
+	require.Equal(t, []string{"subject.max_length", "body.required"}, adapter.GetStringSlice("rules.enabled"))
 
-		// Test array access
-		jiraProject := adapter.Get("jira.projects.0")
-		require.Equal(t, "PROJ1", jiraProject)
-
-		// Test nil for non-existent keys
-		nonExistent := adapter.Get("non.existent.key")
-		require.Nil(t, nonExistent)
-	})
-
-	t.Run("GetString", func(t *testing.T) {
-		str := adapter.GetString("jira.projects.0")
-		require.Equal(t, "PROJ1", str)
-
-		// Non-existent key returns empty string
-		empty := adapter.GetString("non.existent")
-		require.Equal(t, "", empty)
-	})
-
-	t.Run("GetBool", func(t *testing.T) {
-		// Check a valid boolean field
-		allowSignOffOnly := adapter.GetBool("body.allow_sign_off_only")
-		require.True(t, allowSignOffOnly) // Set to true in test config
-
-		// Non-existent key returns false
-		nonExistent := adapter.GetBool("non.existent")
-		require.False(t, nonExistent)
-	})
-
-	t.Run("GetInt", func(t *testing.T) {
-		maxLength := adapter.GetInt("subject.max_length")
-		require.Equal(t, 72, maxLength)
-
-		// Non-existent key returns 0
-		nonExistent := adapter.GetInt("non.existent")
-		require.Equal(t, 0, nonExistent)
-	})
-
-	t.Run("GetStringSlice", func(t *testing.T) {
-		projects := adapter.GetStringSlice("jira.projects")
-		require.Equal(t, []string{"PROJ1", "PROJ2"}, projects)
-
-		// Non-existent key returns nil
-		nonExistent := adapter.GetStringSlice("non.existent")
-		require.Nil(t, nonExistent)
-	})
-
-	t.Run("Rule state methods", func(t *testing.T) {
-		// Test enabled rule
-		require.True(t, adapter.IsRuleEnabled("SubjectLength"))
-		require.False(t, adapter.IsRuleDisabled("SubjectLength"))
-
-		// Test disabled rule
-		require.False(t, adapter.IsRuleEnabled("spell"))
-		require.True(t, adapter.IsRuleDisabled("spell"))
-
-		// Test rule not in any list but is not default disabled (most rules are enabled by default)
-		require.True(t, adapter.IsRuleEnabled("ImperativeVerb"))
-		require.False(t, adapter.IsRuleDisabled("ImperativeVerb"))
-	})
+	// Test rule enabled/disabled methods
+	// Create a test context
+	ctx := context.Background()
+	require.True(t, adapter.IsRuleEnabled(ctx, "subject.max_length"))
+	require.False(t, adapter.IsRuleEnabled(ctx, "spell"))
+	require.True(t, adapter.IsRuleDisabled(ctx, "spell"))
 }
 
-func TestAdapter_ValidationConfigMethods(t *testing.T) {
+func TestAdapter_SpecificMethods(t *testing.T) {
 	// Create a test config
 	cfg := configTypes.Config{
-		Subject: configTypes.SubjectConfig{
-			MaxLength: 72,
-		},
-		Body: configTypes.BodyConfig{
-			MinLength:        10,
-			AllowSignOffOnly: true,
-		},
-		Security: configTypes.SecurityConfig{
-			GPGRequired: true,
+		Message: configTypes.MessageConfig{
+			Subject: configTypes.SubjectConfig{
+				MaxLength: 50,
+			},
+			Body: configTypes.BodyConfig{
+				MinLength:        20,
+				AllowSignoffOnly: false,
+			},
 		},
 		Jira: configTypes.JiraConfig{
-			Projects: []string{"PROJ1", "PROJ2"},
+			Pattern:  "JIRA-[0-9]+",
+			Projects: []string{"PROJ"},
 		},
 		Conventional: configTypes.ConventionalConfig{
 			Types: []string{"feat", "fix"},
 		},
-		Rules: configTypes.RulesConfig{
-			Enabled:  []string{"subject.max_length"},
-			Disabled: []string{"spell"},
-		},
 	}
 
-	// Create adapter
-	adapter := infra.NewAdapter(cfg)
+	// Create the adapter
+	adapter := config.NewAdapter(cfg)
 
-	// Test ValidationConfig interface methods
-	t.Run("ValidationConfig methods", func(t *testing.T) {
-		require.Equal(t, cfg.Rules.Enabled, adapter.EnabledRules())
-		require.Equal(t, cfg.Rules.Disabled, adapter.DisabledRules())
-		require.Equal(t, cfg.Subject.MaxLength, adapter.SubjectMaxLength())
-		require.Equal(t, cfg.Subject.Imperative, adapter.SubjectImperative())
-		require.Equal(t, cfg.Body.MinLength, adapter.BodyMinLength())
-		// Note: GPGRequired and SignOffRequired are part of SecurityConfig but not exposed in ValidationConfig interface
-		// They are accessed through the config.Get methods instead
-		require.Equal(t, cfg.Jira.Projects, adapter.JiraProjects())
-		require.Equal(t, cfg.Conventional.Types, adapter.ConventionalTypes())
-	})
+	// Test specific getters
+	require.Equal(t, 50, adapter.GetInt("message.subject.max_length"))
+	require.Equal(t, 20, adapter.GetInt("message.body.min_length"))
+	require.Equal(t, "JIRA-[0-9]+", adapter.GetString("jira.pattern"))
+	require.Equal(t, []string{"PROJ"}, adapter.GetStringSlice("jira.projects"))
+	require.Equal(t, []string{"feat", "fix"}, adapter.GetStringSlice("conventional.types"))
 }
 
-func TestAdapter_RulesConfigMethods(t *testing.T) {
-	// Create a test config
+func TestAdapter_NestedConfig(t *testing.T) {
+	// Create a complex nested config
 	cfg := configTypes.Config{
-		Body: configTypes.BodyConfig{
-			MinLength:        10,
-			AllowSignOffOnly: true,
+		Message: configTypes.MessageConfig{
+			Subject: configTypes.SubjectConfig{
+				MaxLength:         100,
+				RequireImperative: true,
+				Case:              "sentence",
+			},
+			Body: configTypes.BodyConfig{
+				MinLength: 50,
+				MinLines:  3,
+			},
 		},
-		Repository: configTypes.RepositoryConfig{
-			ReferenceBranch: "main",
-			MaxCommitsAhead: 15,
-		},
-		Rules: configTypes.RulesConfig{
-			Enabled:  []string{"body.min_length"},
-			Disabled: []string{"spell"},
-		},
-		SpellCheck: configTypes.SpellCheckConfig{
-			CustomDictionary: []string{"gommitlint", "golang"},
-		},
-		Subject: configTypes.SubjectConfig{
-			Case: "sentence",
+		Jira: configTypes.JiraConfig{
+			Pattern:  "([A-Z]+-[0-9]+)",
+			Projects: []string{"PROJ1", "PROJ2", "PROJ3"},
 		},
 	}
 
-	// Create adapter
-	adapter := infra.NewAdapter(cfg)
+	// Create the adapter
+	adapter := config.NewAdapter(cfg)
 
-	// Test RulesConfig interface methods
-	t.Run("RulesConfig methods", func(t *testing.T) {
-		require.Equal(t, cfg.Body.MinLength, adapter.BodyMinLength())
-		require.Equal(t, cfg.Repository.ReferenceBranch, adapter.ReferenceBranch())
-		require.Equal(t, cfg.Repository.MaxCommitsAhead, adapter.MaxCommitsAhead())
-		// SpellIgnoreWords is stored in SpellCheck.CustomDictionary
-		require.Equal(t, cfg.SpellCheck.CustomDictionary, adapter.SpellIgnoreWords())
-		require.Equal(t, cfg.Subject.Case, adapter.SubjectCase())
-	})
+	// Test nested access
+	require.Equal(t, 100, adapter.GetInt("message.subject.max_length"))
+	require.True(t, adapter.GetBool("message.subject.require_imperative"))
+	require.Equal(t, "sentence", adapter.GetString("message.subject.case"))
+	require.Equal(t, "([A-Z]+-[0-9]+)", adapter.GetString("jira.pattern"))
+	require.Len(t, adapter.GetStringSlice("jira.projects"), 3)
 }
 
-func TestAdapter_RuleConfigurationMethods(t *testing.T) {
-	// Create a test config with rules that have default disabled states
+func TestAdapter_EmptyValues(t *testing.T) {
+	// Create a config with empty values
+	cfg := configTypes.Config{}
+
+	// Create the adapter
+	adapter := config.NewAdapter(cfg)
+
+	// Test that empty values return defaults
+	require.Equal(t, 0, adapter.GetInt("message.subject.max_length"))
+	require.False(t, adapter.GetBool("message.body.allow_signoff_only"))
+	require.Equal(t, "", adapter.GetString("jira.pattern"))
+	require.Empty(t, adapter.GetStringSlice("conventional.types"))
+}
+
+func TestAdapter_InvalidPaths(t *testing.T) {
+	// Create a config
 	cfg := configTypes.Config{
-		Rules: configTypes.RulesConfig{
-			Enabled:  []string{"SubjectLength", "SignedIdentity"}, // Force enable SignedIdentity
-			Disabled: []string{"spell"},
+		Message: configTypes.MessageConfig{
+			Subject: configTypes.SubjectConfig{
+				MaxLength: 72,
+			},
 		},
 	}
 
-	// Create adapter
-	adapter := infra.NewAdapter(cfg)
+	// Create the adapter
+	adapter := config.NewAdapter(cfg)
 
-	// Test RuleConfiguration interface methods
-	t.Run("DefaultDisabledRules", func(t *testing.T) {
-		// SignedIdentity is normally default disabled
-		// but since it's in enabled_rules, it should be enabled
-		require.True(t, adapter.IsRuleEnabled("SignedIdentity"))
-		require.False(t, adapter.IsRuleDisabled("SignedIdentity"))
+	// Test invalid paths
+	require.Equal(t, 0, adapter.GetInt("invalid.path"))
+	require.False(t, adapter.GetBool("another.invalid.path"))
+	require.Equal(t, "", adapter.GetString("not.exists"))
+	require.Empty(t, adapter.GetStringSlice("invalid.array"))
+}
 
-		// spell is in disabled_rules, so it should be disabled
-		require.False(t, adapter.IsRuleEnabled("spell"))
-		require.True(t, adapter.IsRuleDisabled("spell"))
+func TestAdapter_DeepNestedPaths(t *testing.T) {
+	// Create a config with deep nesting
+	cfg := configTypes.Config{
+		Jira: configTypes.JiraConfig{
+			Projects: []string{"P1", "P2", "P3", "P4", "P5"},
+		},
+	}
 
-		// A rule that's not in any list and not default disabled should be enabled
-		require.True(t, adapter.IsRuleEnabled("SubjectLength"))
-		require.False(t, adapter.IsRuleDisabled("SubjectLength"))
-	})
+	// Create the adapter
+	adapter := config.NewAdapter(cfg)
+
+	// Test array access
+	projects := adapter.GetStringSlice("jira.projects")
+	require.Len(t, projects, 5)
+	require.Equal(t, "P1", projects[0])
+	require.Equal(t, "P5", projects[4])
+
+	// Test individual array element access
+	require.Equal(t, "P1", adapter.GetString("jira.projects.0"))
+	require.Equal(t, "P5", adapter.GetString("jira.projects.4"))
 }

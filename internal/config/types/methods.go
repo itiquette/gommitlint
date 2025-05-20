@@ -7,18 +7,10 @@ package types
 // Config transformation methods
 // =========================================================================
 
-// WithSubject returns a new Config with the updated subject configuration.
-func (c Config) WithSubject(subject SubjectConfig) Config {
+// WithMessage returns a new Config with the updated message configuration.
+func (c Config) WithMessage(message MessageConfig) Config {
 	result := c
-	result.Subject = subject
-
-	return result
-}
-
-// WithBody returns a new Config with the updated body configuration.
-func (c Config) WithBody(body BodyConfig) Config {
-	result := c
-	result.Body = body
+	result.Message = message
 
 	return result
 }
@@ -31,42 +23,18 @@ func (c Config) WithConventional(conventional ConventionalConfig) Config {
 	return result
 }
 
-// WithRules returns a new Config with the updated rules configuration.
-func (c Config) WithRules(rules RulesConfig) Config {
+// WithSigning returns a new Config with the updated signing configuration.
+func (c Config) WithSigning(signing SigningConfig) Config {
 	result := c
-	result.Rules = rules
+	result.Signing = signing
 
 	return result
 }
 
-// WithSecurity returns a new Config with the updated security configuration.
-func (c Config) WithSecurity(security SecurityConfig) Config {
+// WithRepo returns a new Config with the updated repository configuration.
+func (c Config) WithRepo(repo RepoConfig) Config {
 	result := c
-	result.Security = security
-
-	return result
-}
-
-// WithRepository returns a new Config with the updated repository configuration.
-func (c Config) WithRepository(repository RepositoryConfig) Config {
-	result := c
-	result.Repository = repository
-
-	return result
-}
-
-// WithOutput returns a new Config with the updated output configuration.
-func (c Config) WithOutput(output OutputConfig) Config {
-	result := c
-	result.Output = output
-
-	return result
-}
-
-// WithSpellCheck returns a new Config with the updated spellcheck configuration.
-func (c Config) WithSpellCheck(spellcheck SpellCheckConfig) Config {
-	result := c
-	result.SpellCheck = spellcheck
+	result.Repo = repo
 
 	return result
 }
@@ -75,6 +43,49 @@ func (c Config) WithSpellCheck(spellcheck SpellCheckConfig) Config {
 func (c Config) WithJira(jira JiraConfig) Config {
 	result := c
 	result.Jira = jira
+
+	return result
+}
+
+// WithSpell returns a new Config with the updated spell checking configuration.
+func (c Config) WithSpell(spell SpellConfig) Config {
+	result := c
+	result.Spell = spell
+
+	return result
+}
+
+// WithRules returns a new Config with the updated rules configuration.
+func (c Config) WithRules(rules RulesConfig) Config {
+	result := c
+	result.Rules = rules
+
+	return result
+}
+
+// WithOutput returns a new Config with the updated output format.
+func (c Config) WithOutput(output string) Config {
+	result := c
+	result.Output = output
+
+	return result
+}
+
+// MessageConfig transformation methods
+// =========================================================================
+
+// WithSubject returns a new MessageConfig with the updated subject configuration.
+func (c MessageConfig) WithSubject(subject SubjectConfig) MessageConfig {
+	result := c
+	result.Subject = subject
+
+	return result
+}
+
+// WithBody returns a new MessageConfig with the updated body configuration.
+func (c MessageConfig) WithBody(body BodyConfig) MessageConfig {
+	result := c
+	result.Body = body
 
 	return result
 }
@@ -98,19 +109,19 @@ func (c SubjectConfig) WithCase(caseStyle string) SubjectConfig {
 	return result
 }
 
-// WithImperative returns a new SubjectConfig with the updated imperative requirement.
-func (c SubjectConfig) WithImperative(required bool) SubjectConfig {
+// WithRequireImperative returns a new SubjectConfig with the updated imperative requirement.
+func (c SubjectConfig) WithRequireImperative(required bool) SubjectConfig {
 	result := c
-	result.Imperative = required
+	result.RequireImperative = required
 
 	return result
 }
 
-// WithDisallowedSuffixes returns a new SubjectConfig with the updated disallowed suffixes.
-func (c SubjectConfig) WithDisallowedSuffixes(suffixes []string) SubjectConfig {
+// WithForbidEndings returns a new SubjectConfig with the updated forbidden endings.
+func (c SubjectConfig) WithForbidEndings(endings []string) SubjectConfig {
 	result := c
-	result.DisallowedSuffixes = make([]string, len(suffixes))
-	copy(result.DisallowedSuffixes, suffixes)
+	result.ForbidEndings = make([]string, len(endings))
+	copy(result.ForbidEndings, endings)
 
 	return result
 }
@@ -134,18 +145,18 @@ func (c BodyConfig) WithMinLines(minLines int) BodyConfig {
 	return result
 }
 
-// WithAllowSignOffOnly returns a new BodyConfig with the updated sign-off only setting.
-func (c BodyConfig) WithAllowSignOffOnly(allow bool) BodyConfig {
+// WithAllowSignoffOnly returns a new BodyConfig with the updated sign-off only setting.
+func (c BodyConfig) WithAllowSignoffOnly(allow bool) BodyConfig {
 	result := c
-	result.AllowSignOffOnly = allow
+	result.AllowSignoffOnly = allow
 
 	return result
 }
 
-// WithRequireSignOff returns a new BodyConfig with the updated require sign-off setting.
-func (c BodyConfig) WithRequireSignOff(require bool) BodyConfig {
+// WithRequireSignoff returns a new BodyConfig with the updated require sign-off setting.
+func (c BodyConfig) WithRequireSignoff(require bool) BodyConfig {
 	result := c
-	result.RequireSignOff = require
+	result.RequireSignoff = require
 
 	return result
 }
@@ -179,10 +190,10 @@ func (c ConventionalConfig) WithScopes(scopes []string) ConventionalConfig {
 	return result
 }
 
-// WithAllowBreakingChanges returns a new ConventionalConfig with the updated breaking changes setting.
-func (c ConventionalConfig) WithAllowBreakingChanges(allow bool) ConventionalConfig {
+// WithAllowBreaking returns a new ConventionalConfig with the updated breaking changes setting.
+func (c ConventionalConfig) WithAllowBreaking(allow bool) ConventionalConfig {
 	result := c
-	result.AllowBreakingChanges = allow
+	result.AllowBreaking = allow
 
 	return result
 }
@@ -195,260 +206,75 @@ func (c ConventionalConfig) WithMaxDescriptionLength(maxLength int) Conventional
 	return result
 }
 
-// RulesConfig transformation methods
+// SigningConfig transformation methods
 // =========================================================================
 
-// WithEnabled returns a new RulesConfig with the updated enabled rules.
-func (c RulesConfig) WithEnabled(rules []string) RulesConfig {
+// WithRequireGPG returns a new SigningConfig with the updated GPG required flag.
+func (c SigningConfig) WithRequireGPG(required bool) SigningConfig {
 	result := c
-	result.Enabled = make([]string, len(rules))
-	copy(result.Enabled, rules)
+	result.RequireGPG = required
 
 	return result
 }
 
-// WithDisabled returns a new RulesConfig with the updated disabled rules.
-func (c RulesConfig) WithDisabled(rules []string) RulesConfig {
+// WithAllowMultipleSignoffs returns a new SigningConfig with the updated multiple sign-offs setting.
+func (c SigningConfig) WithAllowMultipleSignoffs(allow bool) SigningConfig {
 	result := c
-	result.Disabled = make([]string, len(rules))
-	copy(result.Disabled, rules)
+	result.AllowMultipleSignoffs = allow
 
 	return result
 }
 
-// Disabled returns the list of disabled rule names from the Config.
-func (c Config) Disabled() []string {
-	return c.Rules.Disabled
-}
-
-// WithDisabled returns a new Config with the updated disabled rules.
-// This is a convenience method that updates the Rules component of the Config.
-func (c Config) WithDisabled(rules []string) Config {
+// WithAllowedSigners returns a new SigningConfig with the updated allowed signers.
+func (c SigningConfig) WithAllowedSigners(signers []string) SigningConfig {
 	result := c
-	result.Rules = result.Rules.WithDisabled(rules)
+	result.AllowedSigners = make([]string, len(signers))
+	copy(result.AllowedSigners, signers)
 
 	return result
 }
 
-// EnableRule adds a rule to the enabled rules list and removes it from disabled rules if present.
-func (c RulesConfig) EnableRule(rule string) RulesConfig {
-	result := c
-
-	// Check if rule is in the enabled list
-	for _, r := range result.Enabled {
-		if r == rule {
-			return result // Already enabled
-		}
-	}
-
-	// Add to enabled rules
-	result.Enabled = append(result.Enabled, rule)
-
-	// Remove from disabled rules if present
-	var newDisabled []string
-
-	for _, r := range result.Disabled {
-		if r != rule {
-			newDisabled = append(newDisabled, r)
-		}
-	}
-
-	result.Disabled = newDisabled
-
-	return result
-}
-
-// DisableRule adds a rule to the disabled rules list and removes it from enabled rules if present.
-func (c RulesConfig) DisableRule(rule string) RulesConfig {
-	result := c
-
-	// Check if rule is in the disabled list
-	for _, r := range result.Disabled {
-		if r == rule {
-			return result // Already disabled
-		}
-	}
-
-	// Add to disabled rules
-	result.Disabled = append(result.Disabled, rule)
-
-	// Remove from enabled rules if present
-	var newEnabled []string
-
-	for _, r := range result.Enabled {
-		if r != rule {
-			newEnabled = append(newEnabled, r)
-		}
-	}
-
-	result.Enabled = newEnabled
-
-	return result
-}
-
-// SecurityConfig transformation methods
+// RepoConfig transformation methods
 // =========================================================================
 
-// WithGPGRequired returns a new SecurityConfig with the updated GPG required flag.
-func (c SecurityConfig) WithGPGRequired(required bool) SecurityConfig {
-	result := c
-	result.GPGRequired = required
-
-	return result
-}
-
-// WithKeyDirectory returns a new SecurityConfig with the updated key directory.
-func (c SecurityConfig) WithKeyDirectory(dir string) SecurityConfig {
-	result := c
-	result.KeyDirectory = dir
-
-	return result
-}
-
-// WithAllowedSignatureTypes returns a new SecurityConfig with the updated allowed signature types.
-func (c SecurityConfig) WithAllowedSignatureTypes(types []string) SecurityConfig {
-	result := c
-	result.AllowedSignatureTypes = make([]string, len(types))
-	copy(result.AllowedSignatureTypes, types)
-
-	return result
-}
-
-// WithAllowedKeyrings returns a new SecurityConfig with the updated allowed keyrings.
-func (c SecurityConfig) WithAllowedKeyrings(keyrings []string) SecurityConfig {
-	result := c
-	result.AllowedKeyrings = make([]string, len(keyrings))
-	copy(result.AllowedKeyrings, keyrings)
-
-	return result
-}
-
-// WithAllowedIdentities returns a new SecurityConfig with the updated allowed identities.
-func (c SecurityConfig) WithAllowedIdentities(identities []string) SecurityConfig {
-	result := c
-	result.AllowedIdentities = make([]string, len(identities))
-	copy(result.AllowedIdentities, identities)
-
-	return result
-}
-
-// WithMultipleSignoffs returns a new SecurityConfig with the updated multiple sign-offs setting.
-func (c SecurityConfig) WithMultipleSignoffs(allow bool) SecurityConfig {
-	result := c
-	result.MultipleSignoffs = allow
-
-	return result
-}
-
-// RepositoryConfig transformation methods
-// =========================================================================
-
-// WithPath returns a new RepositoryConfig with the updated path.
-func (c RepositoryConfig) WithPath(path string) RepositoryConfig {
+// WithPath returns a new RepoConfig with the updated path.
+func (c RepoConfig) WithPath(path string) RepoConfig {
 	result := c
 	result.Path = path
 
 	return result
 }
 
-// WithReferenceBranch returns a new RepositoryConfig with the updated reference branch.
-func (c RepositoryConfig) WithReferenceBranch(branch string) RepositoryConfig {
+// WithBranch returns a new RepoConfig with the updated branch.
+func (c RepoConfig) WithBranch(branch string) RepoConfig {
 	result := c
-	result.ReferenceBranch = branch
+	result.Branch = branch
 
 	return result
 }
 
-// WithMaxCommitsAhead returns a new RepositoryConfig with the updated max commits ahead.
-func (c RepositoryConfig) WithMaxCommitsAhead(maxCommits int) RepositoryConfig {
+// WithMaxCommitsAhead returns a new RepoConfig with the updated max commits ahead.
+func (c RepoConfig) WithMaxCommitsAhead(maxCommits int) RepoConfig {
 	result := c
 	result.MaxCommitsAhead = maxCommits
 
 	return result
 }
 
-// WithMaxHistoryDays returns a new RepositoryConfig with the updated max history days.
-func (c RepositoryConfig) WithMaxHistoryDays(days int) RepositoryConfig {
+// WithIgnoreMerges returns a new RepoConfig with the updated ignore merges setting.
+func (c RepoConfig) WithIgnoreMerges(ignore bool) RepoConfig {
 	result := c
-	result.MaxHistoryDays = days
+	result.IgnoreMerges = ignore
 
 	return result
 }
 
-// WithIgnoreMergeCommits returns a new RepositoryConfig with the updated ignore merge commits setting.
-func (c RepositoryConfig) WithIgnoreMergeCommits(ignore bool) RepositoryConfig {
-	result := c
-	result.IgnoreMergeCommits = ignore
-
-	return result
-}
-
-// OutputConfig transformation methods
-// =========================================================================
-
-// WithFormat returns a new OutputConfig with the updated format.
-func (c OutputConfig) WithFormat(format string) OutputConfig {
-	result := c
-	result.Format = format
-
-	return result
-}
-
-// WithVerbose returns a new OutputConfig with the updated verbose setting.
-func (c OutputConfig) WithVerbose(verbose bool) OutputConfig {
-	result := c
-	result.Verbose = verbose
-
-	return result
-}
-
-// WithQuiet returns a new OutputConfig with the updated quiet setting.
-func (c OutputConfig) WithQuiet(quiet bool) OutputConfig {
-	result := c
-	result.Quiet = quiet
-
-	return result
-}
-
-// WithColor returns a new OutputConfig with the updated color setting.
-func (c OutputConfig) WithColor(color bool) OutputConfig {
-	result := c
-	result.Color = color
-
-	return result
-}
-
-// SpellCheckConfig transformation methods
-// =========================================================================
-
-// WithLanguage returns a new SpellCheckConfig with the updated language.
-func (c SpellCheckConfig) WithLanguage(language string) SpellCheckConfig {
-	result := c
-	result.Language = language
-
-	return result
-}
-
-// WithIgnoreCase returns a new SpellCheckConfig with the updated ignore case setting.
-func (c SpellCheckConfig) WithIgnoreCase(ignore bool) SpellCheckConfig {
-	result := c
-	result.IgnoreCase = ignore
-
-	return result
-}
-
-// WithCustomDictionary returns a new SpellCheckConfig with the updated custom dictionary.
-func (c SpellCheckConfig) WithCustomDictionary(dictionary []string) SpellCheckConfig {
-	result := c
-	result.CustomDictionary = make([]string, len(dictionary))
-	copy(result.CustomDictionary, dictionary)
-
-	return result
-}
+// (Removed IntegrationsConfig methods - Jira and Spell configs are now directly accessible)
 
 // JiraConfig transformation methods
 // =========================================================================
 
+// WithPattern returns a new JiraConfig with the updated pattern.
 func (c JiraConfig) WithPattern(pattern string) JiraConfig {
 	result := c
 	result.Pattern = pattern
@@ -465,10 +291,124 @@ func (c JiraConfig) WithProjects(projects []string) JiraConfig {
 	return result
 }
 
-// WithBodyRef returns a new JiraConfig with the updated body reference setting.
-func (c JiraConfig) WithBodyRef(bodyRef bool) JiraConfig {
+// WithCheckBody returns a new JiraConfig with the updated check body setting.
+func (c JiraConfig) WithCheckBody(checkBody bool) JiraConfig {
 	result := c
-	result.BodyRef = bodyRef
+	result.CheckBody = checkBody
+
+	return result
+}
+
+// SpellConfig transformation methods
+// =========================================================================
+
+// WithLanguage returns a new SpellConfig with the updated language.
+func (c SpellConfig) WithLanguage(language string) SpellConfig {
+	result := c
+	result.Language = language
+
+	return result
+}
+
+// WithIgnoreWords returns a new SpellConfig with the updated ignore words.
+func (c SpellConfig) WithIgnoreWords(words []string) SpellConfig {
+	result := c
+	result.IgnoreWords = make([]string, len(words))
+	copy(result.IgnoreWords, words)
+
+	return result
+}
+
+// RulesConfig transformation methods
+// =========================================================================
+
+// WithEnable returns a new RulesConfig with the updated enabled rules.
+func (c RulesConfig) WithEnable(rules []string) RulesConfig {
+	result := c
+	result.Enabled = make([]string, len(rules))
+	copy(result.Enabled, rules)
+
+	return result
+}
+
+// WithDisable returns a new RulesConfig with the updated disabled rules.
+func (c RulesConfig) WithDisable(rules []string) RulesConfig {
+	result := c
+	result.Disabled = make([]string, len(rules))
+	copy(result.Disabled, rules)
+
+	return result
+}
+
+// EnableRule ads a rule to the enabled rules list and removes it from disabled rules if present.
+func (c RulesConfig) EnableRule(rule string) RulesConfig {
+	result := c
+
+	// Check if rule is in the enabled list
+	for _, r := range result.Enabled {
+		if r == rule {
+			return result // Already enabled
+		}
+	}
+
+	// Ad to enabled rules
+	result.Enabled = append(result.Enabled, rule)
+
+	// Remove from disabled rules if present
+	var newDisabled []string
+
+	for _, r := range result.Disabled {
+		if r != rule {
+			newDisabled = append(newDisabled, r)
+		}
+	}
+
+	result.Disabled = newDisabled
+
+	return result
+}
+
+// DisableRule ads a rule to the disabled rules list and removes it from enabled rules if present.
+func (c RulesConfig) DisableRule(rule string) RulesConfig {
+	result := c
+
+	// Check if rule is in the disabled list
+	for _, r := range result.Disabled {
+		if r == rule {
+			return result // Already disabled
+		}
+	}
+
+	// Ad to disabled rules
+	result.Disabled = append(result.Disabled, rule)
+
+	// Remove from enabled rules if present
+	var newEnabled []string
+
+	for _, r := range result.Enabled {
+		if r != rule {
+			newEnabled = append(newEnabled, r)
+		}
+	}
+
+	result.Enabled = newEnabled
+
+	return result
+}
+
+// Convenience methods for commonly accessed fields
+// =========================================================================
+
+// Disable returns the list of disabled rule names from the Config.
+func (c Config) Disable() []string {
+	return c.Rules.Disabled
+}
+
+// WithDisable returns a new Config with the updated disabled rules.
+// This is a convenience method that updates the Rules component of the Config.
+func (c Config) WithDisable(rules []string) Config {
+	result := c
+	result.Rules = result.Rules.WithDisable(rules)
 
 	return result
 }

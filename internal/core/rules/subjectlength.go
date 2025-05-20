@@ -48,7 +48,7 @@ func (r SubjectLengthRule) Validate(ctx context.Context, commit domain.CommitInf
 	}
 
 	// Get max length from configuration with default
-	maxLength := cfg.GetInt("subject.max_length")
+	maxLength := cfg.GetInt("message.subject.max_length")
 	if maxLength == 0 {
 		maxLength = 72 // Default max length
 	}

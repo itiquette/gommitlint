@@ -92,7 +92,7 @@ func (r SubjectCaseRule) Validate(ctx context.Context, commit domain.CommitInfo)
 	allowNonAlpha := true // Default to allow non-alpha
 
 	// Get configuration values directly
-	caseStyle := cfg.GetString("subject.case")
+	caseStyle := cfg.GetString("message.subject.case")
 	if caseStyle != "" {
 		caseChoice = caseStyle
 		logger.Debug("Using case style from config",
@@ -100,7 +100,7 @@ func (r SubjectCaseRule) Validate(ctx context.Context, commit domain.CommitInfo)
 	}
 
 	// Get imperative requirement
-	requireImperative := cfg.GetBool("subject.imperative")
+	requireImperative := cfg.GetBool("message.subject.imperative")
 	allowNonAlpha = requireImperative || allowNonAlpha
 	logger.Debug("Configured imperative requirement",
 		"require_imperative", requireImperative,

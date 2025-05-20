@@ -67,7 +67,7 @@ func (m *Manager) UpdateConfig(transform func(types.Config) types.Config) {
 // WithGitRepository sets the Git repository path in the configuration.
 func (m *Manager) WithGitRepository(path string) {
 	m.UpdateConfig(func(cfg types.Config) types.Config {
-		cfg.Repository.Path = path
+		cfg.Repo.Path = path
 
 		return cfg
 	})

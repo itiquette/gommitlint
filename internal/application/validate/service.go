@@ -114,7 +114,7 @@ func (s ValidationService) WithInfoProvider(infoProvider domain.RepositoryInfoPr
 
 // WithCustomRule returns a new ValidationService with the custom rule added to the engine.
 // Returns an error and the original service if the engine doesn't support custom rules.
-func (s ValidationService) WithCustomRule(rule domain.Rule) (ValidationService, error) {
+func (s ValidationService) WithCustomRule(ctx context.Context, rule domain.Rule) (ValidationService, error) {
 	// Create a copy to ensure immutability
 	serviceCopy := s
 
@@ -139,8 +139,8 @@ func (s ValidationService) WithCustomRule(rule domain.Rule) (ValidationService, 
 			return rule
 		}
 
-		// Register the factory
-		registry.Register(ruleName, factory)
+		// Register the factory with context
+		registry.RegisterWithContext(ctx, ruleName, factory)
 
 		// The same engine instance will use the updated registry
 		return serviceCopy, nil
@@ -399,8 +399,8 @@ func CreateValidationService(
 
 	// Apply configuration from context if available
 	if cfg != nil {
-		enabledRules := cfg.GetStringSlice("rules.enabled_rules")
-		disabledRules := cfg.GetStringSlice("rules.disabled_rules")
+		enabledRules := cfg.GetStringSlice("rules.enabled")
+		disabledRules := cfg.GetStringSlice("rules.disabled")
 
 		if len(enabledRules) > 0 {
 			service = service.WithEnabled(enabledRules)

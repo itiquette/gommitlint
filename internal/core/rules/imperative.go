@@ -275,7 +275,7 @@ func (r ImperativeVerbRule) withContextConfig(ctx context.Context) ImperativeVer
 	cfg := contextx.GetConfig(ctx)
 
 	// Extract configuration values
-	isImperativeRequired := cfg.GetBool("subject.require_imperative") // Default to true if not set
+	isImperativeRequired := cfg.GetBool("message.subject.imperative") // Default to true if not set
 
 	// Check if conventional rule is enabled
 	isConventionalEnabled := IsRuleEnabled(ctx, "Conventional")

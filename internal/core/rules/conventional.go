@@ -182,13 +182,13 @@ func (r ConventionalCommitRule) Validate(ctx context.Context, commit domain.Comm
 			config.Scopes = deepCopyStringSlice(scopes)
 		}
 
-		config.ScopeRequired = cfg.GetBool("conventional.scope_required")
+		config.ScopeRequired = cfg.GetBool("conventional.require_scope")
 
 		if maxDescLen := cfg.GetInt("conventional.max_description_length"); maxDescLen > 0 {
 			config.MaxDescLength = maxDescLen
-		} else if config.MaxDescLength == 0 && cfg.GetInt("subject.max_length") > 0 {
+		} else if config.MaxDescLength == 0 && cfg.GetInt("message.subject.max_length") > 0 {
 			// If maxDescLength is not set, use the subject max length from config
-			config.MaxDescLength = cfg.GetInt("subject.max_length")
+			config.MaxDescLength = cfg.GetInt("message.subject.max_length")
 		}
 	}
 

@@ -20,8 +20,8 @@ func IsRuleEnabled(ctx context.Context, ruleName string) bool {
 	}
 
 	// Get enabled and disabled rules from configuration
-	enabledRules := cfg.GetStringSlice("rules.enabled_rules")
-	disabledRules := cfg.GetStringSlice("rules.disabled_rules")
+	enabledRules := cfg.GetStringSlice("rules.enabled")
+	disabledRules := cfg.GetStringSlice("rules.disabled")
 
 	// Use the standard rule priority function
 	return configRules.RulePriority(ruleName, enabledRules, disabledRules, nil)

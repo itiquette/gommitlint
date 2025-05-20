@@ -148,11 +148,11 @@ func (r SignOffRule) withContextConfig(ctx context.Context) SignOffRule {
 
 	// Try to get security settings from config
 	if cfg != nil {
-		if cfg.GetBool("security.signoff_required") {
+		if cfg.GetBool("message.body.require_signoff") {
 			requireSignOff = true
 		}
 
-		if cfg.GetBool("security.multiple_signoffs") {
+		if cfg.GetBool("signing.allow_multiple_signoffs") {
 			acceptAltFormat = true
 		}
 	}

@@ -24,9 +24,9 @@ import (
 func createTestSubjectLengthContext(maxLength int) context.Context {
 	// Create a base config to adapt
 	cfg := config.NewDefaultConfig()
-	cfg.Subject.MaxLength = maxLength
-	cfg.Subject.Case = "sentence"
-	cfg.Subject.Imperative = true
+	cfg.Message.Subject.MaxLength = maxLength
+	cfg.Message.Subject.Case = "sentence"
+	cfg.Message.Subject.RequireImperative = true
 	cfg.Conventional.Types = []string{"feat", "fix", "docs", "style", "refactor", "test", "chore"}
 
 	// Add to context using direct adapter pattern

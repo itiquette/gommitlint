@@ -118,28 +118,30 @@ func NewDefaultConfig() types.Config {
 	}
 
 	config := types.Config{
-		Subject: types.SubjectConfig{
-			Case:               "sentence",
-			MaxLength:          72,
-			Imperative:         false,
-			DisallowedSuffixes: []string{"."},
-		},
-		Body: types.BodyConfig{
-			MinLength:        10,
-			MinLines:         3,
-			AllowSignOffOnly: false,
-			RequireSignOff:   false,
+		Message: types.MessageConfig{
+			Subject: types.SubjectConfig{
+				Case:              "sentence",
+				MaxLength:         72,
+				RequireImperative: false,
+				ForbidEndings:     []string{"."},
+			},
+			Body: types.BodyConfig{
+				MinLength:        10,
+				MinLines:         3,
+				AllowSignoffOnly: false,
+				RequireSignoff:   false,
+			},
 		},
 		Conventional: types.ConventionalConfig{
 			RequireScope:         false,
 			Types:                []string{"feat", "fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore", "revert"},
-			AllowBreakingChanges: true,
+			AllowBreaking:        true,
 			MaxDescriptionLength: 72,
 		},
 		Rules: types.RulesConfig{
 			Enabled: []string{
 				"SubjectLength",
-				"Body",
+				"CommitBody",
 				"Conventional",
 				"Imperative",
 				"SubjectCase",
@@ -147,22 +149,20 @@ func NewDefaultConfig() types.Config {
 			},
 			Disabled: disabledRules,
 		},
-		Security: types.SecurityConfig{
-			GPGRequired:      false,
-			MultipleSignoffs: false,
+		Signing: types.SigningConfig{
+			RequireGPG:            false,
+			AllowMultipleSignoffs: false,
 		},
-		Repository: types.RepositoryConfig{
-			Path:               ".",
-			MaxCommitsAhead:    10,
-			ReferenceBranch:    "main",
-			IgnoreMergeCommits: true,
+		Repo: types.RepoConfig{
+			Path:            ".",
+			MaxCommitsAhead: 10,
+			Branch:          "main",
+			IgnoreMerges:    true,
 		},
-		Output: types.OutputConfig{
-			Format: "text",
-		},
-		SpellCheck: types.SpellCheckConfig{
-			Language:         "en_US",
-			CustomDictionary: []string{},
+		Output: "text",
+		Spell: types.SpellConfig{
+			Language:    "en_US",
+			IgnoreWords: []string{},
 		},
 		Jira: types.JiraConfig{
 			Projects: []string{},

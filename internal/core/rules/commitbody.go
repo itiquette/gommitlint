@@ -70,7 +70,7 @@ func (r CommitBodyRule) Validate(ctx context.Context, commit domain.CommitInfo) 
 	}
 
 	// Check minimum body length
-	minLength := cfg.GetInt("body.min_length")
+	minLength := cfg.GetInt("message.body.min_length")
 	if minLength > 0 && len(strings.TrimSpace(commit.Body)) < minLength {
 		actualLength := len(strings.TrimSpace(commit.Body))
 		err := appErrors.NewBodyError(

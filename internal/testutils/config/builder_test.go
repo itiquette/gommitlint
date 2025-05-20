@@ -36,7 +36,7 @@ func TestBuilder_WithSubjectMaxLength(t *testing.T) {
 		WithSubjectMaxLength(100).
 		Build()
 
-	require.Equal(t, 100, cfg.Subject.MaxLength)
+	require.Equal(t, 100, cfg.Message.Subject.MaxLength)
 }
 
 // TestCompatibility_WithJira removed since compatibility layer was deleted

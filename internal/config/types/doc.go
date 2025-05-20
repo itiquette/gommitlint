@@ -17,13 +17,13 @@
 //   - BodyConfig: Commit body validation configuration
 //   - ConventionalConfig: Conventional commit format configuration
 //   - RulesConfig: Rule enable/disable configuration
-//   - SecurityConfig: Security and signature configuration
-//   - RepositoryConfig: Git repository configuration
-//   - OutputConfig: Output formatting configuration
-//   - SpellCheckConfig: Spell checking configuration
+//   - SigningConfig: Security and signature configuration
+//   - RepoConfig: Git repository configuration
+//   - IntegrationsConfig: Integrations with external systems
+//   - SpellConfig: Spell checking configuration
 //   - JiraConfig: JIRA reference validation configuration
 //
 // All types provide With* methods for functional transformations:
 //
-//	cfg := cfg.WithSubject(cfg.Subject.WithMaxLength(80))
+//	cfg := cfg.WithMessage(cfg.Message.WithSubject(cfg.Message.Subject.WithMaxLength(80)))
 package types

@@ -26,10 +26,8 @@ func NewRuleRegistry() *RuleRegistry {
 	}
 }
 
-// Register adds a rule to the registry.
-func (r *RuleRegistry) Register(name string, factory func(context.Context) Rule) {
-	r.RegisterWithContext(context.Background(), name, factory)
-}
+// RegisterWithContext must be used to add a rule to the registry
+// to ensure proper context propagation.
 
 // RegisterWithContext adds a rule to the registry with a context.
 func (r *RuleRegistry) RegisterWithContext(ctx context.Context, name string, factory func(context.Context) Rule) {
@@ -59,8 +57,8 @@ func (r *RuleRegistry) GetEnabledRules(ctx context.Context) []Rule {
 
 	// Get enabled/disabled from config
 	config := contextx.GetConfig(ctx)
-	enabledMap := makeRuleMap(config.GetStringSlice("rules.enabled_rules"))
-	disabledMap := makeRuleMap(config.GetStringSlice("rules.disabled_rules"))
+	enabledMap := makeRuleMap(config.GetStringSlice("rules.enabled"))
+	disabledMap := makeRuleMap(config.GetStringSlice("rules.disabled"))
 
 	// Create rules that are enabled
 	for name, factory := range r.factories {

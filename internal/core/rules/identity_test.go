@@ -1,149 +1,148 @@
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
+
+// Package rules provides validation rules for git commit messages.
 package rules_test
 
 import (
+	"context"
 	"testing"
 
-	infraConfig "github.com/itiquette/gommitlint/internal/adapters/outgoing/config"
+	"github.com/stretchr/testify/require"
+
+	"github.com/itiquette/gommitlint/internal/adapters/outgoing/config"
 	"github.com/itiquette/gommitlint/internal/common/contextx"
-	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/config/types"
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
+	appErrors "github.com/itiquette/gommitlint/internal/errors"
 	testcontext "github.com/itiquette/gommitlint/internal/testutils/context"
-	"github.com/stretchr/testify/require"
 )
 
-func TestIdentityRuleWithConfig(t *testing.T) {
-	t.Skip("Integration test that requires key directories")
-
+func TestIdentityRule_Validate(t *testing.T) {
 	tests := []struct {
-		name         string
-		configSetup  func() types.Config
-		commit       domain.CommitInfo
-		expectErrors bool
-		description  string
+		name           string
+		commit         domain.CommitInfo
+		configModifier func(types.Config) types.Config
+		expectedValid  bool
+		expectedCode   string
 	}{
 		{
-			name: "valid GPG signature with key directory",
-			configSetup: func() types.Config {
-				cfg := config.NewDefaultConfig()
-
+			name: "Valid commit with identity",
+			configModifier: func(cfg types.Config) types.Config {
+				// Value-based immutable transformation
 				result := cfg
-				result.Security = types.SecurityConfig{
-					KeyDirectory: "/tmp/gommitlint_test_keys",
+				result.Signing = types.SigningConfig{
+					AllowedSigners: []string{"John Doe <john@example.com>"},
 				}
+				// Enable the SignedIdentity rule for this test
+				result.Rules.Enabled = append(result.Rules.Enabled, "SignedIdentity")
 
 				return result
 			},
 			commit: domain.CommitInfo{
-				Subject:   "Add feature",
-				Body:      "Description",
-				Signature: "-----BEGIN PGP SIGNATURE-----\nVersion: GnuPG v2\n\nabc123\n-----END PGP SIGNATURE-----",
+				Subject:     "Add feature",
+				AuthorName:  "John Doe",
+				AuthorEmail: "john@example.com",
 			},
-			expectErrors: false,
-			description:  "Should pass with a valid GPG signature format",
+			expectedValid: true,
 		},
 		{
-			name: "missing signature with key directory",
-			configSetup: func() types.Config {
-				cfg := config.NewDefaultConfig()
-
+			name: "Invalid author identity",
+			configModifier: func(cfg types.Config) types.Config {
+				// Value-based immutable transformation
 				result := cfg
-				result.Security = types.SecurityConfig{
-					KeyDirectory: "/tmp/gommitlint_test_keys",
+				result.Signing = types.SigningConfig{
+					AllowedSigners: []string{"John Doe <john@example.com>"},
 				}
+				// Enable the SignedIdentity rule for this test
+				result.Rules.Enabled = append(result.Rules.Enabled, "SignedIdentity")
 
 				return result
 			},
 			commit: domain.CommitInfo{
-				Subject:   "Add feature",
-				Body:      "Description",
-				Signature: "",
+				Subject:     "Add feature",
+				AuthorName:  "Jane Doe",
+				AuthorEmail: "jane@example.com",
 			},
-			expectErrors: true,
-			description:  "Should fail when signature is missing",
+			expectedValid: false,
+			expectedCode:  string(appErrors.ErrInvalidSignature),
 		},
 		{
-			name: "GPG required but missing key directory",
-			configSetup: func() types.Config {
-				cfg := config.NewDefaultConfig()
-
+			name: "Multiple allowed identities",
+			configModifier: func(cfg types.Config) types.Config {
+				// Value-based immutable transformation
 				result := cfg
-				result.Security = types.SecurityConfig{
-					GPGRequired:  true,
-					KeyDirectory: "",
+				result.Signing = types.SigningConfig{
+					AllowedSigners: []string{
+						"John Doe <john@example.com>",
+						"Jane Doe <jane@example.com>",
+					},
 				}
+				// Enable the SignedIdentity rule for this test
+				result.Rules.Enabled = append(result.Rules.Enabled, "SignedIdentity")
 
 				return result
 			},
 			commit: domain.CommitInfo{
-				Subject:   "Add feature",
-				Body:      "Description",
-				Signature: "-----BEGIN PGP SIGNATURE-----\nVersion: GnuPG v2\n\nabc123\n-----END PGP SIGNATURE-----",
+				Subject:     "Add feature",
+				AuthorName:  "Jane Doe",
+				AuthorEmail: "jane@example.com",
 			},
-			expectErrors: true,
-			description:  "Should fail when key directory is missing",
-		},
-		{
-			name: "SSH signature with key directory",
-			configSetup: func() types.Config {
-				cfg := config.NewDefaultConfig()
-
-				result := cfg
-				result.Security = types.SecurityConfig{
-					KeyDirectory: "/tmp/gommitlint_test_keys",
-				}
-
-				return result
-			},
-			commit: domain.CommitInfo{
-				Subject:   "Add feature",
-				Body:      "Description",
-				Signature: "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAg\n-----END SSH SIGNATURE-----",
-			},
-			expectErrors: false,
-			description:  "Should pass with a valid SSH signature format",
+			expectedValid: true,
 		},
 	}
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			// Create config
-			cfg := testCase.configSetup()
-
-			// Add config to context using our adapter
+			// Create context with configuration
 			ctx := testcontext.CreateTestContext()
-			adapter := infraConfig.NewAdapter(cfg)
+
+			// Get default config and apply modifications
+			cfg := types.Config{}
+			if testCase.configModifier != nil {
+				cfg = testCase.configModifier(cfg)
+			}
+
+			adapter := config.NewAdapter(cfg)
 			ctx = contextx.WithConfig(ctx, adapter)
 
-			// Create rule using key directory from config
-			rule := rules.NewIdentityRule(
-				rules.WithKeyDirectory(cfg.Security.KeyDirectory),
-			)
+			// Create rule
+			rule := rules.NewIdentityRule()
 
 			// Execute validation
 			errors := rule.Validate(ctx, testCase.commit)
 
-			// Check results
-			if testCase.expectErrors {
-				require.NotEmpty(t, errors, "Expected validation errors but got none")
-			} else {
+			// Verify results
+			if testCase.expectedValid {
 				require.Empty(t, errors, "Expected no validation errors but got: %v", errors)
+			} else {
+				require.NotEmpty(t, errors, "Expected validation errors but got none")
+				require.Equal(t, testCase.expectedCode, errors[0].Code,
+					"Error code mismatch: wanted %s, got %s", testCase.expectedCode, errors[0].Code)
 			}
-
-			// Test name always works
-			require.Equal(t, "SignedIdentity", rule.Name())
 		})
 	}
 }
 
-func TestIdentityRule(t *testing.T) {
-	t.Skip("Integration test that requires a real git repository with keys")
+func TestIdentityRule_Name(t *testing.T) {
+	rule := rules.NewIdentityRule()
+	require.Equal(t, "SignedIdentity", rule.Name())
 }
 
-// The WithConfigSecurity helper function has been removed in favor of
-// direct value-based modifications for better value semantics following
-// the pattern: result := cfg; result.Security = newValue; return result
+func TestIdentityRule_EmptyConfig(t *testing.T) {
+	// Test with no allowed identities configured
+	ctx := context.Background()
+	rule := rules.NewIdentityRule()
+
+	commit := domain.CommitInfo{
+		Subject:     "Test commit",
+		AuthorName:  "Test",
+		AuthorEmail: "test@example.com",
+	}
+
+	// Should be valid when no identities are configured
+	errors := rule.Validate(ctx, commit)
+	require.Empty(t, errors, "Should not error when no identities are configured")
+}

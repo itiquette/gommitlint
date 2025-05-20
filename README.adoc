@@ -92,7 +92,7 @@ TODO
       max_description_length: 72 # Maximum length of description
 
     rules:
-      enabled_rules:             # Explicitly enabled rules
+      enabled:                   # Explicitly enabled rules
         - SubjectLength
         - SubjectCase
         - SubjectSuffix
@@ -103,7 +103,7 @@ TODO
         - Spell
         - JiraReference
         - CommitsAhead
-      disabled_rules:            # Explicitly disabled rules
+      disabled:                  # Explicitly disabled rules
         - CommitBody           # Disabled by default
 
     security:

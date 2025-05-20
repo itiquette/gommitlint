@@ -14,7 +14,7 @@ cfg := contextx.GetConfig(ctx)
 // Access configuration values using key-based access
 maxLength := cfg.GetInt("subject.max_length")
 isBodyRequired := cfg.GetBool("body.required")
-enabledRules := cfg.GetStringSlice("rules.enabled_rules")
+enabledRules := cfg.GetStringSlice("rules.enabled")
 ```
 
 The configuration is stored in the context early in the application lifecycle and should be accessed directly from there. This approach ensures:
@@ -49,20 +49,20 @@ Rules in gommitlint can have three states which follow a specific priority order
 
 2. **Priority System**:
    - An enabled rule always wins - it has higher priority than any disable setting
-   - A rule in `enabled_rules` will always be validated, regardless of other settings
-   - A rule is disabled if it's in the `disabled_rules` list, unless it's also in `enabled_rules`
-   - Most rules are enabled by default, regardless of the `enabled_rules` setting
-   - To deactivate a default-enabled rule, it must be added to the `disabled_rules` configuration
+   - A rule in `enabled` will always be validated, regardless of other settings
+   - A rule is disabled if it's in the `disabled` list, unless it's also in `enabled`
+   - Most rules are enabled by default, regardless of the `enabled` setting
+   - To deactivate a default-enabled rule, it must be added to the `disabled` configuration
 
 3. **Rule States Combinations**:
    - Default-enabled: Not in DefaultDisabledRules map, not in any configuration lists
    - Default-disabled: In DefaultDisabledRules map, not in any configuration lists
-   - Explicitly enabled: In enabled_rules list (overrides any other setting)
-   - Explicitly disabled: In disabled_rules list (unless also explicitly enabled)
+   - Explicitly enabled: In enabled list (overrides any other setting)
+   - Explicitly disabled: In disabled list (unless also explicitly enabled)
 
 4. **Validation Process**:
-   - First check if a rule is in enabled_rules - if yes, include it
-   - Then check if a rule is in disabled_rules - if yes, exclude it (unless it was explicitly enabled)
+   - First check if a rule is in enabled - if yes, include it
+   - Then check if a rule is in disabled - if yes, exclude it (unless it was explicitly enabled)
    - Finally check if a rule is in DefaultDisabledRules - if yes, exclude it (unless it was explicitly enabled)
    - If none of the above apply, include the rule (default behavior)
 

@@ -164,18 +164,19 @@ gommitlint:
 			shouldPass:    false, // Will still fail due to various validations
 			config: `
 gommitlint:
+  message:
+    body:
+      required: false
+      allow_signoff_only: true
+      require_sign_off: true
   conventional:
     required: true
     types:
       - custom
       - feat
       - fix
-  body:
-    required: false
-    allow_signoff_only: true
-  security:
-    signature_required: false
-    signoff_required: true
+  signing:
+    require_signature: false
   rules:
     enabled:
       - ConventionalCommit

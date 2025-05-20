@@ -138,7 +138,7 @@ func (r SignatureRule) withContextConfig(ctx context.Context) SignatureRule {
 	// Log configuration at debug level
 	logger := contextx.GetLogger(ctx)
 	logger.Debug("Signature rule configuration (final)",
-		"require_signature", result.requireSignature,
+		"require_gpg", result.requireSignature,
 		"allowed_sig_types", result.allowedSigTypes)
 
 	return result

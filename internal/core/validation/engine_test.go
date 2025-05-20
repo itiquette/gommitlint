@@ -146,11 +146,11 @@ func TestEngineValidateCommit(t *testing.T) {
 	registry.SetDefaultDisabled("DisabledByDefaultRule", true)
 
 	// Register the rules
-	registry.Register("PassingRule", passingRuleFactory)
-	registry.Register("FailingRule", failingRuleFactory)
-	registry.Register("DisabledRule", disabledRuleFactory)
-	registry.Register("CustomRule", customRuleFactory)
-	registry.Register("DisabledByDefaultRule", failingRuleFactory)
+	registry.RegisterWithContext(ctx, "PassingRule", passingRuleFactory)
+	registry.RegisterWithContext(ctx, "FailingRule", failingRuleFactory)
+	registry.RegisterWithContext(ctx, "DisabledRule", disabledRuleFactory)
+	registry.RegisterWithContext(ctx, "CustomRule", customRuleFactory)
+	registry.RegisterWithContext(ctx, "DisabledByDefaultRule", failingRuleFactory)
 
 	// Create the engine using RegistryEngine
 	engine := &RegistryEngine{
@@ -258,8 +258,8 @@ func TestEngineValidateCommits(t *testing.T) {
 	registry := domain.NewRuleRegistry()
 
 	// Register the rules
-	registry.Register("PassingRule", passingRuleFactory)
-	registry.Register("FailingRule", failingRuleFactory)
+	registry.RegisterWithContext(ctx, "PassingRule", passingRuleFactory)
+	registry.RegisterWithContext(ctx, "FailingRule", failingRuleFactory)
 
 	// Create the engine using RegistryEngine
 	engine := &RegistryEngine{
@@ -367,7 +367,7 @@ func TestEngineWithSpecificConfiguration(t *testing.T) {
 				factory := func(_ context.Context) domain.Rule {
 					return rule
 				}
-				registry.Register(ruleName, factory)
+				registry.RegisterWithContext(ctx, ruleName, factory)
 			}
 
 			// Set default disabled rules

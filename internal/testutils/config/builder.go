@@ -27,74 +27,85 @@ func NewBuilder() Builder {
 	}
 }
 
+// WithMessage sets the message configuration.
+func (b Builder) WithMessage(message types.MessageConfig) Builder {
+	b.config.Message = message
+
+	return b
+}
+
 // WithSubject sets the subject configuration.
 func (b Builder) WithSubject(subject types.SubjectConfig) Builder {
-	b.config.Subject = subject
+	b.config.Message.Subject = subject
 
 	return b
 }
 
 // WithSubjectMaxLength sets just the subject max length.
 func (b Builder) WithSubjectMaxLength(maxLength int) Builder {
-	b.config.Subject.MaxLength = maxLength
+	b.config.Message.Subject.MaxLength = maxLength
 
 	return b
 }
 
 // WithSubjectCase sets just the subject case style.
 func (b Builder) WithSubjectCase(caseStyle string) Builder {
-	b.config.Subject.Case = caseStyle
+	b.config.Message.Subject.Case = caseStyle
 
 	return b
 }
 
 // WithSubjectImperative sets just the subject imperative requirement.
 func (b Builder) WithSubjectImperative(required bool) Builder {
-	b.config.Subject.Imperative = required
+	b.config.Message.Subject.RequireImperative = required
 
 	return b
 }
 
-// WithSubjectSuffixes sets just the subject disallowed suffixes.
-// NOTE: This sets "subject.invalid_suffixes" in the configuration
-// to be compatible with the SubjectSuffixRule implementation.
-func (b Builder) WithSubjectSuffixes(suffixes []string) Builder {
-	b.config.Subject.DisallowedSuffixes = suffixes
+// WithSubjectForbidEndings sets the forbidden subject endings.
+func (b Builder) WithSubjectForbidEndings(endings []string) Builder {
+	b.config.Message.Subject.ForbidEndings = endings
 
 	return b
+}
+
+// WithSubjectSuffixes is a compatibility alias for WithSubjectForbidEndings.
+// This maintains backward compatibility with existing tests.
+func (b Builder) WithSubjectSuffixes(suffixes []string) Builder {
+	return b.WithSubjectForbidEndings(suffixes)
 }
 
 // WithBody sets the body configuration.
 func (b Builder) WithBody(body types.BodyConfig) Builder {
-	b.config.Body = body
+	b.config.Message.Body = body
 
 	return b
 }
 
 // WithBodyMinLength sets just the body minimum length.
 func (b Builder) WithBodyMinLength(minLength int) Builder {
-	b.config.Body.MinLength = minLength
+	b.config.Message.Body.MinLength = minLength
 
 	return b
 }
 
 // WithBodyMinLines sets just the body minimum lines.
 func (b Builder) WithBodyMinLines(minLines int) Builder {
-	b.config.Body.MinLines = minLines
+	b.config.Message.Body.MinLines = minLines
 
 	return b
 }
 
 // WithBodySignOffOnly sets just the body sign-off only flag.
 func (b Builder) WithBodySignOffOnly(allow bool) Builder {
-	b.config.Body.AllowSignOffOnly = allow
+	b.config.Message.Body.AllowSignoffOnly = allow
 
 	return b
 }
 
 // WithBodyRequireSignOff sets just the body sign-off requirement.
 func (b Builder) WithBodyRequireSignOff(required bool) Builder {
-	b.config.Body.RequireSignOff = required
+	b.config.Message.Body.RequireSignoff = required
 
 	return b
 }
@@ -141,21 +152,21 @@ func (b Builder) WithRules(rules types.RulesConfig) Builder {
 	return b
 }
 
-// WithEnabled sets just the enabled rules.
-func (b Builder) WithEnabled(rules []string) Builder {
+// WithEnable sets just the enabled rules.
+func (b Builder) WithEnable(rules []string) Builder {
 	b.config.Rules.Enabled = rules
 
 	return b
 }
 
-// WithDisabled sets just the disabled rules.
-func (b Builder) WithDisabled(rules []string) Builder {
+// WithDisable sets just the disabled rules.
+func (b Builder) WithDisable(rules []string) Builder {
 	b.config.Rules.Disabled = rules
 
 	return b
 }
 
-// EnableRule adds a rule to the enabled rules list.
+// EnableRule ads a rule to the enabled rules list.
 func (b Builder) EnableRule(rule string) Builder {
 	// Check if already enabled
 	for _, r := range b.config.Rules.Enabled {
@@ -164,7 +175,7 @@ func (b Builder) EnableRule(rule string) Builder {
 		}
 	}
 
-	// Add to enabled rules
+	// Ad to enabled rules
 	b.config.Rules.Enabled = append(b.config.Rules.Enabled, rule)
 
 	// Remove from disabled rules if present
@@ -181,7 +192,7 @@ func (b Builder) EnableRule(rule string) Builder {
 	return b
 }
 
-// DisableRule adds a rule to the disabled rules list.
+// DisableRule ads a rule to the disabled rules list.
 func (b Builder) DisableRule(rule string) Builder {
 	// Check if already disabled
 	for _, r := range b.config.Rules.Disabled {
@@ -190,7 +201,7 @@ func (b Builder) DisableRule(rule string) Builder {
 		}
 	}
 
-	// Add to disabled rules
+	// Ad to disabled rules
 	b.config.Rules.Disabled = append(b.config.Rules.Disabled, rule)
 
 	// Remove from enabled rules if present
@@ -228,54 +239,76 @@ func (b Builder) WithJiraProjects(projects []string) Builder {
 	return b
 }
 
-// WithJiraBodyRef sets just the JIRA body reference flag.
-func (b Builder) WithJiraBodyRef(bodyRef bool) Builder {
-	b.config.Jira.BodyRef = bodyRef
+// WithJiraCheckBody sets just the JIRA body reference flag.
+func (b Builder) WithJiraCheckBody(checkBody bool) Builder {
+	b.config.Jira.CheckBody = checkBody
 
 	return b
 }
 
-// WithSecurity sets the security configuration.
-func (b Builder) WithSecurity(security types.SecurityConfig) Builder {
-	b.config.Security = security
+// WithJiraBodyRef is a compatibility alias for WithJiraCheckBody.
+// This maintains backward compatibility with existing tests.
+func (b Builder) WithJiraBodyRef(checkBody bool) Builder {
+	return b.WithJiraCheckBody(checkBody)
+}
+
+// WithSigning sets the signing configuration.
+func (b Builder) WithSigning(signing types.SigningConfig) Builder {
+	b.config.Signing = signing
 
 	return b
 }
 
 // WithSignOffRequired sets just the sign-off requirement.
 func (b Builder) WithSignOffRequired(required bool) Builder {
-	b.config.Body.RequireSignOff = required
+	b.config.Message.Body.RequireSignoff = required
 
 	return b
 }
 
-// WithGPGRequired sets just the GPG requirement.
-func (b Builder) WithGPGRequired(required bool) Builder {
-	b.config.Security.GPGRequired = required
+// WithRequireGPG sets just the GPG requirement.
+func (b Builder) WithRequireGPG(required bool) Builder {
+	b.config.Signing.RequireGPG = required
 
 	return b
 }
 
-// WithOutput sets the output configuration.
-func (b Builder) WithOutput(output types.OutputConfig) Builder {
-	b.config.Output = output
+// WithRepo sets the repository configuration.
+func (b Builder) WithRepo(repo types.RepoConfig) Builder {
+	b.config.Repo = repo
 
 	return b
 }
 
-// WithOutputFormat sets just the output format.
-func (b Builder) WithOutputFormat(format string) Builder {
-	b.config.Output.Format = format
+// WithRepoPath sets just the repository path.
+func (b Builder) WithRepoPath(path string) Builder {
+	b.config.Repo.Path = path
 
 	return b
 }
 
-// WithSpellCheck sets the spell check configuration.
-func (b Builder) WithSpellCheck(spellcheck types.SpellCheckConfig) Builder {
-	b.config.SpellCheck = spellcheck
+// WithRepoBranch sets just the repository branch.
+func (b Builder) WithRepoBranch(branch string) Builder {
+	b.config.Repo.Branch = branch
 
 	return b
 }
+
+// WithOutput sets the output format.
+func (b Builder) WithOutput(format string) Builder {
+	b.config.Output = format
+
+	return b
+}
+
+// WithSpell sets the spell check configuration.
+func (b Builder) WithSpell(spell types.SpellConfig) Builder {
+	b.config.Spell = spell
+
+	return b
+}
+
+// With backward compatibility methods
 
 // WithJiraConfig returns a new Builder with the updated JIRA configuration (alias for WithJira).
 func (b Builder) WithJiraConfig(jira types.JiraConfig) Builder {
@@ -297,19 +330,19 @@ func (b Builder) WithConventionalConfig(conventional types.ConventionalConfig) B
 	return b.WithConventional(conventional)
 }
 
-// WithSecurityConfig returns a new Builder with the updated security configuration (alias for WithSecurity).
-func (b Builder) WithSecurityConfig(security types.SecurityConfig) Builder {
-	return b.WithSecurity(security)
+// WithSecurityConfig returns a new Builder with the updated signing configuration.
+func (b Builder) WithSecurityConfig(signing types.SigningConfig) Builder {
+	return b.WithSigning(signing)
 }
 
-// WithOutputConfig returns a new Builder with the updated output configuration (alias for WithOutput).
-func (b Builder) WithOutputConfig(output types.OutputConfig) Builder {
-	return b.WithOutput(output)
+// WithOutputConfig sets the output format (flattened).
+func (b Builder) WithOutputConfig(format string) Builder {
+	return b.WithOutput(format)
 }
 
-// WithSpellCheckConfig returns a new Builder with the updated spell check configuration (alias for WithSpellCheck).
-func (b Builder) WithSpellCheckConfig(spellcheck types.SpellCheckConfig) Builder {
-	return b.WithSpellCheck(spellcheck)
+// WithSpellCheckConfig returns a new Builder with the updated spell check configuration (alias for WithSpell).
+func (b Builder) WithSpellCheckConfig(spell types.SpellConfig) Builder {
+	return b.WithSpell(spell)
 }
 
 // WithRulesConfig returns a new Builder with the updated rules configuration (alias for WithRules).

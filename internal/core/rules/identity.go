@@ -38,7 +38,7 @@ func WithKeyDirectory(dir string) IdentityOption {
 func NewIdentityRule(options ...IdentityOption) IdentityRule {
 	// Create a rule with default values
 	rule := IdentityRule{
-		name:   "Identity",
+		name:   "SignedIdentity",
 		keyDir: "", // Default to no key directory
 	}
 
@@ -54,6 +54,48 @@ func NewIdentityRule(options ...IdentityOption) IdentityRule {
 func (r IdentityRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
 	logger := contextx.GetLogger(ctx)
 	logger.Debug("Validating signed identity using context configuration", "rule", r.Name(), "commit_hash", commit.Hash)
+
+	// Get configuration from context
+	cfg := contextx.GetConfig(ctx)
+	if cfg == nil {
+		return nil
+	}
+
+	// Check if this rule is enabled
+	if !IsRuleEnabled(ctx, r.Name()) {
+		logger.Debug("Identity rule is disabled, skipping validation")
+
+		return nil
+	}
+
+	// Get allowed signers from configuration
+	allowedSigners := cfg.GetStringSlice("signing.allowed_signers")
+	if len(allowedSigners) > 0 {
+		// Validate author identity against allowed signers
+		authorIdentity := commit.AuthorName + " <" + commit.AuthorEmail + ">"
+		isAllowed := false
+
+		for _, allowed := range allowedSigners {
+			if allowed == authorIdentity || extractEmail(allowed) == commit.AuthorEmail {
+				isAllowed = true
+
+				break
+			}
+		}
+
+		if !isAllowed {
+			return []appErrors.ValidationError{
+				appErrors.NewIdentityError(
+					appErrors.ErrInvalidSignature,
+					r.Name(),
+					"author identity not in allowed signers list",
+					"Add the author to the allowed signers list or use an authorized identity",
+				).WithContextMap(map[string]string{
+					"author": authorIdentity,
+				}),
+			}
+		}
+	}
 
 	// Create a new rule with context configuration
 	rule := r.withContextConfig(ctx)

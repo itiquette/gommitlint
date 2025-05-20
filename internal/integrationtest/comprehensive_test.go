@@ -33,19 +33,17 @@ func TestSimpleValidation(t *testing.T) {
 	configPath := filepath.Join(tempDir, ".gommitlint.yaml")
 	configContent := `
 gommitlint:
-  validation:
-    enabled: true
-  subject:
-    max_length: 50
+  message:
+    subject:
+      max_length: 50
+    body:
+      required: false
   conventional:
-    enabled: true
     required: true
     types:
       - feat
       - fix
       - docs
-  body:
-    required: false
   rules:
     enabled:
       - SubjectLength
@@ -76,7 +74,7 @@ gommitlint:
 	cfg := configService.GetConfig()
 
 	// Update subject config
-	cfg.Subject.MaxLength = 50
+	cfg.Message.Subject.MaxLength = 50
 
 	// Update conventional config
 	cfg.Conventional.Types = []string{"feat", "fix", "docs"}

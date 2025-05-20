@@ -60,7 +60,7 @@ func (r *Root) createFactories(ctx context.Context) {
 // initializeAdapters initializes all adapters.
 func (r *Root) initializeAdapters(ctx context.Context) error {
 	// Initialize Git repository
-	repoPath := r.config.Repository.Path
+	repoPath := r.config.Repo.Path
 	if repoPath == "" {
 		repoPath = "."
 	}

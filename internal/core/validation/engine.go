@@ -77,13 +77,13 @@ func (e *RegistryEngine) ValidateCommit(ctx context.Context, commit domain.Commi
 
 	// Get enabled/disabled rules directly from context configuration
 	cfg := contextx.GetConfig(ctx)
-	enabledRules := cfg.GetStringSlice("rules.enabled_rules")
-	disabledRules := cfg.GetStringSlice("rules.disabled_rules")
+	enabledRules := cfg.GetStringSlice("rules.enabled")
+	disabledRules := cfg.GetStringSlice("rules.disabled")
 
 	// Log configuration values
 	logger.Debug("Rule configuration from context",
-		"enabled_rules", enabledRules,
-		"disabled_rules", disabledRules)
+		"enabled", enabledRules,
+		"disabled", disabledRules)
 
 	// Create active rules using the registry
 	activeRules := e.registry.CreateActiveRules(ctx, enabledRules, disabledRules)
@@ -157,8 +157,8 @@ func (e *RegistryEngine) ValidateCommits(ctx context.Context, commits []domain.C
 
 	// Get config from context
 	cfg := contextx.GetConfig(ctx)
-	enabledRules := cfg.GetStringSlice("rules.enabled_rules")
-	disabledRules := cfg.GetStringSlice("rules.disabled_rules")
+	enabledRules := cfg.GetStringSlice("rules.enabled")
+	disabledRules := cfg.GetStringSlice("rules.disabled")
 
 	// Create active rules once to avoid repeated rule creation
 	activeRules := e.registry.CreateActiveRules(ctx, enabledRules, disabledRules)

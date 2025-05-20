@@ -22,8 +22,8 @@ func TestService_Creation(t *testing.T) {
 	// Verify default config is loaded
 	cfg := service.GetConfig()
 	require.NotNil(t, cfg)
-	require.Equal(t, "sentence", cfg.Subject.Case)
-	require.Equal(t, 72, cfg.Subject.MaxLength)
+	require.Equal(t, "sentence", cfg.Message.Subject.Case)
+	require.Equal(t, 72, cfg.Message.Subject.MaxLength)
 }
 
 func TestService_UpdateConfig(t *testing.T) {
@@ -33,15 +33,15 @@ func TestService_UpdateConfig(t *testing.T) {
 
 	// Update config
 	newService := service.UpdateConfig(func(cfg types.Config) types.Config {
-		cfg.Subject.MaxLength = 100
+		cfg.Message.Subject.MaxLength = 100
 
 		return cfg
 	})
 
 	// Verify the update
-	require.Equal(t, 100, newService.GetConfig().Subject.MaxLength)
+	require.Equal(t, 100, newService.GetConfig().Message.Subject.MaxLength)
 	// Verify immutability
-	require.Equal(t, 72, service.GetConfig().Subject.MaxLength)
+	require.Equal(t, 72, service.GetConfig().Message.Subject.MaxLength)
 }
 
 func TestService_GetAdapter(t *testing.T) {
@@ -54,5 +54,5 @@ func TestService_GetAdapter(t *testing.T) {
 	require.NotNil(t, adapter)
 
 	// Test adapter methods
-	require.Equal(t, 72, adapter.GetInt("subject.max_length"))
+	require.Equal(t, 72, adapter.GetInt("message.subject.max_length"))
 }

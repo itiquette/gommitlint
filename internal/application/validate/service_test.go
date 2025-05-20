@@ -700,7 +700,8 @@ func TestValueSemantics(t *testing.T) {
 		)
 
 		// Add a custom rule
-		serviceCopy, err := service.WithCustomRule(customRule)
+		ctx := testcontext.CreateTestContext() // Create a test context
+		serviceCopy, err := service.WithCustomRule(ctx, customRule)
 		require.NoError(t, err)
 
 		// Verify the custom rule is correctly added to the engine in the copy

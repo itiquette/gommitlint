@@ -209,7 +209,7 @@ func (r JiraReferenceRule) withContextConfig(ctx context.Context) JiraReferenceR
 	cfg := contextx.GetConfig(ctx)
 
 	// Extract configuration values
-	validateBodyRef := cfg.GetBool("jira.body_ref")
+	validateBodyRef := cfg.GetBool("jira.check_body")
 	validProjects := cfg.GetStringSlice("jira.projects")
 	pattern := cfg.GetString("jira.pattern")
 

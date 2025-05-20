@@ -95,8 +95,8 @@ func (s *RulePriorityService) IsRuleEnabled(
 	logger := contextx.GetLogger(ctx)
 	logger.Debug("Entering RulePriorityService.IsRuleEnabled",
 		"rule", ruleName,
-		"enabled_rules", enabledRules,
-		"disabled_rules", disabledRules)
+		"enabled", enabledRules,
+		"disabled", disabledRules)
 
 	cleanRuleName := s.CleanRuleName(ruleName)
 
@@ -104,7 +104,7 @@ func (s *RulePriorityService) IsRuleEnabled(
 	enabledMap := s.MakeRuleMap(enabledRules)
 	disabledMap := s.MakeRuleMap(disabledRules)
 
-	// Core rule priority logic: disabled_rules take precedence over enabled_rules,
+	// Core rule priority logic: disabled take precedence over enabled,
 	// ensuring users can disable any rule regardless of default settings
 
 	// Apply priority filtering logic with disabled_rules having highest priority
@@ -153,12 +153,12 @@ func (s *RulePriorityService) FilterRules(
 	logger := contextx.GetLogger(ctx)
 	logger.Debug("Entering RulePriorityService.FilterRules",
 		"rule_count", len(rules),
-		"enabled_rules", enabledRules,
-		"disabled_rules", disabledRules)
+		"enabled", enabledRules,
+		"disabled", disabledRules)
 
 	logger.Debug("Filtering rules with configuration",
-		"enabled_rules", enabledRules,
-		"disabled_rules", disabledRules)
+		"enabled", enabledRules,
+		"disabled", disabledRules)
 
 	// Filter the rules based on configuration
 	filtered := make([]Rule, 0, len(rules))
@@ -189,12 +189,12 @@ func (s *RulePriorityService) FilterRuleResults(
 	logger := contextx.GetLogger(ctx)
 	logger.Debug("Entering RulePriorityService.FilterRuleResults",
 		"result_count", len(results),
-		"enabled_rules", enabledRules,
-		"disabled_rules", disabledRules)
+		"enabled", enabledRules,
+		"disabled", disabledRules)
 
 	logger.Debug("Filtering rule results with configuration",
-		"enabled_rules", enabledRules,
-		"disabled_rules", disabledRules)
+		"enabled", enabledRules,
+		"disabled", disabledRules)
 
 	// Filter the rule results
 	filtered := make([]RuleResult, 0, len(results))

@@ -68,7 +68,7 @@ func (r SubjectSuffixRule) Validate(ctx context.Context, commit domain.CommitInf
 
 	// Get config object directly from standard context key
 	cfg := contextx.GetConfig(ctx)
-	disallowedSuffixes := cfg.GetStringSlice("subject.disallowed_suffixes")
+	disallowedSuffixes := cfg.GetStringSlice("message.subject.forbid_endings")
 
 	// Process disallowed suffixes if we have them
 	if len(disallowedSuffixes) > 0 {
