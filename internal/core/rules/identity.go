@@ -1,24 +1,27 @@
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
+
 package rules
 
 import (
 	"context"
-	"strings"
+	"fmt"
 
+	"github.com/itiquette/gommitlint/internal/adapters/outgoing/crypto"
 	"github.com/itiquette/gommitlint/internal/common/contextx"
-	"github.com/itiquette/gommitlint/internal/core/rules/sigverify"
 	"github.com/itiquette/gommitlint/internal/domain"
+	domainCrypto "github.com/itiquette/gommitlint/internal/domain/crypto"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
 
 // IdentityRule validates that commit signatures match the committer identity.
+// Uses the crypto domain for identity and signature handling.
 type IdentityRule struct {
-	name           string
-	keyDir         string
-	verifiedBy     string
-	signerIdentity string
+	name       string
+	keyDir     string
+	verifier   *crypto.VerificationAdapter
+	repository crypto.KeyRepository
 }
 
 // IdentityOption configures an IdentityRule.
@@ -30,16 +33,28 @@ func WithKeyDirectory(dir string) IdentityOption {
 		result := r
 		result.keyDir = dir
 
+		// Update repository if needed
+		if result.repository != nil {
+			result.repository = crypto.NewFileSystemKeyRepository(dir)
+			result.verifier = crypto.NewVerificationAdapter(result.repository)
+		}
+
 		return result
 	}
 }
 
 // NewIdentityRule creates a new rule for validating signature identity.
 func NewIdentityRule(options ...IdentityOption) IdentityRule {
+	// Create default repository and verifier
+	repository := crypto.NewFileSystemKeyRepository("") // Empty directory as default
+	verifier := crypto.NewVerificationAdapter(repository)
+
 	// Create a rule with default values
 	rule := IdentityRule{
-		name:   "SignedIdentity",
-		keyDir: "", // Default to no key directory
+		name:       "SignedIdentity",
+		keyDir:     "", // Default to no key directory
+		repository: repository,
+		verifier:   verifier,
 	}
 
 	// Apply all options
@@ -71,12 +86,20 @@ func (r IdentityRule) Validate(ctx context.Context, commit domain.CommitInfo) []
 	// Get allowed signers from configuration
 	allowedSigners := cfg.GetStringSlice("signing.allowed_signers")
 	if len(allowedSigners) > 0 {
-		// Validate author identity against allowed signers
-		authorIdentity := commit.AuthorName + " <" + commit.AuthorEmail + ">"
+		// Create author identity
+		authorIdentity := domainCrypto.NewIdentity(commit.AuthorName, commit.AuthorEmail)
+
+		// Convert allowed signers config to Identity objects
+		var allowedIdentities []domainCrypto.Identity
+		for _, allowed := range allowedSigners {
+			allowedIdentities = append(allowedIdentities, domainCrypto.NewIdentityFromString(allowed))
+		}
+
+		// Check if author is in allowed signers
 		isAllowed := false
 
-		for _, allowed := range allowedSigners {
-			if allowed == authorIdentity || extractEmail(allowed) == commit.AuthorEmail {
+		for _, allowed := range allowedIdentities {
+			if authorIdentity.Matches(allowed) {
 				isAllowed = true
 
 				break
@@ -91,17 +114,14 @@ func (r IdentityRule) Validate(ctx context.Context, commit domain.CommitInfo) []
 					"author identity not in allowed signers list",
 					"Add the author to the allowed signers list or use an authorized identity",
 				).WithContextMap(map[string]string{
-					"author": authorIdentity,
+					"author": authorIdentity.String(),
 				}),
 			}
 		}
 	}
 
-	// Create a new rule with context configuration
-	rule := r.withContextConfig(ctx)
-
-	// Skip validation if key directory is empty or verification is disabled
-	if rule.keyDir == "" {
+	// Skip validation if key directory is empty
+	if r.keyDir == "" && r.repository.GetKeyDirectory() == "" {
 		return nil
 	}
 
@@ -117,185 +137,56 @@ func (r IdentityRule) Validate(ctx context.Context, commit domain.CommitInfo) []
 		}
 	}
 
-	// Determine signature type and parse
-	if strings.Contains(commit.Signature, "BEGIN PGP SIGNATURE") {
-		// GPG signature verification logic
-		r.verifiedBy = "gpg"
-
-		// For signature verification, we would normally have the commit data
-		// but in this mock implementation we'll use a placeholder
-		commitData := []byte("mock commit data")
-
-		// Verify the signature and get signer identity
-		signerIdentity, err := sigverify.VerifyGPGSignature(commitData, commit.Signature, rule.keyDir)
-		if err != nil {
-			return []appErrors.ValidationError{
-				appErrors.NewIdentityError(
-					appErrors.ErrVerificationFailed,
-					"Identity",
-					"GPG signature verification failed",
-					"Ensure your GPG key is valid and properly configured",
-				).WithContextMap(map[string]string{
-					"error": err.Error(),
-				}),
-			}
-		}
-
-		r.signerIdentity = signerIdentity
-
-		// Compare with author identity
-		if !isIdentityMatch(signerIdentity, commit.AuthorEmail) {
-			return []appErrors.ValidationError{
-				appErrors.NewIdentityError(
-					appErrors.ErrInvalidSignature,
-					"Identity",
-					"signature identity mismatch",
-					"Commit author must match signature identity",
-				).WithContextMap(map[string]string{
-					"signer": signerIdentity,
-					"author": commit.AuthorEmail,
-				}),
-			}
-		}
-	} else if strings.Contains(commit.Signature, "BEGIN SSH SIGNATURE") {
-		// SSH signature verification logic
-		r.verifiedBy = "ssh"
-
-		// For signature verification, we would normally have the commit data and parse the signature
-		// but in this mock implementation we'll use placeholders
-		commitData := []byte("mock commit data")
-		format := "ssh-rsa"
-		blob := []byte("mock signature blob")
-
-		// Verify the signature and get signer identity
-		signerIdentity, err := sigverify.VerifySSHSignature(commitData, format, blob, rule.keyDir)
-		if err != nil {
-			return []appErrors.ValidationError{
-				appErrors.NewIdentityError(
-					appErrors.ErrVerificationFailed,
-					"Identity",
-					"SSH signature verification failed",
-					"Ensure your SSH key is valid and properly configured",
-				).WithContextMap(map[string]string{
-					"error": err.Error(),
-				}),
-			}
-		}
-
-		r.signerIdentity = signerIdentity
-
-		// Compare with author identity
-		if !isIdentityMatch(signerIdentity, commit.AuthorEmail) {
-			return []appErrors.ValidationError{
-				appErrors.NewIdentityError(
-					appErrors.ErrInvalidSignature,
-					"Identity",
-					"signature identity mismatch",
-					"Commit author must match signature identity",
-				).WithContextMap(map[string]string{
-					"signer": signerIdentity,
-					"author": commit.AuthorEmail,
-				}),
-			}
-		}
-	} else {
-		// Unknown signature format
+	// Verify signature using our adapter
+	result, err := r.verifier.VerifyCommit(ctx, commit)
+	if err != nil {
 		return []appErrors.ValidationError{
 			appErrors.NewIdentityError(
-				appErrors.ErrUnknownSigFormat,
+				appErrors.ErrVerificationFailed,
 				"Identity",
-				"unrecognized signature format",
-				"Use GPG or SSH keys for commit signing",
+				fmt.Sprintf("failed to verify signature: %s", err),
+				"Check signature format and key availability",
 			),
+		}
+	}
+
+	// Check verification result
+	if !result.IsVerified() {
+		return []appErrors.ValidationError{
+			appErrors.NewIdentityError(
+				appErrors.ErrVerificationFailed,
+				"Identity",
+				result.ErrorMessage(),
+				"Ensure your signing key is valid and properly configured",
+			).WithContextMap(map[string]string{
+				"error_code": result.ErrorCode(),
+			}),
+		}
+	}
+
+	// Get the verified identity
+	signerIdentity := result.Identity()
+
+	// Compare with author identity
+	authorIdentity := domainCrypto.NewIdentity(commit.AuthorName, commit.AuthorEmail)
+	if !signerIdentity.Matches(authorIdentity) {
+		return []appErrors.ValidationError{
+			appErrors.NewIdentityError(
+				appErrors.ErrInvalidSignature,
+				"Identity",
+				"signature identity mismatch",
+				"Commit author must match signature identity",
+			).WithContextMap(map[string]string{
+				"signer": signerIdentity.String(),
+				"author": authorIdentity.String(),
+			}),
 		}
 	}
 
 	return nil
 }
 
-// withContextConfig creates a new rule with configuration from context.
-func (r IdentityRule) withContextConfig(ctx context.Context) IdentityRule {
-	// We're skipping config from context for now as our adapter doesn't have security settings
-	// Default values (would come from config in the full implementation)
-	keyDir := ""
-	allowedIdentities := []string{}
-	gpgRequired := false
-
-	// Log configuration at debug level
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("Identity rule configuration from context",
-		"key_dir", keyDir,
-		"allowed_identities", allowedIdentities,
-		"gpg_required", gpgRequired)
-
-	// Create a copy of the rule
-	result := r
-
-	// If GPG is not required, skip the verification
-	if !gpgRequired {
-		// Log that we're skipping verification
-		logger.Debug("GPG verification not required, skipping signature identity validation")
-		// We'll return a dummy rule that won't validate anything
-		// This ensures validateSignedIdentityWithState won't run verification
-		return result
-	}
-
-	// Update with context configuration
-	if keyDir != "" {
-		result.keyDir = keyDir
-	}
-
-	return result
-}
-
 // Name returns the rule name.
 func (r IdentityRule) Name() string {
 	return r.name
-}
-
-// SetIdentityInfo sets identity information on the rule and returns an updated rule.
-func (r IdentityRule) SetIdentityInfo(identity, sigType string) IdentityRule {
-	result := r
-
-	if identity != "" {
-		result.signerIdentity = identity
-	}
-
-	if sigType != "" {
-		result.verifiedBy = sigType
-	}
-
-	return result
-}
-
-// isIdentityMatch checks if the signature identity matches the author identity.
-func isIdentityMatch(signerIdentity, authorIdentity string) bool {
-	// Simple exact match
-	if signerIdentity == authorIdentity {
-		return true
-	}
-
-	// Normalize and check email only
-	signerEmail := extractEmail(signerIdentity)
-	authorEmail := extractEmail(authorIdentity)
-
-	return signerEmail != "" && signerEmail == authorEmail
-}
-
-// extractEmail attempts to extract an email from a string.
-func extractEmail(input string) string {
-	// Simple logic: look for string between < and >
-	start := strings.LastIndex(input, "<")
-	end := strings.LastIndex(input, ">")
-
-	if start != -1 && end != -1 && start < end {
-		return input[start+1 : end]
-	}
-
-	// If not found, check if the whole string is an email (has @)
-	if strings.Contains(input, "@") {
-		return input
-	}
-
-	return ""
 }

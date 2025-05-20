@@ -2,14 +2,10 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package rules provides validation rules for git commit messages.
 package rules_test
 
 import (
-	"context"
 	"testing"
-
-	"github.com/stretchr/testify/require"
 
 	"github.com/itiquette/gommitlint/internal/adapters/outgoing/config"
 	"github.com/itiquette/gommitlint/internal/common/contextx"
@@ -18,9 +14,10 @@ import (
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 	testcontext "github.com/itiquette/gommitlint/internal/testutils/context"
+	"github.com/stretchr/testify/require"
 )
 
-func TestIdentityRule_Validate(t *testing.T) {
+func TestIdentityRule_Identity(t *testing.T) {
 	tests := []struct {
 		name           string
 		commit         domain.CommitInfo
@@ -133,7 +130,7 @@ func TestIdentityRule_Name(t *testing.T) {
 
 func TestIdentityRule_EmptyConfig(t *testing.T) {
 	// Test with no allowed identities configured
-	ctx := context.Background()
+	ctx := testcontext.CreateTestContext()
 	rule := rules.NewIdentityRule()
 
 	commit := domain.CommitInfo{

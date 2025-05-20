@@ -131,8 +131,13 @@ Rules in gommitlint can have three states which follow a specific priority order
 
 ### Project Understanding
 
-- Always check for and read ARCHITECTURE.md in the project or docs/ directory first
+- Always read docs/ARCHITECTURE.md on startup to understand the project structure and principles
 - Reference project documentation when discussing implementation
+- Never perform git commit, add, or push operations unless explicitly requested by the user
+- Apply deep thinking to all changes, focus on the specific task at hand
+- Don't overengineer solutions - keep them simple, clear, and aligned with the project's architecture
+- Ensure all contributions are coherent, concise, and follow functional programming principles where possible
+- Strive for readability and maintainability in all code changes
 
 ### Debugging Help
 

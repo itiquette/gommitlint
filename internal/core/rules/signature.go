@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
+
 package rules
 
 import (
@@ -10,10 +11,12 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/common/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain/crypto"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
 
 // SignatureRule validates that commits have cryptographic signatures.
+// Uses the crypto domain for signature handling.
 type SignatureRule struct {
 	name               string
 	requireSignature   bool
@@ -67,8 +70,7 @@ func NewSignatureRule(options ...SignatureOption) SignatureRule {
 	return rule
 }
 
-// Validate checks for the presence and format of cryptographic signatures
-// using configuration from context, but options provided to the rule constructor take precedence.
+// Validate checks for the presence and format of cryptographic signatures.
 func (r SignatureRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
 	logger := contextx.GetLogger(ctx)
 	logger.Debug("Validating signature using context configuration", "rule", r.Name(), "commit_hash", commit.Hash)
@@ -81,8 +83,11 @@ func (r SignatureRule) Validate(ctx context.Context, commit domain.CommitInfo) [
 		return nil
 	}
 
+	// Create a signature object from the commit
+	signature := crypto.NewSignature(commit.Signature)
+
 	// Check if signature exists
-	if commit.Signature == "" {
+	if signature.IsEmpty() {
 		return []appErrors.ValidationError{
 			appErrors.NewSignatureError(
 				appErrors.ErrMissingSignature,
@@ -93,8 +98,8 @@ func (r SignatureRule) Validate(ctx context.Context, commit domain.CommitInfo) [
 		}
 	}
 
-	// Determine signature type
-	sigType := determineSignatureType(commit.Signature)
+	// Get signature type as string for comparison
+	sigType := string(signature.Type())
 	r.foundSignatureType = sigType
 
 	// Validate signature type if allowed types are specified
@@ -127,13 +132,13 @@ func (r SignatureRule) Validate(ctx context.Context, commit domain.CommitInfo) [
 	return nil
 }
 
-// Note: Rule constructor options take precedence over context configuration.
+// withContextConfig creates a new rule with configuration from context.
 func (r SignatureRule) withContextConfig(ctx context.Context) SignatureRule {
 	// Create a copy of the rule
 	result := r
 
-	// We're skipping config from context because our adapter doesn't have security settings
-	// Just keeping defaults from constructor
+	// In a real implementation, this would read config from context
+	// Just keeping defaults from constructor for now
 
 	// Log configuration at debug level
 	logger := contextx.GetLogger(ctx)
@@ -147,22 +152,4 @@ func (r SignatureRule) withContextConfig(ctx context.Context) SignatureRule {
 // Name returns the rule name.
 func (r SignatureRule) Name() string {
 	return r.name
-}
-
-// determineSignatureType determines the type of signature from its content.
-func determineSignatureType(signature string) string {
-	signature = strings.TrimSpace(signature)
-
-	// Check for GPG signature
-	if strings.HasPrefix(signature, "-----BEGIN PGP SIGNATURE-----") {
-		return "gpg"
-	}
-
-	// Check for SSH signature
-	if strings.Contains(signature, "-----BEGIN SSH SIGNATURE-----") {
-		return "ssh"
-	}
-
-	// Unknown signature type
-	return "unknown"
 }

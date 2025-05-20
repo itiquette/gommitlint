@@ -55,6 +55,7 @@ type SigningConfig struct {
 	RequireGPG            bool     `json:"require_gpg"             yaml:"require_gpg"`
 	AllowMultipleSignoffs bool     `json:"allow_multiple_signoffs" yaml:"allow_multiple_signoffs"`
 	AllowedSigners        []string `json:"allowed_signers"         yaml:"allowed_signers"`
+	KeyDirectory          string   `json:"key_directory"           yaml:"key_directory"`
 }
 
 // RepoConfig contains configuration options related to the Git repository.

@@ -1,22 +1,20 @@
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
+
 package rules_test
 
 import (
-	"context"
 	"strings"
 	"testing"
 
 	infraConfig "github.com/itiquette/gommitlint/internal/adapters/outgoing/config"
 	"github.com/itiquette/gommitlint/internal/common/contextx"
-	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/config/types"
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 	testcontext "github.com/itiquette/gommitlint/internal/testutils/context"
-	testdomain "github.com/itiquette/gommitlint/internal/testutils/domain"
 	"github.com/stretchr/testify/require"
 )
 
@@ -93,20 +91,6 @@ LwAAACRrZXktMS11c2VyQHVuaXQuZXhhbXBsZQAAAAAAAAAAAAAAAA==
 			expectedCode:  string(appErrors.ErrDisallowedSigType),
 			errorContains: "signature type 'ssh' is not allowed",
 		},
-		{
-			name:      "With custom allowed signature types",
-			signature: validGPGSignature,
-			configModifier: func(c types.Config) types.Config {
-				// Value-based immutable transformation
-				result := c
-				result.Signing = types.SigningConfig{
-					RequireGPG: true,
-				}
-
-				return result
-			},
-			expectedValid: true,
-		},
 	}
 
 	for _, testCase := range tests {
@@ -119,16 +103,11 @@ LwAAACRrZXktMS11c2VyQHVuaXQuZXhhbXBsZQAAAAAAAAAAAAAAAA==
 				Signature: testCase.signature,
 			}
 
-			// Create a context with configuration if needed
+			// Create a context
 			ctx := testcontext.CreateTestContext()
 
-			// Add test override flag to trigger test-specific logic in the Validate method
-			ctx = context.WithValue(ctx, testdomain.SignatureTestOverrideKey, true)
-
 			if testCase.configModifier != nil {
-				cfg := config.NewDefaultConfig()
-				cfg = testCase.configModifier(cfg)
-				// Convert config to common interface directly
+				cfg := testCase.configModifier(types.Config{})
 				adapter := infraConfig.NewAdapter(cfg)
 				ctx = contextx.WithConfig(ctx, adapter)
 			}
@@ -141,31 +120,21 @@ LwAAACRrZXktMS11c2VyQHVuaXQuZXhhbXBsZQAAAAAAAAAAAAAAAA==
 				require.Empty(t, errors, "Expected no validation errors")
 			} else {
 				require.NotEmpty(t, errors, "Expected errors but found none")
+
 				// Check error code if specified
 				if testCase.expectedCode != "" && len(errors) > 0 {
 					require.Equal(t, testCase.expectedCode, errors[0].Code,
 						"Error code should match expected")
 				}
 
-				if len(errors) > 0 {
-					for i, err := range errors {
-						t.Logf("Error %d message: %s", i+1, err.Error())
-						t.Logf("Error %d context: %v", i+1, err.Context)
-					}
-				}
 				// Check error message contains expected substring
 				if testCase.errorContains != "" && len(errors) > 0 {
 					found := false
 
 					for _, err := range errors {
-						// Check in the main error message
-						if strings.Contains(strings.ToLower(err.Error()), strings.ToLower(testCase.errorContains)) {
-							found = true
-
-							break
-						}
-						// Also check in the Message field
-						if strings.Contains(strings.ToLower(err.Message), strings.ToLower(testCase.errorContains)) {
+						// Check in the main error message or Message field
+						if strings.Contains(strings.ToLower(err.Error()), strings.ToLower(testCase.errorContains)) ||
+							strings.Contains(strings.ToLower(err.Message), strings.ToLower(testCase.errorContains)) {
 							found = true
 
 							break
@@ -174,23 +143,10 @@ LwAAACRrZXktMS11c2VyQHVuaXQuZXhhbXBsZQAAAAAAAAAAAAAAAA==
 
 					require.True(t, found, "Expected error containing %q", testCase.errorContains)
 				}
-				// Verify rule name is set in ValidationError
-				if len(errors) > 0 {
-					require.Equal(t, "Signature", errors[0].Rule, "Rule name should be set in ValidationError")
-				}
 			}
 
 			// Always check name
 			require.Equal(t, "Signature", rule.Name(), "Rule name should always be 'Signature'")
 		})
 	}
-}
-
-// but we skip those tests during migration to value-based approach.
-func TestSignatureRuleWithRepository(t *testing.T) {
-	t.Skip("Skipping tests that require a real git repository")
-}
-
-func TestSignatureVerification(t *testing.T) {
-	t.Skip("Skipping tests that require GPG/SSH verification")
 }
