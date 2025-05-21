@@ -89,14 +89,19 @@ func TestSubjectLengthRule(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			// Create a rule without options
-			rule := rules.NewSubjectLengthRule()
+			// Create a rule without options, then apply context configuration
+			baseRule := rules.NewSubjectLengthRule()
 
 			// Create context with configuration
 			ctx := createTestSubjectLengthContext(testCase.maxLength)
+
+			// Apply context configuration
+			configuredRule, ok := baseRule.WithContext(ctx).(rules.SubjectLengthRule)
+			require.True(t, ok, "Expected WithContext to return a SubjectLengthRule")
+
 			commit := domain.CommitInfo{Subject: testCase.subject}
 
-			errors := rule.Validate(ctx, commit)
+			errors := configuredRule.Validate(ctx, commit)
 
 			if testCase.expectError {
 				require.NotEmpty(t, errors, "Expected validation error")
@@ -134,23 +139,6 @@ func TestSubjectLengthRule(t *testing.T) {
 	}
 }
 
-func TestSubjectLengthRuleVerbosity(t *testing.T) {
-	// Create a rule
-	rule := rules.NewSubjectLengthRule()
-
-	// Create a rule with verbosity
-	verboseRule := rule.WithVerbosity("verbose")
-	require.Equal(t, "SubjectLength", verboseRule.Name(), "Rule name should be unchanged")
-
-	// Test with a long subject
-	subject := strings.Repeat("a", 80)
-	ctx := createTestSubjectLengthContext(50)
-	commit := domain.CommitInfo{Subject: subject}
-
-	errors := verboseRule.Validate(ctx, commit)
-	require.NotEmpty(t, errors, "Should have validation errors")
-}
-
 func TestSubjectLengthRuleName(t *testing.T) {
 	rule := rules.NewSubjectLengthRule()
 	require.Equal(t, "SubjectLength", rule.Name())
@@ -177,13 +165,18 @@ func TestSubjectLengthRuleWithoutContext(t *testing.T) {
 
 // Test that UTF-8 characters are counted correctly (by bytes, not runes).
 func TestSubjectLengthRuleUTF8(t *testing.T) {
-	rule := rules.NewSubjectLengthRule()
+	baseRule := rules.NewSubjectLengthRule()
 
 	// Create a subject with multi-byte UTF-8 characters
 	// Each emoji is typically 4 bytes
 	subject := "Test " + strings.Repeat("🎉", 20) // 5 + 20*4 = 85 bytes
 
 	ctx := createTestSubjectLengthContext(72)
+
+	// Apply context configuration
+	rule, ok := baseRule.WithContext(ctx).(rules.SubjectLengthRule)
+	require.True(t, ok, "Expected WithContext to return a SubjectLengthRule")
+
 	commit := domain.CommitInfo{Subject: subject}
 
 	errors := rule.Validate(ctx, commit)

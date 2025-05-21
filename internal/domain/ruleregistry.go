@@ -16,6 +16,7 @@ import (
 type RuleRegistry struct {
 	factories       map[string]func(context.Context) Rule
 	defaultDisabled map[string]bool
+	rules           map[string]Rule // Stores pre-created rules for efficient filtering
 }
 
 // NewRuleRegistry creates a new rule registry.
@@ -23,17 +24,32 @@ func NewRuleRegistry() *RuleRegistry {
 	return &RuleRegistry{
 		factories:       make(map[string]func(context.Context) Rule),
 		defaultDisabled: GetDefaultDisabledRules(),
+		rules:           make(map[string]Rule),
 	}
 }
 
 // RegisterWithContext must be used to add a rule to the registry
 // to ensure proper context propagation.
 
-// RegisterWithContext adds a rule to the registry with a context.
-func (r *RuleRegistry) RegisterWithContext(ctx context.Context, name string, factory func(context.Context) Rule) {
+// RegisterWithContext adds a rule factory to the registry with a context.
+func (r *RuleRegistry) RegisterWithContext(_ context.Context, name string, factory func(context.Context) Rule) {
 	r.factories[name] = factory
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("Registered rule", "rule", name)
+}
+
+// InitializeRules creates all rules at once with the provided context.
+// This should be called once after all rule factories are registered,
+// before any validation is performed.
+func (r *RuleRegistry) InitializeRules(ctx context.Context) {
+	// Clear any existing rules
+	r.rules = make(map[string]Rule, len(r.factories))
+
+	// Create all rules
+	for name, factory := range r.factories {
+		rule := factory(ctx)
+		if rule != nil {
+			r.rules[name] = rule
+		}
+	}
 }
 
 // Create instantiates a rule by name.
@@ -74,17 +90,17 @@ func (r *RuleRegistry) GetEnabledRules(ctx context.Context) []Rule {
 
 // shouldEnableRule determines if a rule should be enabled.
 func (r *RuleRegistry) shouldEnableRule(name string, enabled, disabled map[string]bool) bool {
-	// Explicitly disabled takes precedence
-	if disabled[name] {
-		return false
-	}
-
-	// Explicitly enabled
+	// Explicitly enabled has highest priority
 	if enabled[name] {
 		return true
 	}
 
-	// Check default disabled list
+	// Explicitly disabled has middle priority
+	if disabled[name] {
+		return false
+	}
+
+	// Default state has lowest priority
 	return !r.defaultDisabled[name]
 }
 
@@ -102,9 +118,6 @@ func makeRuleMap(rules []string) map[string]bool {
 func (r *RuleRegistry) CreateRule(ctx context.Context, name string) Rule {
 	factory, exists := r.factories[name]
 	if !exists {
-		logger := contextx.GetLogger(ctx)
-		logger.Warn("Rule factory not found", "rule", name)
-
 		return nil
 	}
 
@@ -145,8 +158,14 @@ func (r *RuleRegistry) CreateAllRules(ctx context.Context) []Rule {
 	return rules
 }
 
-// CreateActiveRules creates a list of active rules based on configuration.
-func (r *RuleRegistry) CreateActiveRules(ctx context.Context, enabledRules, disabledRules []string) []Rule {
+// GetActiveRules returns a list of active rules based on configuration.
+// This uses pre-created rules for better performance and consistency.
+func (r *RuleRegistry) GetActiveRules(enabledRules, disabledRules []string) []Rule {
+	// If rules haven't been initialized, return an empty slice
+	if len(r.rules) == 0 {
+		return []Rule{}
+	}
+
 	names := r.GetRuleNames()
 	active := make([]Rule, 0, len(names))
 
@@ -155,8 +174,7 @@ func (r *RuleRegistry) CreateActiveRules(ctx context.Context, enabledRules, disa
 
 	for _, name := range names {
 		if r.shouldEnableRule(name, enabledMap, disabledMap) {
-			rule := r.CreateRule(ctx, name)
-			if rule != nil {
+			if rule, exists := r.rules[name]; exists && rule != nil {
 				active = append(active, rule)
 			}
 		}

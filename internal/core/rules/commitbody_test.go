@@ -182,8 +182,11 @@ X`,
 				Body:    body,
 			}
 
-			// Create rule
-			rule := rules.NewCommitBodyRule()
+			// Create and configure rule with context
+			baseRule := rules.NewCommitBodyRule()
+			rule, ok := baseRule.WithContext(ctx).(rules.CommitBodyRule)
+			require.True(t, ok, "Expected WithContext to return a CommitBodyRule")
+
 			errors := rule.Validate(ctx, commit)
 
 			// Check result

@@ -89,9 +89,6 @@ func (g Generator) GenerateReport(ctx context.Context, results domain.Validation
 	// Use the injected formatter with context
 	report := g.formatter.Format(ctx, results)
 
-	// Log the result size at debug level
-	logger.Debug().Int("report_length", len(report)).Msg("Generated formatted report")
-
 	// Use a pure function to write the report
 	if err := writeReport(g.options.Writer, report); err != nil {
 		return fmt.Errorf("write error: %w", err)
@@ -153,34 +150,49 @@ func copyOptions(opts Options) Options {
 }
 
 // WithVerbose returns a new Generator with verbose setting updated.
+// Uses explicit field copying for clarity and to maintain immutability.
 func (g Generator) WithVerbose(verbose bool) domain.ReportGenerator {
-	newOptions := copyOptions(g.options)
-	newOptions.Verbose = verbose
-
 	return Generator{
-		options:   newOptions,
+		options: Options{
+			Format:         g.options.Format,
+			Verbose:        verbose, // Only this field changes
+			ShowHelp:       g.options.ShowHelp,
+			RuleToShowHelp: g.options.RuleToShowHelp,
+			LightMode:      g.options.LightMode,
+			Writer:         g.options.Writer,
+		},
 		formatter: g.formatter,
 	}
 }
 
 // WithShowHelp returns a new Generator with showHelp setting updated.
+// Uses explicit field copying for clarity and to maintain immutability.
 func (g Generator) WithShowHelp(showHelp bool) domain.ReportGenerator {
-	newOptions := copyOptions(g.options)
-	newOptions.ShowHelp = showHelp
-
 	return Generator{
-		options:   newOptions,
+		options: Options{
+			Format:         g.options.Format,
+			Verbose:        g.options.Verbose,
+			ShowHelp:       showHelp, // Only this field changes
+			RuleToShowHelp: g.options.RuleToShowHelp,
+			LightMode:      g.options.LightMode,
+			Writer:         g.options.Writer,
+		},
 		formatter: g.formatter,
 	}
 }
 
 // WithRuleToShowHelp returns a new Generator with ruleToShowHelp setting updated.
+// Uses explicit field copying for clarity and to maintain immutability.
 func (g Generator) WithRuleToShowHelp(ruleName string) domain.ReportGenerator {
-	newOptions := copyOptions(g.options)
-	newOptions.RuleToShowHelp = ruleName
-
 	return Generator{
-		options:   newOptions,
+		options: Options{
+			Format:         g.options.Format,
+			Verbose:        g.options.Verbose,
+			ShowHelp:       g.options.ShowHelp,
+			RuleToShowHelp: ruleName, // Only this field changes
+			LightMode:      g.options.LightMode,
+			Writer:         g.options.Writer,
+		},
 		formatter: g.formatter,
 	}
 }

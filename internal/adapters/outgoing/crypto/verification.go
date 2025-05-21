@@ -6,14 +6,11 @@ package crypto
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
-	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/itiquette/gommitlint/internal/common/config"
 	"github.com/itiquette/gommitlint/internal/common/contextx"
 	coreCrypto "github.com/itiquette/gommitlint/internal/core/crypto"
-	"github.com/itiquette/gommitlint/internal/core/crypto/gpg"
-	"github.com/itiquette/gommitlint/internal/core/crypto/ssh"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/domain/crypto"
 )
@@ -26,19 +23,9 @@ type VerificationAdapter struct {
 }
 
 // NewVerificationAdapter creates a new adapter with the default verifiers.
+// For more flexibility, use NewVerificationAdapterWithOptions instead.
 func NewVerificationAdapter(keyRepository KeyRepository) *VerificationAdapter {
-	// Create verifiers with default settings
-	gpgVerifier := gpg.NewDefaultVerifier()
-	sshVerifier := ssh.NewDefaultVerifier()
-
-	// Create verification service with all verifiers
-	service := coreCrypto.NewVerificationService(gpgVerifier, sshVerifier)
-
-	return &VerificationAdapter{
-		service:    service,
-		repository: keyRepository,
-		defaultDir: keyRepository.GetKeyDirectory(),
-	}
+	return NewVerificationAdapterWithOptions(WithKeyRepository(keyRepository))
 }
 
 // VerifyCommit verifies the signature on a commit.
@@ -70,33 +57,13 @@ func (a *VerificationAdapter) VerifyCommit(ctx context.Context, commit domain.Co
 }
 
 // getKeyDirectoryFromContext gets the key directory from the context configuration.
+// Uses ResolvePath from the config utilities to handle path resolution consistently.
 func (a *VerificationAdapter) getKeyDirectoryFromContext(ctx context.Context) string {
 	cfg := contextx.GetConfig(ctx)
 	if cfg == nil {
 		return a.defaultDir
 	}
 
-	// Try to get key directory from config
-	keyDir := cfg.GetString("signing.key_directory")
-	if keyDir == "" {
-		return a.defaultDir
-	}
-
-	return keyDir
-}
-
-// GetCommitBytes extracts the byte representation of a commit for signature verification.
-// This is typically needed as the input for signature verification.
-func GetCommitBytes(commit *object.Commit) ([]byte, error) {
-	if commit == nil {
-		return nil, errors.New("nil commit")
-	}
-
-	// In a real implementation, you would:
-	// 1. Create a memory object
-	// 2. Encode the commit without its signature
-	// 3. Read the bytes back
-
-	// For now, we'll return a placeholder
-	return []byte(fmt.Sprintf("commit %s", commit.Hash)), nil
+	// Use the standardized path resolution utility
+	return config.ResolvePath(cfg, "signing.key_directory", a.defaultDir)
 }

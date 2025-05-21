@@ -249,7 +249,7 @@ func (a *Adapter) GetRuleConfig(ruleName string) RuleConfig {
 		config["sign_off_required"] = a.cfg.Message.Body.RequireSignoff
 		config["allow_multiple_signoffs"] = a.cfg.Signing.AllowMultipleSignoffs
 	case "Signature":
-		config["gpg_required"] = a.cfg.Signing.RequireGPG
+		config["signature_required"] = a.cfg.Signing.RequireSignature
 	case "SignedIdentity":
 		config["allowed_identities"] = a.cfg.Signing.AllowedSigners
 	case "Spell":
@@ -360,8 +360,8 @@ func (a *Adapter) getSigningValue(parts []string) interface{} {
 	}
 
 	switch parts[0] {
-	case "require_gpg":
-		return a.cfg.Signing.RequireGPG
+	case "require_signature":
+		return a.cfg.Signing.RequireSignature
 	case "allow_multiple_signoffs":
 		return a.cfg.Signing.AllowMultipleSignoffs
 	case "allowed_signers":

@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/itiquette/gommitlint/internal/adapters/outgoing/crypto"
+	"github.com/itiquette/gommitlint/internal/common/security"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -87,4 +89,87 @@ func TestFileSystemKeyRepository(t *testing.T) {
 	noFiles, err := repo.FindKeyFiles([]string{".nonexistent"})
 	require.NoError(t, err)
 	require.Empty(t, noFiles)
+}
+
+func TestReadKeyFile(t *testing.T) {
+	// Create a temporary directory for testing
+	tempDir, err := os.MkdirTemp("", "key-repo-test")
+	require.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	// Create the repository with a test security checker that bypasses permission checks
+	testChecker := security.NewTestSecurityChecker()
+	repo := crypto.NewFileSystemKeyRepositoryWithOptions(tempDir,
+		crypto.WithSecurityChecker(testChecker))
+
+	// Create test files with different permissions and types
+	tests := []struct {
+		name        string
+		filename    string
+		permissions os.FileMode
+		content     string
+		shouldPass  bool
+	}{
+		{
+			name:        "Private key with secure permissions",
+			filename:    "private.key",
+			permissions: 0600,
+			content:     "secure private key content",
+			shouldPass:  true,
+		},
+		{
+			name:        "Private key with insecure permissions",
+			filename:    "insecure-private.key",
+			permissions: 0644,
+			content:     "insecure private key content",
+			shouldPass:  true, // With TestSecurityChecker all files pass
+		},
+		{
+			name:        "Public key with reasonable permissions",
+			filename:    "public.pub",
+			permissions: 0644,
+			content:     "public key content",
+			shouldPass:  true,
+		},
+		{
+			name:        "Public key with world-writable permissions",
+			filename:    "world-writable.pub",
+			permissions: 0666,
+			content:     "world-writable public key content",
+			shouldPass:  true, // With TestSecurityChecker all files pass
+		},
+		{
+			name:        "Regular file with normal permissions",
+			filename:    "regular.txt",
+			permissions: 0644,
+			content:     "regular file content",
+			shouldPass:  true,
+		},
+	}
+
+	// Create all test files
+	files := make([]string, 0, len(tests))
+
+	for _, testCase := range tests {
+		filePath := filepath.Join(tempDir, testCase.filename)
+		err := os.WriteFile(filePath, []byte(testCase.content), testCase.permissions)
+		require.NoError(t, err)
+
+		files = append(files, filePath)
+	}
+
+	// Test each file
+	for i, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			filePath := files[i]
+			content, err := repo.ReadKeyFile(filePath)
+
+			if testCase.shouldPass {
+				require.NoError(t, err)
+				assert.Equal(t, testCase.content, string(content))
+			} else {
+				assert.Error(t, err)
+			}
+		})
+	}
 }

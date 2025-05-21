@@ -148,15 +148,38 @@ func (r ImperativeVerbRule) Name() string {
 	return r.name
 }
 
+// WithContext implements the ConfigurableRule interface for ImperativeVerbRule.
+// It returns a new rule with configuration from the provided context.
+func (r ImperativeVerbRule) WithContext(ctx context.Context) domain.Rule {
+	// Get configuration directly from context
+	cfg := contextx.GetConfig(ctx)
+	if cfg == nil {
+		return r
+	}
+
+	// Extract configuration values
+	_ = cfg.GetBool("message.subject.imperative") // Default to true if not set
+
+	// Check if conventional rule is enabled using domain priority service
+	enabledRules := cfg.GetStringSlice("rules.enabled")
+	disabledRules := cfg.GetStringSlice("rules.disabled")
+	priorityService := domain.NewRulePriorityService(domain.GetDefaultDisabledRules())
+	isConventionalEnabled := priorityService.IsRuleEnabled(ctx, "Conventional", enabledRules, disabledRules)
+
+	// Create a copy of the rule
+	result := r
+
+	// Set conventional flag if the Conventional rule is enabled
+	if isConventionalEnabled {
+		result.checkConventionalCommits = true
+		result.conventionalDescriptionOnly = true
+	}
+
+	return result
+}
+
 // Validate checks if the commit message uses imperative mood.
-// This implementation uses context to retrieve configuration.
-func (r ImperativeVerbRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("Validating imperative verb using context configuration", "rule", r.Name(), "commit_hash", commit.Hash)
-
-	// Create a new rule with context configuration
-	rule := r.withContextConfig(ctx)
-
+func (r ImperativeVerbRule) Validate(_ context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
 	// Validate imperative mood
 	subject := strings.TrimSpace(commit.Subject)
 	if subject == "" {
@@ -164,7 +187,7 @@ func (r ImperativeVerbRule) Validate(ctx context.Context, commit domain.CommitIn
 	}
 
 	// Handle conventional commits if needed
-	if rule.checkConventionalCommits && rule.conventionalDescriptionOnly {
+	if r.checkConventionalCommits && r.conventionalDescriptionOnly {
 		// Extract description from conventional commit format
 		re := regexp.MustCompile(`^[a-z]+(?:\([a-zA-Z0-9/-]+\))?!?:\s*(.*)$`)
 
@@ -190,7 +213,7 @@ func (r ImperativeVerbRule) Validate(ctx context.Context, commit domain.CommitIn
 	firstWord = strings.ToLower(firstWord)
 
 	// Check for imperative mood violations
-	category, isViolation := categorizeVerb(firstWord, rule.verbCategories, rule.baseFormsEndingWithED)
+	category, isViolation := categorizeVerb(firstWord, r.verbCategories, r.baseFormsEndingWithED)
 
 	if isViolation {
 		// Build suggestions based on category
@@ -267,35 +290,6 @@ func (r ImperativeVerbRule) Validate(ctx context.Context, commit domain.CommitIn
 	}
 
 	return nil
-}
-
-// withContextConfig creates a new rule with configuration from context.
-func (r ImperativeVerbRule) withContextConfig(ctx context.Context) ImperativeVerbRule {
-	// Get configuration directly from context
-	cfg := contextx.GetConfig(ctx)
-
-	// Extract configuration values
-	isImperativeRequired := cfg.GetBool("message.subject.imperative") // Default to true if not set
-
-	// Check if conventional rule is enabled
-	isConventionalEnabled := IsRuleEnabled(ctx, "Conventional")
-
-	// Log configuration at debug level
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("ImperativeVerb rule configuration from context",
-		"require_imperative", isImperativeRequired,
-		"conventional_enabled", isConventionalEnabled)
-
-	// Create a copy of the rule
-	result := r
-
-	// Set conventional flag if the Conventional rule is enabled
-	if isConventionalEnabled {
-		result.checkConventionalCommits = true
-		result.conventionalDescriptionOnly = true
-	}
-
-	return result
 }
 
 // extractFirstWord extracts the first word from a subject.

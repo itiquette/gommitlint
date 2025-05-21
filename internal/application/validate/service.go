@@ -47,14 +47,11 @@ type ValidationOptions struct {
 
 // ValidationService orchestrates commit validation operations.
 // It is designed to be used with value semantics and follows functional programming patterns.
+// Rule activation is controlled via context configuration, not stored in this struct.
 type ValidationService struct {
 	engine        validation.Engine
 	commitService domain.CommitRepository
 	infoProvider  domain.RepositoryInfoProvider
-
-	// Configuration for rule activation
-	enabledRules  []string
-	disabledRules []string
 }
 
 // Engine returns the validation engine.
@@ -141,6 +138,9 @@ func (s ValidationService) WithCustomRule(ctx context.Context, rule domain.Rule)
 
 		// Register the factory with context
 		registry.RegisterWithContext(ctx, ruleName, factory)
+
+		// Re-initialize all rules to include the new one
+		registry.InitializeRules(ctx)
 
 		// The same engine instance will use the updated registry
 		return serviceCopy, nil
@@ -290,9 +290,6 @@ func (s ValidationService) ValidateMessageFile(ctx context.Context, path string)
 
 // ValidateWithOptions performs validation based on the provided options.
 func (s ValidationService) ValidateWithOptions(ctx context.Context, opts ValidationOptions) (domain.ValidationResults, error) {
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("Entering ValidateWithOptions")
-
 	// Validate options are correct
 	optionCount := 0
 	if opts.CommitHash != "" {
@@ -350,28 +347,6 @@ func (s ValidationService) ValidateWithOptions(ctx context.Context, opts Validat
 	}
 }
 
-// WithEnabled returns a new ValidationService with specific rules enabled.
-func (s ValidationService) WithEnabled(rules []string) ValidationService {
-	return ValidationService{
-		engine:        s.engine,
-		commitService: s.commitService,
-		infoProvider:  s.infoProvider,
-		enabledRules:  rules,
-		disabledRules: s.disabledRules,
-	}
-}
-
-// WithDisabled returns a new ValidationService with specific rules disabled.
-func (s ValidationService) WithDisabled(rules []string) ValidationService {
-	return ValidationService{
-		engine:        s.engine,
-		commitService: s.commitService,
-		infoProvider:  s.infoProvider,
-		enabledRules:  s.enabledRules,
-		disabledRules: rules,
-	}
-}
-
 // CreateValidationService creates a validation service with context-based configuration.
 // This is the main entry point for creating validation services.
 func CreateValidationService(
@@ -380,14 +355,6 @@ func CreateValidationService(
 	infoProvider domain.RepositoryInfoProvider,
 	analyzer domain.CommitAnalyzer,
 ) ValidationService {
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("Creating validation service")
-
-	// Logger is used indirectly through ctx
-
-	// Get the configuration from context
-	cfg := contextx.GetConfig(ctx)
-
 	// Use default config for the engine
 	defaultConfig := config.NewDefaultConfig()
 
@@ -395,27 +362,7 @@ func CreateValidationService(
 	engine := validation.CreateEngine(ctx, defaultConfig, analyzer)
 
 	// Create the service
-	service := NewValidationService(engine, commitService, infoProvider)
-
-	// Apply configuration from context if available
-	if cfg != nil {
-		enabledRules := cfg.GetStringSlice("rules.enabled")
-		disabledRules := cfg.GetStringSlice("rules.disabled")
-
-		if len(enabledRules) > 0 {
-			service = service.WithEnabled(enabledRules)
-		}
-
-		if len(disabledRules) > 0 {
-			service = service.WithDisabled(disabledRules)
-		}
-	}
-
-	logger.Debug("Validation service created",
-		"enabled_rules", service.enabledRules,
-		"disabled_rules", service.disabledRules)
-
-	return service
+	return NewValidationService(engine, commitService, infoProvider)
 }
 
 // Helper functions

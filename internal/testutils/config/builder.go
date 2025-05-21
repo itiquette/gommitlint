@@ -27,6 +27,31 @@ func NewBuilder() Builder {
 	}
 }
 
+// NewTestConfig provides a simpler alternative to the Builder pattern.
+// It creates a config using functional options.
+func NewTestConfig(options ...func(*types.Config)) types.Config {
+	cfg := config.NewDefaultConfig()
+
+	for _, option := range options {
+		option(&cfg)
+	}
+
+	return cfg
+}
+
+// WithString sets a string value in the config.
+func WithString(key string, value string) func(*types.Config) {
+	return func(cfg *types.Config) {
+		if key == "output" {
+			cfg.Output = value
+		} else if key == "repo.path" {
+			cfg.Repo.Path = value
+		} else if key == "repo.branch" {
+			cfg.Repo.Branch = value
+		}
+	}
+}
+
 // WithMessage sets the message configuration.
 func (b Builder) WithMessage(message types.MessageConfig) Builder {
 	b.config.Message = message
@@ -62,17 +87,11 @@ func (b Builder) WithSubjectImperative(required bool) Builder {
 	return b
 }
 
-// WithSubjectForbidEndings sets the forbidden subject endings.
+// WithSubjectForbidEndings sets the characters that a commit subject should not end with.
 func (b Builder) WithSubjectForbidEndings(endings []string) Builder {
 	b.config.Message.Subject.ForbidEndings = endings
 
 	return b
-}
-
-// WithSubjectSuffixes is a compatibility alias for WithSubjectForbidEndings.
-// This maintains backward compatibility with existing tests.
-func (b Builder) WithSubjectSuffixes(suffixes []string) Builder {
-	return b.WithSubjectForbidEndings(suffixes)
 }
 
 // WithBody sets the body configuration.
@@ -239,17 +258,11 @@ func (b Builder) WithJiraProjects(projects []string) Builder {
 	return b
 }
 
-// WithJiraCheckBody sets just the JIRA body reference flag.
+// WithJiraCheckBody configures whether to look for JIRA references in commit body.
 func (b Builder) WithJiraCheckBody(checkBody bool) Builder {
 	b.config.Jira.CheckBody = checkBody
 
 	return b
-}
-
-// WithJiraBodyRef is a compatibility alias for WithJiraCheckBody.
-// This maintains backward compatibility with existing tests.
-func (b Builder) WithJiraBodyRef(checkBody bool) Builder {
-	return b.WithJiraCheckBody(checkBody)
 }
 
 // WithSigning sets the signing configuration.
@@ -266,9 +279,9 @@ func (b Builder) WithSignOffRequired(required bool) Builder {
 	return b
 }
 
-// WithRequireGPG sets just the GPG requirement.
-func (b Builder) WithRequireGPG(required bool) Builder {
-	b.config.Signing.RequireGPG = required
+// WithRequireSignature sets the cryptographic signature requirement.
+func (b Builder) WithRequireSignature(required bool) Builder {
+	b.config.Signing.RequireSignature = required
 
 	return b
 }
@@ -306,48 +319,6 @@ func (b Builder) WithSpell(spell types.SpellConfig) Builder {
 	b.config.Spell = spell
 
 	return b
-}
-
-// With backward compatibility methods
-
-// WithJiraConfig returns a new Builder with the updated JIRA configuration (alias for WithJira).
-func (b Builder) WithJiraConfig(jira types.JiraConfig) Builder {
-	return b.WithJira(jira)
-}
-
-// WithSubjectConfig returns a new Builder with the updated subject configuration (alias for WithSubject).
-func (b Builder) WithSubjectConfig(subject types.SubjectConfig) Builder {
-	return b.WithSubject(subject)
-}
-
-// WithBodyConfig returns a new Builder with the updated body configuration (alias for WithBody).
-func (b Builder) WithBodyConfig(body types.BodyConfig) Builder {
-	return b.WithBody(body)
-}
-
-// WithConventionalConfig returns a new Builder with the updated conventional configuration (alias for WithConventional).
-func (b Builder) WithConventionalConfig(conventional types.ConventionalConfig) Builder {
-	return b.WithConventional(conventional)
-}
-
-// WithSecurityConfig returns a new Builder with the updated signing configuration.
-func (b Builder) WithSecurityConfig(signing types.SigningConfig) Builder {
-	return b.WithSigning(signing)
-}
-
-// WithOutputConfig sets the output format (flattened).
-func (b Builder) WithOutputConfig(format string) Builder {
-	return b.WithOutput(format)
-}
-
-// WithSpellCheckConfig returns a new Builder with the updated spell check configuration (alias for WithSpell).
-func (b Builder) WithSpellCheckConfig(spell types.SpellConfig) Builder {
-	return b.WithSpell(spell)
-}
-
-// WithRulesConfig returns a new Builder with the updated rules configuration (alias for WithRules).
-func (b Builder) WithRulesConfig(rules types.RulesConfig) Builder {
-	return b.WithRules(rules)
 }
 
 // Build returns the constructed config.

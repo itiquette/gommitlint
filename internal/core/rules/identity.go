@@ -28,6 +28,9 @@ type IdentityRule struct {
 type IdentityOption func(IdentityRule) IdentityRule
 
 // WithKeyDirectory sets the directory containing trusted keys.
+// This is deprecated and will be removed in a future version.
+// Use testutils/rules.WithTestKeyDirectory for tests.
+// Production code should use configuration-based paths.
 func WithKeyDirectory(dir string) IdentityOption {
 	return func(r IdentityRule) IdentityRule {
 		result := r
@@ -41,6 +44,24 @@ func WithKeyDirectory(dir string) IdentityOption {
 
 		return result
 	}
+}
+
+// GetRepository returns the key repository. Used in test helpers only.
+// Note: Previously exported but moved to testutils/rules for proper separation.
+func (r IdentityRule) GetRepository() crypto.KeyRepository {
+	return r.repository
+}
+
+// SetRepository sets the key repository. Used in test helpers only.
+// Note: Previously exported but moved to testutils/rules for proper separation.
+func (r *IdentityRule) SetRepository(repo crypto.KeyRepository) {
+	r.repository = repo
+}
+
+// SetVerifier sets the verification adapter. Used in test helpers only.
+// Note: Previously exported but moved to testutils/rules for proper separation.
+func (r *IdentityRule) SetVerifier(verifier *crypto.VerificationAdapter) {
+	r.verifier = verifier
 }
 
 // NewIdentityRule creates a new rule for validating signature identity.
@@ -65,21 +86,44 @@ func NewIdentityRule(options ...IdentityOption) IdentityRule {
 	return rule
 }
 
-// Validate validates that signatures match the committer identity using context-based configuration.
-func (r IdentityRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("Validating signed identity using context configuration", "rule", r.Name(), "commit_hash", commit.Hash)
+// WithContext implements the ConfigurableRule interface for IdentityRule.
+// It returns a new rule with configuration from the provided context.
+func (r IdentityRule) WithContext(ctx context.Context) domain.Rule {
+	// Get configuration directly from context
+	cfg := contextx.GetConfig(ctx)
+	if cfg == nil {
+		return r
+	}
 
+	// Create a copy of the rule
+	result := r
+
+	// Get keyDir from configuration if available
+	keyDir := cfg.GetString("signing.key_directory")
+	if keyDir != "" && keyDir != r.keyDir {
+		result.keyDir = keyDir
+		// Update repository and verifier
+		result.repository = crypto.NewFileSystemKeyRepository(keyDir)
+		result.verifier = crypto.NewVerificationAdapter(result.repository)
+	}
+
+	return result
+}
+
+// Validate validates that signatures match the committer identity.
+func (r IdentityRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
 	// Get configuration from context
 	cfg := contextx.GetConfig(ctx)
 	if cfg == nil {
 		return nil
 	}
 
-	// Check if this rule is enabled
-	if !IsRuleEnabled(ctx, r.Name()) {
-		logger.Debug("Identity rule is disabled, skipping validation")
+	// Check if rule is enabled (use domain rule registry)
+	priorityService := domain.NewRulePriorityService(domain.GetDefaultDisabledRules())
+	enabled := cfg.GetStringSlice("rules.enabled")
+	disabled := cfg.GetStringSlice("rules.disabled")
 
+	if !priorityService.IsRuleEnabled(ctx, r.Name(), enabled, disabled) {
 		return nil
 	}
 

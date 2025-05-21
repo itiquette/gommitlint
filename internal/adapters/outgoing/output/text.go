@@ -133,14 +133,18 @@ func (f TextFormatter) WithLightMode(lightMode bool) TextFormatter {
 
 // Format formats validation results as text.
 func (f TextFormatter) Format(ctx context.Context, results domain.ValidationResults) string {
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("Entering TextFormatter.Format",
-		"verbose", f.verbose,
-		"light_mode", f.lightMode,
-		"show_help", f.showHelp,
-		"total_commits", results.TotalCommits)
+	// Estimate initial capacity based on number of commits and results
+	initialCapacity := 1000                       // Base size
+	initialCapacity += 200 * len(results.Results) // Headers
+
+	// Add space for rule results (roughly 100 bytes per rule per commit)
+	for _, commit := range results.Results {
+		initialCapacity += 100 * len(commit.RuleResults)
+	}
 
 	var builder strings.Builder
+
+	builder.Grow(initialCapacity)
 
 	// Get configuration for rule result formatting
 	var cfg types.Config
@@ -279,25 +283,7 @@ func (f TextFormatter) formatCommitMessage(builder *strings.Builder, message str
 }
 
 // formatRuleResults formats the rule validation results.
-func (f TextFormatter) formatRuleResults(ctx context.Context, builder *strings.Builder, commitResult domain.CommitResult, cfg types.Config) {
-	// Get logger for structured logging
-	logger := contextx.GetLogger(ctx)
-
-	// Log rule configuration
-	logger.Debug("Text formatter received configuration",
-		"enabled_rules", cfg.Rules.Enabled,
-		"disabled_rules", cfg.Rules.Disabled)
-
-	// Log initial rule results before filtering
-	ruleNames := make([]string, 0, len(commitResult.RuleResults))
-	for _, rule := range commitResult.RuleResults {
-		ruleNames = append(ruleNames, rule.RuleName)
-	}
-
-	logger.Debug("Initial rule results before filtering",
-		"initial_rules", ruleNames,
-		"initial_rule_count", len(commitResult.RuleResults))
-
+func (f TextFormatter) formatRuleResults(ctx context.Context, builder *strings.Builder, commitResult domain.CommitResult, _ types.Config) {
 	// Sort rule results alphabetically by name
 	sortedRules := getSortedRuleResults(commitResult.RuleResults)
 
@@ -349,17 +335,6 @@ func (f TextFormatter) formatRuleResults(ctx context.Context, builder *strings.B
 	passedRules := len(slices.Filter(ruleCounts, func(rc RuleCount) bool {
 		return rc.passed
 	}))
-
-	// Log filtered rules count and names
-	activeRuleNames := make([]string, 0, len(activeRules))
-	for _, rule := range activeRules {
-		activeRuleNames = append(activeRuleNames, rule.RuleName)
-	}
-
-	logger.Debug("Rules after filtering",
-		"filtered_rule_count", totalRules,
-		"passed_rules", passedRules,
-		"active_rules", activeRuleNames)
 
 	// Process each active rule
 	slices.ForEach(activeRules, func(ruleResult domain.RuleResult) {
@@ -423,12 +398,6 @@ func (f TextFormatter) formatFailedRule(builder *strings.Builder, ruleName strin
 
 	// Add a blank line for spacing
 	builder.WriteString("\n")
-
-	// Show help at the rule level if available (deprecated in favor of error-level help)
-	if f.showHelp && ruleResult.HelpMessage != "" {
-		builder.WriteString(fmt.Sprintf("  %s\n", f.colors.HelpText(ruleResult.HelpMessage)))
-		builder.WriteString("\n")
-	}
 }
 
 // formatRuleSummaryLine formats the summary line.

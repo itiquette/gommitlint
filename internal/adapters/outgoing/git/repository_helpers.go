@@ -11,13 +11,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/itiquette/gommitlint/internal/adapters/outgoing/log"
-	"github.com/itiquette/gommitlint/internal/common/slices"
+	commonSlices "github.com/itiquette/gommitlint/internal/common/slices"
 )
 
 // findGitDir finds the Git directory from a starting path.
@@ -236,7 +237,7 @@ func collectCommits(
 		}
 
 		// Create a new slice to maintain immutability
-		newCommits := append(slices.DeepCopy(state.commits), commit)
+		newCommits := append(slices.Clone(state.commits), commit)
 		newCount := state.count + 1
 
 		// Check if we've reached the limit
@@ -297,7 +298,7 @@ func getAncestorsWithAccumulator(ctx context.Context, repo *git.Repository, comm
 	logger := log.Logger(ctx)
 	logger.Trace().Str("commit_hash", commit.Hash.String()).Int("existing_ancestors", len(ancestors)).Msg("Entering getAncestorsWithAccumulator")
 	// Create a new map with the current ancestors using DeepCopyMap
-	result := slices.DeepCopyMap(ancestors)
+	result := commonSlices.DeepCopyMap(ancestors)
 
 	// Initialize a queue with the starting commit
 	queue := []*object.Commit{commit}
@@ -309,7 +310,7 @@ func getAncestorsWithAccumulator(ctx context.Context, repo *git.Repository, comm
 		queue = queue[1:]
 
 		// Mark this commit as an ancestor (immutably)
-		result = slices.DeepCopyMap(result)
+		result = commonSlices.DeepCopyMap(result)
 		result[current.Hash] = true
 
 		// Process all parents of the current commit
@@ -326,7 +327,7 @@ func getAncestorsWithAccumulator(ctx context.Context, repo *git.Repository, comm
 			}
 
 			// Add to queue using functional approach (create new slice)
-			queue = append(slices.DeepCopy(queue), parent)
+			queue = append(slices.Clone(queue), parent)
 		}
 	}
 

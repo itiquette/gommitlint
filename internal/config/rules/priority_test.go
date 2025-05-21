@@ -44,8 +44,8 @@ func TestRulePriority(t *testing.T) {
 			expected:      false,
 		},
 		{
-			name:          "Rule enabled by default and not explicitly disabled should be included (Spell)",
-			ruleName:      "Spell",
+			name:          "Rule enabled by default and not explicitly disabled should be included (SubjectLength)",
+			ruleName:      "SubjectLength",
 			enabledRules:  []string{},
 			disabledRules: []string{},
 			expected:      true,
@@ -108,28 +108,28 @@ func TestMakeRuleMap(t *testing.T) {
 		},
 		{
 			name:      "Simple rule names",
-			ruleNames: []string{"Rule1", "Rule2", "Rule3"},
+			ruleNames: []string{"rule1", "rule2", "rule3"},
 			expected: map[string]bool{
-				"Rule1": true,
-				"Rule2": true,
-				"Rule3": true,
+				"rule1": true,
+				"rule2": true,
+				"rule3": true,
 			},
 		},
 		{
 			name:      "Rule names with quotes and whitespace",
 			ruleNames: []string{" \"Rule1\" ", "'Rule2'", "  Rule3  "},
 			expected: map[string]bool{
-				"Rule1": true,
-				"Rule2": true,
-				"Rule3": true,
+				"rule1": true,
+				"rule2": true,
+				"rule3": true,
 			},
 		},
 		{
 			name:      "Rule names with comments",
-			ruleNames: []string{"Rule1", "#Rule2", "Rule3"},
+			ruleNames: []string{"rule1", "#Rule2", "rule3"},
 			expected: map[string]bool{
-				"Rule1": true,
-				"Rule3": true,
+				"rule1": true,
+				"rule3": true,
 			},
 		},
 		{

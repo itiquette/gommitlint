@@ -52,7 +52,7 @@ type ConventionalConfig struct {
 
 // SigningConfig contains configuration options for signing-related validations.
 type SigningConfig struct {
-	RequireGPG            bool     `json:"require_gpg"             yaml:"require_gpg"`
+	RequireSignature      bool     `json:"require_signature"       yaml:"require_signature"`
 	AllowMultipleSignoffs bool     `json:"allow_multiple_signoffs" yaml:"allow_multiple_signoffs"`
 	AllowedSigners        []string `json:"allowed_signers"         yaml:"allowed_signers"`
 	KeyDirectory          string   `json:"key_directory"           yaml:"key_directory"`

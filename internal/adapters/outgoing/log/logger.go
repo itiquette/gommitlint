@@ -25,7 +25,6 @@ type Level string
 const (
 	LevelQuiet Level = "quiet" // Only error messages
 	LevelBrief Level = "brief" // Info and above (default)
-	LevelDebug Level = "debug" // Debug and above
 	LevelTrace Level = "trace" // Trace and above (most verbose)
 )
 
@@ -42,8 +41,6 @@ func (l Level) ToZerologLevel() zerolog.Level {
 	switch l {
 	case LevelQuiet:
 		return zerolog.ErrorLevel
-	case LevelDebug:
-		return zerolog.DebugLevel
 	case LevelTrace:
 		return zerolog.TraceLevel
 	case LevelBrief:
@@ -87,8 +84,6 @@ func InitLogger(ctx context.Context, cmd *cobra.Command, withCaller bool, output
 					switch levelStr {
 					case "trace":
 						return "\x1b[90m" + "TRC" + "\x1b[0m"
-					case "debug":
-						return "\x1b[36m" + "DBG" + "\x1b[0m"
 					case "info":
 						return "\x1b[34m" + "INF" + "\x1b[0m"
 					case "warn":

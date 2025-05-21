@@ -21,8 +21,15 @@ type Rule interface {
 	Validate(ctx context.Context, commit CommitInfo) []errors.ValidationError
 }
 
-// RuleProvider interface has been removed in favor of RuleRegistry.
-// Use RuleRegistry and the registry-based validation engine directly.
+// ConfigurableRule extends Rule with configuration capabilities.
+// Implementing this interface allows rules to be configured by the RuleRegistry.
+type ConfigurableRule interface {
+	Rule
+
+	// WithConfig returns a new rule instance with applied configuration from context.
+	// Following functional programming principles, it doesn't modify the original rule.
+	WithContext(ctx context.Context) Rule
+}
 
 // RulePriorityManager defines an interface for determining rule activation status.
 // This is primarily used by output formatters to filter results.

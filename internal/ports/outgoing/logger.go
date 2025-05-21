@@ -4,7 +4,7 @@
 
 package outgoing
 
-// Logger defines the interface for logging operations.
+// Logger defines the minimal interface for error logging operations.
 // This is an outgoing port that will be implemented by adapters.
 type Logger interface {
 	Debug(msg string, kvs ...interface{})

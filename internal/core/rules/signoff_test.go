@@ -130,7 +130,6 @@ This is a detailed description of the feature.`,
 			cfg := config.NewDefaultConfig()
 			cfg.Message.Body.RequireSignoff = testCase.requireSignOff
 			cfg.Signing.AllowMultipleSignoffs = testCase.allowMultiple
-			// Use direct adapter pattern instead of the deprecated AdaptConfigForTesting
 			adapter := infraConfig.NewAdapter(cfg)
 			ctx = contextx.WithConfig(ctx, adapter)
 
@@ -230,7 +229,6 @@ Signed-off-by: Cragger Crocodile <cragger@svamp.org>`,
 
 			// Add configuration to context
 			ctx := createSignoffTestContext()
-			// Use direct adapter pattern instead of the deprecated AdaptConfigForTesting
 			adapter := infraConfig.NewAdapter(cfg)
 			ctx = contextx.WithConfig(ctx, adapter)
 

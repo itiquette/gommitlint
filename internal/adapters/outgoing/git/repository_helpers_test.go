@@ -5,44 +5,27 @@
 package git
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	testcontext "github.com/itiquette/gommitlint/internal/testutils/context"
+	testgit "github.com/itiquette/gommitlint/internal/testutils/git"
 	"github.com/stretchr/testify/require"
 )
 
-// setupTestRepo creates a temporary repository for testing.
-func setupTestRepo(t *testing.T) (*git.Repository, string) {
-	t.Helper()
-	// Create a temporary directory
-	tempDir, err := os.MkdirTemp("", "gommitlint-test")
-	require.NoError(t, err, "Failed to create temp directory")
-
-	// Initialize a git repository
-	repo, err := git.PlainInit(tempDir, false)
-	require.NoError(t, err, "Failed to initialize git repository")
-
-	return repo, tempDir
-}
-
-// cleanupTestRepo removes the temporary repository.
-func cleanupTestRepo(tempDir string) {
-	os.RemoveAll(tempDir)
-}
+// Note: setupTestRepo and cleanupTestRepo have been moved to internal/testutils/git/helpers.go
+// This comment is kept for clarity in the test file.
 
 func TestFindGitDir(t *testing.T) {
 	// Create context
 	ctx := testcontext.CreateTestContext()
 
 	// Create temporary git repository
-	_, tempDir := setupTestRepo(t)
-	defer cleanupTestRepo(tempDir)
+	_, tempDir := testgit.SetupTestRepo(t)
+	defer testgit.CleanupTestRepo(tempDir)
 
 	// Test finding git directory from the repo root
 	gitDir, err := findGitDir(ctx, tempDir)
@@ -74,17 +57,15 @@ func TestCollectCommits(t *testing.T) {
 
 	t.Run("Should limit commits", func(t *testing.T) {
 		// Create test repository
-		_, tempDir := setupTestRepo(t)
-		defer cleanupTestRepo(tempDir)
+		_, tempDir := testgit.SetupTestRepo(t)
+		defer testgit.CleanupTestRepo(tempDir)
 
 		// Create a mock iterator function for testing
-		mockIter := &mockCommitIter{
-			commits: []*object.Commit{
-				{Hash: plumbing.NewHash("hash1")},
-				{Hash: plumbing.NewHash("hash2")},
-				{Hash: plumbing.NewHash("hash3")},
-			},
-		}
+		mockIter := testgit.NewMockCommitIter([]*object.Commit{
+			{Hash: plumbing.NewHash("hash1")},
+			{Hash: plumbing.NewHash("hash2")},
+			{Hash: plumbing.NewHash("hash3")},
+		}, "")
 
 		// Collect commits with limit
 		commits, err := collectCommits(ctx, mockIter, 2, nil)
@@ -96,8 +77,8 @@ func TestCollectCommits(t *testing.T) {
 
 	t.Run("Should stop at condition", func(t *testing.T) {
 		// Create test repository
-		_, tempDir := setupTestRepo(t)
-		defer cleanupTestRepo(tempDir)
+		_, tempDir := testgit.SetupTestRepo(t)
+		defer testgit.CleanupTestRepo(tempDir)
 
 		// Create test commits with distinct hashes
 		hash1 := plumbing.NewHash("aaa1111111111111111111111111111111111111")
@@ -130,7 +111,7 @@ func TestCollectCommits(t *testing.T) {
 		require.Equal(t, hash1, collectedCommits[0].Hash, "Test setup should collect only commit1")
 
 		// Now test the actual collectCommits function with a real stop condition
-		commits, err := collectCommits(ctx, &mockCommitIter{commits: []*object.Commit{commit1, commit2, commit3}}, 0, stopOnHash2)
+		commits, err := collectCommits(ctx, testgit.NewMockCommitIter([]*object.Commit{commit1, commit2, commit3}, ""), 0, stopOnHash2)
 
 		// Verify results
 		require.NoError(t, err)
@@ -150,17 +131,15 @@ func TestCollectCommits(t *testing.T) {
 
 	t.Run("Should handle nil commit", func(t *testing.T) {
 		// Create test repository
-		_, tempDir := setupTestRepo(t)
-		defer cleanupTestRepo(tempDir)
+		_, tempDir := testgit.SetupTestRepo(t)
+		defer testgit.CleanupTestRepo(tempDir)
 
 		// Create a mock iterator function for testing
-		mockIter := &mockCommitIter{
-			commits: []*object.Commit{
-				{Hash: plumbing.NewHash("hash1")},
-				nil,
-				{Hash: plumbing.NewHash("hash3")},
-			},
-		}
+		mockIter := testgit.NewMockCommitIter([]*object.Commit{
+			{Hash: plumbing.NewHash("hash1")},
+			nil,
+			{Hash: plumbing.NewHash("hash3")},
+		}, "")
 
 		// Collect commits with nil commit
 		_, err := collectCommits(ctx, mockIter, 0, nil)
@@ -181,39 +160,5 @@ func TestFindMergeBase(t *testing.T) {
 	t.Skip("Skipping test that requires a real git repository with commits")
 }
 
-// mockCommitIter is a mock implementation of object.CommitIter for testing.
-type mockCommitIter struct {
-	commits    []*object.Commit
-	index      int
-	stopAtHash string // If set, ForEach will stop when it encounters this hash
-}
-
-func (m *mockCommitIter) Next() (*object.Commit, error) {
-	if m.index >= len(m.commits) {
-		return nil, errors.New("end of iterator")
-	}
-
-	commit := m.commits[m.index]
-	m.index++
-
-	return commit, nil
-}
-
-func (m *mockCommitIter) ForEach(callback func(*object.Commit) error) error {
-	for _, commit := range m.commits {
-		// If stopAtHash is set and this is the commit with that hash, don't process it
-		// but return a "stop" error to simulate the real behavior
-		if m.stopAtHash != "" && commit != nil && commit.Hash.String() == m.stopAtHash {
-			return errors.New("stop")
-		}
-
-		err := callback(commit)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (m *mockCommitIter) Close() {}
+// Note: mockCommitIter has been moved to internal/testutils/git/mocks.go
+// This comment is kept for clarity in the test file.

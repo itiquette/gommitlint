@@ -27,16 +27,30 @@ func FormatVerboseResult(ruleName string, errs []errors.ValidationError) string 
 		return ruleName + ": All checks passed"
 	}
 
+	// Calculate capacity to avoid reallocations
+	capacity := len(ruleName) + 50 // Base text
+
+	for _, err := range errs {
+		capacity += len(err.Message) + 20 // Message with numbering
+		help := err.GetHelp()
+
+		if help != "" {
+			capacity += len(help) + 15 // Help text with prefix
+		}
+	}
+
 	var builder strings.Builder
+
+	builder.Grow(capacity)
 
 	builder.WriteString(fmt.Sprintf("%s: Found %d error(s):\n", ruleName, len(errs)))
 
 	for i, err := range errs {
-		builder.WriteString(fmt.Sprintf("  %d. %s\n", i+1, err.Message))
+		fmt.Fprintf(&builder, "  %d. %s\n", i+1, err.Message)
 
 		help := err.GetHelp()
 		if help != "" {
-			builder.WriteString(fmt.Sprintf("     Help: %s\n", help))
+			fmt.Fprintf(&builder, "     Help: %s\n", help)
 		}
 	}
 

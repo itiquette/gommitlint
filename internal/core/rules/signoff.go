@@ -74,19 +74,53 @@ func NewSignOffRule(options ...SignOffOption) SignOffRule {
 	return rule
 }
 
-// Validate checks for the presence and format of a Developer Certificate of Origin sign-off
-// using configuration from context.
+// WithContext implements the ConfigurableRule interface for SignOffRule.
+// It returns a new rule with configuration from the provided context.
+func (r SignOffRule) WithContext(ctx context.Context) domain.Rule {
+	// Get config from common interface
+	cfg := contextx.GetConfig(ctx)
+	if cfg == nil {
+		return r
+	}
+
+	// Default values - use the rule's current values
+	requireSignOff := r.requireSignOff
+	acceptAltFormat := r.acceptAltFormat
+
+	// Try to get security settings from config
+	if cfg.GetBool("message.body.require_signoff") {
+		requireSignOff = true
+	}
+
+	if cfg.GetBool("signing.allow_multiple_signoffs") {
+		acceptAltFormat = true
+	}
+
+	// Log configuration at debug level
+	logger := contextx.GetLogger(ctx)
+	logger.Debug("Sign-off rule configuration from context",
+		"require_sign_off", requireSignOff,
+		"accept_alternative_format", acceptAltFormat)
+
+	// Create a copy of the rule
+	result := r
+
+	// Update settings from context
+	result.requireSignOff = requireSignOff
+	result.acceptAltFormat = acceptAltFormat
+
+	return result
+}
+
+// Validate checks for the presence and format of a Developer Certificate of Origin sign-off.
 func (r SignOffRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
 	logger := contextx.GetLogger(ctx)
-	logger.Debug("Validating sign-off using context configuration",
+	logger.Debug("Validating sign-off",
 		"rule", r.Name(),
 		"commit_hash", commit.Hash)
 
-	// Create a new rule with context configuration
-	rule := r.withContextConfig(ctx)
-
 	// Check if sign-off is required
-	if !rule.requireSignOff {
+	if !r.requireSignOff {
 		return nil
 	}
 
@@ -120,7 +154,7 @@ func (r SignOffRule) Validate(ctx context.Context, commit domain.CommitInfo) []a
 	}
 
 	// Check for sign-off in the text
-	hasSignOff := hasSignOffLine(textToCheck, rule.acceptAltFormat)
+	hasSignOff := hasSignOffLine(textToCheck, r.acceptAltFormat)
 	if !hasSignOff {
 		return []appErrors.ValidationError{
 			appErrors.NewSignOffError(
@@ -135,42 +169,6 @@ func (r SignOffRule) Validate(ctx context.Context, commit domain.CommitInfo) []a
 	}
 
 	return nil
-}
-
-// withContextConfig creates a new rule with configuration from context.
-func (r SignOffRule) withContextConfig(ctx context.Context) SignOffRule {
-	// Get config from common interface
-	cfg := contextx.GetConfig(ctx)
-
-	// Default values - use the rule's current values
-	requireSignOff := r.requireSignOff
-	acceptAltFormat := r.acceptAltFormat
-
-	// Try to get security settings from config
-	if cfg != nil {
-		if cfg.GetBool("message.body.require_signoff") {
-			requireSignOff = true
-		}
-
-		if cfg.GetBool("signing.allow_multiple_signoffs") {
-			acceptAltFormat = true
-		}
-	}
-
-	// Log configuration at debug level
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("Sign-off rule configuration from context",
-		"require_sign_off", requireSignOff,
-		"accept_alternative_format", acceptAltFormat)
-
-	// Create a copy of the rule
-	result := r
-
-	// Update settings from context
-	result.requireSignOff = requireSignOff
-	result.acceptAltFormat = acceptAltFormat
-
-	return result
 }
 
 // Name returns the rule name.

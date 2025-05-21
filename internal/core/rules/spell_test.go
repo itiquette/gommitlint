@@ -93,13 +93,3 @@ func TestSpellRule(t *testing.T) {
 		_ = errors // Acknowledge that errors might or might not exist
 	})
 }
-
-// Test the WithVerbosity method.
-func TestSpellRuleWithVerbosity(t *testing.T) {
-	rule := rules.NewSpellRule()
-	verboseRule := rule.WithVerbosity("verbose")
-
-	// Test that verbosity can be set
-	// The verbosity is used in the Validate method for enhanced error context
-	require.Equal(t, "Spell", verboseRule.Name())
-}

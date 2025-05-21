@@ -10,6 +10,7 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/domain"
 	testcontext "github.com/itiquette/gommitlint/internal/testutils/context"
+	testgit "github.com/itiquette/gommitlint/internal/testutils/git"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,7 +21,7 @@ func TestRepositoryFactory(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	// Initialize a git repository
-	_, tempGitPath := setupTestRepo(t)
+	_, tempGitPath := testgit.SetupTestRepo(t)
 
 	// We'll use the actual Git repo path for our tests
 	tempDir = tempGitPath

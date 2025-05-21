@@ -25,7 +25,7 @@
 //	}
 //
 //	// Work with logger
-//	log := contextx.Logger(ctx)
+//	log := contextx.GetLogger(ctx)
 //	log.Info("Processing request")
 //
 //	// Add logger with fields
@@ -73,6 +73,9 @@ func Value[T any](ctx context.Context, key contextkeys.ContextKey) (T, bool) {
 	return result, ok
 }
 
+// Note: valueWithError has been removed as it's not used in production code.
+// If you need similar functionality, use Value with proper error handling.
+
 // GetLogger retrieves a logger from the context.
 // If no logger is found, it returns a no-op logger.
 //
@@ -81,11 +84,12 @@ func Value[T any](ctx context.Context, key contextkeys.ContextKey) (T, bool) {
 //	log := contextx.GetLogger(ctx)
 //	log.Info("Operation completed") // Safe to call even if no logger was set
 func GetLogger(ctx context.Context) outgoing.Logger {
-	if logger, ok := ctx.Value(contextkeys.LoggerKey).(outgoing.Logger); ok {
+	logger, ok := Value[outgoing.Logger](ctx, contextkeys.LoggerKey)
+	if ok {
 		return logger
 	}
 
-	return &noOpLogger{}
+	return NewNoOpLogger()
 }
 
 // WithLogger adds a logger to the context.
@@ -97,14 +101,6 @@ func GetLogger(ctx context.Context) outgoing.Logger {
 func WithLogger(ctx context.Context, log outgoing.Logger) context.Context {
 	return context.WithValue(ctx, contextkeys.LoggerKey, log)
 }
-
-// noOpLogger is a logger that does nothing.
-type noOpLogger struct{}
-
-func (n *noOpLogger) Debug(_ string, _ ...interface{}) {}
-func (n *noOpLogger) Info(_ string, _ ...interface{})  {}
-func (n *noOpLogger) Warn(_ string, _ ...interface{})  {}
-func (n *noOpLogger) Error(_ string, _ ...interface{}) {}
 
 // WithConfig adds configuration to the context.
 //
@@ -127,36 +123,25 @@ func GetConfig(ctx context.Context) config.Config {
 	return config.GetConfig(ctx)
 }
 
-// MergeContext combines two contexts, with values from the second context
-// taking precedence over values from the first context. This is useful when
-// you need to override specific context values while preserving others.
+// MergeContext is deprecated and has been moved to internal/testutils/context.
+// Use testcontext.MergeContext instead.
 //
-// Both contexts must be non-nil or this function will panic.
-// The function iterates through all known context keys and copies values
-// from ctx2 to the result, overriding any existing values from ctx1.
-//
-// Example:
-//
-//	baseCtx := someExistingContext
-//	overrideCtx := contextx.WithValue(baseCtx, contextkeys.LoggerKey, customLogger)
-//	merged := contextx.MergeContext(baseCtx, overrideCtx)
-//	// merged will have the customLogger
+// Deprecated: This function will be removed in a future version.
 func MergeContext(ctx1, ctx2 context.Context) context.Context {
-	// Handle nil contexts
+	// Validate base context
 	if ctx1 == nil {
-		// Instead of creating a new context.Background(), we should indicate this is invalid
-		// and let the caller handle it properly
-		panic("MergeContext: ctx1 cannot be nil - only main.go should create context.Background()")
+		panic("MergeContext: base context cannot be nil")
 	}
 
+	// If second context is nil, return first unchanged
 	if ctx2 == nil {
 		return ctx1
 	}
 
-	// Start with a copy of ctx1
+	// Start with base context
 	result := ctx1
 
-	// Add all context keys from ctx2 to result
+	// Copy all known context keys from override context
 	for _, key := range contextkeys.AllContextKeys() {
 		if val := ctx2.Value(key); val != nil {
 			result = context.WithValue(result, key, val)

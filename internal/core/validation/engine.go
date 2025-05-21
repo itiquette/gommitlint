@@ -35,9 +35,6 @@ type RegistryEngine struct {
 
 // CreateEngine creates a validation engine using the context.
 func CreateEngine(ctx context.Context, _ types.Config, analyzer domain.CommitAnalyzer) Engine {
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("Entering validation.CreateEngine")
-
 	// Create rule registry
 	simpleRegistry := domain.NewRuleRegistry()
 
@@ -60,6 +57,10 @@ func CreateEngine(ctx context.Context, _ types.Config, analyzer domain.CommitAna
 		simpleRegistry.RegisterWithContext(ctx, name, factory)
 	}
 
+	// Initialize all rules upfront with the current context
+	// This creates the rules once and stores them for later filtering
+	simpleRegistry.InitializeRules(ctx)
+
 	// Create and return the registry engine
 	return &RegistryEngine{
 		registry: simpleRegistry,
@@ -68,33 +69,13 @@ func CreateEngine(ctx context.Context, _ types.Config, analyzer domain.CommitAna
 
 // ValidateCommit validates a single commit against all active rules.
 func (e *RegistryEngine) ValidateCommit(ctx context.Context, commit domain.CommitInfo) domain.CommitResult {
-	// Get logger from context
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("Entering Engine.ValidateCommit",
-		"commit_hash", commit.Hash,
-		"subject", commit.Subject,
-		"is_merge_commit", commit.IsMergeCommit)
-
 	// Get enabled/disabled rules directly from context configuration
 	cfg := contextx.GetConfig(ctx)
 	enabledRules := cfg.GetStringSlice("rules.enabled")
 	disabledRules := cfg.GetStringSlice("rules.disabled")
 
-	// Log configuration values
-	logger.Debug("Rule configuration from context",
-		"enabled", enabledRules,
-		"disabled", disabledRules)
-
-	// Create active rules using the registry
-	activeRules := e.registry.CreateActiveRules(ctx, enabledRules, disabledRules)
-
-	// Log active rules for debugging
-	activeRuleNames := make([]string, 0, len(activeRules))
-	for _, rule := range activeRules {
-		activeRuleNames = append(activeRuleNames, rule.Name())
-	}
-
-	logger.Debug("Active rules for validation", "active_rules", activeRuleNames)
+	// Get active rules using the registry (uses pre-created rules)
+	activeRules := e.registry.GetActiveRules(enabledRules, disabledRules)
 
 	// Use helper method to validate with the provided rules
 	return e.validateWithRules(ctx, commit, activeRules)
@@ -102,13 +83,8 @@ func (e *RegistryEngine) ValidateCommit(ctx context.Context, commit domain.Commi
 
 // validateWithRules is a helper method that validates a commit against a set of rules.
 func (e *RegistryEngine) validateWithRules(ctx context.Context, commit domain.CommitInfo, rules []domain.Rule) domain.CommitResult {
-	// Get logger from context
-	logger := contextx.GetLogger(ctx)
-
 	// Handle no active rules case
 	if len(rules) == 0 {
-		logger.Debug("No active rules, returning passing result")
-
 		return domain.CommitResult{
 			CommitInfo:  commit,
 			RuleResults: []domain.RuleResult{},
@@ -151,17 +127,13 @@ func (e *RegistryEngine) validateWithRules(ctx context.Context, commit domain.Co
 
 // ValidateCommits validates multiple commits against all active rules.
 func (e *RegistryEngine) ValidateCommits(ctx context.Context, commits []domain.CommitInfo) domain.ValidationResults {
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("Entering Engine.ValidateCommits",
-		"commit_count", len(commits))
-
 	// Get config from context
 	cfg := contextx.GetConfig(ctx)
 	enabledRules := cfg.GetStringSlice("rules.enabled")
 	disabledRules := cfg.GetStringSlice("rules.disabled")
 
-	// Create active rules once to avoid repeated rule creation
-	activeRules := e.registry.CreateActiveRules(ctx, enabledRules, disabledRules)
+	// Get active rules (uses pre-created rules)
+	activeRules := e.registry.GetActiveRules(enabledRules, disabledRules)
 
 	// Create results
 	results := domain.NewValidationResults()

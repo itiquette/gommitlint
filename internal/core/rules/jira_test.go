@@ -44,7 +44,7 @@ func TestJiraReferenceRule_Validate(t *testing.T) {
 			name: "jira required in body with body ref enabled",
 			configSetup: func() types.Config {
 				return testConfig.NewBuilder().
-					WithJiraBodyRef(true).
+					WithJiraCheckBody(true).
 					Build()
 			},
 			commit: domain.CommitInfo{
@@ -102,8 +102,12 @@ func TestJiraReferenceRule_Validate(t *testing.T) {
 			cfg := testCase.configSetup()
 			ctx := createJiraTestContext(cfg)
 
+			// Create and configure rule with context
+			baseRule := rules.NewJiraReferenceRule()
+			rule, ok := baseRule.WithContext(ctx).(rules.JiraReferenceRule)
+			require.True(t, ok, "Expected WithContext to return a JiraReferenceRule")
+
 			// Execute
-			rule := rules.NewJiraReferenceRule()
 			errors := rule.Validate(ctx, testCase.commit)
 
 			// Assert

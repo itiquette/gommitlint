@@ -108,11 +108,8 @@ TODO
 
     security:
       sign_off_required: true    # Whether sign-off is required
-      gpg_required: false        # Whether GPG signature is required
+      require_signature: false   # Whether cryptographic signature is required
       key_directory: ""          # Path to key directory
-      allowed_signature_types:   # Allowed signature types
-        - "GPG"
-        - "SSH"
       allowed_keyrings: []       # List of allowed keyrings
       allowed_identities: []     # List of allowed identities
       allow_multiple_sign_offs: true # Whether multiple sign-offs are allowed

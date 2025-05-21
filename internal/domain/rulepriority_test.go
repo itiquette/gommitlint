@@ -13,9 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// MockLogger and LogEvent have been removed as part of hexagonal architecture migration.
-// Logger is now accessed via context using contextx.GetLogger().
-
 // MockRule implements the Rule interface for testing.
 type MockRule struct {
 	name    string
@@ -57,7 +54,7 @@ func (r *MockRule) Help(_ []errors.ValidationError) string {
 }
 
 func TestRulePriorityService_CleanRuleName(t *testing.T) {
-	service := NewRulePriorityService(DefaultDisabledRuleMap{})
+	service := NewRulePriorityService(nil)
 
 	tests := []struct {
 		name     string
@@ -67,27 +64,27 @@ func TestRulePriorityService_CleanRuleName(t *testing.T) {
 		{
 			name:     "simple name",
 			input:    "RuleName",
-			expected: "RuleName",
+			expected: "rulename", // CleanRuleName converts to lowercase
 		},
 		{
 			name:     "name with whitespace",
 			input:    "  RuleName  ",
-			expected: "RuleName",
+			expected: "rulename", // Also trims spaces
 		},
 		{
 			name:     "name with double quotes",
 			input:    "\"RuleName\"",
-			expected: "RuleName",
+			expected: "rulename", // Also removes quotes
 		},
 		{
 			name:     "name with single quotes",
 			input:    "'RuleName'",
-			expected: "RuleName",
+			expected: "rulename", // Also removes quotes
 		},
 		{
 			name:     "name with quotes and whitespace",
 			input:    " \"RuleName\" ",
-			expected: "RuleName",
+			expected: "rulename", // Removes both quotes and whitespace
 		},
 	}
 
@@ -100,7 +97,7 @@ func TestRulePriorityService_CleanRuleName(t *testing.T) {
 }
 
 func TestRulePriorityService_MakeRuleMap(t *testing.T) {
-	service := NewRulePriorityService(DefaultDisabledRuleMap{})
+	service := NewRulePriorityService(nil)
 
 	tests := []struct {
 		name      string
@@ -116,26 +113,26 @@ func TestRulePriorityService_MakeRuleMap(t *testing.T) {
 			name:      "simple rule names",
 			ruleNames: []string{"Rule1", "Rule2", "Rule3"},
 			expected: map[string]bool{
-				"Rule1": true,
-				"Rule2": true,
-				"Rule3": true,
+				"rule1": true,
+				"rule2": true,
+				"rule3": true,
 			},
 		},
 		{
 			name:      "rule names with quotes and whitespace",
 			ruleNames: []string{" \"Rule1\" ", "'Rule2'", "  Rule3  "},
 			expected: map[string]bool{
-				"Rule1": true,
-				"Rule2": true,
-				"Rule3": true,
+				"rule1": true,
+				"rule2": true,
+				"rule3": true,
 			},
 		},
 		{
 			name:      "rule names with comments",
 			ruleNames: []string{"Rule1", "#Rule2", "Rule3"},
 			expected: map[string]bool{
-				"Rule1": true,
-				"Rule3": true,
+				"rule1": true,
+				"rule3": true,
 			},
 		},
 	}
@@ -153,8 +150,8 @@ func TestRulePriorityService_IsRuleEnabled(t *testing.T) {
 	ctx := testcontext.CreateTestContext()
 
 	// Create default disabled rules for testing
-	defaultDisabled := DefaultDisabledRuleMap{
-		"DefaultDisabled": true,
+	defaultDisabled := map[string]bool{
+		"defaultdisabled": true,
 	}
 
 	service := NewRulePriorityService(defaultDisabled)
@@ -230,8 +227,8 @@ func TestRulePriorityService_FilterRules(t *testing.T) {
 	ctx := testcontext.CreateTestContext()
 
 	// Create default disabled rules for testing
-	defaultDisabled := DefaultDisabledRuleMap{
-		"DefaultDisabled": true,
+	defaultDisabled := map[string]bool{
+		"defaultdisabled": true,
 	}
 
 	service := NewRulePriorityService(defaultDisabled)

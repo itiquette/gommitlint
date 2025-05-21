@@ -111,7 +111,6 @@ func TestBranchAheadRuleOptions(t *testing.T) {
 	errors := rule.Validate(ctx, commit)
 
 	// No validation errors should be present since commits ahead is within limit
-	// We used to check for status_info errors, but those were removed in the updated implementation
 	require.Empty(t, errors, "No validation errors should occur when commits ahead is within limit")
 }
 

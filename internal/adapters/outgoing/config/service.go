@@ -150,7 +150,7 @@ func NewDefaultConfig() types.Config {
 			Disabled: disabledRules,
 		},
 		Signing: types.SigningConfig{
-			RequireGPG:            false,
+			RequireSignature:      false,
 			AllowMultipleSignoffs: false,
 		},
 		Repo: types.RepoConfig{

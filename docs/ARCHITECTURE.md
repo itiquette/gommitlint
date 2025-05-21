@@ -446,7 +446,7 @@ Default-disabled rules:
 
 ### Rule Priority Logic
 
-```
+```python
 if rule in enabled:
     include rule
 else if rule in disabled:
@@ -639,7 +639,7 @@ internal/
 - Side effects in business logic
 - Mixed I/O and computation
 
-## Implementation Notes
+## Implementation Status and Roadmap
 
 ### Current State
 

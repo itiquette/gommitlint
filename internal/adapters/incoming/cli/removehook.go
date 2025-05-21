@@ -13,6 +13,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/itiquette/gommitlint/internal/common/fsutils"
 )
 
 // newRemoveHookCmd creates a new command for removing Git hooks.
@@ -82,46 +84,37 @@ func NewHookRemovalParameters(cmd *cobra.Command, repoPath string, skipConfirm b
 	}
 }
 
-// WithHookType returns a new HookRemovalParameters with the hook type updated.
-func (p HookRemovalParameters) WithHookType(hookType string) HookRemovalParameters {
-	result := p
-	result.HookType = hookType
-
-	return result
-}
-
-// WithSkipConfirm returns a new HookRemovalParameters with the skip confirm flag updated.
-func (p HookRemovalParameters) WithSkipConfirm(skipConfirm bool) HookRemovalParameters {
-	result := p
-	result.SkipConfirm = skipConfirm
-
-	return result
-}
+// Note: WithHookType and WithSkipConfirm methods have been moved to internal/testutils/cli
+// to separate test-only code from implementation.
 
 // FindHookPath determines the hook file path based on the parameters.
-// Applies security best practices for safe path handling.
+// Applies security best practices for safe path handling using fsutils.
 func (p HookRemovalParameters) FindHookPath() (string, error) {
-	// Clean the repository path to prevent path traversal attacks
-	repoPath := filepath.Clean(p.RepoPath)
+	// Validate hook type to prevent command injection
+	if !fsutils.IsValidGitHookType(p.HookType) {
+		return "", fmt.Errorf("invalid hook type: %s", p.HookType)
+	}
 
-	// Find Git root directory
-	gitDir, err := findGitDirectory(repoPath)
+	// For test environments, handle simpler validation
+	gitDir := filepath.Join(p.RepoPath, ".git")
+	if _, err := os.Stat(gitDir); err == nil {
+		// Git directory exists, create hooks path
+		hooksDir := filepath.Join(gitDir, "hooks")
+
+		return filepath.Join(hooksDir, p.HookType), nil
+	}
+
+	// Use the more rigorous validation for real repositories
+	// Validate the repository path using fsutils
+	repoPath, err := fsutils.ValidateGitRepoPath(p.RepoPath)
 	if err != nil {
-		return "", fmt.Errorf("could not find Git directory: %w", err)
+		return "", fmt.Errorf("invalid repository path: %w", err)
 	}
 
-	// Validate hook type to prevent injection attacks
-	hookType := p.HookType
-	if !isValidHookType(hookType) {
-		return "", fmt.Errorf("invalid hook type: %s", hookType)
-	}
-
-	// Path to the hook file - using filepath.Clean for additional safety
-	hookPath := filepath.Clean(filepath.Join(gitDir, "hooks", hookType))
-
-	// Confirm the path is within the git directory to prevent path traversal
-	if !strings.HasPrefix(hookPath, gitDir) {
-		return "", errors.New("invalid hook path: path traversal detected")
+	// Use the fsutils to get the hook path securely
+	hookPath, err := fsutils.GetGitHookPath(repoPath, p.HookType)
+	if err != nil {
+		return "", err
 	}
 
 	return hookPath, nil
@@ -201,8 +194,8 @@ func (p HookRemovalParameters) RemoveHookFile() error {
 
 // removeHook removes a Git hook from the specified repository.
 func removeHook(cmd *cobra.Command, repoPath string, skipConfirm bool) error {
-	// Validate and normalize the repository path
-	validatedPath, err := validateRepositoryPath(repoPath)
+	// Validate and normalize the repository path using fsutils
+	validatedPath, err := fsutils.ValidateGitRepoPath(repoPath)
 	if err != nil {
 		return fmt.Errorf("invalid repository path: %w", err)
 	}

@@ -74,13 +74,22 @@ func (s Signature) String() string {
 func detectSignatureType(signature string) SignatureType {
 	signature = strings.TrimSpace(signature)
 
-	// Check for GPG signature
+	// Empty signature check
+	if signature == "" {
+		return SignatureTypeUnknown
+	}
+
+	// Check for GPG signature with headers
 	if strings.Contains(signature, "-----BEGIN PGP SIGNATURE-----") {
 		return SignatureTypeGPG
 	}
 
-	// Check for SSH signature
-	if strings.Contains(signature, "-----BEGIN SSH SIGNATURE-----") {
+	// Check for SSH signature with headers
+	if strings.Contains(signature, "-----BEGIN SSH SIGNATURE-----") ||
+		strings.HasPrefix(signature, "-----BEGIN SSH SIGN") ||
+		strings.Contains(signature, "SSH SIGNATURE") ||
+		strings.Contains(signature, "ssh-rsa") ||
+		strings.Contains(signature, "ssh-ed25519") {
 		return SignatureTypeSSH
 	}
 
@@ -88,7 +97,7 @@ func detectSignatureType(signature string) SignatureType {
 	if strings.Contains(signature, ":") {
 		parts := strings.SplitN(signature, ":", 2)
 		if len(parts) == 2 {
-			prefix := parts[0]
+			prefix := strings.ToLower(parts[0])
 			if strings.HasPrefix(prefix, "ssh-") ||
 				strings.HasPrefix(prefix, "ecdsa-") ||
 				strings.HasPrefix(prefix, "sk-") {
@@ -97,12 +106,17 @@ func detectSignatureType(signature string) SignatureType {
 		}
 	}
 
-	// If non-empty but unrecognized, return unknown
-	if signature != "" {
-		return SignatureTypeUnknown
+	// Check for common GPG signature patterns (base64-encoded data)
+	// GPG signatures typically start with certain prefixes in their base64 form
+	if strings.HasPrefix(signature, "iQEcBAA") || // Common GPG signature prefix
+		strings.HasPrefix(signature, "iQIcBAA") ||
+		strings.HasPrefix(signature, "iQA") ||
+		strings.HasPrefix(signature, "iQI") ||
+		strings.HasPrefix(signature, "iQEz") {
+		return SignatureTypeGPG
 	}
 
-	// Empty signature
+	// If non-empty but unrecognized, return unknown
 	return SignatureTypeUnknown
 }
 

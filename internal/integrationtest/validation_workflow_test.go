@@ -639,7 +639,7 @@ func applyTestConfiguration(cfg types.Config) types.Config {
 	cfg.Message.Body.RequireSignoff = false
 
 	// Update signing config
-	cfg.Signing.RequireGPG = false
+	cfg.Signing.RequireSignature = false
 
 	// Update rules config - ensure only the rules we need are active
 	// Explicitly enable these rules (they'll run unless disabled)

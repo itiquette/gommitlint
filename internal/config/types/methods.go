@@ -209,10 +209,10 @@ func (c ConventionalConfig) WithMaxDescriptionLength(maxLength int) Conventional
 // SigningConfig transformation methods
 // =========================================================================
 
-// WithRequireGPG returns a new SigningConfig with the updated GPG required flag.
-func (c SigningConfig) WithRequireGPG(required bool) SigningConfig {
+// WithRequireSignature returns a new SigningConfig with the updated signature required flag.
+func (c SigningConfig) WithRequireSignature(required bool) SigningConfig {
 	result := c
-	result.RequireGPG = required
+	result.RequireSignature = required
 
 	return result
 }

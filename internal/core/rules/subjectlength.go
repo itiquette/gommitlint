@@ -17,13 +17,14 @@ import (
 // This rule uses configuration from context rather than embedded fields.
 type SubjectLengthRule struct {
 	name      string
-	verbosity string
+	maxLength int
 }
 
 // NewSubjectLengthRule creates a new SubjectLengthRule.
 func NewSubjectLengthRule() SubjectLengthRule {
 	return SubjectLengthRule{
-		name: "SubjectLength",
+		name:      "SubjectLength",
+		maxLength: 72, // Default max length
 	}
 }
 
@@ -32,35 +33,36 @@ func (r SubjectLengthRule) Name() string {
 	return r.name
 }
 
-// Validate performs validation against a commit using configuration from context.
-func (r SubjectLengthRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
-	// Log validation at trace level
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("Validating subject length",
-		"rule", r.Name(),
-		"commit_hash", commit.Hash)
-
+// WithContext implements the ConfigurableRule interface for SubjectLengthRule.
+// It returns a new rule with configuration from the provided context.
+func (r SubjectLengthRule) WithContext(ctx context.Context) domain.Rule {
 	// Get configuration from context
 	cfg := contextx.GetConfig(ctx)
 	if cfg == nil {
-		// If no config is available, return nil (no validation)
-		return nil
+		return r
 	}
 
-	// Get max length from configuration with default
+	// Get max length from configuration
 	maxLength := cfg.GetInt("message.subject.max_length")
-	if maxLength == 0 {
-		maxLength = 72 // Default max length
+
+	// Create a copy of the rule
+	result := r
+
+	// Only update if a value is explicitly set in config
+	if maxLength > 0 {
+		result.maxLength = maxLength
 	}
 
-	// Log configuration at debug level
-	logger.Debug("Subject length rule configuration from context", "max_length", maxLength)
+	return result
+}
 
+// Validate performs validation against a commit.
+func (r SubjectLengthRule) Validate(_ context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
 	// Validate the subject length
 	subject := commit.Subject
 
 	// Check if subject length exceeds maximum
-	if len(subject) <= maxLength {
+	if len(subject) <= r.maxLength {
 		return nil
 	}
 
@@ -68,21 +70,10 @@ func (r SubjectLengthRule) Validate(ctx context.Context, commit domain.CommitInf
 	err := appErrors.NewLengthError(
 		appErrors.ErrMaxLengthExceeded,
 		"SubjectLength",
-		fmt.Sprintf("Commit subject is %d characters too long", len(subject)-maxLength),
+		fmt.Sprintf("Commit subject is %d characters too long", len(subject)-r.maxLength),
 		len(subject),
-		maxLength,
+		r.maxLength,
 	).WithContext("subject", subject)
 
-	// Log the error at error level
-	logger.Debug("Subject length validation failed", "error", err.Error())
-
 	return []appErrors.ValidationError{err}
-}
-
-// WithVerbosity returns a new SubjectLengthRule with the specified verbosity.
-func (r SubjectLengthRule) WithVerbosity(verbosity string) SubjectLengthRule {
-	newRule := r
-	newRule.verbosity = verbosity
-
-	return newRule
 }

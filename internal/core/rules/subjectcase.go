@@ -74,51 +74,53 @@ func NewSubjectCaseRule(options ...SubjectCaseOption) SubjectCaseRule {
 	return rule
 }
 
-// Validate checks that commit subjects follow the required case style
-// using configuration from context.
+// WithContext implements the ConfigurableRule interface for SubjectCaseRule.
+// It returns a new rule with configuration from the provided context.
+func (r SubjectCaseRule) WithContext(ctx context.Context) domain.Rule {
+	// Get configuration directly from context
+	cfg := contextx.GetConfig(ctx)
+	if cfg == nil {
+		return r
+	}
+
+	// Create a copy of the rule
+	result := r
+
+	// Get configuration values directly
+	caseStyle := cfg.GetString("message.subject.case")
+	if caseStyle != "" {
+		result.caseChoice = caseStyle
+	}
+
+	// Get imperative requirement
+	requireImperative := cfg.GetBool("message.subject.imperative")
+	result.allowNonAlpha = requireImperative || r.allowNonAlpha
+
+	// Check if conventional commit is enabled using domain priority service
+	enabledRules := cfg.GetStringSlice("rules.enabled")
+	disabledRules := cfg.GetStringSlice("rules.disabled")
+	priorityService := domain.NewRulePriorityService(domain.GetDefaultDisabledRules())
+	result.checkCommit = priorityService.IsRuleEnabled(ctx, "Conventional", enabledRules, disabledRules)
+
+	// Log configuration at debug level
+	logger := contextx.GetLogger(ctx)
+	logger.Debug("Subject case rule configuration",
+		"case_choice", result.caseChoice,
+		"is_conventional", result.checkCommit,
+		"allow_non_alpha", result.allowNonAlpha)
+
+	return result
+}
+
+// Validate checks that commit subjects follow the required case style.
 func (r SubjectCaseRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
 	logger := contextx.GetLogger(ctx)
 	logger.Debug("Validating subject case",
 		"rule", r.Name(),
 		"commit_hash", commit.Hash)
 
-	// Get config directly from context using standard approach
-	cfg := contextx.GetConfig(ctx)
-
-	// Apply configuration from context
-	caseChoice := r.caseChoice
-
-	// Set default values
-	allowNonAlpha := true // Default to allow non-alpha
-
-	// Get configuration values directly
-	caseStyle := cfg.GetString("message.subject.case")
-	if caseStyle != "" {
-		caseChoice = caseStyle
-		logger.Debug("Using case style from config",
-			"case_style", caseStyle)
-	}
-
-	// Get imperative requirement
-	requireImperative := cfg.GetBool("message.subject.imperative")
-	allowNonAlpha = requireImperative || allowNonAlpha
-	logger.Debug("Configured imperative requirement",
-		"require_imperative", requireImperative,
-		"allow_non_alpha", allowNonAlpha)
-
-	// Check if conventional commit is enabled
-	checkCommit := IsRuleEnabled(ctx, "Conventional")
-	logger.Debug("Configured conventional commit check",
-		"conventional_enabled", checkCommit)
-
-	// Log final configuration at debug level
-	logger.Debug("Subject case rule configuration",
-		"case_choice", caseChoice,
-		"is_conventional", checkCommit,
-		"allow_non_alpha", allowNonAlpha)
-
 	// Special handling for "ignore" or "any" case choice - always valid
-	if caseChoice == "ignore" || caseChoice == "any" {
+	if r.caseChoice == "ignore" || r.caseChoice == "any" {
 		return nil
 	}
 
@@ -140,7 +142,7 @@ func (r SubjectCaseRule) Validate(ctx context.Context, commit domain.CommitInfo)
 	// For conventional commits, need to extract the description part
 	var textToCheck string
 
-	if checkCommit {
+	if r.checkCommit {
 		// Try to parse as conventional commit
 		// Format: type(scope)!: description
 		conventionalRegex := regexp.MustCompile(`^(?:\w+)(?:\([^)]*\))?(?:!)?:\s*(.*)$`)
@@ -183,12 +185,12 @@ func (r SubjectCaseRule) Validate(ctx context.Context, commit domain.CommitInfo)
 	}
 
 	// Special handling for non-alphabetic starts with allowNonAlpha option
-	if allowNonAlpha && !startsWithAlpha(textToCheck) {
+	if r.allowNonAlpha && !startsWithAlpha(textToCheck) {
 		return nil
 	}
 
 	// Get the first word to check its case
-	firstWord := extractFirstWordForCase(textToCheck, allowNonAlpha)
+	firstWord := extractFirstWordForCase(textToCheck, r.allowNonAlpha)
 	if firstWord == "" {
 		return []appErrors.ValidationError{
 			appErrors.NewCaseError(
@@ -201,18 +203,18 @@ func (r SubjectCaseRule) Validate(ctx context.Context, commit domain.CommitInfo)
 	}
 
 	// Check the case
-	actualCase, isValid := checkCase(firstWord, caseChoice)
+	actualCase, isValid := checkCase(firstWord, r.caseChoice)
 
 	if !isValid {
 		return []appErrors.ValidationError{
 			appErrors.NewCaseError(
 				appErrors.ErrSubjectCase,
 				"SubjectCase",
-				fmt.Sprintf("First word '%s' should be in %s case", firstWord, caseChoice),
-				fmt.Sprintf("Change '%s' to %s case", firstWord, caseChoice),
+				fmt.Sprintf("First word '%s' should be in %s case", firstWord, r.caseChoice),
+				fmt.Sprintf("Change '%s' to %s case", firstWord, r.caseChoice),
 			).WithContextMap(map[string]string{
 				"word":          firstWord,
-				"required_case": caseChoice,
+				"required_case": r.caseChoice,
 				"actual_case":   actualCase,
 			}),
 		}

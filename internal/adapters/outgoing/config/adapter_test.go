@@ -32,7 +32,7 @@ func TestAdapter_InterfaceCompliance(t *testing.T) {
 			Disabled: []string{"spell"},
 		},
 		Signing: configTypes.SigningConfig{
-			RequireGPG:            true,
+			RequireSignature:      true,
 			AllowMultipleSignoffs: false,
 		},
 		Jira: configTypes.JiraConfig{

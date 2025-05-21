@@ -139,11 +139,11 @@ func TestSubjectCaseRule(t *testing.T) {
 			}
 
 			// Create rule with options if provided, otherwise use default
-			var rule rules.SubjectCaseRule
+			var baseRule rules.SubjectCaseRule
 			if len(testCase.options) > 0 {
-				rule = rules.NewSubjectCaseRule(testCase.options...)
+				baseRule = rules.NewSubjectCaseRule(testCase.options...)
 			} else {
-				rule = rules.NewSubjectCaseRule()
+				baseRule = rules.NewSubjectCaseRule()
 			}
 
 			// Setup context with TestConfigAdapter
@@ -156,6 +156,10 @@ func TestSubjectCaseRule(t *testing.T) {
 			// Create the context with config
 			ctx := testcontext.CreateTestContext()
 			ctx = contextx.WithConfig(ctx, testConfig)
+
+			// Configure the rule with context
+			rule, ok := baseRule.WithContext(ctx).(rules.SubjectCaseRule)
+			require.True(t, ok, "Expected WithContext to return a SubjectCaseRule")
 
 			// Execute validation
 			errors := rule.Validate(ctx, commit)
@@ -254,9 +258,13 @@ func TestSubjectCaseRuleWithConfig(t *testing.T) {
 			}
 
 			// Create rule with appropriate options
-			rule := rules.NewSubjectCaseRule(
+			baseRule := rules.NewSubjectCaseRule(
 				rules.WithSubjectCaseCommitFormat(testCase.checkCommit),
 			)
+
+			// Configure rule with context
+			rule, ok := baseRule.WithContext(ctx).(rules.SubjectCaseRule)
+			require.True(t, ok, "Expected WithContext to return a SubjectCaseRule")
 
 			// Execute validation
 			errors := rule.Validate(ctx, commit)
@@ -339,7 +347,7 @@ func TestSubjectCaseWithConventionalCommit(t *testing.T) {
 			}
 
 			// Create rule with commit format enabled
-			rule := rules.NewSubjectCaseRule(
+			baseRule := rules.NewSubjectCaseRule(
 				rules.WithSubjectCaseCommitFormat(true),
 			)
 
@@ -351,6 +359,10 @@ func TestSubjectCaseWithConventionalCommit(t *testing.T) {
 
 			ctx := testcontext.CreateTestContext()
 			ctx = contextx.WithConfig(ctx, testConfig)
+
+			// Configure rule with context
+			rule, ok := baseRule.WithContext(ctx).(rules.SubjectCaseRule)
+			require.True(t, ok, "Expected WithContext to return a SubjectCaseRule")
 
 			// Execute validation
 			errors := rule.Validate(ctx, commit)

@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/adapters/outgoing/git"
-	"github.com/itiquette/gommitlint/internal/common/contextx"
 	"github.com/itiquette/gommitlint/internal/config/types"
 	"github.com/itiquette/gommitlint/internal/domain"
 )
@@ -89,9 +88,6 @@ func (s Service) WithConfig(cfg types.Config) Service {
 
 // ValidateCommit validates a single commit.
 func (s Service) ValidateCommit(ctx context.Context, hash string) (domain.CommitResult, error) {
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("Entering Service.ValidateCommit", "hash", hash)
-
 	// Get the commit from the git repository
 	commit, err := s.dependencies.CommitService.GetCommit(ctx, hash)
 	if err != nil {
@@ -104,9 +100,6 @@ func (s Service) ValidateCommit(ctx context.Context, hash string) (domain.Commit
 
 // ValidateHeadCommits validates the specified number of commits from HEAD.
 func (s Service) ValidateHeadCommits(ctx context.Context, count int, skipMerge bool) (domain.ValidationResults, error) {
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("Entering Service.ValidateHeadCommits", "count", count, "skip_merge", skipMerge)
-
 	// Get the commits from the git repository
 	commits, err := s.dependencies.CommitService.GetHeadCommits(ctx, count)
 	if err != nil {
@@ -125,12 +118,6 @@ func (s Service) ValidateHeadCommits(ctx context.Context, count int, skipMerge b
 
 // ValidateCommitRange validates all commits in the given range.
 func (s Service) ValidateCommitRange(ctx context.Context, fromHash, toHash string, skipMerge bool) (domain.ValidationResults, error) {
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("Entering Service.ValidateCommitRange",
-		"from_hash", fromHash,
-		"to_hash", toHash,
-		"skip_merge", skipMerge)
-
 	// Get the commits from the git repository
 	commits, err := s.dependencies.CommitService.GetCommitRange(ctx, fromHash, toHash)
 	if err != nil {
@@ -149,9 +136,6 @@ func (s Service) ValidateCommitRange(ctx context.Context, fromHash, toHash strin
 
 // ValidateMessageFile validates a commit message from a file.
 func (s Service) ValidateMessageFile(ctx context.Context, filePath string) (domain.ValidationResults, error) {
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("Entering Service.ValidateMessageFile", "file_path", filePath)
-
 	// Read the message file
 	messageBytes, err := os.ReadFile(filePath)
 	if err != nil {
@@ -188,15 +172,6 @@ func (s Service) ValidateMessageFile(ctx context.Context, filePath string) (doma
 
 // ValidateWithOptions validates commits according to the provided options.
 func (s Service) ValidateWithOptions(ctx context.Context, opts Options) (domain.ValidationResults, error) {
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("Entering Service.ValidateWithOptions",
-		"commit_hash", opts.CommitHash,
-		"from_hash", opts.FromHash,
-		"to_hash", opts.ToHash,
-		"message_file", opts.MessageFile,
-		"commit_count", opts.CommitCount,
-		"skip_merge", opts.SkipMergeCommits)
-
 	// Create validation results
 	results := domain.NewValidationResults()
 
@@ -243,9 +218,6 @@ func (s Service) ValidateWithOptions(ctx context.Context, opts Options) (domain.
 // CreateService creates a validation service with the configuration.
 // This now uses context directly for configuration.
 func CreateService(ctx context.Context, config types.Config, repoPath string) (Service, error) {
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("Entering CreateService", "repo_path", repoPath)
-
 	// Create the repository adapter
 	repoAdapter, err := git.NewRepositoryAdapter(ctx, repoPath)
 	if err != nil {

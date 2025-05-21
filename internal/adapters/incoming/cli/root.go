@@ -44,10 +44,6 @@ func newRootCommand(ctx context.Context, versionString string, deps *AppDependen
 			// Initialize logger with command flags
 			ctx = log.InitLoggerContext(ctx, cmd)
 
-			// Log initialization (trace level)
-			logger := contextx.GetLogger(ctx)
-			logger.Debug("Logger initialized")
-
 			// Propagate the context to all commands
 			cmd.SetContext(ctx)
 
@@ -56,7 +52,7 @@ func newRootCommand(ctx context.Context, versionString string, deps *AppDependen
 	}
 
 	// Add common flags
-	rootCmd.PersistentFlags().String("verbosity", "brief", "Log level (quiet, brief, debug, trace)")
+	rootCmd.PersistentFlags().String("verbosity", "brief", "Log level (quiet, brief, trace)")
 	rootCmd.PersistentFlags().Bool("quiet", false, "Suppress all output except errors")
 	rootCmd.PersistentFlags().Bool("caller", false, "Include caller information in logs")
 	rootCmd.PersistentFlags().String("output", "text", "Output format (text, json, github, gitlab)")
@@ -98,8 +94,6 @@ func ExecuteWithContext(ctx context.Context, version, commitSHA, buildDate strin
 		"enabled_rules", cfg.Rules.Enabled,
 		"disabled_rules", cfg.Rules.Disabled)
 
-	configLogger.Debug("Added config directly to context using contextx.WithConfig")
-
 	// Use the ExecuteWithDependencies function with the context
 	ExecuteWithDependencies(
 		ctx,
@@ -124,9 +118,6 @@ func ExecuteWithDependencies(
 	deps *AppDependencies,
 ) {
 	// Create a logger
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("Entering ExecuteWithDependencies")
-
 	versionString := version + " (Commit SHA: " + commitSHA + ", Build date: " + buildDate + ")"
 
 	// Create and execute root command with dependencies

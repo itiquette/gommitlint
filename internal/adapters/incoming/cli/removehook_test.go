@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 
+	testCli "github.com/itiquette/gommitlint/internal/testutils/clitests"
 	testGit "github.com/itiquette/gommitlint/internal/testutils/git"
 )
 
@@ -34,11 +35,15 @@ func TestHookRemovalParameters(t *testing.T) {
 	require.NotNil(t, params.Input)
 
 	// Test immutability with the With* methods
-	updatedParams := params.WithSkipConfirm(true)
+	updatedParamsRaw := testCli.WithSkipConfirm(params, true)
+	updatedParams, isCorrectType := updatedParamsRaw.(HookRemovalParameters)
+	require.True(t, isCorrectType, "Failed to convert parameters to HookRemovalParameters")
 	require.False(t, params.SkipConfirm, "Original should be unchanged")
 	require.True(t, updatedParams.SkipConfirm, "New instance should have updated value")
 
-	customTypeParams := params.WithHookType("custom-hook")
+	customTypeParamsRaw := testCli.WithHookTypeRemoval(params, "custom-hook")
+	customTypeParams, isCorrectType := customTypeParamsRaw.(HookRemovalParameters)
+	require.True(t, isCorrectType, "Failed to convert parameters to HookRemovalParameters")
 	require.Equal(t, "commit-msg", params.HookType, "Original should be unchanged")
 	require.Equal(t, "custom-hook", customTypeParams.HookType, "New instance should have updated value")
 

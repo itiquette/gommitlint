@@ -104,11 +104,11 @@ func TestSubjectSuffixRule(t *testing.T) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			// Create the rule with value semantics
-			var rule rules.SubjectSuffixRule
+			var baseRule rules.SubjectSuffixRule
 			if testCase.invalidSuffixes != "" {
-				rule = rules.NewSubjectSuffixRule(rules.WithInvalidSuffixes(testCase.invalidSuffixes))
+				baseRule = rules.NewSubjectSuffixRule(rules.WithInvalidSuffixes(testCase.invalidSuffixes))
 			} else {
-				rule = rules.NewSubjectSuffixRule() // Use default suffixes
+				baseRule = rules.NewSubjectSuffixRule() // Use default suffixes
 			}
 
 			// Create commit with the test subject
@@ -123,15 +123,19 @@ func TestSubjectSuffixRule(t *testing.T) {
 			}
 
 			builder := testconfig.NewBuilder().
-				WithSubjectSuffixes(suffixes)
+				WithSubjectForbidEndings(suffixes)
 			cfg := builder.Build()
 			testConfig := testconfig.NewAdapter(cfg).Adapter
 
 			ctx := testcontext.CreateTestContext()
 			ctx = contextx.WithConfig(ctx, testConfig)
 
+			// Apply context configuration
+			configuredRule, ok := baseRule.WithContext(ctx).(rules.SubjectSuffixRule)
+			require.True(t, ok, "Expected WithContext to return a SubjectSuffixRule")
+
 			// Execute validation
-			errors := rule.Validate(ctx, commit)
+			errors := configuredRule.Validate(ctx, commit)
 
 			// Check results
 			if testCase.expectedValid {
@@ -145,7 +149,7 @@ func TestSubjectSuffixRule(t *testing.T) {
 			}
 
 			// Verify name
-			require.Equal(t, "SubjectSuffix", rule.Name())
+			require.Equal(t, "SubjectSuffix", configuredRule.Name())
 		})
 	}
 }
@@ -153,7 +157,7 @@ func TestSubjectSuffixRule(t *testing.T) {
 func TestSubjectSuffixOptions(t *testing.T) {
 	t.Run("Default configuration", func(t *testing.T) {
 		// No options provided, should use default invalid suffixes
-		rule := rules.NewSubjectSuffixRule()
+		baseRule := rules.NewSubjectSuffixRule()
 
 		// Create a valid commit
 		validCommit := domain.CommitInfo{
@@ -167,12 +171,16 @@ func TestSubjectSuffixOptions(t *testing.T) {
 
 		// Setup context with our test config adapter
 		builder := testconfig.NewBuilder().
-			WithSubjectSuffixes([]string{".", ","})
+			WithSubjectForbidEndings([]string{".", ","})
 		cfg := builder.Build()
 		testConfig := testconfig.NewAdapter(cfg).Adapter
 
 		ctx := testcontext.CreateTestContext()
 		ctx = contextx.WithConfig(ctx, testConfig)
+
+		// Apply context configuration
+		rule, ok := baseRule.WithContext(ctx).(rules.SubjectSuffixRule)
+		require.True(t, ok, "Expected WithContext to return a SubjectSuffixRule")
 
 		// Test valid case
 		validErrors := rule.Validate(ctx, validCommit)
@@ -185,7 +193,7 @@ func TestSubjectSuffixOptions(t *testing.T) {
 
 	t.Run("With custom invalid suffixes", func(t *testing.T) {
 		// Custom invalid suffixes
-		rule := rules.NewSubjectSuffixRule(rules.WithInvalidSuffixes("!@#"))
+		baseRule := rules.NewSubjectSuffixRule(rules.WithInvalidSuffixes("!@#"))
 
 		// Create commits for testing
 		invalidCommit := domain.CommitInfo{
@@ -198,12 +206,16 @@ func TestSubjectSuffixOptions(t *testing.T) {
 
 		// Setup context with custom config using our test adapter
 		builder := testconfig.NewBuilder().
-			WithSubjectSuffixes([]string{"!", "@", "#"})
+			WithSubjectForbidEndings([]string{"!", "@", "#"})
 		cfg := builder.Build()
 		testConfig := testconfig.NewAdapter(cfg).Adapter
 
 		ctx := testcontext.CreateTestContext()
 		ctx = contextx.WithConfig(ctx, testConfig)
+
+		// Apply context configuration
+		rule, ok := baseRule.WithContext(ctx).(rules.SubjectSuffixRule)
+		require.True(t, ok, "Expected WithContext to return a SubjectSuffixRule")
 
 		// Test invalid case
 		invalidErrors := rule.Validate(ctx, invalidCommit)
@@ -216,7 +228,7 @@ func TestSubjectSuffixOptions(t *testing.T) {
 
 	t.Run("Empty invalid suffixes", func(t *testing.T) {
 		// Empty invalid suffixes should fall back to defaults
-		rule := rules.NewSubjectSuffixRule(rules.WithInvalidSuffixes(""))
+		baseRule := rules.NewSubjectSuffixRule(rules.WithInvalidSuffixes(""))
 
 		// Create commit with question mark (in default invalid suffixes)
 		commit := domain.CommitInfo{
@@ -225,12 +237,16 @@ func TestSubjectSuffixOptions(t *testing.T) {
 
 		// Setup context with config that checks for ?
 		builder := testconfig.NewBuilder().
-			WithSubjectSuffixes([]string{"?"})
+			WithSubjectForbidEndings([]string{"?"})
 		cfg := builder.Build()
 		testConfig := testconfig.NewAdapter(cfg).Adapter
 
 		ctx := testcontext.CreateTestContext()
 		ctx = contextx.WithConfig(ctx, testConfig)
+
+		// Apply context configuration
+		rule, ok := baseRule.WithContext(ctx).(rules.SubjectSuffixRule)
+		require.True(t, ok, "Expected WithContext to return a SubjectSuffixRule")
 
 		// Test invalid case
 		errors := rule.Validate(ctx, commit)
@@ -240,7 +256,7 @@ func TestSubjectSuffixOptions(t *testing.T) {
 
 func TestSubjectSuffixRuleWithCustomOptions(t *testing.T) {
 	// Create rule with options
-	rule := rules.NewSubjectSuffixRule(
+	baseRule := rules.NewSubjectSuffixRule(
 		rules.WithInvalidSuffixes("!@#"),
 	)
 
@@ -251,12 +267,16 @@ func TestSubjectSuffixRuleWithCustomOptions(t *testing.T) {
 
 	// Setup context with config that matches rule options using our test adapter
 	builder := testconfig.NewBuilder().
-		WithSubjectSuffixes([]string{"!", "@", "#"})
+		WithSubjectForbidEndings([]string{"!", "@", "#"})
 	cfg := builder.Build()
 	testConfig := testconfig.NewAdapter(cfg).Adapter
 
 	ctx := testcontext.CreateTestContext()
 	ctx = contextx.WithConfig(ctx, testConfig)
+
+	// Apply context configuration
+	rule, ok := baseRule.WithContext(ctx).(rules.SubjectSuffixRule)
+	require.True(t, ok, "Expected WithContext to return a SubjectSuffixRule")
 
 	// Test validation
 	errors := rule.Validate(ctx, commit)
@@ -322,7 +342,7 @@ func TestSubjectSuffixRuleWithConfig(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			// Create config with our test adapter
 			builder := testconfig.NewBuilder().
-				WithSubjectSuffixes(testCase.invalidSuffixes)
+				WithSubjectForbidEndings(testCase.invalidSuffixes)
 			cfg := builder.Build()
 			testConfig := testconfig.NewAdapter(cfg).Adapter
 
@@ -331,7 +351,11 @@ func TestSubjectSuffixRuleWithConfig(t *testing.T) {
 			ctx = contextx.WithConfig(ctx, testConfig)
 
 			// Create rule
-			rule := rules.NewSubjectSuffixRule()
+			baseRule := rules.NewSubjectSuffixRule()
+
+			// Apply context configuration
+			rule, ok := baseRule.WithContext(ctx).(rules.SubjectSuffixRule)
+			require.True(t, ok, "Expected WithContext to return a SubjectSuffixRule")
 
 			// Create test commit
 			commit := domain.CommitInfo{

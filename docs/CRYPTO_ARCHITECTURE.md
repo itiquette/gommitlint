@@ -69,10 +69,8 @@ Rules should use the crypto domain models directly:
 // Create a signature from a string
 signature := crypto.NewSignature(commit.Signature)
 
-// Check properties
-if signature.Type() == crypto.SignatureTypeGPG {
-    // Handle GPG signature
-}
+// The signature type is now handled internally by the crypto domain
+// Rules no longer need to check or validate signature types
 
 // Create identities
 authorIdentity := crypto.NewIdentity(commit.AuthorName, commit.AuthorEmail)
@@ -82,7 +80,7 @@ signerIdentity := crypto.NewIdentityFromString("Name <email@example.com>")
 if authorIdentity.Matches(signerIdentity) {
     // Identities match
 }
-```
+```go
 
 ### For Verification
 
@@ -104,7 +102,7 @@ if result.IsVerified() {
 } else {
     fmt.Println("Verification failed:", result.ErrorMessage())
 }
-```
+```go
 
 ## Benefits of the New Architecture
 
@@ -113,6 +111,7 @@ if result.IsVerified() {
 - **Immutability**: No state modification in core functions
 - **Simpler rules**: Focused validation logic
 - **Extensibility**: Easy to add new signature types or verifiers
+- **Automatic signature type handling**: Signature types are now detected and handled automatically by the crypto domain, removing the need for user configuration of allowed signature types
 
 ## Update Tests
 
@@ -132,7 +131,7 @@ make quality
 make quality/golangcilint
 make quality/govet
 make quality/revive
-```
+```bash
 
 These checks will verify:
 - Proper documentation (including deprecation notices)
@@ -163,7 +162,7 @@ go test -v ./internal/common/encutils/...
 
 The crypto functionality is organized across the following packages to maintain hexagonal architecture:
 
-```
+```text
 internal/
 ├── domain/
 │   └── crypto/             # Domain models and interfaces
@@ -187,7 +186,7 @@ internal/
 │   ├── fsutils/            # Filesystem utilities
 │   └── encutils/           # Encoding utilities
 └── ...
-```
+```text
 
 ## Questions and Support
 

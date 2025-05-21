@@ -23,7 +23,7 @@ func (e TestEngine) ValidateCommit(ctx context.Context, commit domain.CommitInfo
 	// Since we can't directly set the unexported field, use the validation
 	// functions directly with our provider
 	// Get active rules from our registry
-	activeRules := e.Registry.CreateActiveRules(ctx, []string{}, []string{})
+	activeRules := e.Registry.GetActiveRules([]string{}, []string{})
 
 	// Initialize result
 	result := domain.CommitResult{

@@ -8,66 +8,49 @@ import (
 	"encoding/base64"
 )
 
-// IsBase64 checks if a string is valid base64-encoded data by attempting
-// to decode it using various base64 encoding schemes.
+// IsBase64 checks if a string is valid base64-encoded data.
+// It attempts to decode the input with standard base64 encodings.
 func IsBase64(input string) bool {
 	if input == "" {
 		return false
 	}
 
-	// Try standard base64 encoding
-	_, err := base64.StdEncoding.DecodeString(input)
-	if err == nil {
-		return true
+	// Try all standard encodings
+	encodings := []*base64.Encoding{
+		base64.StdEncoding,
+		base64.URLEncoding,
+		base64.RawStdEncoding,
+		base64.RawURLEncoding,
 	}
 
-	// Try URL encoding
-	_, err = base64.URLEncoding.DecodeString(input)
-	if err == nil {
-		return true
+	for _, enc := range encodings {
+		if _, err := enc.DecodeString(input); err == nil {
+			return true
+		}
 	}
 
-	// Try RawStdEncoding (no padding)
-	_, err = base64.RawStdEncoding.DecodeString(input)
-	if err == nil {
-		return true
-	}
-
-	// Try RawURLEncoding (no padding)
-	_, err = base64.RawURLEncoding.DecodeString(input)
-
-	return err == nil
+	return false
 }
 
-// DecodeBase64 attempts to decode a base64 string using multiple encoding variants.
+// DecodeBase64 attempts to decode a base64 string with standard encodings.
 // It returns the decoded bytes and true if successful, or nil and false if not.
 func DecodeBase64(input string) ([]byte, bool) {
 	if input == "" {
 		return nil, false
 	}
 
-	// Try standard base64 encoding
-	decoded, err := base64.StdEncoding.DecodeString(input)
-	if err == nil {
-		return decoded, true
+	// Try all standard encodings
+	encodings := []*base64.Encoding{
+		base64.StdEncoding,
+		base64.URLEncoding,
+		base64.RawStdEncoding,
+		base64.RawURLEncoding,
 	}
 
-	// Try URL encoding
-	decoded, err = base64.URLEncoding.DecodeString(input)
-	if err == nil {
-		return decoded, true
-	}
-
-	// Try RawStdEncoding (no padding)
-	decoded, err = base64.RawStdEncoding.DecodeString(input)
-	if err == nil {
-		return decoded, true
-	}
-
-	// Try RawURLEncoding (no padding)
-	decoded, err = base64.RawURLEncoding.DecodeString(input)
-	if err == nil {
-		return decoded, true
+	for _, enc := range encodings {
+		if decoded, err := enc.DecodeString(input); err == nil {
+			return decoded, true
+		}
 	}
 
 	return nil, false

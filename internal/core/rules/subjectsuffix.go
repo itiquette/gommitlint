@@ -56,18 +56,19 @@ func NewSubjectSuffixRule(options ...SubjectSuffixOption) SubjectSuffixRule {
 	return rule
 }
 
-// Validate checks that the commit subject doesn't end with invalid characters.
-func (r SubjectSuffixRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("Validating subject suffix",
-		"rule", r.Name(),
-		"commit_hash", commit.Hash)
-
-	// Get invalid suffixes from context configuration
-	invalidSuffixes := r.invalidSuffixes
-
-	// Get config object directly from standard context key
+// WithContext implements the ConfigurableRule interface for SubjectSuffixRule.
+// It returns a new rule with configuration from the provided context.
+func (r SubjectSuffixRule) WithContext(ctx context.Context) domain.Rule {
+	// Get configuration directly from context
 	cfg := contextx.GetConfig(ctx)
+	if cfg == nil {
+		return r
+	}
+
+	// Create a copy of the rule
+	result := r
+
+	// Get disallowed suffixes from config
 	disallowedSuffixes := cfg.GetStringSlice("message.subject.forbid_endings")
 
 	// Process disallowed suffixes if we have them
@@ -82,19 +83,30 @@ func (r SubjectSuffixRule) Validate(ctx context.Context, commit domain.CommitInf
 		configInvalidSuffixes := sb.String()
 
 		// Log the processed suffixes for debugging
+		logger := contextx.GetLogger(ctx)
 		logger.Debug("Processing disallowed suffixes from context config",
 			"disallowed_suffixes_slice", disallowedSuffixes,
 			"processed_invalid_suffixes", configInvalidSuffixes)
 
 		// Update rule setting
 		if configInvalidSuffixes != "" {
-			invalidSuffixes = configInvalidSuffixes
+			result.invalidSuffixes = configInvalidSuffixes
 		}
 	}
 
+	return result
+}
+
+// Validate checks that the commit subject doesn't end with invalid characters.
+func (r SubjectSuffixRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
+	logger := contextx.GetLogger(ctx)
+	logger.Debug("Validating subject suffix",
+		"rule", r.Name(),
+		"commit_hash", commit.Hash)
+
 	// Log configuration at debug level
 	logger.Debug("Subject suffix rule configuration",
-		"invalid_suffixes", invalidSuffixes)
+		"invalid_suffixes", r.invalidSuffixes)
 
 	// Empty subject is always an error
 	if len(commit.Subject) == 0 {
@@ -120,7 +132,7 @@ func (r SubjectSuffixRule) Validate(ctx context.Context, commit domain.CommitInf
 			suffixContainsLastChar := false
 
 			// Range directly over the string to handle multi-byte characters properly
-			for _, suffixRune := range invalidSuffixes {
+			for _, suffixRune := range r.invalidSuffixes {
 				if suffixRune == lastRune {
 					suffixContainsLastChar = true
 
@@ -140,7 +152,7 @@ func (r SubjectSuffixRule) Validate(ctx context.Context, commit domain.CommitInf
 						"subject":          commit.Subject,
 						"invalid_suffix":   lastChar,
 						"last_char":        lastChar,
-						"invalid_suffixes": invalidSuffixes,
+						"invalid_suffixes": r.invalidSuffixes,
 					}),
 				}
 			}

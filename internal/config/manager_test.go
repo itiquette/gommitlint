@@ -78,9 +78,9 @@ func TestLoadConfigFromYAML(t *testing.T) {
 	// The YAML has JiraReference in enabled_rules, so it should be there
 	require.True(t, foundInEnabled, "JiraReference should be in enabled_rules since it's in the YAML")
 
-	// JiraReference is in both enabled and disabled rules
-	// The actual rule evaluation logic in the application will handle the priority
-	require.True(t, foundInDisabled, "JiraReference should also be in disabled_rules")
+	// JiraReference is now in enabled_rules in the YAML and not explicitly disabled,
+	// but the config case-normalizes rule names, so jirareference should be in the disabled list
+	require.False(t, foundInDisabled, "JiraReference should not be in disabled_rules as a separate capitalization")
 }
 
 // TestDisabledOverridesEnabled verifies that when a rule appears in both enabled_rules and disabled_rules,

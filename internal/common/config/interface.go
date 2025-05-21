@@ -46,7 +46,9 @@ func GetConfig(ctx context.Context) Config {
 		return &emptyConfig{}
 	}
 
-	if cfg, ok := ctx.Value(configKey{}).(Config); ok {
+	// Get config from context
+	value := ctx.Value(configKey{})
+	if cfg, ok := value.(Config); ok {
 		return cfg
 	}
 
@@ -64,7 +66,9 @@ func GetProvider(ctx context.Context) Provider {
 		return &emptyProvider{}
 	}
 
-	if provider, ok := ctx.Value(providerKey{}).(Provider); ok {
+	// Get provider from context
+	value := ctx.Value(providerKey{})
+	if provider, ok := value.(Provider); ok {
 		return provider
 	}
 

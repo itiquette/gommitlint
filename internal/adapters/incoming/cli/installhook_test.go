@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	testCli "github.com/itiquette/gommitlint/internal/testutils/clitests"
 	testGit "github.com/itiquette/gommitlint/internal/testutils/git"
 )
 
@@ -30,15 +31,21 @@ func TestHookInstallationParameters(t *testing.T) {
 	require.Equal(t, "commit-msg", params.HookType)
 
 	// Test immutability with the With* methods
-	updatedParams := params.WithForce(true)
+	updatedParamsRaw := testCli.WithForce(params, true)
+	updatedParams, isCorrectType := updatedParamsRaw.(HookInstallationParameters)
+	require.True(t, isCorrectType, "Failed to convert parameters to HookInstallationParameters")
 	require.False(t, params.Force, "Original should be unchanged")
 	require.True(t, updatedParams.Force, "New instance should have updated value")
 
-	customTypeParams := params.WithHookType("custom-hook")
+	customTypeParamsRaw := testCli.WithHookType(params, "custom-hook")
+	customTypeParams, isCorrectType := customTypeParamsRaw.(HookInstallationParameters)
+	require.True(t, isCorrectType, "Failed to convert parameters to HookInstallationParameters")
 	require.Equal(t, "commit-msg", params.HookType, "Original should be unchanged")
 	require.Equal(t, "custom-hook", customTypeParams.HookType, "New instance should have updated value")
 
-	customPathParams := params.WithRepoPath("/custom/path")
+	customPathParamsRaw := testCli.WithRepoPath(params, "/custom/path")
+	customPathParams, isCorrectType := customPathParamsRaw.(HookInstallationParameters)
+	require.True(t, isCorrectType, "Failed to convert parameters to HookInstallationParameters")
 	require.Equal(t, tmpDir, params.RepoPath, "Original should be unchanged")
 	require.Equal(t, "/custom/path", customPathParams.RepoPath, "New instance should have updated value")
 
@@ -74,7 +81,10 @@ func TestHookInstallationParameters(t *testing.T) {
 	require.Error(t, err)
 
 	// With force
-	forceParams := params.WithForce(true)
+	forceParamsRaw := testCli.WithForce(params, true)
+	forceParams, isCorrectType := forceParamsRaw.(HookInstallationParameters)
+	require.True(t, isCorrectType, "Failed to convert parameters to HookInstallationParameters")
+
 	err = forceParams.CanInstallHook()
 	require.NoError(t, err)
 }

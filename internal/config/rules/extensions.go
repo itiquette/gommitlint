@@ -8,7 +8,8 @@ import (
 	"strings"
 )
 
-// CleanRuleName standardizes rule name by removing quotes and whitespace.
+// CleanRuleName standardizes rule name by removing quotes and whitespace
+// and converting to lowercase for case-insensitive matching.
 func CleanRuleName(rule string) string {
 	// Remove leading/trailing whitespace
 	rule = strings.TrimSpace(rule)
@@ -21,6 +22,9 @@ func CleanRuleName(rule string) string {
 
 	// Final trim to remove any remaining whitespace
 	rule = strings.TrimSpace(rule)
+
+	// Convert to lowercase for case-insensitive comparison
+	rule = strings.ToLower(rule)
 
 	return rule
 }

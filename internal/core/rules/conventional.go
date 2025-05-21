@@ -8,17 +8,19 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/common/contextx"
-	"github.com/itiquette/gommitlint/internal/common/slices"
+	commonSlices "github.com/itiquette/gommitlint/internal/common/slices"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
 
-// ConventionalParts represents the parts of a conventional commit.
-type ConventionalParts struct {
+// conventionalParts represents the parts of a conventional commit.
+// This is an internal type used only by the parseConventionalFormat function.
+type conventionalParts struct {
 	Type        string
 	Scope       string
 	Breaking    bool
@@ -130,7 +132,7 @@ func NewConventionalCommitRule(options ...ConventionalCommitOption) Conventional
 	}
 
 	// Apply options using Reduce for a more functional approach
-	return slices.Reduce(
+	return commonSlices.Reduce(
 		options,
 		rule,
 		func(currentRule ConventionalCommitRule, option ConventionalCommitOption) ConventionalCommitRule {
@@ -144,62 +146,43 @@ func (r ConventionalCommitRule) Name() string {
 	return r.name
 }
 
-// Validate validates a commit against the conventional commit rules.
-// This method follows functional programming principles and does not modify the rule's state.
-func (r ConventionalCommitRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
-	// Get the logger from context
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("Validating conventional commit format", "rule", r.Name(), "commit_hash", commit.Hash)
-
-	// Build configuration from rule and context using a local struct for validation
-	// We use a custom struct here because the rule's internal state needs different
-	// fields than the standard types.ConventionalConfig
-	config := struct {
-		Required         bool
-		Types            []string
-		Scopes           []string
-		ScopeRequired    bool
-		ValidateBreaking bool
-		MaxDescLength    int
-	}{
-		Required:         true, // Conventional rule is always required if enabled
-		Types:            r.allowedTypes,
-		Scopes:           r.allowedScopes,
-		ScopeRequired:    r.requireScope,
-		ValidateBreaking: r.validateBreaking,
-		MaxDescLength:    r.maxDescLength,
-	}
-
+// WithContext implements the ConfigurableRule interface for ConventionalCommitRule.
+// It returns a new rule with configuration from the provided context.
+func (r ConventionalCommitRule) WithContext(ctx context.Context) domain.Rule {
 	// Get configuration directly from context
 	cfg := contextx.GetConfig(ctx)
-	if cfg != nil {
-		// Only override settings if they are specified in the context configuration
-		if types := cfg.GetStringSlice("conventional.types"); len(types) > 0 {
-			config.Types = deepCopyStringSlice(types)
-		}
-
-		if scopes := cfg.GetStringSlice("conventional.scopes"); len(scopes) > 0 {
-			config.Scopes = deepCopyStringSlice(scopes)
-		}
-
-		config.ScopeRequired = cfg.GetBool("conventional.require_scope")
-
-		if maxDescLen := cfg.GetInt("conventional.max_description_length"); maxDescLen > 0 {
-			config.MaxDescLength = maxDescLen
-		} else if config.MaxDescLength == 0 && cfg.GetInt("message.subject.max_length") > 0 {
-			// If maxDescLength is not set, use the subject max length from config
-			config.MaxDescLength = cfg.GetInt("message.subject.max_length")
-		}
+	if cfg == nil {
+		return r
 	}
 
-	// Log configuration for debugging
-	logger.Debug("Conventional commit rule configuration",
-		"allowed_types", config.Types,
-		"allowed_scopes", config.Scopes,
-		"require_scope", config.ScopeRequired,
-		"validate_breaking", config.ValidateBreaking,
-		"max_desc_length", config.MaxDescLength)
+	// Create a copy of the rule
+	result := r
 
+	// Only override settings if they are specified in the context configuration
+	if types := cfg.GetStringSlice("conventional.types"); len(types) > 0 {
+		result.allowedTypes = deepCopyStringSlice(types)
+	}
+
+	if scopes := cfg.GetStringSlice("conventional.scopes"); len(scopes) > 0 {
+		result.allowedScopes = deepCopyStringSlice(scopes)
+	}
+
+	// Update scope requirement if explicitly set in config
+	result.requireScope = cfg.GetBool("conventional.require_scope")
+
+	if maxDescLen := cfg.GetInt("conventional.max_description_length"); maxDescLen > 0 {
+		result.maxDescLength = maxDescLen
+	} else if result.maxDescLength == 0 && cfg.GetInt("message.subject.max_length") > 0 {
+		// If maxDescLength is not set, use the subject max length from config
+		result.maxDescLength = cfg.GetInt("message.subject.max_length")
+	}
+
+	return result
+}
+
+// Validate validates a commit against the conventional commit rules.
+// This method follows functional programming principles and does not modify the rule's state.
+func (r ConventionalCommitRule) Validate(_ context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
 	// Validate conventional commit format
 	// Parse subject from commit
 	subject := commit.Subject
@@ -225,16 +208,16 @@ func (r ConventionalCommitRule) Validate(ctx context.Context, commit domain.Comm
 	}
 
 	// Validate type
-	if !isValidType(parts.Type, config.Types) {
+	if !isValidType(parts.Type, r.allowedTypes) {
 		errors := []appErrors.ValidationError{
 			appErrors.NewConventionalCommitError(
 				appErrors.ErrInvalidConventionalType,
 				"ConventionalCommit",
-				fmt.Sprintf("Invalid type '%s'; allowed types: %s", parts.Type, strings.Join(config.Types, ", ")),
-				strings.Join(config.Types, ", "),
+				fmt.Sprintf("Invalid type '%s'; allowed types: %s", parts.Type, strings.Join(r.allowedTypes, ", ")),
+				strings.Join(r.allowedTypes, ", "),
 			).WithContextMap(map[string]string{
 				"type":          parts.Type,
-				"allowed_types": strings.Join(config.Types, ", "),
+				"allowed_types": strings.Join(r.allowedTypes, ", "),
 			}),
 		}
 
@@ -242,7 +225,7 @@ func (r ConventionalCommitRule) Validate(ctx context.Context, commit domain.Comm
 	}
 
 	// Validate scope if required
-	if config.ScopeRequired && parts.Scope == "" {
+	if r.requireScope && parts.Scope == "" {
 		errors := []appErrors.ValidationError{
 			appErrors.NewConventionalCommitError(
 				appErrors.ErrMissingConventionalScope,
@@ -256,16 +239,16 @@ func (r ConventionalCommitRule) Validate(ctx context.Context, commit domain.Comm
 	}
 
 	// Validate allowed scopes if specified
-	if parts.Scope != "" && len(config.Scopes) > 0 && !isValidScope(parts.Scope, config.Scopes) {
+	if parts.Scope != "" && len(r.allowedScopes) > 0 && !isValidScope(parts.Scope, r.allowedScopes) {
 		errors := []appErrors.ValidationError{
 			appErrors.NewConventionalCommitError(
 				appErrors.ErrInvalidConventionalScope,
 				"ConventionalCommit",
-				fmt.Sprintf("Invalid scope '%s'; allowed scopes: %s", parts.Scope, strings.Join(config.Scopes, ", ")),
-				strings.Join(config.Scopes, ", "),
+				fmt.Sprintf("Invalid scope '%s'; allowed scopes: %s", parts.Scope, strings.Join(r.allowedScopes, ", ")),
+				strings.Join(r.allowedScopes, ", "),
 			).WithContextMap(map[string]string{
 				"scope":          parts.Scope,
-				"allowed_scopes": strings.Join(config.Scopes, ", "),
+				"allowed_scopes": strings.Join(r.allowedScopes, ", "),
 			}),
 		}
 
@@ -273,16 +256,16 @@ func (r ConventionalCommitRule) Validate(ctx context.Context, commit domain.Comm
 	}
 
 	// Validate description length
-	if config.MaxDescLength > 0 && len(parts.Description) > config.MaxDescLength {
+	if r.maxDescLength > 0 && len(parts.Description) > r.maxDescLength {
 		errors := []appErrors.ValidationError{
 			appErrors.NewConventionalCommitError(
 				appErrors.ErrConventionalDescTooLong,
 				"ConventionalCommit",
-				fmt.Sprintf("Description too long (%d > %d)", len(parts.Description), config.MaxDescLength),
-				fmt.Sprintf("type[(scope)]: description (max %d chars)", config.MaxDescLength),
+				fmt.Sprintf("Description too long (%d > %d)", len(parts.Description), r.maxDescLength),
+				fmt.Sprintf("type[(scope)]: description (max %d chars)", r.maxDescLength),
 			).WithContextMap(map[string]string{
 				"length":     strconv.Itoa(len(parts.Description)),
-				"max_length": strconv.Itoa(config.MaxDescLength),
+				"max_length": strconv.Itoa(r.maxDescLength),
 			}),
 		}
 
@@ -294,7 +277,7 @@ func (r ConventionalCommitRule) Validate(ctx context.Context, commit domain.Comm
 }
 
 // parseConventionalFormat parses a commit subject into conventional commit parts.
-func parseConventionalFormat(subject string) (ConventionalParts, error) {
+func parseConventionalFormat(subject string) (conventionalParts, error) {
 	// Conventional commit format: <type>[(scope)][!]: <description>
 	// Example: feat(api)!: add new endpoint
 	pattern := `^(?P<type>[a-z]+)(?:\((?P<scope>[a-z0-9/-]+)\))?(?P<breaking>!)?:\s?(?P<description>.*)`
@@ -302,7 +285,7 @@ func parseConventionalFormat(subject string) (ConventionalParts, error) {
 
 	match := regex.FindStringSubmatch(subject)
 	if match == nil {
-		return ConventionalParts{}, errors.New("subject does not match conventional format")
+		return conventionalParts{}, errors.New("subject does not match conventional format")
 	}
 
 	// Extract named groups
@@ -314,7 +297,7 @@ func parseConventionalFormat(subject string) (ConventionalParts, error) {
 		}
 	}
 
-	return ConventionalParts{
+	return conventionalParts{
 		Type:        groups["type"],
 		Scope:       groups["scope"],
 		Breaking:    groups["breaking"] == "!",
@@ -339,10 +322,10 @@ func isValidScope(scope string, allowedScopes []string) bool {
 		return true
 	}
 
-	return slices.Contains(allowedScopes, scope)
+	return commonSlices.Contains(allowedScopes, scope)
 }
 
 // Helper function for deep copying string slices.
 func deepCopyStringSlice(src []string) []string {
-	return slices.DeepCopy(src)
+	return slices.Clone(src)
 }

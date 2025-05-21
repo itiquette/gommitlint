@@ -119,38 +119,32 @@ func NewJiraReferenceRule(options ...JiraReferenceOption) JiraReferenceRule {
 
 // Helper function to check if a JIRA reference is in the scope part of a conventional commit.
 
-// Validate checks a commit for Jira reference compliance using context-based configuration.
-func (r JiraReferenceRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("Validating Jira references using context configuration", "rule", r.Name(), "commit_hash", commit.Hash)
-
-	// Create a new rule with context configuration
-	rule := r.withContextConfig(ctx)
-
+// Validate checks a commit for Jira reference compliance.
+func (r JiraReferenceRule) Validate(_ context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
 	// Check if this commit type should be excluded from JIRA validation
-	if shouldExcludeCommitType(commit.Subject, rule.excludedTypes) {
+	if shouldExcludeCommitType(commit.Subject, r.excludedTypes) {
 		return nil
 	}
 
 	// Check if JIRA is required for this commit type
-	if !isJiraRequiredForType(commit.Subject, rule.requiredForTypes) && rule.checkConventionalOnly {
+	if !isJiraRequiredForType(commit.Subject, r.requiredForTypes) && r.checkConventionalOnly {
 		return nil
 	}
 
 	// Prepare the text to search
 	textToSearch := commit.Subject
-	if rule.searchInBody && commit.Body != "" {
+	if r.searchInBody && commit.Body != "" {
 		textToSearch = fmt.Sprintf("%s\n%s", commit.Subject, commit.Body)
 	}
 
 	// Extract JIRA references
-	references := extractJiraReferences(textToSearch, rule.pattern, rule.prefixes)
+	references := extractJiraReferences(textToSearch, r.pattern, r.prefixes)
 
 	// If no references found and they're required
 	if len(references) == 0 {
 		expectedPattern := "ABC-123"
-		if len(rule.prefixes) > 0 {
-			expectedPattern = rule.prefixes[0] + "-123"
+		if len(r.prefixes) > 0 {
+			expectedPattern = r.prefixes[0] + "-123"
 		}
 
 		return []appErrors.ValidationError{
@@ -159,19 +153,19 @@ func (r JiraReferenceRule) Validate(ctx context.Context, commit domain.CommitInf
 	}
 
 	// Validate projects if configured
-	if len(rule.prefixes) > 0 {
+	if len(r.prefixes) > 0 {
 		for _, ref := range references {
 			project := extractProjectFromReference(ref)
-			if !isValidProject(project, rule.prefixes) {
+			if !isValidProject(project, r.prefixes) {
 				return []appErrors.ValidationError{
 					appErrors.NewJiraError(
 						appErrors.ErrInvalidProject,
 						"JiraReference",
-						fmt.Sprintf("Invalid JIRA project '%s'; allowed projects: %s", project, strings.Join(rule.prefixes, ", ")),
-						"Use one of: "+strings.Join(rule.prefixes, ", "),
+						fmt.Sprintf("Invalid JIRA project '%s'; allowed projects: %s", project, strings.Join(r.prefixes, ", ")),
+						"Use one of: "+strings.Join(r.prefixes, ", "),
 					).WithContextMap(map[string]string{
 						"project":        project,
-						"valid_projects": strings.Join(rule.prefixes, ", "),
+						"valid_projects": strings.Join(r.prefixes, ", "),
 					}),
 				}
 			}
@@ -179,7 +173,7 @@ func (r JiraReferenceRule) Validate(ctx context.Context, commit domain.CommitInf
 	}
 
 	// Check reference placement in conventional commits
-	if rule.checkConventionalOnly && isConventionalCommit(commit.Subject) {
+	if r.checkConventionalOnly && isConventionalCommit(commit.Subject) {
 		conventionalType, _, _ := parseConventionalCommit(commit.Subject)
 
 		// For merge commits, we're more lenient
@@ -188,7 +182,7 @@ func (r JiraReferenceRule) Validate(ctx context.Context, commit domain.CommitInf
 		}
 
 		// Check if JIRA is in the correct position (not in description)
-		if hasJiraInDescription(commit.Subject, rule.pattern) {
+		if hasJiraInDescription(commit.Subject, r.pattern) {
 			return []appErrors.ValidationError{
 				appErrors.NewJiraError(
 					appErrors.ErrMisplacedJira,
@@ -203,18 +197,25 @@ func (r JiraReferenceRule) Validate(ctx context.Context, commit domain.CommitInf
 	return nil
 }
 
-// withContextConfig creates a new rule with configuration from context.
-func (r JiraReferenceRule) withContextConfig(ctx context.Context) JiraReferenceRule {
+// WithContext implements the ConfigurableRule interface for JiraReferenceRule.
+// It returns a new rule with configuration from the provided context.
+func (r JiraReferenceRule) WithContext(ctx context.Context) domain.Rule {
 	// Get configuration directly from context
 	cfg := contextx.GetConfig(ctx)
+	if cfg == nil {
+		return r
+	}
 
 	// Extract configuration values
 	validateBodyRef := cfg.GetBool("jira.check_body")
 	validProjects := cfg.GetStringSlice("jira.projects")
 	pattern := cfg.GetString("jira.pattern")
 
-	// Check if conventional rule is enabled
-	isConventionalEnabled := IsRuleEnabled(ctx, "Conventional")
+	// Check if conventional rule is enabled using domain priority service
+	enabledRules := cfg.GetStringSlice("rules.enabled")
+	disabledRules := cfg.GetStringSlice("rules.disabled")
+	priorityService := domain.NewRulePriorityService(domain.GetDefaultDisabledRules())
+	isConventionalEnabled := priorityService.IsRuleEnabled(ctx, "Conventional", enabledRules, disabledRules)
 
 	// Create a copy of the rule
 	result := r

@@ -200,6 +200,42 @@ func SwitchBranch(repoPath, branchName string) error {
 	return nil
 }
 
+// SetupTestRepo creates a temporary repository for testing.
+// It returns the repository object and the temporary directory path.
+// The caller is responsible for calling cleanupTestRepo to remove the directory.
+func SetupTestRepo(t interface{}) (*gogit.Repository, string) {
+	// Use type assertion to get the testing.T
+	// Check if this is a valid test.TB implementation with the methods we need
+	tObj, ok := t.(interface {
+		Helper()
+		TempDir() string
+	})
+	if !ok {
+		panic("SetupTestRepo requires a testing.T or testing.B implementation")
+	}
+
+	tObj.Helper()
+
+	// Create a temporary directory
+	tempDir := tObj.TempDir()
+
+	// Initialize a git repository
+	repo, err := gogit.PlainInit(tempDir, false)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize git repository: %v", err))
+	}
+
+	return repo, tempDir
+}
+
+// CleanupTestRepo removes the temporary repository.
+// This is provided for backward compatibility as testing.T.TempDir()
+// already handles cleanup automatically.
+func CleanupTestRepo(_ string) {
+	// This is now a no-op since TempDir is used and will be cleaned up automatically
+	// But we keep the function for backward compatibility
+}
+
 // CreateGitHooksDir creates the .git/hooks directory if it doesn't exist.
 func CreateGitHooksDir(repoPath string) (string, error) {
 	gitDir := filepath.Join(repoPath, ".git")

@@ -20,7 +20,6 @@ type BranchAheadRule struct {
 	maxCommitsAhead  int
 	reference        string
 	repositoryGetter func() domain.CommitAnalyzer
-	commitsAhead     int
 }
 
 // BranchAheadOption is a function that configures a BranchAheadRule.
@@ -73,17 +72,37 @@ func NewBranchAheadRule(options ...BranchAheadOption) BranchAheadRule {
 	return rule
 }
 
+// WithContext implements the ConfigurableRule interface for BranchAheadRule.
+// It returns a new rule with configuration from the provided context.
+func (r BranchAheadRule) WithContext(ctx context.Context) domain.Rule {
+	// Get configuration directly from context
+	cfg := contextx.GetConfig(ctx)
+	if cfg == nil {
+		return r
+	}
+
+	// Extract configuration values
+	maxCommitsAhead := cfg.GetInt("repo.max_commits_ahead")
+	ref := cfg.GetString("repo.branch")
+
+	// Create a copy of the rule
+	result := r
+
+	// Update with context configuration
+	result.maxCommitsAhead = maxCommitsAhead
+	result.reference = ref
+
+	// Keep the repository getter from the original rule
+	// (We don't replace it with contextual configuration)
+
+	return result
+}
+
 // Validate checks that the current branch is not too many commits ahead of the reference branch.
-// This implementation uses context to get configuration values.
-func (r BranchAheadRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("Validating commits ahead using context configuration", "rule", r.Name(), "commit_hash", commit.Hash)
-
-	// Create a new rule with context configuration
-	rule := r.withContextConfig(ctx)
-
+// This implementation uses the rule's pre-configured state set by WithContext.
+func (r BranchAheadRule) Validate(ctx context.Context, _ domain.CommitInfo) []appErrors.ValidationError {
 	// Get the repository
-	if rule.repositoryGetter == nil {
+	if r.repositoryGetter == nil {
 		// This should not happen in normal operation
 		// Create a clear error when repository getter is unavailable
 		return []appErrors.ValidationError{
@@ -96,7 +115,7 @@ func (r BranchAheadRule) Validate(ctx context.Context, commit domain.CommitInfo)
 		}
 	}
 
-	repository := rule.repositoryGetter()
+	repository := r.repositoryGetter()
 	if repository == nil {
 		// This is another error that should not happen in normal operation
 		// Without a repository, we can't validate
@@ -111,7 +130,7 @@ func (r BranchAheadRule) Validate(ctx context.Context, commit domain.CommitInfo)
 	}
 
 	// Get the number of commits ahead
-	commitsAhead, err := repository.GetCommitsAhead(ctx, rule.reference)
+	commitsAhead, err := repository.GetCommitsAhead(ctx, r.reference)
 	if err != nil {
 		// Handle errors from the repository
 		return []appErrors.ValidationError{
@@ -119,61 +138,35 @@ func (r BranchAheadRule) Validate(ctx context.Context, commit domain.CommitInfo)
 				appErrors.ErrGitOperationFailed,
 				"BranchAhead",
 				"Failed to get commits ahead of reference",
-				fmt.Sprintf("Check if the reference branch '%s' exists", rule.reference),
+				fmt.Sprintf("Check if the reference branch '%s' exists", r.reference),
 			).WithContextMap(map[string]string{
-				"reference": rule.reference,
+				"reference": r.reference,
 				"error":     err.Error(),
 			}),
 		}
 	}
 
-	// Store the commits ahead for result formatting
-	r.commitsAhead = commitsAhead
+	// The commitsAhead field is not used since the rule is stateless
+	// Keeping it as a local variable instead
 
 	// Validate against the maximum
-	if rule.maxCommitsAhead > 0 && commitsAhead > rule.maxCommitsAhead {
+	if r.maxCommitsAhead > 0 && commitsAhead > r.maxCommitsAhead {
 		return []appErrors.ValidationError{
 			appErrors.NewBranchError(
 				appErrors.ErrTooManyCommits,
 				"BranchAhead",
 				fmt.Sprintf("Your branch is %d commits ahead of '%s' (max allowed: %d)",
-					commitsAhead, rule.reference, rule.maxCommitsAhead),
-				fmt.Sprintf("Rebase on %s or squash some commits to reduce the distance", rule.reference),
+					commitsAhead, r.reference, r.maxCommitsAhead),
+				fmt.Sprintf("Rebase on %s or squash some commits to reduce the distance", r.reference),
 			).WithContextMap(map[string]string{
-				"reference":     rule.reference,
+				"reference":     r.reference,
 				"commits_ahead": strconv.Itoa(commitsAhead),
-				"max_allowed":   strconv.Itoa(rule.maxCommitsAhead),
+				"max_allowed":   strconv.Itoa(r.maxCommitsAhead),
 			}),
 		}
 	}
 
 	return nil
-}
-
-// withContextConfig creates a new rule with configuration from context.
-func (r BranchAheadRule) withContextConfig(ctx context.Context) BranchAheadRule {
-	// Get configuration directly from context
-	cfg := contextx.GetConfig(ctx)
-
-	// Extract configuration values
-	maxCommitsAhead := cfg.GetInt("repo.max_commits_ahead")
-	ref := cfg.GetString("repo.branch")
-
-	// Log configuration at debug level
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("CommitsAhead rule configuration from context", "max_commits_ahead", maxCommitsAhead, "reference", ref)
-
-	// Create a copy of the rule
-	result := r
-
-	// Update with context configuration
-	result.maxCommitsAhead = maxCommitsAhead
-	result.reference = ref
-
-	// Keep the repository getter from the original rule
-	// (We don't replace it with contextual configuration)
-
-	return result
 }
 
 // Name returns the rule name.
