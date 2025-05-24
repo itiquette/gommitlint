@@ -46,11 +46,11 @@ func FormatVerboseResult(ruleName string, errs []errors.ValidationError) string 
 	builder.WriteString(fmt.Sprintf("%s: Found %d error(s):\n", ruleName, len(errs)))
 
 	for i, err := range errs {
-		fmt.Fprintf(&builder, "  %d. %s\n", i+1, err.Message)
+		builder.WriteString(fmt.Sprintf("  %d. %s\n", i+1, err.Message))
 
 		help := err.GetHelp()
 		if help != "" {
-			fmt.Fprintf(&builder, "     Help: %s\n", help)
+			builder.WriteString(fmt.Sprintf("     Help: %s\n", help))
 		}
 	}
 

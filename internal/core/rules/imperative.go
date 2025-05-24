@@ -9,7 +9,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/itiquette/gommitlint/internal/common/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
@@ -146,36 +145,6 @@ func NewImperativeVerbRule(options ...ImperativeVerbOption) ImperativeVerbRule {
 // Name returns the rule name.
 func (r ImperativeVerbRule) Name() string {
 	return r.name
-}
-
-// WithContext implements the ConfigurableRule interface for ImperativeVerbRule.
-// It returns a new rule with configuration from the provided context.
-func (r ImperativeVerbRule) WithContext(ctx context.Context) domain.Rule {
-	// Get configuration directly from context
-	cfg := contextx.GetConfig(ctx)
-	if cfg == nil {
-		return r
-	}
-
-	// Extract configuration values
-	_ = cfg.GetBool("message.subject.imperative") // Default to true if not set
-
-	// Check if conventional rule is enabled using domain priority service
-	enabledRules := cfg.GetStringSlice("rules.enabled")
-	disabledRules := cfg.GetStringSlice("rules.disabled")
-	priorityService := domain.NewRulePriorityService(domain.GetDefaultDisabledRules())
-	isConventionalEnabled := priorityService.IsRuleEnabled(ctx, "Conventional", enabledRules, disabledRules)
-
-	// Create a copy of the rule
-	result := r
-
-	// Set conventional flag if the Conventional rule is enabled
-	if isConventionalEnabled {
-		result.checkConventionalCommits = true
-		result.conventionalDescriptionOnly = true
-	}
-
-	return result
 }
 
 // Validate checks if the commit message uses imperative mood.

@@ -52,14 +52,4 @@ func TestRepositoryFactory(t *testing.T) {
 		require.NotNil(t, analyzer, "CommitAnalyzer should not be nil")
 		require.Implements(t, (*domain.CommitAnalyzer)(nil), analyzer)
 	})
-
-	t.Run("Create GitRepositoryService", func(t *testing.T) {
-		service := factory.CreateGitRepositoryService()
-		require.NotNil(t, service, "GitRepositoryService should not be nil")
-
-		// Verify it implements all the specialized interfaces
-		require.Implements(t, (*domain.CommitRepository)(nil), service)
-		require.Implements(t, (*domain.RepositoryInfoProvider)(nil), service)
-		require.Implements(t, (*domain.CommitAnalyzer)(nil), service)
-	})
 }

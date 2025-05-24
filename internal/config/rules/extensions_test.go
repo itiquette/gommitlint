@@ -33,15 +33,15 @@ func TestIsRuleEnabled(t *testing.T) {
 		require.False(t, result, "JiraReference should be disabled when in disabled_rules")
 	})
 
-	t.Run("disabled_rules takes precedence over enabled_rules", func(t *testing.T) {
+	t.Run("enabled_rules takes precedence over disabled_rules", func(t *testing.T) {
 		enabledRules := []string{"Rule1", "JiraReference"}
 		disabledRules := []string{"Rule1", "JiraReference"}
 
 		result := IsRuleEnabled("Rule1", enabledRules, disabledRules)
-		require.False(t, result, "Rule should be disabled when in both lists")
+		require.True(t, result, "Rule should be enabled when in both lists")
 
 		result = IsRuleEnabled("JiraReference", enabledRules, disabledRules)
-		require.False(t, result, "JiraReference should be disabled when in both lists")
+		require.True(t, result, "JiraReference should be enabled when in both lists")
 	})
 
 	t.Run("Rule is enabled when not in any list (default behavior)", func(t *testing.T) {

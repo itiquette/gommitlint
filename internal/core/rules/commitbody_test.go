@@ -82,22 +82,21 @@ Signed-off-by: Laval Lion <laval@cavora.org>`,
 			expectError:    false,
 			expectedResult: "✓ Commit message body format is valid and meets all requirements",
 		},
-		// TODO: Sign-off only validation not implemented yet
-		// {
-		// 	name: "commit with only sign-off",
-		// 	message: `Update configuration
+		{
+			name: "commit with only sign-off",
+			message: `Update configuration
 
-		// Signed-off-by: Laval Lion <laval@cavora.org>`,
-		// 	configFunc: func() types.Config {
-		// 		return testconfig.NewBuilder().
-		// 			EnableRule("CommitBody").
-		// 			WithBodySignOffOnly(false).
-		// 			Build()
-		// 	},
-		// 	expectError:    true,
-		// 	errorCode:      string(appErrors.ErrMissingBody),
-		// 	expectedResult: "✗ Commit body cannot contain only sign-off line",
-		// },
+Signed-off-by: Laval Lion <laval@cavora.org>`,
+			configFunc: func() types.Config {
+				return testconfig.NewBuilder().
+					EnableRule("CommitBody").
+					WithBodySignOffOnly(false).
+					Build()
+			},
+			expectError:    true,
+			errorCode:      string(appErrors.ErrMissingBody),
+			expectedResult: "✗ Commit body cannot contain only sign-off line",
+		},
 		{
 			name: "commit with only sign-off when allowed",
 			message: `Fix typo
@@ -112,22 +111,21 @@ Signed-off-by: Laval Lion <laval@cavora.org>`,
 			expectError:    false,
 			expectedResult: "✓ Commit message body format is valid and meets all requirements",
 		},
-		// TODO: Minimum lines validation not implemented yet
-		// {
-		// 	name: "commit with too few lines",
-		// 	message: `Add feature
+		{
+			name: "commit with too few lines",
+			message: `Add feature
 
-		// Short description`,
-		// 	configFunc: func() types.Config {
-		// 		return testconfig.NewBuilder().
-		// 			EnableRule("CommitBody").
-		// 			WithBodyMinLines(3).
-		// 			Build()
-		// 	},
-		// 	expectError:    true,
-		// 	errorCode:      string(appErrors.ErrMissingBody),
-		// 	expectedResult: "✗ Commit body must have at least 3 lines",
-		// },
+Short description`,
+			configFunc: func() types.Config {
+				return testconfig.NewBuilder().
+					EnableRule("CommitBody").
+					WithBodyMinLines(3).
+					Build()
+			},
+			expectError:    true,
+			errorCode:      string(appErrors.ErrBodyTooShort),
+			expectedResult: "✗ Commit body must have at least 3 lines",
+		},
 		{
 			name: "commit with minimum lines",
 			message: `Add new rules
@@ -182,10 +180,23 @@ X`,
 				Body:    body,
 			}
 
-			// Create and configure rule with context
-			baseRule := rules.NewCommitBodyRule()
-			rule, ok := baseRule.WithContext(ctx).(rules.CommitBodyRule)
-			require.True(t, ok, "Expected WithContext to return a CommitBodyRule")
+			// Create rule with configuration
+			options := []rules.CommitBodyOption{}
+
+			if testCase.configFunc != nil {
+				cfg := testCase.configFunc()
+				if cfg.Message.Body.MinLength > 0 {
+					options = append(options, rules.WithMinLength(cfg.Message.Body.MinLength))
+				}
+
+				if cfg.Message.Body.MinLines > 0 {
+					options = append(options, rules.WithMinLines(cfg.Message.Body.MinLines))
+				}
+
+				options = append(options, rules.WithAllowSignOffOnly(cfg.Message.Body.AllowSignoffOnly))
+			}
+
+			rule := rules.NewCommitBodyRule(options...)
 
 			errors := rule.Validate(ctx, commit)
 

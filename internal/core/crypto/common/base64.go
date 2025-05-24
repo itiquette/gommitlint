@@ -8,9 +8,6 @@ import (
 	"strings"
 )
 
-// Note: Base64 utility functions (IsBase64, DecodeBase64) have been moved to the encutils package.
-// Use "github.com/itiquette/gommitlint/internal/common/encutils" directly for base64 operations.
-
 // IsArmored checks if a string appears to be an armored (PEM-like) block
 // containing base64 data between header and footer lines.
 // This is commonly used for GPG and SSH keys and signatures.

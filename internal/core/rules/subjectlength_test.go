@@ -10,31 +10,11 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	infraConfig "github.com/itiquette/gommitlint/internal/adapters/outgoing/config"
-	"github.com/itiquette/gommitlint/internal/common/contextx"
-	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
-	testcontext "github.com/itiquette/gommitlint/internal/testutils/context"
 	"github.com/stretchr/testify/require"
 )
-
-// createTestSubjectLengthContext creates a context with the given max length setting.
-func createTestSubjectLengthContext(maxLength int) context.Context {
-	// Create a base config to adapt
-	cfg := config.NewDefaultConfig()
-	cfg.Message.Subject.MaxLength = maxLength
-	cfg.Message.Subject.Case = "sentence"
-	cfg.Message.Subject.RequireImperative = true
-	cfg.Conventional.Types = []string{"feat", "fix", "docs", "style", "refactor", "test", "chore"}
-
-	// Add to context using direct adapter pattern
-	ctx := testcontext.CreateTestContext()
-	adapter := infraConfig.NewAdapter(cfg)
-
-	return contextx.WithConfig(ctx, adapter)
-}
 
 func TestSubjectLengthRule(t *testing.T) {
 	tests := []struct {
@@ -89,16 +69,15 @@ func TestSubjectLengthRule(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			// Create a rule without options, then apply context configuration
-			baseRule := rules.NewSubjectLengthRule()
+			// Create rule with configuration
+			options := []rules.SubjectLengthOption{}
+			if testCase.maxLength > 0 {
+				options = append(options, rules.WithMaxLength(testCase.maxLength))
+			}
 
-			// Create context with configuration
-			ctx := createTestSubjectLengthContext(testCase.maxLength)
+			configuredRule := rules.NewSubjectLengthRule(options...)
 
-			// Apply context configuration
-			configuredRule, ok := baseRule.WithContext(ctx).(rules.SubjectLengthRule)
-			require.True(t, ok, "Expected WithContext to return a SubjectLengthRule")
-
+			ctx := context.Background()
 			commit := domain.CommitInfo{Subject: testCase.subject}
 
 			errors := configuredRule.Validate(ctx, commit)
@@ -153,7 +132,7 @@ func TestSubjectLengthRuleWithoutContext(t *testing.T) {
 	}
 
 	// Create a context without configuration
-	ctx := testcontext.CreateTestContext()
+	ctx := context.Background()
 
 	// When no config is available, the rule should use default max length of 72
 	errors := rule.Validate(ctx, commit)
@@ -165,18 +144,14 @@ func TestSubjectLengthRuleWithoutContext(t *testing.T) {
 
 // Test that UTF-8 characters are counted correctly (by bytes, not runes).
 func TestSubjectLengthRuleUTF8(t *testing.T) {
-	baseRule := rules.NewSubjectLengthRule()
-
 	// Create a subject with multi-byte UTF-8 characters
 	// Each emoji is typically 4 bytes
 	subject := "Test " + strings.Repeat("🎉", 20) // 5 + 20*4 = 85 bytes
 
-	ctx := createTestSubjectLengthContext(72)
+	// Create rule with max length of 72
+	rule := rules.NewSubjectLengthRule(rules.WithMaxLength(72))
 
-	// Apply context configuration
-	rule, ok := baseRule.WithContext(ctx).(rules.SubjectLengthRule)
-	require.True(t, ok, "Expected WithContext to return a SubjectLengthRule")
-
+	ctx := context.Background()
 	commit := domain.CommitInfo{Subject: subject}
 
 	errors := rule.Validate(ctx, commit)

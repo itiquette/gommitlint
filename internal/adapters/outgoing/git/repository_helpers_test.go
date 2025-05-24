@@ -16,16 +16,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Note: setupTestRepo and cleanupTestRepo have been moved to internal/testutils/git/helpers.go
+// Note: setupTestRepo has been moved to internal/testutils/git/helpers.go
+// cleanupTestRepo has been removed as it's no longer needed (t.TempDir handles cleanup)
 // This comment is kept for clarity in the test file.
 
 func TestFindGitDir(t *testing.T) {
 	// Create context
 	ctx := testcontext.CreateTestContext()
 
-	// Create temporary git repository
+	// Create temporary git repository with auto-cleanup using t.TempDir
 	_, tempDir := testgit.SetupTestRepo(t)
-	defer testgit.CleanupTestRepo(tempDir)
 
 	// Test finding git directory from the repo root
 	gitDir, err := findGitDir(ctx, tempDir)
@@ -56,9 +56,8 @@ func TestCollectCommits(t *testing.T) {
 	ctx := testcontext.CreateTestContext()
 
 	t.Run("Should limit commits", func(t *testing.T) {
-		// Create test repository
-		_, tempDir := testgit.SetupTestRepo(t)
-		defer testgit.CleanupTestRepo(tempDir)
+		// Create test repository (return values unused intentionally)
+		_, _ = testgit.SetupTestRepo(t)
 
 		// Create a mock iterator function for testing
 		mockIter := testgit.NewMockCommitIter([]*object.Commit{
@@ -76,9 +75,8 @@ func TestCollectCommits(t *testing.T) {
 	})
 
 	t.Run("Should stop at condition", func(t *testing.T) {
-		// Create test repository
-		_, tempDir := testgit.SetupTestRepo(t)
-		defer testgit.CleanupTestRepo(tempDir)
+		// Create test repository (return values unused intentionally)
+		_, _ = testgit.SetupTestRepo(t)
 
 		// Create test commits with distinct hashes
 		hash1 := plumbing.NewHash("aaa1111111111111111111111111111111111111")
@@ -130,9 +128,8 @@ func TestCollectCommits(t *testing.T) {
 	})
 
 	t.Run("Should handle nil commit", func(t *testing.T) {
-		// Create test repository
-		_, tempDir := testgit.SetupTestRepo(t)
-		defer testgit.CleanupTestRepo(tempDir)
+		// Create test repository (return values unused intentionally)
+		_, _ = testgit.SetupTestRepo(t)
 
 		// Create a mock iterator function for testing
 		mockIter := testgit.NewMockCommitIter([]*object.Commit{

@@ -12,14 +12,13 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 
-	"github.com/itiquette/gommitlint/internal/adapters/outgoing/git"
 	"github.com/itiquette/gommitlint/internal/adapters/outgoing/log"
-	"github.com/itiquette/gommitlint/internal/application/validate"
 	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/config/types"
 	"github.com/itiquette/gommitlint/internal/domain"
 	testconfig "github.com/itiquette/gommitlint/internal/testutils/config"
 	testcontext "github.com/itiquette/gommitlint/internal/testutils/context"
+	"github.com/itiquette/gommitlint/internal/testutils/integrationtest"
 )
 
 // TestContextBasedConfigWorkflow tests the context-based configuration workflow end-to-end.
@@ -94,7 +93,7 @@ gommitlint:
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			// Setup test repository
-			repoPath, cleanup := SetupTestRepository(t, testCase.commitMessage)
+			repoPath, cleanup := integrationtest.SetupTestRepository(t, testCase.commitMessage)
 			defer cleanup()
 
 			// Create a context for the entire test
@@ -113,25 +112,12 @@ gommitlint:
 			// Add the config to the context with wrapper
 			ctx = testconfig.WrapAndInjectConfig(ctx, configObj)
 
-			// Create repository factory with the context
-			repoFactory, err := git.NewRepositoryFactory(ctx, repoPath)
+			loggerAdapter := log.NewSimpleAdapter(logger)
+			validationService, err := integrationtest.CreateValidationService(ctx, loggerAdapter, repoPath)
 			require.NoError(t, err)
 
-			// Get services from factory
-			commitService := repoFactory.CreateCommitRepository()
-			infoProvider := repoFactory.CreateRepositoryInfoProvider()
-			analyzer := repoFactory.CreateCommitAnalyzer()
-
-			// Create context-based validation service
-			validationService := validate.CreateValidationService(
-				ctx,
-				commitService,
-				infoProvider,
-				analyzer,
-			)
-
 			// Validate the HEAD commit
-			result, err := validationService.ValidateCommit(ctx, "HEAD")
+			result, err := validationService.ValidateCommit(ctx, "HEAD", false)
 			require.NoError(t, err)
 
 			// Print validation errors for debugging
@@ -178,13 +164,13 @@ gommitlint:
 			// Check if the validation result matches expectations
 			if testCase.shouldPass {
 				if !filteredResult.Passed {
-					t.Logf("Validation errors: %v", GetValidationErrors(result))
+					t.Logf("Validation errors: %v", integrationtest.GetValidationErrors(result))
 				}
 
 				require.True(t, filteredResult.Passed, "Expected validation to pass but it failed")
 			} else {
 				require.False(t, filteredResult.Passed, "Expected validation to fail but it passed")
-				require.NotEmpty(t, GetValidationErrorsExcludingRule(result, "CommitsAhead"), "Expected validation errors")
+				require.NotEmpty(t, integrationtest.GetValidationErrorsExcludingRule(result, "CommitsAhead"), "Expected validation errors")
 			}
 		})
 	}
@@ -289,28 +275,20 @@ gommitlint:
 
 			// We still need a git repository for message validation
 			// to initialize correctly
-			repoPath, cleanup := SetupTestRepository(t, "Initial commit\n\nThis is an initial commit for testing.")
+			repoPath, cleanup := integrationtest.SetupTestRepository(t, "Initial commit\n\nThis is an initial commit for testing.")
 			defer cleanup()
 
-			// Create repository factory with the context
-			repoFactory, err := git.NewRepositoryFactory(ctx, repoPath)
+			// Create validation service using helper
+			loggerAdapter := log.NewSimpleAdapter(logger)
+			validationService, err := integrationtest.CreateValidationService(ctx, loggerAdapter, repoPath)
 			require.NoError(t, err)
 
-			// Get services from factory
-			commitService := repoFactory.CreateCommitRepository()
-			infoProvider := repoFactory.CreateRepositoryInfoProvider()
-			analyzer := repoFactory.CreateCommitAnalyzer()
+			// Read the message file content
+			messageContent, err := os.ReadFile(messagePath)
+			require.NoError(t, err)
 
-			// Create context-based validation service
-			validationService := validate.CreateValidationService(
-				ctx,
-				commitService,
-				infoProvider,
-				analyzer,
-			)
-
-			// Validate the message file
-			results, err := validationService.ValidateMessageFile(ctx, messagePath)
+			// Validate the message content
+			results, err := validationService.ValidateMessage(ctx, string(messageContent))
 			require.NoError(t, err)
 
 			// Get first commit result
@@ -361,13 +339,13 @@ gommitlint:
 			// Check if the validation result matches expectations
 			if testCase.shouldPass {
 				if !filteredResult.Passed {
-					t.Logf("Validation errors: %v", GetValidationErrors(result))
+					t.Logf("Validation errors: %v", integrationtest.GetValidationErrors(result))
 				}
 
 				require.True(t, filteredResult.Passed, "Expected validation to pass but it failed")
 			} else {
 				require.False(t, filteredResult.Passed, "Expected validation to fail but it passed")
-				require.NotEmpty(t, GetValidationErrorsExcludingRule(result, "CommitsAhead"), "Expected validation errors")
+				require.NotEmpty(t, integrationtest.GetValidationErrorsExcludingRule(result, "CommitsAhead"), "Expected validation errors")
 			}
 		})
 	}

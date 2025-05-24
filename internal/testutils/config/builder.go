@@ -8,10 +8,13 @@ package config
 
 import (
 	"context"
+	"testing"
 
+	"github.com/itiquette/gommitlint/internal/adapters/outgoing/config"
 	"github.com/itiquette/gommitlint/internal/common/contextx"
-	"github.com/itiquette/gommitlint/internal/config"
+	internalConfig "github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/config/types"
+	testcontext "github.com/itiquette/gommitlint/internal/testutils/context"
 )
 
 // Builder provides a functional builder for creating test configurations.
@@ -23,14 +26,57 @@ type Builder struct {
 // NewBuilder creates a new Builder with default values.
 func NewBuilder() Builder {
 	return Builder{
-		config: config.NewDefaultConfig(),
+		config: internalConfig.NewDefaultConfig(),
 	}
+}
+
+// CreateTestContext creates a test context with configuration.
+// This is the recommended approach for tests that need configuration.
+//
+// Parameters:
+//   - t: The testing.T instance for test helper registration (can be nil for non-test usage)
+//   - configModifier: A function that takes a base Config and returns a modified Config
+//
+// Returns:
+//   - context.Context: A context with the configuration added
+//
+// Usage:
+//
+//	ctx := testconfig.CreateTestContext(t, func(c types.Config) types.Config {
+//	    c.Rules.Enabled = []string{"SubjectLength"}
+//	    return c
+//	})
+//
+//nolint:thelper // This function can receive nil t, so we can't always call t.Helper()
+func CreateTestContext(t *testing.T, configModifier func(types.Config) types.Config) context.Context {
+	// t can be nil, so only call Helper if provided
+	// This implementation to handle t.Helper() check for nil in linters
+	if t != nil {
+		t.Helper()
+	}
+
+	// Create base configuration
+	baseConfig := internalConfig.NewDefaultConfig()
+
+	// Apply modifier if provided
+	if configModifier != nil {
+		baseConfig = configModifier(baseConfig)
+	}
+
+	// Create adapter
+	adapter := config.NewAdapter(baseConfig)
+
+	// Create context
+	ctx := testcontext.CreateTestContext()
+	ctx = contextx.WithConfig(ctx, adapter)
+
+	return ctx
 }
 
 // NewTestConfig provides a simpler alternative to the Builder pattern.
 // It creates a config using functional options.
 func NewTestConfig(options ...func(*types.Config)) types.Config {
-	cfg := config.NewDefaultConfig()
+	cfg := internalConfig.NewDefaultConfig()
 
 	for _, option := range options {
 		option(&cfg)

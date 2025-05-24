@@ -110,10 +110,6 @@ const (
 	ErrUnknown ValidationErrorCode = "unknown_error"
 )
 
-// Note: Error templates have been removed as they are now handled by specialized error helpers
-// in formatting.go like NewFormatValidationError, etc. These provide rich context
-// and standardized formatting.
-
 // ValidationError represents an error detected during validation.
 // This is the standard error type for the entire application.
 type ValidationError struct {
@@ -139,7 +135,6 @@ func (e ValidationError) Error() string {
 }
 
 // WithContext adds context information to a ValidationError.
-// Note: This implementation was updated for immutability with functional programming principles.
 func (e ValidationError) WithContext(key, value string) ValidationError {
 	result := e
 
@@ -162,7 +157,6 @@ func (e ValidationError) WithContext(key, value string) ValidationError {
 }
 
 // WithHelp adds help text to a ValidationError.
-// Note: This implementation follows immutability with functional programming principles.
 func (e ValidationError) WithHelp(help string) ValidationError {
 	result := e
 	result.Help = help

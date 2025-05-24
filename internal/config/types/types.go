@@ -66,8 +66,6 @@ type RepoConfig struct {
 	IgnoreMerges    bool   `json:"ignore_merges"     yaml:"ignore_merges"`
 }
 
-// (Removed IntegrationsConfig - Jira and Spell configs are now top-level)
-
 // JiraConfig contains configuration options for JIRA ticket reference validation.
 type JiraConfig struct {
 	Pattern   string   `json:"pattern"    yaml:"pattern"`

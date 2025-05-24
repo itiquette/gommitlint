@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -201,9 +202,9 @@ func parseSSHSignature(signatureData string) (string, []byte, error) {
 
 // loadSSHKey loads and parses an SSH public key from a file.
 func loadSSHKey(path string) (string, ssh.PublicKey, error) {
-	data, err := fsutils.SafeReadFile(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
-		return "", nil, err
+		return "", nil, fmt.Errorf("failed to read SSH key file: %w", err)
 	}
 
 	// Parse key

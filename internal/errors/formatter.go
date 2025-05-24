@@ -42,17 +42,17 @@ func (f TextFormatter) FormatErrors(errs []ValidationError) string {
 		return "No validation errors found."
 	}
 
-	formatted := slices.Map(errs, func(err ValidationError) string {
-		return f.FormatError(err)
-	})
+	var result strings.Builder
 
-	return slices.Reduce(formatted, "", func(acc string, errStr string) string {
-		if acc == "" {
-			return errStr
+	for i, err := range errs {
+		if i > 0 {
+			result.WriteString("\n\n")
 		}
 
-		return acc + "\n\n" + errStr
-	})
+		result.WriteString(f.FormatError(err))
+	}
+
+	return result.String()
 }
 
 // JSONFormatter formats errors as JSON.
@@ -109,8 +109,14 @@ func (JSONFormatter) FormatErrors(errs []ValidationError) string {
 			helpText = help
 		}
 
-		// Filter context excluding help using FilterMapKeys
-		contextMap := slices.FilterMapKeys(err.Context, []string{"help"})
+		// Create context map excluding help
+		contextMap := make(map[string]string)
+
+		for k, v := range err.Context {
+			if k != "help" {
+				contextMap[k] = v
+			}
+		}
 
 		return errorRepresentation{
 			Rule:    err.Rule,
@@ -145,16 +151,16 @@ func NewMarkdownFormatter() MarkdownFormatter {
 func (MarkdownFormatter) FormatError(err ValidationError) string {
 	var builder strings.Builder
 
-	fmt.Fprintf(&builder, "### %s: %s\n\n", err.Rule, err.Message)
-	fmt.Fprintf(&builder, "**Code:** `%s`\n\n", err.Code)
+	builder.WriteString(fmt.Sprintf("### %s: %s\n\n", err.Rule, err.Message))
+	builder.WriteString(fmt.Sprintf("**Code:** `%s`\n\n", err.Code))
 
 	if err.Help != "" {
-		fmt.Fprintf(&builder, "**Help:** %s\n\n", err.Help)
+		builder.WriteString(fmt.Sprintf("**Help:** %s\n\n", err.Help))
 	}
 
 	// Print all context entries
 	if len(err.Context) > 0 {
-		fmt.Fprintf(&builder, "**Context:**\n\n")
+		builder.WriteString("**Context:**\n\n")
 
 		// Format each context entry as a Markdown list item
 		contextEntries := make([]string, 0, len(err.Context))
@@ -179,15 +185,14 @@ func (MarkdownFormatter) FormatErrors(errs []ValidationError) string {
 		return "# No validation errors found."
 	}
 
-	header := fmt.Sprintf("# Validation Errors (%d)\n\n", len(errs))
+	var result strings.Builder
 
-	formattedErrors := slices.Map(errs, func(err ValidationError) string {
-		return MarkdownFormatter{}.FormatError(err)
-	})
+	result.WriteString(fmt.Sprintf("# Validation Errors (%d)\n\n", len(errs)))
 
-	errorContent := slices.Reduce(formattedErrors, "", func(acc string, errStr string) string {
-		return acc + errStr + "\n"
-	})
+	for _, err := range errs {
+		result.WriteString(MarkdownFormatter{}.FormatError(err))
+		result.WriteString("\n")
+	}
 
-	return header + errorContent
+	return result.String()
 }

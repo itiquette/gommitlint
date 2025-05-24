@@ -10,7 +10,6 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/itiquette/gommitlint/internal/common/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
@@ -74,51 +73,8 @@ func NewSubjectCaseRule(options ...SubjectCaseOption) SubjectCaseRule {
 	return rule
 }
 
-// WithContext implements the ConfigurableRule interface for SubjectCaseRule.
-// It returns a new rule with configuration from the provided context.
-func (r SubjectCaseRule) WithContext(ctx context.Context) domain.Rule {
-	// Get configuration directly from context
-	cfg := contextx.GetConfig(ctx)
-	if cfg == nil {
-		return r
-	}
-
-	// Create a copy of the rule
-	result := r
-
-	// Get configuration values directly
-	caseStyle := cfg.GetString("message.subject.case")
-	if caseStyle != "" {
-		result.caseChoice = caseStyle
-	}
-
-	// Get imperative requirement
-	requireImperative := cfg.GetBool("message.subject.imperative")
-	result.allowNonAlpha = requireImperative || r.allowNonAlpha
-
-	// Check if conventional commit is enabled using domain priority service
-	enabledRules := cfg.GetStringSlice("rules.enabled")
-	disabledRules := cfg.GetStringSlice("rules.disabled")
-	priorityService := domain.NewRulePriorityService(domain.GetDefaultDisabledRules())
-	result.checkCommit = priorityService.IsRuleEnabled(ctx, "Conventional", enabledRules, disabledRules)
-
-	// Log configuration at debug level
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("Subject case rule configuration",
-		"case_choice", result.caseChoice,
-		"is_conventional", result.checkCommit,
-		"allow_non_alpha", result.allowNonAlpha)
-
-	return result
-}
-
 // Validate checks that commit subjects follow the required case style.
-func (r SubjectCaseRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("Validating subject case",
-		"rule", r.Name(),
-		"commit_hash", commit.Hash)
-
+func (r SubjectCaseRule) Validate(_ context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
 	// Special handling for "ignore" or "any" case choice - always valid
 	if r.caseChoice == "ignore" || r.caseChoice == "any" {
 		return nil

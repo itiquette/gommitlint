@@ -33,7 +33,7 @@ func NewLoader() *Loader {
 }
 
 // Load loads configuration from default paths.
-func (l *Loader) Load() (types.Config, error) {
+func (l Loader) Load() (types.Config, error) {
 	// Try to load from each standard path
 	for _, path := range l.configPaths {
 		if _, err := os.Stat(path); err == nil {
@@ -46,7 +46,7 @@ func (l *Loader) Load() (types.Config, error) {
 }
 
 // LoadFromPath loads configuration from a specific path.
-func (l *Loader) LoadFromPath(configPath string) (types.Config, error) {
+func (l Loader) LoadFromPath(configPath string) (types.Config, error) {
 	// Create koanf instance
 	koanfConfig := koanf.New(".")
 
@@ -70,7 +70,7 @@ func (l *Loader) LoadFromPath(configPath string) (types.Config, error) {
 	// Merge default disabled rules with YAML disabled rules
 	if koanfConfig.Exists("gommitlint.rules.disabled") {
 		// YAML has disabled, apply priority logic
-		l.applyRulePriority(&config)
+		config = l.applyRulePriority(config)
 	} else {
 		// No disabled in YAML, apply defaults and merge
 		config.Rules.Disabled = l.mergeDefaultDisabledRules(config.Rules.Enabled, defaultDisabledRules)
@@ -81,7 +81,8 @@ func (l *Loader) LoadFromPath(configPath string) (types.Config, error) {
 
 // applyRulePriority ensures that rules in disabled_rules are removed from enabled_rules.
 // If a rule appears in both lists, disabled takes precedence.
-func (l *Loader) applyRulePriority(config *types.Config) {
+// Returns a new config with the updated rules.
+func (l Loader) applyRulePriority(config types.Config) types.Config {
 	// Create a map of disabled rules for efficient lookup
 	disabledMap := make(map[string]bool)
 	for _, rule := range config.Rules.Disabled {
@@ -97,13 +98,17 @@ func (l *Loader) applyRulePriority(config *types.Config) {
 		}
 	}
 
-	config.Rules.Enabled = filteredEnabled
+	// Create a new config with the filtered rules
+	result := config
+	result.Rules.Enabled = filteredEnabled
+
+	return result
 }
 
 // mergeDefaultDisabledRules merges default disabled rules with the current configuration.
 // When no disabled are specified in YAML, we keep default disabled rules
 // even if they're explicitly enabled (both lists can contain the rule).
-func (l *Loader) mergeDefaultDisabledRules(_ []string, defaultDisabledRules []string) []string {
+func (l Loader) mergeDefaultDisabledRules(_ []string, defaultDisabledRules []string) []string {
 	// Just return the default disabled rules - they coexist with enabled rules
 	return defaultDisabledRules
 }

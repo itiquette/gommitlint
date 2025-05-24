@@ -39,11 +39,3 @@ type CommitAnalyzer interface {
 	// GetCommitsAhead returns the number of commits ahead of a reference.
 	GetCommitsAhead(ctx context.Context, ref string) (int, error)
 }
-
-// GitRepositoryService combines all Git repository interfaces.
-// It provides a complete interface for Git repository operations.
-type GitRepositoryService interface {
-	CommitRepository
-	RepositoryInfoProvider
-	CommitAnalyzer
-}

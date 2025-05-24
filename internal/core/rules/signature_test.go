@@ -18,12 +18,12 @@ import (
 	"strings"
 	"testing"
 
-	infraConfig "github.com/itiquette/gommitlint/internal/adapters/outgoing/config"
-	"github.com/itiquette/gommitlint/internal/common/contextx"
+	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/config/types"
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
+	testconfig "github.com/itiquette/gommitlint/internal/testutils/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -59,18 +59,9 @@ func createCommit(signature string) domain.CommitInfo {
 }
 
 // createContextWithConfig creates a test context with the given config modifier.
+// This uses the new recommended pattern with testconfig.CreateTestContext.
 func createContextWithConfig(configModifier func(types.Config) types.Config) context.Context {
-	// Use a normal context for configuration tests, not a test context
-	ctx := context.Background()
-	cfg := types.Config{}
-
-	if configModifier != nil {
-		cfg = configModifier(cfg)
-	}
-
-	adapter := infraConfig.NewAdapter(cfg)
-
-	return contextx.WithConfig(ctx, adapter)
+	return testconfig.CreateTestContext(nil, configModifier)
 }
 
 // assertNoErrors checks that validation produced no errors.
@@ -199,18 +190,22 @@ func TestSignatureRule_WithContext(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			// Create base rule
-			baseRule := rules.NewSignatureRule()
-
 			// Create a commit for testing
 			commit := createCommit(testCase.signature)
 
 			// Create context with configuration
 			ctx := createContextWithConfig(testCase.configModifier)
 
-			// Get configured rule using WithContext
-			configuredRule, ok := baseRule.WithContext(ctx).(rules.SignatureRule)
-			require.True(t, ok, "Expected WithContext to return a SignatureRule")
+			// Apply config modifier to get the requirement setting
+			cfg := config.NewDefaultConfig()
+			if testCase.configModifier != nil {
+				cfg = testCase.configModifier(cfg)
+			}
+
+			// Create rule with proper configuration via constructor
+			configuredRule := rules.NewSignatureRule(
+				rules.WithRequireSignature(cfg.Signing.RequireSignature),
+			)
 
 			// Validate directly using the configured rule
 			errors := configuredRule.Validate(ctx, commit)
@@ -253,7 +248,7 @@ func TestSignatureRule_OptionConsistency(t *testing.T) {
 			optionRequired:         true,
 			configRequireSignature: false,
 			signature:              "",
-			expectedValid:          true, // Config setting takes precedence
+			expectedValid:          false, // Option takes precedence
 		},
 		{
 			name:                   "Option=false, Config=false, signature missing",
@@ -273,9 +268,6 @@ func TestSignatureRule_OptionConsistency(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			// Create base rule with option
-			baseRule := rules.NewSignatureRule(rules.WithRequireSignature(testCase.optionRequired))
-
 			// Create context with configuration
 			ctx := createContextWithConfig(func(cfg types.Config) types.Config {
 				result := cfg
@@ -287,9 +279,10 @@ func TestSignatureRule_OptionConsistency(t *testing.T) {
 			// Create a commit for testing
 			commit := createCommit(testCase.signature)
 
-			// Apply context configuration
-			configuredRule, ok := baseRule.WithContext(ctx).(rules.SignatureRule)
-			require.True(t, ok, "Expected WithContext to return a SignatureRule")
+			// Create rule with proper configuration via constructor
+			configuredRule := rules.NewSignatureRule(
+				rules.WithRequireSignature(testCase.optionRequired),
+			)
 
 			// Validate with the configured rule
 			errors := configuredRule.Validate(ctx, commit)

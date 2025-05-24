@@ -7,13 +7,14 @@ package report
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 
-	"github.com/itiquette/gommitlint/internal/adapters/outgoing/log"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/ports/outgoing"
 )
 
 // Format represents the output format for reports.
@@ -47,10 +48,11 @@ type Options struct {
 }
 
 // Generator generates reports from validation results.
-// It implements the domain.ReportGenerator interface.
+// It implements the outgoing.ReportGenerator interface.
 type Generator struct {
 	options   Options
-	formatter domain.ResultFormatter
+	formatter outgoing.ResultFormatter
+	logger    outgoing.Logger
 }
 
 // Options returns a copy of the generator's options.
@@ -59,11 +61,11 @@ func (g Generator) Options() Options {
 	return copyOptions(g.options)
 }
 
-// Ensure Generator implements domain.ReportGenerator.
-var _ domain.ReportGenerator = Generator{}
+// Ensure Generator implements outgoing.ReportGenerator.
+var _ outgoing.ReportGenerator = Generator{}
 
 // NewGenerator creates a new report generator.
-func NewGenerator(options Options, formatter domain.ResultFormatter) Generator {
+func NewGenerator(options Options, formatter outgoing.ResultFormatter, logger outgoing.Logger) Generator {
 	// Ensure writer is initialized with a default if not provided
 	if options.Writer == nil {
 		options.Writer = os.Stdout
@@ -72,35 +74,36 @@ func NewGenerator(options Options, formatter domain.ResultFormatter) Generator {
 	return Generator{
 		options:   options,
 		formatter: formatter,
+		logger:    logger,
 	}
 }
 
-// GenerateReport implements the domain.ReportGenerator interface.
-func (g Generator) GenerateReport(ctx context.Context, results domain.ValidationResults) error {
-	logger := log.Logger(ctx)
-	logger.Trace().
-		Str("format", string(g.options.Format)).
-		Bool("verbose", g.options.Verbose).
-		Bool("show_help", g.options.ShowHelp).
-		Int("total_commits", results.TotalCommits).
-		Int("passed_commits", results.PassedCommits).
-		Msg("Entering Generator.GenerateReport")
+// GenerateReport implements the outgoing.ReportGenerator interface.
+func (g Generator) GenerateReport(ctx context.Context, results interface{}) error {
+	validationResults, ok := results.(domain.ValidationResults)
+	if !ok {
+		return errors.New("invalid results type: expected domain.ValidationResults")
+	}
+
+	g.logger.Info("Generating validation report",
+		"format", string(g.options.Format),
+		"verbose", g.options.Verbose,
+		"show_help", g.options.ShowHelp,
+		"total_commits", validationResults.TotalCommits,
+		"passed_commits", validationResults.PassedCommits)
 
 	// Use the injected formatter with context
-	report := g.formatter.Format(ctx, results)
+	report := g.formatter.Format(ctx, validationResults)
 
 	// Use a pure function to write the report
 	if err := writeReport(g.options.Writer, report); err != nil {
 		return fmt.Errorf("write error: %w", err)
 	}
 
-	// Force flush os.Stdout to ensure all content is written
-	if g.options.Writer == os.Stdout {
-		os.Stdout.Sync()
-	}
+	// Note: The caller is responsible for flushing the writer if needed
 
 	// Use a pure function to handle failure cases
-	return handleFailure(results, g.options.Writer)
+	return handleFailure(validationResults, g.options.Writer)
 }
 
 // writeReport is a pure function to write content to a writer.
@@ -151,7 +154,7 @@ func copyOptions(opts Options) Options {
 
 // WithVerbose returns a new Generator with verbose setting updated.
 // Uses explicit field copying for clarity and to maintain immutability.
-func (g Generator) WithVerbose(verbose bool) domain.ReportGenerator {
+func (g Generator) WithVerbose(verbose bool) outgoing.ReportGenerator {
 	return Generator{
 		options: Options{
 			Format:         g.options.Format,
@@ -162,12 +165,13 @@ func (g Generator) WithVerbose(verbose bool) domain.ReportGenerator {
 			Writer:         g.options.Writer,
 		},
 		formatter: g.formatter,
+		logger:    g.logger,
 	}
 }
 
 // WithShowHelp returns a new Generator with showHelp setting updated.
 // Uses explicit field copying for clarity and to maintain immutability.
-func (g Generator) WithShowHelp(showHelp bool) domain.ReportGenerator {
+func (g Generator) WithShowHelp(showHelp bool) outgoing.ReportGenerator {
 	return Generator{
 		options: Options{
 			Format:         g.options.Format,
@@ -178,12 +182,13 @@ func (g Generator) WithShowHelp(showHelp bool) domain.ReportGenerator {
 			Writer:         g.options.Writer,
 		},
 		formatter: g.formatter,
+		logger:    g.logger,
 	}
 }
 
 // WithRuleToShowHelp returns a new Generator with ruleToShowHelp setting updated.
 // Uses explicit field copying for clarity and to maintain immutability.
-func (g Generator) WithRuleToShowHelp(ruleName string) domain.ReportGenerator {
+func (g Generator) WithRuleToShowHelp(ruleName string) outgoing.ReportGenerator {
 	return Generator{
 		options: Options{
 			Format:         g.options.Format,
@@ -194,20 +199,24 @@ func (g Generator) WithRuleToShowHelp(ruleName string) domain.ReportGenerator {
 			Writer:         g.options.Writer,
 		},
 		formatter: g.formatter,
+		logger:    g.logger,
 	}
 }
 
 // GenerateSummary generates a brief summary report.
 // This is used for quick command-line feedback.
-func (g Generator) GenerateSummary(ctx context.Context, results domain.ValidationResults) error {
-	logger := log.Logger(ctx)
-	logger.Trace().
-		Int("total_commits", results.TotalCommits).
-		Int("passed_commits", results.PassedCommits).
-		Msg("Entering Generator.GenerateSummary")
+func (g Generator) GenerateSummary(_ context.Context, results interface{}) error {
+	validationResults, ok := results.(domain.ValidationResults)
+	if !ok {
+		return errors.New("invalid results type: expected domain.ValidationResults")
+	}
+
+	g.logger.Info("Generating validation summary",
+		"total_commits", validationResults.TotalCommits,
+		"passed_commits", validationResults.PassedCommits)
 
 	// Generate the summary content using a pure function
-	summary := buildSummary(results)
+	summary := buildSummary(validationResults)
 
 	// Write the summary using the pure function
 	if err := writeReport(g.options.Writer, summary); err != nil {
@@ -215,7 +224,7 @@ func (g Generator) GenerateSummary(ctx context.Context, results domain.Validatio
 	}
 
 	// Handle failure cases using a pure function
-	return handleFailure(results, g.options.Writer)
+	return handleFailure(validationResults, g.options.Writer)
 }
 
 // buildSummary is a pure function that creates a summary string from validation results.

@@ -10,10 +10,7 @@ import (
 	"testing"
 
 	"github.com/itiquette/gommitlint/internal/adapters/outgoing/config"
-	"github.com/itiquette/gommitlint/internal/adapters/outgoing/crypto"
-	"github.com/itiquette/gommitlint/internal/common/contextx"
 	"github.com/itiquette/gommitlint/internal/config/types"
-	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 )
 
@@ -43,21 +40,9 @@ func CreateTestConfigAdapter(t *testing.T, configModifier func(types.Config) typ
 	return config.NewAdapter(baseConfig)
 }
 
-// CreateTestContextWithConfig creates a test context with the specified configuration.
-// NOTE: This function is deprecated. Use CreateTestConfigAdapter instead and pass
-// the configuration directly to functions that need it, rather than embedding in context.
-// This is maintained for backward compatibility with existing tests.
-func CreateTestContextWithConfig(t *testing.T, configModifier func(types.Config) types.Config) context.Context {
-	t.Helper()
-
-	// Create the adapter
-	adapter := CreateTestConfigAdapter(t, configModifier)
-
-	// Add to context (deprecated pattern)
-	ctx := context.Background()
-
-	return contextx.WithConfig(ctx, adapter)
-}
+// NOTE: CreateTestContextWithConfig has been removed.
+// Use CreateTestConfigAdapter instead and pass the configuration directly
+// to functions that need it, rather than embedding in context.
 
 // CreateTestCommit creates a commit for testing with specified attributes.
 func CreateTestCommit(hash, signature string) domain.CommitInfo {
@@ -91,23 +76,5 @@ LwAAACRrZXktMS11c2VyQHVuaXQuZXhhbXBsZQAAAAAAAAAAAAAAAA==
 -----END SSH SIGNATURE-----`,
 }
 
-// WithTestKeyDirectory returns an option for configuring test IdentityRules with a specific key directory.
-// This is a proper test helper function that creates a test-specific option.
-func WithTestKeyDirectory(dir string) rules.IdentityOption {
-	return func(rule rules.IdentityRule) rules.IdentityRule {
-		// Create a new test repository specifically for the key directory
-		testRepo := crypto.NewFileSystemKeyRepository(dir)
-		testVerifier := crypto.NewVerificationAdapter(testRepo)
-
-		// Create a copy of the rule with the new repository and verifier
-		result := rule
-
-		// Update fields using the helper access functions
-		if GetRuleRepository(rule) != nil {
-			SetRuleRepository(&result, testRepo)
-			SetRuleVerifier(&result, testVerifier)
-		}
-
-		return result
-	}
-}
+// NOTE: The WithTestKeyDirectory function has been moved to identity_test_helpers.go
+// to provide a cleaner implementation using the new WithTest* methods.

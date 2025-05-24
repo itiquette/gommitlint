@@ -6,6 +6,7 @@ package domain_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/itiquette/gommitlint/internal/common/contextx"
@@ -87,28 +88,31 @@ func TestRuleRegistry_InitializeAndGetActiveRules(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			// Create a new registry
-			registry := domain.NewRuleRegistry()
+			// Create a new registry with custom default disabled rules
+			// Convert rule names to lowercase for the priority service
+			lowerDefaultDisabled := make(map[string]bool)
+			for rule, disabled := range testCase.defaultDisabled {
+				lowerDefaultDisabled[strings.ToLower(rule)] = disabled
+			}
+
+			priorityService := domain.NewRulePriorityService(lowerDefaultDisabled)
+			registry := domain.NewRuleRegistry(domain.WithPriorityService(priorityService))
 
 			// Register the rules
 			for _, name := range testCase.ruleNames {
 				// Capture for closure
+				ruleName := name // Capture loop variable
 				factory := func(_ context.Context) domain.Rule {
-					return TestRule{ruleName: name, result: nil}
+					return TestRule{ruleName: ruleName, result: nil}
 				}
 				registry.RegisterWithContext(ctx, name, factory)
-			}
-
-			// Set default disabled rules
-			for rule, isDisabled := range testCase.defaultDisabled {
-				registry.SetDefaultDisabled(rule, isDisabled)
 			}
 
 			// Initialize rules
 			registry.InitializeRules(ctx)
 
 			// Get active rules
-			activeRules := registry.GetActiveRules(testCase.enabledRules, testCase.disabledRules)
+			activeRules := registry.GetActiveRules(ctx, testCase.enabledRules, testCase.disabledRules)
 
 			// Check that we got the expected rules
 			require.Equal(t, len(testCase.expectedRules), len(activeRules),
@@ -175,9 +179,9 @@ func TestRuleRegistry_CreationDeduplication(t *testing.T) {
 	}
 
 	// Get active rules multiple times
-	registry.GetActiveRules([]string{}, []string{})
-	registry.GetActiveRules([]string{"Rule1"}, []string{})
-	registry.GetActiveRules([]string{}, []string{"Rule2"})
+	registry.GetActiveRules(ctx, []string{}, []string{})
+	registry.GetActiveRules(ctx, []string{"Rule1"}, []string{})
+	registry.GetActiveRules(ctx, []string{}, []string{"Rule2"})
 
 	// Verify the rules weren't created again
 	for _, name := range ruleNames {
@@ -215,7 +219,7 @@ func TestRuleRegistry_WithContext(t *testing.T) {
 	require.True(t, contextReceived, "Context should be passed to rule factory")
 
 	// Get active rules
-	activeRules := registry.GetActiveRules([]string{}, []string{})
+	activeRules := registry.GetActiveRules(ctx, []string{}, []string{})
 
 	// Verify rule was returned and is active
 	require.Len(t, activeRules, 1, "One rule should be active")

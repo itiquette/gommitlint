@@ -6,9 +6,7 @@ package rules
 import (
 	"context"
 	"fmt"
-	"strings"
 
-	"github.com/itiquette/gommitlint/internal/common/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
@@ -56,58 +54,8 @@ func NewSubjectSuffixRule(options ...SubjectSuffixOption) SubjectSuffixRule {
 	return rule
 }
 
-// WithContext implements the ConfigurableRule interface for SubjectSuffixRule.
-// It returns a new rule with configuration from the provided context.
-func (r SubjectSuffixRule) WithContext(ctx context.Context) domain.Rule {
-	// Get configuration directly from context
-	cfg := contextx.GetConfig(ctx)
-	if cfg == nil {
-		return r
-	}
-
-	// Create a copy of the rule
-	result := r
-
-	// Get disallowed suffixes from config
-	disallowedSuffixes := cfg.GetStringSlice("message.subject.forbid_endings")
-
-	// Process disallowed suffixes if we have them
-	if len(disallowedSuffixes) > 0 {
-		// For multi-byte characters like emojis, we need to ensure they're not split
-		// Build the string without using Join which can break multi-byte characters
-		var sb strings.Builder
-		for _, suffix := range disallowedSuffixes {
-			sb.WriteString(suffix)
-		}
-
-		configInvalidSuffixes := sb.String()
-
-		// Log the processed suffixes for debugging
-		logger := contextx.GetLogger(ctx)
-		logger.Debug("Processing disallowed suffixes from context config",
-			"disallowed_suffixes_slice", disallowedSuffixes,
-			"processed_invalid_suffixes", configInvalidSuffixes)
-
-		// Update rule setting
-		if configInvalidSuffixes != "" {
-			result.invalidSuffixes = configInvalidSuffixes
-		}
-	}
-
-	return result
-}
-
 // Validate checks that the commit subject doesn't end with invalid characters.
-func (r SubjectSuffixRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("Validating subject suffix",
-		"rule", r.Name(),
-		"commit_hash", commit.Hash)
-
-	// Log configuration at debug level
-	logger.Debug("Subject suffix rule configuration",
-		"invalid_suffixes", r.invalidSuffixes)
-
+func (r SubjectSuffixRule) Validate(_ context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
 	// Empty subject is always an error
 	if len(commit.Subject) == 0 {
 		return []appErrors.ValidationError{

@@ -11,19 +11,19 @@ import (
 	"github.com/itiquette/gommitlint/internal/domain/formatting"
 )
 
-// TestEngine is a thin wrapper around validation.Engine that implements
-// validation.Engine for testing purposes.
+// TestEngine is a thin wrapper around domain.ValidationEngine that implements
+// domain.ValidationEngine for testing purposes.
 type TestEngine struct {
 	Registry *domain.RuleRegistry
 }
 
-// ValidateCommit implements validation.Engine.
+// ValidateCommit implements domain.ValidationEngine.
 func (e TestEngine) ValidateCommit(ctx context.Context, commit domain.CommitInfo) domain.CommitResult {
-	// No need to create a validation.Engine since we're implementing the interface directly
+	// No need to create a domain.ValidationEngine since we're implementing the interface directly
 	// Since we can't directly set the unexported field, use the validation
 	// functions directly with our provider
 	// Get active rules from our registry
-	activeRules := e.Registry.GetActiveRules([]string{}, []string{})
+	activeRules := e.Registry.GetActiveRules(ctx, []string{}, []string{})
 
 	// Initialize result
 	result := domain.CommitResult{
@@ -60,7 +60,7 @@ func (e TestEngine) ValidateCommit(ctx context.Context, commit domain.CommitInfo
 	return result
 }
 
-// ValidateCommits implements validation.Engine.
+// ValidateCommits implements domain.ValidationEngine.
 func (e TestEngine) ValidateCommits(ctx context.Context, commits []domain.CommitInfo) domain.ValidationResults {
 	// Create a new ValidationResults
 	results := domain.NewValidationResults()
@@ -94,7 +94,7 @@ func (e TestEngine) ValidateCommits(ctx context.Context, commits []domain.Commit
 	return results
 }
 
-// GetRegistry implements validation.Engine.
+// GetRegistry implements domain.ValidationEngine.
 func (e TestEngine) GetRegistry() *domain.RuleRegistry {
 	return e.Registry
 }

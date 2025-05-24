@@ -12,37 +12,26 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/common/fsutils"
 	"github.com/itiquette/gommitlint/internal/common/security"
+	"github.com/itiquette/gommitlint/internal/domain"
 )
 
-// KeyRepository defines a repository for accessing cryptographic keys.
-type KeyRepository interface {
-	// GetKeyDirectory returns the directory containing trusted keys.
-	GetKeyDirectory() string
-
-	// FindKeyFiles finds key files matching the given extensions.
-	FindKeyFiles(extensions []string) ([]string, error)
-
-	// ReadKeyFile reads a key file with appropriate security checks.
-	ReadKeyFile(path string) ([]byte, error)
-}
-
-// FileSystemKeyRepository implements KeyRepository using the local filesystem.
+// FileSystemKeyRepository implements domain.CryptoKeyRepository using the local filesystem.
 type FileSystemKeyRepository struct {
 	keyDir   string
-	security security.Checker
+	security *security.FileSecurityService
 }
+
+// Compile-time check to ensure FileSystemKeyRepository implements domain.CryptoKeyRepository.
+var _ domain.CryptoKeyRepository = (*FileSystemKeyRepository)(nil)
 
 // RepositoryOption configures a FileSystemKeyRepository.
 type RepositoryOption func(*FileSystemKeyRepository)
 
-// WithSecurityChecker sets a custom security checker.
+// WithSecurityService sets a custom security service.
 // This allows for test configurations with relaxed security.
-func WithSecurityChecker(checker interface{}) RepositoryOption {
+func WithSecurityService(service *security.FileSecurityService) RepositoryOption {
 	return func(r *FileSystemKeyRepository) {
-		// Handle different types of security checkers
-		if checker, ok := checker.(security.Checker); ok {
-			r.security = checker
-		}
+		r.security = service
 	}
 }
 
@@ -69,14 +58,14 @@ func NewFileSystemKeyRepositoryWithOptions(keyDir string, options ...RepositoryO
 }
 
 // GetKeyDirectory returns the directory containing trusted keys.
-func (r *FileSystemKeyRepository) GetKeyDirectory() string {
+func (r FileSystemKeyRepository) GetKeyDirectory() string {
 	return r.keyDir
 }
 
 // FindKeyFiles finds key files matching the given extensions.
 // Implements improved path security by using safe directory access and path validation.
 // Follows functional programming principles by not mutating state.
-func (r *FileSystemKeyRepository) FindKeyFiles(extensions []string) ([]string, error) {
+func (r FileSystemKeyRepository) FindKeyFiles(extensions []string) ([]string, error) {
 	// Use the safer directory reading function to prevent TOCTOU race conditions
 	entries, err := r.readDirSafely()
 	if err != nil {
@@ -113,7 +102,7 @@ func (r *FileSystemKeyRepository) FindKeyFiles(extensions []string) ([]string, e
 }
 
 // ReadKeyFile reads a key file with appropriate security checks based on the file type.
-func (r *FileSystemKeyRepository) ReadKeyFile(path string) ([]byte, error) {
+func (r FileSystemKeyRepository) ReadKeyFile(path string) ([]byte, error) {
 	// Determine security level based on file type and extension
 	level := security.GetSecurityLevelForFile(path)
 
@@ -149,7 +138,7 @@ func (r *FileSystemKeyRepository) ReadKeyFile(path string) ([]byte, error) {
 
 // readDirSafely reads the key directory using file descriptor operations
 // to prevent Time-of-Check/Time-of-Use (TOCTOU) race conditions.
-func (r *FileSystemKeyRepository) readDirSafely() ([]os.DirEntry, error) {
+func (r FileSystemKeyRepository) readDirSafely() ([]os.DirEntry, error) {
 	// Open the directory to get a file descriptor
 	dirFile, err := os.Open(r.keyDir)
 	if err != nil {
@@ -175,6 +164,3 @@ func (r *FileSystemKeyRepository) readDirSafely() ([]os.DirEntry, error) {
 
 	return entries, nil
 }
-
-// Note: determineSecurityLevel has been moved to internal/common/security/permissions.go
-// Use security.GetSecurityLevelForFile instead

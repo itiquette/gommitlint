@@ -29,12 +29,6 @@ type Config interface {
 	GetStringSlice(key string) []string
 }
 
-// Provider is an interface for providing configuration.
-type Provider interface {
-	// GetConfig returns the current configuration.
-	GetConfig() Config
-}
-
 // WithConfig adds configuration to the context.
 func WithConfig(ctx context.Context, cfg Config) context.Context {
 	return context.WithValue(ctx, configKey{}, cfg)
@@ -55,43 +49,8 @@ func GetConfig(ctx context.Context) Config {
 	return &emptyConfig{}
 }
 
-// WithProvider adds a configuration provider to the context.
-func WithProvider(ctx context.Context, provider Provider) context.Context {
-	return context.WithValue(ctx, providerKey{}, provider)
-}
-
-// GetProvider retrieves a configuration provider from the context.
-func GetProvider(ctx context.Context) Provider {
-	if ctx == nil {
-		return &emptyProvider{}
-	}
-
-	// Get provider from context
-	value := ctx.Value(providerKey{})
-	if provider, ok := value.(Provider); ok {
-		return provider
-	}
-
-	return &emptyProvider{}
-}
-
-// Key returns the key used to store configuration in the context.
-// This is exported to allow other packages to access the same key.
-func Key() interface{} {
-	return configKey{}
-}
-
-// ProviderKey returns the key used to store the provider in the context.
-// This is exported to allow other packages to access the same key.
-func ProviderKey() interface{} {
-	return providerKey{}
-}
-
 // configKey is a private type for context keys to avoid collisions.
 type configKey struct{}
-
-// providerKey is a private type for context keys to avoid collisions.
-type providerKey struct{}
 
 // emptyConfig is a Config implementation that returns empty values.
 type emptyConfig struct{}
@@ -101,8 +60,3 @@ func (c *emptyConfig) GetString(_ string) string        { return "" }
 func (c *emptyConfig) GetBool(_ string) bool            { return false }
 func (c *emptyConfig) GetInt(_ string) int              { return 0 }
 func (c *emptyConfig) GetStringSlice(_ string) []string { return []string{} }
-
-// emptyProvider is a Provider implementation that returns an empty config.
-type emptyProvider struct{}
-
-func (p *emptyProvider) GetConfig() Config { return &emptyConfig{} }

@@ -46,3 +46,6 @@ func MergeContext(ctx1, ctx2 context.Context) context.Context {
 
 	return result
 }
+
+// NOTE: CreateConfiguredContext has been removed to avoid import cycles.
+// Use the testutils/config package for managing test configurations.

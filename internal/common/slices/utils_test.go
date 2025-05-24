@@ -5,10 +5,10 @@
 package slices_test
 
 import (
-	"strings"
+	"slices"
 	"testing"
 
-	"github.com/itiquette/gommitlint/internal/common/slices"
+	commonslices "github.com/itiquette/gommitlint/internal/common/slices"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,48 +41,8 @@ func TestMap(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			result := slices.Map(testCase.input, testCase.mapFn)
+			result := commonslices.Map(testCase.input, testCase.mapFn)
 			require.Equal(t, testCase.expect, result)
-		})
-	}
-}
-
-func TestMapMap(t *testing.T) {
-	tests := []struct {
-		name   string
-		input  map[string]int
-		expect []string
-		mapFn  func(string, int) string
-	}{
-		{
-			name:   "Map to strings",
-			input:  map[string]int{"a": 1, "b": 2},
-			expect: []string{"a:1", "b:2"},
-			mapFn:  func(k string, v int) string { return k + ":" + string(rune(v+'0')) },
-		},
-		{
-			name:   "Empty map",
-			input:  map[string]int{},
-			expect: []string{},
-			mapFn:  func(k string, v int) string { return k + ":" + string(rune(v+'0')) },
-		},
-		{
-			name:   "Nil input",
-			input:  nil,
-			expect: nil,
-			mapFn:  func(k string, v int) string { return k + ":" + string(rune(v+'0')) },
-		},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			result := slices.MapMap(testCase.input, testCase.mapFn)
-			if testCase.expect == nil {
-				require.Nil(t, result)
-			} else {
-				// Since maps are unordered, sort the results to compare
-				require.ElementsMatch(t, testCase.expect, result)
-			}
 		})
 	}
 }
@@ -122,7 +82,7 @@ func TestFilter(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			result := slices.Filter(testCase.input, testCase.predicate)
+			result := commonslices.Filter(testCase.input, testCase.predicate)
 			require.Equal(t, testCase.expect, result)
 		})
 	}
@@ -168,7 +128,7 @@ func TestReduce(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			result := slices.Reduce(testCase.input, testCase.initial, testCase.fn)
+			result := commonslices.Reduce(testCase.input, testCase.initial, testCase.fn)
 			require.Equal(t, testCase.expect, result)
 		})
 	}
@@ -250,149 +210,54 @@ func TestSome(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			result := slices.Some(testCase.input, testCase.predicate)
+			result := slices.ContainsFunc(testCase.input, testCase.predicate)
 			require.Equal(t, testCase.expect, result)
 		})
 	}
 }
 
-func TestEvery(t *testing.T) {
+func TestMapKeys(t *testing.T) {
 	tests := []struct {
-		name      string
-		input     []int
-		predicate func(int) bool
-		expect    bool
+		name   string
+		input  map[string]int
+		expect []string
 	}{
 		{
-			name:      "All match",
-			input:     []int{2, 4, 6},
-			predicate: func(i int) bool { return i%2 == 0 },
-			expect:    true,
+			name:   "Extract keys from map",
+			input:  map[string]int{"a": 1, "b": 2, "c": 3},
+			expect: []string{"a", "b", "c"},
 		},
 		{
-			name:      "Some not match",
-			input:     []int{2, 3, 4},
-			predicate: func(i int) bool { return i%2 == 0 },
-			expect:    false,
+			name:   "Empty map",
+			input:  map[string]int{},
+			expect: []string{},
 		},
 		{
-			name:      "Empty slice",
-			input:     []int{},
-			predicate: func(i int) bool { return i%2 == 0 },
-			expect:    true, // By definition, every element of an empty set satisfies any predicate
-		},
-		{
-			name:      "Nil input",
-			input:     nil,
-			predicate: func(i int) bool { return i%2 == 0 },
-			expect:    true,
+			name:   "Nil input",
+			input:  nil,
+			expect: nil,
 		},
 	}
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			result := slices.Every(testCase.input, testCase.predicate)
-			require.Equal(t, testCase.expect, result)
-		})
-	}
-}
+			result := commonslices.MapKeys(testCase.input)
+			if testCase.expect == nil {
+				require.Nil(t, result)
+			} else {
+				// Since maps are unordered, sort both slices before comparing
+				sort := func(s []string) []string {
+					sort := make([]string, len(s))
+					copy(sort, s)
+					slices.Sort(sort)
 
-func TestFind(t *testing.T) {
-	tests := []struct {
-		name        string
-		input       []string
-		predicate   func(string) bool
-		expectValue string
-		expectFound bool
-	}{
-		{
-			name:        "Element found",
-			input:       []string{"apple", "banana", "cherry"},
-			predicate:   func(s string) bool { return strings.HasPrefix(s, "b") },
-			expectValue: "banana",
-			expectFound: true,
-		},
-		{
-			name:        "Element not found",
-			input:       []string{"apple", "banana", "cherry"},
-			predicate:   func(s string) bool { return strings.HasPrefix(s, "d") },
-			expectValue: "",
-			expectFound: false,
-		},
-		{
-			name:        "Empty slice",
-			input:       []string{},
-			predicate:   func(_ string) bool { return true },
-			expectValue: "",
-			expectFound: false,
-		},
-		{
-			name:        "Nil input",
-			input:       nil,
-			predicate:   func(_ string) bool { return true },
-			expectValue: "",
-			expectFound: false,
-		},
-	}
+					return sort
+				}
 
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			value, found := slices.Find(testCase.input, testCase.predicate)
-			require.Equal(t, testCase.expectValue, value)
-			require.Equal(t, testCase.expectFound, found)
-		})
-	}
-}
-
-func TestFilterMapKeys(t *testing.T) {
-	tests := []struct {
-		name        string
-		input       map[string]int
-		excludeKeys []string
-		expect      map[string]int
-	}{
-		{
-			name:        "Exclude single key",
-			input:       map[string]int{"a": 1, "b": 2, "c": 3},
-			excludeKeys: []string{"b"},
-			expect:      map[string]int{"a": 1, "c": 3},
-		},
-		{
-			name:        "Exclude multiple keys",
-			input:       map[string]int{"a": 1, "b": 2, "c": 3},
-			excludeKeys: []string{"b", "c"},
-			expect:      map[string]int{"a": 1},
-		},
-		{
-			name:        "Exclude non-existent key",
-			input:       map[string]int{"a": 1, "b": 2},
-			excludeKeys: []string{"z"},
-			expect:      map[string]int{"a": 1, "b": 2},
-		},
-		{
-			name:        "Empty exclude list",
-			input:       map[string]int{"a": 1, "b": 2},
-			excludeKeys: []string{},
-			expect:      map[string]int{"a": 1, "b": 2},
-		},
-		{
-			name:        "Nil input",
-			input:       nil,
-			excludeKeys: []string{"a"},
-			expect:      nil,
-		},
-		{
-			name:        "Empty map",
-			input:       map[string]int{},
-			excludeKeys: []string{"a"},
-			expect:      map[string]int{},
-		},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			result := slices.FilterMapKeys(testCase.input, testCase.excludeKeys)
-			require.Equal(t, testCase.expect, result)
+				sortedResult := sort(result)
+				sortedExpect := sort(testCase.expect)
+				require.Equal(t, sortedExpect, sortedResult)
+			}
 		})
 	}
 }

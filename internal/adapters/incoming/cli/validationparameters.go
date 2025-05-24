@@ -5,7 +5,6 @@
 package cli
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -16,7 +15,7 @@ import (
 	"github.com/itiquette/gommitlint/internal/adapters/outgoing/output"
 	"github.com/itiquette/gommitlint/internal/application/report"
 	"github.com/itiquette/gommitlint/internal/application/validate"
-	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/ports/outgoing"
 	"github.com/spf13/cobra"
 )
 
@@ -257,7 +256,7 @@ func getReportFormat(format string) report.Format {
 }
 
 // CreateFormatter creates a formatter based on the parameters.
-func (p ValidationParameters) CreateFormatter() domain.ResultFormatter {
+func (p ValidationParameters) CreateFormatter() outgoing.ResultFormatter {
 	reportOptions := p.ToReportOptions()
 
 	switch reportOptions.Format {
@@ -281,13 +280,9 @@ func (p ValidationParameters) CreateFormatter() domain.ResultFormatter {
 	}
 }
 
-// CreateValidationService creates a validation service based on parameters.
-func (p ValidationParameters) CreateValidationService(ctx context.Context) (validate.ValidationService, error) {
-	if err := validateFilePath(p.RepoPath); err != nil {
-		return validate.ValidationService{}, fmt.Errorf("invalid repository path: %w", err)
-	}
-
-	return constructValidationService(ctx, p.Dependencies, p.RepoPath)
+// GetRepoPath returns the repository path for validation.
+func (p ValidationParameters) GetRepoPath() string {
+	return p.RepoPath
 }
 
 // parseRevisionRange parses a revision range string (e.g., "main..HEAD") into a slice of parts.

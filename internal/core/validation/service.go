@@ -9,15 +9,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
-	"github.com/itiquette/gommitlint/internal/adapters/outgoing/git"
 	"github.com/itiquette/gommitlint/internal/config/types"
 	"github.com/itiquette/gommitlint/internal/domain"
 )
-
-// Note: Engine implementation and methods are now defined in engine.go
 
 // Options contains options for validation.
 type Options struct {
@@ -43,7 +39,7 @@ type Options struct {
 // ServiceDependencies holds all the dependencies for the Service.
 type ServiceDependencies struct {
 	// Engine that performs the validation
-	Engine Engine
+	Engine domain.ValidationEngine
 
 	// CommitService for retrieving commit information
 	CommitService domain.CommitRepository
@@ -113,7 +109,7 @@ func (s Service) ValidateHeadCommits(ctx context.Context, count int, skipMerge b
 	}
 
 	// Validate the commits
-	return s.dependencies.Engine.ValidateCommits(ctx, []domain.CommitInfo(collection)), nil
+	return s.dependencies.Engine.ValidateCommits(ctx, collection), nil
 }
 
 // ValidateCommitRange validates all commits in the given range.
@@ -131,19 +127,13 @@ func (s Service) ValidateCommitRange(ctx context.Context, fromHash, toHash strin
 	}
 
 	// Validate the commits
-	return s.dependencies.Engine.ValidateCommits(ctx, []domain.CommitInfo(collection)), nil
+	return s.dependencies.Engine.ValidateCommits(ctx, collection), nil
 }
 
-// ValidateMessageFile validates a commit message from a file.
-func (s Service) ValidateMessageFile(ctx context.Context, filePath string) (domain.ValidationResults, error) {
-	// Read the message file
-	messageBytes, err := os.ReadFile(filePath)
-	if err != nil {
-		return domain.ValidationResults{}, fmt.Errorf("failed to read message file: %w", err)
-	}
-
-	// Convert to string and trim whitespace
-	message := strings.TrimSpace(string(messageBytes))
+// ValidateMessage validates a commit message string.
+func (s Service) ValidateMessage(ctx context.Context, message string) (domain.ValidationResults, error) {
+	// Trim whitespace
+	message = strings.TrimSpace(message)
 	if message == "" {
 		return domain.NewValidationResults(), errors.New("empty commit message")
 	}
@@ -151,7 +141,7 @@ func (s Service) ValidateMessageFile(ctx context.Context, filePath string) (doma
 	// Split into subject and body
 	subject, body := domain.SplitCommitMessage(message)
 
-	// Create a dummy commit
+	// Create a commit info for validation
 	commit := domain.CommitInfo{
 		Hash:          "0000000000000000000000000000000000000000",
 		Subject:       subject,
@@ -163,35 +153,25 @@ func (s Service) ValidateMessageFile(ctx context.Context, filePath string) (doma
 	// Validate the commit
 	result := s.dependencies.Engine.ValidateCommit(ctx, commit)
 
-	// Create validation results
-	results := domain.NewValidationResults()
-	results = results.WithResult(result)
-
-	return results, nil
+	// Create validation results using functional approach
+	return domain.NewValidationResults().WithResult(result), nil
 }
 
 // ValidateWithOptions validates commits according to the provided options.
 func (s Service) ValidateWithOptions(ctx context.Context, opts Options) (domain.ValidationResults, error) {
-	// Create validation results
-	results := domain.NewValidationResults()
-
-	// Validate commit message file
+	// Message file validation should be handled by the caller
 	if opts.MessageFile != "" {
-		return s.ValidateMessageFile(ctx, opts.MessageFile)
+		return domain.NewValidationResults(), errors.New("message file validation should use ValidateMessage after reading file content")
 	}
 
 	// Validate specific commit
 	if opts.CommitHash != "" {
 		result, err := s.ValidateCommit(ctx, opts.CommitHash)
 		if err != nil {
-			return results, err
+			return domain.NewValidationResults(), err
 		}
 
-		// Create validation results
-		results := domain.NewValidationResults()
-		results = results.WithResult(result)
-
-		return results, nil
+		return domain.NewValidationResults().WithResult(result), nil
 	}
 
 	// Validate commit range
@@ -207,34 +187,8 @@ func (s Service) ValidateWithOptions(ctx context.Context, opts Options) (domain.
 	// Default to validating the HEAD commit
 	result, err := s.ValidateCommit(ctx, "HEAD")
 	if err != nil {
-		return results, err
+		return domain.NewValidationResults(), err
 	}
 
-	results = results.WithResult(result)
-
-	return results, nil
-}
-
-// CreateService creates a validation service with the configuration.
-// This now uses context directly for configuration.
-func CreateService(ctx context.Context, config types.Config, repoPath string) (Service, error) {
-	// Create the repository adapter
-	repoAdapter, err := git.NewRepositoryAdapter(ctx, repoPath)
-	if err != nil {
-		return Service{}, fmt.Errorf("failed to create repository adapter: %w", err)
-	}
-
-	// Create engine using rule provider and context
-	engine := CreateEngine(ctx, config, repoAdapter)
-
-	// Create dependencies
-	deps := ServiceDependencies{
-		Engine:        engine,
-		CommitService: repoAdapter,
-		InfoProvider:  repoAdapter,
-		Analyzer:      repoAdapter,
-	}
-
-	// Create and return service
-	return NewService(deps, config), nil
+	return domain.NewValidationResults().WithResult(result), nil
 }

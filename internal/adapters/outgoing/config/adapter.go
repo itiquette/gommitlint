@@ -12,7 +12,6 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/common/config"
 	configTypes "github.com/itiquette/gommitlint/internal/config/types"
-	"github.com/itiquette/gommitlint/internal/domain"
 )
 
 // RuleConfig is a map of configuration values for a rule.
@@ -32,7 +31,7 @@ func NewAdapter(cfg configTypes.Config) *Adapter {
 var _ config.Config = (*Adapter)(nil)
 
 // GetConfig returns the concrete config structure.
-func (a *Adapter) GetConfig() configTypes.Config {
+func (a Adapter) GetConfig() configTypes.Config {
 	return a.cfg
 }
 
@@ -41,7 +40,7 @@ func (a *Adapter) GetConfig() configTypes.Config {
 
 // Get returns a configuration value for a given key.
 // It supports nested keys with dot notation (e.g., "message.subject.max_length").
-func (a *Adapter) Get(key string) interface{} {
+func (a Adapter) Get(key string) interface{} {
 	if key == "" {
 		return nil
 	}
@@ -71,7 +70,7 @@ func (a *Adapter) Get(key string) interface{} {
 }
 
 // GetString returns a string configuration value for a given key.
-func (a *Adapter) GetString(key string) string {
+func (a Adapter) GetString(key string) string {
 	val := a.Get(key)
 	if s, ok := val.(string); ok {
 		return s
@@ -81,7 +80,7 @@ func (a *Adapter) GetString(key string) string {
 }
 
 // GetBool returns a boolean configuration value for a given key.
-func (a *Adapter) GetBool(key string) bool {
+func (a Adapter) GetBool(key string) bool {
 	val := a.Get(key)
 	if b, ok := val.(bool); ok {
 		return b
@@ -91,7 +90,7 @@ func (a *Adapter) GetBool(key string) bool {
 }
 
 // GetInt returns an integer configuration value for a given key.
-func (a *Adapter) GetInt(key string) int {
+func (a Adapter) GetInt(key string) int {
 	val := a.Get(key)
 	if i, ok := val.(int); ok {
 		return i
@@ -101,7 +100,7 @@ func (a *Adapter) GetInt(key string) int {
 }
 
 // GetStringSlice returns a string slice configuration value for a given key.
-func (a *Adapter) GetStringSlice(key string) []string {
+func (a Adapter) GetStringSlice(key string) []string {
 	val := a.Get(key)
 	if ss, ok := val.([]string); ok {
 		return ss
@@ -113,17 +112,17 @@ func (a *Adapter) GetStringSlice(key string) []string {
 // ValidationConfig interface implementation
 
 // EnabledRules returns the list of explicitly enabled rules.
-func (a *Adapter) EnabledRules() []string {
+func (a Adapter) EnabledRules() []string {
 	return a.cfg.Rules.Enabled
 }
 
 // DisabledRules returns the list of explicitly disabled rules.
-func (a *Adapter) DisabledRules() []string {
+func (a Adapter) DisabledRules() []string {
 	return a.cfg.Rules.Disabled
 }
 
 // SubjectMaxLength returns the maximum length for commit subjects.
-func (a *Adapter) SubjectMaxLength() int {
+func (a Adapter) SubjectMaxLength() int {
 	if a.cfg.Message.Subject.MaxLength <= 0 {
 		return 72 // Default
 	}
@@ -132,137 +131,120 @@ func (a *Adapter) SubjectMaxLength() int {
 }
 
 // BodyAllowSignOffOnly returns whether a sign-off alone is sufficient for the body.
-func (a *Adapter) BodyAllowSignOffOnly() bool {
+func (a Adapter) BodyAllowSignOffOnly() bool {
 	return a.cfg.Message.Body.AllowSignoffOnly
 }
 
 // ConventionalTypes returns the allowed types for conventional commits.
-func (a *Adapter) ConventionalTypes() []string {
+func (a Adapter) ConventionalTypes() []string {
 	return a.cfg.Conventional.Types
 }
 
 // ConventionalScopes returns the allowed scopes for conventional commits.
-func (a *Adapter) ConventionalScopes() []string {
+func (a Adapter) ConventionalScopes() []string {
 	return a.cfg.Conventional.Scopes
 }
 
 // ConventionalScopeRequired returns whether a scope is required in conventional commits.
-func (a *Adapter) ConventionalScopeRequired() bool {
+func (a Adapter) ConventionalScopeRequired() bool {
 	return a.cfg.Conventional.RequireScope
 }
 
 // SubjectImperative returns whether imperative mood is required in subjects.
-func (a *Adapter) SubjectImperative() bool {
+func (a Adapter) SubjectImperative() bool {
 	return a.cfg.Message.Subject.RequireImperative
 }
 
 // BodyMinLength returns the minimum length for commit body.
-func (a *Adapter) BodyMinLength() int {
+func (a Adapter) BodyMinLength() int {
 	return a.cfg.Message.Body.MinLength
 }
 
 // JiraProjects returns the list of JIRA projects.
-func (a *Adapter) JiraProjects() []string {
+func (a Adapter) JiraProjects() []string {
 	return a.cfg.Jira.Projects
 }
 
 // RulesConfig interface implementation
 
 // BodyMinimumLines returns the minimum number of lines in the body.
-func (a *Adapter) BodyMinimumLines() int {
+func (a Adapter) BodyMinimumLines() int {
 	return a.cfg.Message.Body.MinLines
 }
 
 // CommitBodyRequired returns whether a commit body is required.
-func (a *Adapter) CommitBodyRequired() bool {
+func (a Adapter) CommitBodyRequired() bool {
 	return a.cfg.Message.Body.MinLength > 0
 }
 
 // ReferenceBranch returns the name of the reference branch for comparison.
-func (a *Adapter) ReferenceBranch() string {
+func (a Adapter) ReferenceBranch() string {
 	return a.cfg.Repo.Branch
 }
 
 // MaxCommitsAhead returns the maximum allowed commits ahead of reference branch.
-func (a *Adapter) MaxCommitsAhead() int {
+func (a Adapter) MaxCommitsAhead() int {
 	return a.cfg.Repo.MaxCommitsAhead
 }
 
 // SpellIgnoreWords returns words to ignore during spell checking.
-func (a *Adapter) SpellIgnoreWords() []string {
+func (a Adapter) SpellIgnoreWords() []string {
 	return a.cfg.Spell.IgnoreWords
 }
 
 // SubjectCase returns the required case for commit subjects.
-func (a *Adapter) SubjectCase() string {
+func (a Adapter) SubjectCase() string {
 	return a.cfg.Message.Subject.Case
 }
 
 // Rule state methods
 
-// IsRuleEnabled checks if a rule is enabled by name.
-// Rules can be explicitly enabled, explicitly disabled, or have default behavior.
-func (a *Adapter) IsRuleEnabled(ctx context.Context, ruleName string) bool {
-	// Get the centralized rule priority service
-	priorityService := domain.NewRulePriorityService(domain.GetDefaultDisabledRules())
+// IsRuleEnabled returns enabled rules list - business logic moved to application layer.
+func (a Adapter) IsRuleEnabled(_ context.Context, ruleName string) bool {
+	// Adapters should not contain business logic - this is configuration access only
+	for _, enabled := range a.cfg.Rules.Enabled {
+		if enabled == ruleName {
+			return true
+		}
+	}
 
-	// Use the centralized function
-	return priorityService.IsRuleEnabled(ctx, ruleName, a.cfg.Rules.Enabled, a.cfg.Rules.Disabled)
+	return false
 }
 
-// IsRuleDisabled checks if a rule is disabled by name.
-func (a *Adapter) IsRuleDisabled(ctx context.Context, ruleName string) bool {
-	return !a.IsRuleEnabled(ctx, ruleName)
+// IsRuleDisabled returns disabled rules list - business logic moved to application layer.
+func (a Adapter) IsRuleDisabled(_ context.Context, ruleName string) bool {
+	for _, disabled := range a.cfg.Rules.Disabled {
+		if disabled == ruleName {
+			return true
+		}
+	}
+
+	return false
 }
 
 // RuleConfiguration interface implementation
 
-// GetRuleConfig returns the configuration for a specific rule by name.
-// It gathers all relevant configuration values for the rule.
-func (a *Adapter) GetRuleConfig(ruleName string) RuleConfig {
-	// Create an empty rule config
+// GetRuleConfig returns raw configuration data - rule interpretation moved to application layer.
+func (a Adapter) GetRuleConfig(_ string) RuleConfig {
+	// Adapters should only provide raw data access, not interpret rule meanings
+	// Application layer will handle rule-specific configuration mapping
 	config := make(RuleConfig)
 
-	// Based on the rule name, populate specific configuration values
-	switch ruleName {
-	case "SubjectLength":
-		config["max_length"] = a.cfg.Message.Subject.MaxLength
-	case "SubjectCase":
-		config["case"] = a.cfg.Message.Subject.Case
-	case "Imperative", "ImperativeVerb":
-		config["require_imperative"] = a.cfg.Message.Subject.RequireImperative
-	case "SubjectSuffix":
-		config["forbid_endings"] = a.cfg.Message.Subject.ForbidEndings
-	case "Conventional", "ConventionalCommit":
-		config["require_scope"] = a.cfg.Conventional.RequireScope
-		config["types"] = a.cfg.Conventional.Types
-		config["scopes"] = a.cfg.Conventional.Scopes
-		config["max_description_length"] = a.cfg.Conventional.MaxDescriptionLength
-	case "CommitBody":
-		config["min_length"] = a.cfg.Message.Body.MinLength
-		config["minimum_lines"] = a.cfg.Message.Body.MinLines
-	case "JiraReference":
-		config["pattern"] = a.cfg.Jira.Pattern
-		config["projects"] = a.cfg.Jira.Projects
-		config["body_ref"] = a.cfg.Jira.CheckBody
-	case "SignOff":
-		config["sign_off_required"] = a.cfg.Message.Body.RequireSignoff
-		config["allow_multiple_signoffs"] = a.cfg.Signing.AllowMultipleSignoffs
-	case "Signature":
-		config["signature_required"] = a.cfg.Signing.RequireSignature
-	case "SignedIdentity":
-		config["allowed_identities"] = a.cfg.Signing.AllowedSigners
-	case "Spell":
-		config["language"] = a.cfg.Spell.Language
-		config["custom_dictionary"] = a.cfg.Spell.IgnoreWords
-	}
+	// Return general config sections - let application layer decide what's relevant
+	config["message"] = a.cfg.Message
+	config["conventional"] = a.cfg.Conventional
+	config["jira"] = a.cfg.Jira
+	config["signing"] = a.cfg.Signing
+	config["spell"] = a.cfg.Spell
+	config["repo"] = a.cfg.Repo
+	config["rules"] = a.cfg.Rules
 
 	return config
 }
 
 // Helper methods for Get()
 
-func (a *Adapter) getMessageValue(parts []string) interface{} {
+func (a Adapter) getMessageValue(parts []string) interface{} {
 	if len(parts) == 0 {
 		return a.cfg.Message
 	}
@@ -277,7 +259,7 @@ func (a *Adapter) getMessageValue(parts []string) interface{} {
 	}
 }
 
-func (a *Adapter) getSubjectValue(parts []string) interface{} {
+func (a Adapter) getSubjectValue(parts []string) interface{} {
 	if len(parts) == 0 {
 		return a.cfg.Message.Subject
 	}
@@ -296,7 +278,7 @@ func (a *Adapter) getSubjectValue(parts []string) interface{} {
 	}
 }
 
-func (a *Adapter) getBodyValue(parts []string) interface{} {
+func (a Adapter) getBodyValue(parts []string) interface{} {
 	if len(parts) == 0 {
 		return a.cfg.Message.Body
 	}
@@ -315,7 +297,7 @@ func (a *Adapter) getBodyValue(parts []string) interface{} {
 	}
 }
 
-func (a *Adapter) getConventionalValue(parts []string) interface{} {
+func (a Adapter) getConventionalValue(parts []string) interface{} {
 	if len(parts) == 0 {
 		return a.cfg.Conventional
 	}
@@ -354,7 +336,7 @@ func (a *Adapter) getConventionalValue(parts []string) interface{} {
 	}
 }
 
-func (a *Adapter) getSigningValue(parts []string) interface{} {
+func (a Adapter) getSigningValue(parts []string) interface{} {
 	if len(parts) == 0 {
 		return a.cfg.Signing
 	}
@@ -380,7 +362,7 @@ func (a *Adapter) getSigningValue(parts []string) interface{} {
 	}
 }
 
-func (a *Adapter) getRepoValue(parts []string) interface{} {
+func (a Adapter) getRepoValue(parts []string) interface{} {
 	if len(parts) == 0 {
 		return a.cfg.Repo
 	}
@@ -401,7 +383,7 @@ func (a *Adapter) getRepoValue(parts []string) interface{} {
 
 // getIntegrationsValue is removed as integrations section is now flattened
 
-func (a *Adapter) getJiraValue(parts []string) interface{} {
+func (a Adapter) getJiraValue(parts []string) interface{} {
 	if len(parts) == 0 {
 		return a.cfg.Jira
 	}
@@ -427,7 +409,7 @@ func (a *Adapter) getJiraValue(parts []string) interface{} {
 	}
 }
 
-func (a *Adapter) getSpellValue(parts []string) interface{} {
+func (a Adapter) getSpellValue(parts []string) interface{} {
 	if len(parts) == 0 {
 		return a.cfg.Spell
 	}
@@ -451,7 +433,7 @@ func (a *Adapter) getSpellValue(parts []string) interface{} {
 	}
 }
 
-func (a *Adapter) getRulesValue(parts []string) interface{} {
+func (a Adapter) getRulesValue(parts []string) interface{} {
 	if len(parts) == 0 {
 		return a.cfg.Rules
 	}

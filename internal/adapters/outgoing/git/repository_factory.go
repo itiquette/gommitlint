@@ -54,12 +54,6 @@ func (f RepositoryFactory) CreateCommitAnalyzer() domain.CommitAnalyzer {
 	return f.adapter
 }
 
-// CreateGitRepositoryService returns an implementation of domain.GitRepositoryService
-// which combines all Git-related interfaces.
-func (f RepositoryFactory) CreateGitRepositoryService() domain.GitRepositoryService {
-	return f.adapter
-}
-
 // NewRepositoryServices creates all repository-related services in a single call.
 // This simplifies dependency injection by providing all necessary components at once.
 // This is the preferred method for getting repository services.

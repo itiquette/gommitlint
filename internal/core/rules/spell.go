@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/client9/misspell"
-	"github.com/itiquette/gommitlint/internal/common/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
@@ -38,11 +37,17 @@ func WithCustomDictionary(words []string) SpellOption {
 }
 
 // NewSpellRule creates a new SpellRule.
-func NewSpellRule() SpellRule {
-	return SpellRule{
+func NewSpellRule(options ...SpellOption) SpellRule {
+	rule := SpellRule{
 		name:        "Spell",
 		ignoreWords: []string{},
 	}
+
+	for _, option := range options {
+		rule = option(rule)
+	}
+
+	return rule
 }
 
 // Name returns the rule name.
@@ -50,47 +55,8 @@ func (r SpellRule) Name() string {
 	return r.name
 }
 
-// WithContext implements the ConfigurableRule interface for SpellRule.
-// It returns a new rule with configuration from the provided context.
-func (r SpellRule) WithContext(ctx context.Context) domain.Rule {
-	// Get configuration directly from context
-	cfg := contextx.GetConfig(ctx)
-	if cfg == nil {
-		return r
-	}
-
-	// Create a copy of the rule
-	result := r
-
-	// Get ignore words from configuration
-	ignoreWords := cfg.GetStringSlice("spell.ignore_words")
-	if len(ignoreWords) > 0 {
-		// Create a deep copy of the ignore words
-		result.ignoreWords = make([]string, len(ignoreWords))
-		copy(result.ignoreWords, ignoreWords)
-	}
-
-	return result
-}
-
 // Validate checks spelling in the commit message.
-func (r SpellRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
-	// Get configuration from context
-	cfg := contextx.GetConfig(ctx)
-	if cfg == nil {
-		// If no config is available, return nil (no validation)
-		return nil
-	}
-
-	// Check if this rule is enabled using domain priority service
-	enabledRules := cfg.GetStringSlice("rules.enabled")
-	disabledRules := cfg.GetStringSlice("rules.disabled")
-	priorityService := domain.NewRulePriorityService(domain.GetDefaultDisabledRules())
-
-	if !priorityService.IsRuleEnabled(ctx, r.Name(), enabledRules, disabledRules) {
-		return nil
-	}
-
+func (r SpellRule) Validate(_ context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
 	// Create a map of ignored words for efficient lookup
 	ignoreWordsMap := make(map[string]bool)
 	for _, word := range r.ignoreWords {

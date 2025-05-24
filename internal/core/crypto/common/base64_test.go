@@ -7,7 +7,7 @@ package common
 import (
 	"testing"
 
-	"github.com/itiquette/gommitlint/internal/common/encutils"
+	"github.com/itiquette/gommitlint/internal/testutils/encutils"
 	"github.com/stretchr/testify/require"
 )
 

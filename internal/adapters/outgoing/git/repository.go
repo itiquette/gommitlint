@@ -16,7 +16,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/itiquette/gommitlint/internal/adapters/outgoing/log"
-	"github.com/itiquette/gommitlint/internal/common/slices"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
@@ -551,10 +550,11 @@ func (g RepositoryAdapter) collectAndConvertCommits(
 func (g RepositoryAdapter) mapCommits(ctx context.Context, commits []*object.Commit) ([]domain.CommitInfo, error) {
 	logger := log.Logger(ctx)
 	logger.Trace().Int("commit_count", len(commits)).Msg("Entering mapCommits")
-	// Use slices.Map for a more concise functional transformation
-	domainCommits := slices.Map(commits, func(commit *object.Commit) domain.CommitInfo {
-		return g.convertCommit(ctx, commit)
-	})
+	// Transform commits using standard library approach
+	domainCommits := make([]domain.CommitInfo, len(commits))
+	for i, commit := range commits {
+		domainCommits[i] = g.convertCommit(ctx, commit)
+	}
 
 	return domainCommits, nil
 }

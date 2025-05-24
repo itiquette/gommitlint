@@ -12,13 +12,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	infra "github.com/itiquette/gommitlint/internal/adapters/outgoing/config"
-	"github.com/itiquette/gommitlint/internal/adapters/outgoing/git"
 	"github.com/itiquette/gommitlint/internal/adapters/outgoing/log"
-	"github.com/itiquette/gommitlint/internal/application/validate"
 	"github.com/itiquette/gommitlint/internal/common/contextx"
+	"github.com/itiquette/gommitlint/internal/composition"
 	"github.com/itiquette/gommitlint/internal/config/types"
 	"github.com/itiquette/gommitlint/internal/domain"
 	testcontext "github.com/itiquette/gommitlint/internal/testutils/context"
+	"github.com/itiquette/gommitlint/internal/testutils/integrationtest"
 	testlogger "github.com/itiquette/gommitlint/internal/testutils/logger"
 )
 
@@ -59,7 +59,7 @@ gommitlint:
 	commitMessage := "feat: add new feature\n\nThis is a valid commit message body with full description."
 
 	// Using the helper from gittest_helper.go
-	repoPath, cleanup := SetupTestRepository(t, commitMessage)
+	repoPath, cleanup := integrationtest.SetupTestRepository(t, commitMessage)
 	defer cleanup()
 
 	// Create a base context with logger
@@ -104,25 +104,17 @@ gommitlint:
 	adapter := configService.GetAdapter()
 	ctx = contextx.WithConfig(ctx, adapter)
 
-	// Create repository factory with the context
-	repoFactory, err := git.NewRepositoryFactory(ctx, repoPath)
+	// Create validation service using composition root
+	logger := log.Logger(ctx)
+	loggerAdapter := log.NewSimpleAdapter(*logger)
+	root := composition.NewRoot(loggerAdapter, configService.GetAdapter().GetConfig())
+	service, err := root.CreateValidationService(ctx, repoPath)
 	require.NoError(t, err)
 
-	// Get services from factory
-	commitService := repoFactory.CreateCommitRepository()
-	infoProvider := repoFactory.CreateRepositoryInfoProvider()
-	analyzer := repoFactory.CreateCommitAnalyzer()
-
-	// Create validation service using context-based configuration
-	validationService := validate.CreateValidationService(
-		ctx,
-		commitService,
-		infoProvider,
-		analyzer,
-	)
+	validationService := service
 
 	// Validate the HEAD commit
-	result, err := validationService.ValidateCommit(ctx, "HEAD")
+	result, err := validationService.ValidateCommit(ctx, "HEAD", false)
 	require.NoError(t, err)
 
 	// Filter for only the rules we explicitly enabled

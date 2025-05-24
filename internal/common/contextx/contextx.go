@@ -73,9 +73,6 @@ func Value[T any](ctx context.Context, key contextkeys.ContextKey) (T, bool) {
 	return result, ok
 }
 
-// Note: valueWithError has been removed as it's not used in production code.
-// If you need similar functionality, use Value with proper error handling.
-
 // GetLogger retrieves a logger from the context.
 // If no logger is found, it returns a no-op logger.
 //
@@ -121,32 +118,4 @@ func WithConfig(ctx context.Context, cfg config.Config) context.Context {
 //	maxRetries := cfg.GetInt("max_retries")
 func GetConfig(ctx context.Context) config.Config {
 	return config.GetConfig(ctx)
-}
-
-// MergeContext is deprecated and has been moved to internal/testutils/context.
-// Use testcontext.MergeContext instead.
-//
-// Deprecated: This function will be removed in a future version.
-func MergeContext(ctx1, ctx2 context.Context) context.Context {
-	// Validate base context
-	if ctx1 == nil {
-		panic("MergeContext: base context cannot be nil")
-	}
-
-	// If second context is nil, return first unchanged
-	if ctx2 == nil {
-		return ctx1
-	}
-
-	// Start with base context
-	result := ctx1
-
-	// Copy all known context keys from override context
-	for _, key := range contextkeys.AllContextKeys() {
-		if val := ctx2.Value(key); val != nil {
-			result = context.WithValue(result, key, val)
-		}
-	}
-
-	return result
 }

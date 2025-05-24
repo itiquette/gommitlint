@@ -13,10 +13,10 @@ import (
 
 	"github.com/fatih/color"
 
-	"github.com/itiquette/gommitlint/internal/common/contextx"
 	"github.com/itiquette/gommitlint/internal/common/slices"
 	"github.com/itiquette/gommitlint/internal/config/types"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/ports/outgoing"
 )
 
 // TextFormatter formats validation results as text.
@@ -131,14 +131,21 @@ func (f TextFormatter) WithLightMode(lightMode bool) TextFormatter {
 	return result
 }
 
+// Ensure TextFormatter implements outgoing.ResultFormatter.
+var _ outgoing.ResultFormatter = TextFormatter{}
+
 // Format formats validation results as text.
-func (f TextFormatter) Format(ctx context.Context, results domain.ValidationResults) string {
+func (f TextFormatter) Format(ctx context.Context, results interface{}) string {
+	validationResults, ok := results.(domain.ValidationResults)
+	if !ok {
+		return "Error: invalid results type"
+	}
 	// Estimate initial capacity based on number of commits and results
-	initialCapacity := 1000                       // Base size
-	initialCapacity += 200 * len(results.Results) // Headers
+	initialCapacity := 1000                                 // Base size
+	initialCapacity += 200 * len(validationResults.Results) // Headers
 
 	// Add space for rule results (roughly 100 bytes per rule per commit)
-	for _, commit := range results.Results {
+	for _, commit := range validationResults.Results {
 		initialCapacity += 100 * len(commit.RuleResults)
 	}
 
@@ -146,48 +153,30 @@ func (f TextFormatter) Format(ctx context.Context, results domain.ValidationResu
 
 	builder.Grow(initialCapacity)
 
-	// Get configuration for rule result formatting
-	var cfg types.Config
-
-	// Try to get config from context using the standard pattern
-	if ctxConfig := contextx.GetConfig(ctx); ctxConfig != nil {
-		// Create a basic config with rule information from context
-		cfg = types.Config{
-			Rules: types.RulesConfig{
-				Enabled:  ctxConfig.GetStringSlice("rules.enabled"),
-				Disabled: ctxConfig.GetStringSlice("rules.disabled"),
+	// Formatters should receive pre-processed data from application layer
+	// No need to access context configuration directly
+	cfg := types.Config{
+		Rules: types.RulesConfig{
+			Enabled:  []string{},
+			Disabled: []string{},
+		},
+		Message: types.MessageConfig{
+			Subject: types.SubjectConfig{
+				MaxLength:         50,
+				Case:              "sentence",
+				RequireImperative: true,
 			},
-			Message: types.MessageConfig{
-				Subject: types.SubjectConfig{
-					MaxLength: ctxConfig.GetInt("message.subject.max_length"),
-				},
-			},
-		}
-	} else {
-		// Create default config
-		cfg = types.Config{
-			Rules: types.RulesConfig{
-				Enabled:  []string{},
-				Disabled: []string{},
-			},
-			Message: types.MessageConfig{
-				Subject: types.SubjectConfig{
-					MaxLength:         50,
-					Case:              "sentence",
-					RequireImperative: true,
-				},
-			},
-		}
+		},
 	}
 
 	// For multiple commits, show a summary header first
-	if len(results.Results) > 1 {
-		f.formatOverallSummary(&builder, results)
+	if len(validationResults.Results) > 1 {
+		f.formatOverallSummary(&builder, validationResults)
 	}
 
 	// Process each commit result
-	for i, commitResult := range results.Results {
-		f.formatCommitHeader(&builder, commitResult, i, len(results.Results))
+	for i, commitResult := range validationResults.Results {
+		f.formatCommitHeader(&builder, commitResult, i, len(validationResults.Results))
 		f.formatRuleResults(ctx, &builder, commitResult, cfg)
 	}
 
@@ -283,32 +272,13 @@ func (f TextFormatter) formatCommitMessage(builder *strings.Builder, message str
 }
 
 // formatRuleResults formats the rule validation results.
-func (f TextFormatter) formatRuleResults(ctx context.Context, builder *strings.Builder, commitResult domain.CommitResult, _ types.Config) {
+func (f TextFormatter) formatRuleResults(_ context.Context, builder *strings.Builder, commitResult domain.CommitResult, _ types.Config) {
 	// Sort rule results alphabetically by name
 	sortedRules := getSortedRuleResults(commitResult.RuleResults)
 
-	// Use the centralized rule priority service directly
-	priorityService := domain.NewRulePriorityService(
-		nil, // No need for default disabled rules here
-	)
-
-	// Create default rule lists
-	enabledRules := []string{}
-	disabledRules := []string{}
-
-	// Get configuration directly from context using the standard pattern
-	if ctxConfig := contextx.GetConfig(ctx); ctxConfig != nil {
-		enabledRules = ctxConfig.GetStringSlice("rules.enabled")
-		disabledRules = ctxConfig.GetStringSlice("rules.disabled")
-	}
-
-	// Use the centralized rule priority service
-	filteredRules := priorityService.FilterRuleResults(
-		ctx,
-		sortedRules,
-		enabledRules,
-		disabledRules,
-	)
+	// Formatters should not filter rules - that's application layer responsibility
+	// Accept pre-filtered rules from application layer
+	filteredRules := sortedRules
 
 	// Use Map to create RuleCount records for each filtered rule
 	type RuleCount struct {
@@ -337,7 +307,7 @@ func (f TextFormatter) formatRuleResults(ctx context.Context, builder *strings.B
 	}))
 
 	// Process each active rule
-	slices.ForEach(activeRules, func(ruleResult domain.RuleResult) {
+	for _, ruleResult := range activeRules {
 		ruleName := f.colors.Bold(ruleResult.RuleName)
 
 		if ruleResult.Status == domain.StatusPassed {
@@ -345,7 +315,7 @@ func (f TextFormatter) formatRuleResults(ctx context.Context, builder *strings.B
 		} else if ruleResult.Status == domain.StatusFailed {
 			f.formatFailedRule(builder, ruleName, ruleResult)
 		}
-	})
+	}
 
 	f.formatRuleSummaryLine(builder, passedRules, totalRules)
 }
@@ -436,9 +406,6 @@ func getSortedRuleResults(results []domain.RuleResult) []domain.RuleResult {
 
 	return sortedResults
 }
-
-// Note: We keep the wrapText function signature to avoid unused function warnings,
-// but we don't use it in our current formatter implementation.
 
 // ColorScheme provides color functions for different parts of the output.
 type ColorScheme struct {

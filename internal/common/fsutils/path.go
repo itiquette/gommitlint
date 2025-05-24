@@ -101,38 +101,114 @@ func IsWithinDirectory(path, baseDir string) (bool, error) {
 }
 
 // SafeJoin safely joins path elements, preventing path traversal attacks.
-// It rejects any element containing ".." sequences and ensures the final
-// path remains within the base directory.
+// It rejects any element containing ".." sequences, guards against symlink attacks,
+// and ensures the final path remains within the base directory using multiple
+// layers of validation.
 func SafeJoin(baseDir string, elements ...string) (string, error) {
-	// Verify baseDir exists and is a directory
-	fi, err := os.Stat(baseDir)
+	// Verify baseDir exists and is a directory using a file descriptor
+	// to prevent TOCTOU race conditions
+	dirFile, err := os.Open(baseDir)
 	if err != nil {
 		return "", fmt.Errorf("invalid base directory: %w", err)
+	}
+	defer dirFile.Close()
+
+	// Get file info directly from the file descriptor
+	fi, err := dirFile.Stat()
+	if err != nil {
+		return "", fmt.Errorf("cannot stat base directory: %w", err)
 	}
 
 	if !fi.IsDir() {
 		return "", fmt.Errorf("base path is not a directory: %s", baseDir)
 	}
 
-	// Clean base path
-	cleanBase := filepath.Clean(baseDir)
+	// Clean base path and get its absolute form
+	absBaseDir, err := filepath.Abs(filepath.Clean(baseDir))
+	if err != nil {
+		return "", fmt.Errorf("cannot get absolute base directory: %w", err)
+	}
 
-	// Check each element and build path
-	result := cleanBase
+	// Resolve base directory symlinks for security
+	canonBase, err := filepath.EvalSymlinks(absBaseDir)
+	if err != nil {
+		return "", fmt.Errorf("cannot resolve base directory symlinks: %w", err)
+	}
 
-	for _, element := range elements {
-		// Reject path traversal attempts
-		if strings.Contains(element, "..") {
+	// Check each element and build path incrementally
+	// Start with the canonical base path
+	result := canonBase
+
+	// Additional security check - verify each component individually
+	for elementIndex, element := range elements {
+		// Reject empty elements
+		if element == "" {
+			continue
+		}
+
+		// First clean the element to normalize it
+		cleanElement := filepath.Clean(element)
+
+		// Comprehensive path traversal blocking
+		// 1. Check for parent directory references (..)
+		if strings.Contains(element, "..") || strings.Contains(cleanElement, "..") {
 			return "", fmt.Errorf("path element contains illegal sequence: %s", element)
 		}
 
-		result = filepath.Join(result, element)
-	}
+		// 2. Check for other suspicious patterns
+		if strings.Contains(cleanElement, "\\") ||
+			strings.Contains(cleanElement, "%2e%2e") || // URL-encoded ..
+			strings.Contains(cleanElement, "%2E%2E") {
+			return "", fmt.Errorf("path element contains suspicious character sequence: %s", element)
+		}
 
-	// Final safety check - ensure result is within baseDir
-	relPath, err := filepath.Rel(cleanBase, result)
-	if err != nil || strings.HasPrefix(relPath, "..") {
-		return "", fmt.Errorf("resulting path escapes base directory: %s", result)
+		// 3. Reject absolute paths in elements
+		if filepath.IsAbs(cleanElement) {
+			return "", fmt.Errorf("path element cannot be absolute: %s", element)
+		}
+
+		// Safely join the element
+		nextResult := filepath.Join(result, cleanElement)
+
+		// Perform thorough path containment verification
+		// 4. Check path containment using relative path
+		relPath, err := filepath.Rel(canonBase, nextResult)
+		if err != nil {
+			return "", fmt.Errorf("path calculation error: %w", err)
+		}
+
+		if strings.HasPrefix(relPath, "..") || strings.Contains(relPath, "/../") {
+			return "", fmt.Errorf("path element causes directory traversal: %s", element)
+		}
+
+		// 5. Check path containment using string prefix (belt and suspenders approach)
+		// Ensure resulting path has canonical base as prefix
+		if !strings.HasPrefix(nextResult, canonBase+string(filepath.Separator)) && nextResult != canonBase {
+			return "", fmt.Errorf("path escapes base directory: %s", element)
+		}
+
+		// 6. For all but the last element, verify each component if it exists
+		// This prevents symlink trickery where intermediate components are symlinks
+		if elementIndex < len(elements)-1 {
+			if _, err := os.Lstat(nextResult); err == nil {
+				// Path exists, check if it's a symlink
+				realPath, err := filepath.EvalSymlinks(nextResult)
+				if err != nil {
+					return "", fmt.Errorf("failed to evaluate potential symlink: %w", err)
+				}
+
+				// Verify the resolved path is still within the base directory
+				if !strings.HasPrefix(realPath, canonBase) {
+					return "", fmt.Errorf("symlink in path escapes base directory: %s", element)
+				}
+
+				// Use the resolved path going forward if it exists
+				nextResult = realPath
+			}
+		}
+
+		// Update our result for the next iteration
+		result = nextResult
 	}
 
 	return result, nil

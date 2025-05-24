@@ -76,8 +76,8 @@ func TestWithConfiguration(t *testing.T) {
 			// Create adapter with configuration
 			adapter := NewVerificationAdapterWithOptions(WithConfiguration(mockCfg))
 
-			// Check key directory
-			require.Equal(t, testCase.expectPath, adapter.defaultDir)
+			// Check key directory via repository
+			require.Equal(t, testCase.expectPath, adapter.repository.GetKeyDirectory())
 		})
 	}
 }

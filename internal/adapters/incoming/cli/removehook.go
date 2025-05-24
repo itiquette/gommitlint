@@ -130,10 +130,17 @@ func (p HookRemovalParameters) VerifyHookExists() error {
 		return err
 	}
 
-	// Check if hook exists
-	if _, err := os.Stat(hookPath); os.IsNotExist(err) {
-		return fmt.Errorf("hook does not exist at %s", hookPath)
+	// Check if hook exists using file descriptor to prevent TOCTOU
+	file, err := os.Open(hookPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("hook does not exist at %s", hookPath)
+		}
+
+		return fmt.Errorf("cannot check hook existence: %w", err)
 	}
+
+	file.Close()
 
 	return nil
 }
@@ -145,8 +152,29 @@ func (p HookRemovalParameters) IsGommitlintHook() (bool, error) {
 		return false, err
 	}
 
-	// Verify the hook is actually one of ours
-	content, err := os.ReadFile(hookPath)
+	// Open file to check size first
+	file, err := os.Open(hookPath)
+	if err != nil {
+		return false, fmt.Errorf("could not open hook file: %w", err)
+	}
+	defer file.Close()
+
+	// Check file size to prevent reading huge files
+	info, err := file.Stat()
+	if err != nil {
+		return false, fmt.Errorf("could not stat hook file: %w", err)
+	}
+
+	// Limit to 10KB - hooks should be small scripts
+	const maxHookSize = 10 * 1024
+	if info.Size() > maxHookSize {
+		return false, fmt.Errorf("hook file too large: %d bytes (max %d)", info.Size(), maxHookSize)
+	}
+
+	// Now safe to read the file
+	content := make([]byte, info.Size())
+
+	_, err = io.ReadFull(file, content)
 	if err != nil {
 		return false, fmt.Errorf("could not read hook file: %w", err)
 	}

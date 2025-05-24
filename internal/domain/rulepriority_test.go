@@ -192,11 +192,11 @@ func TestRulePriorityService_IsRuleEnabled(t *testing.T) {
 			expected:      true,
 		},
 		{
-			name:          "explicitly disabled rule overrides explicitly enabled rule",
+			name:          "explicitly enabled rule overrides explicitly disabled rule",
 			ruleName:      "ExplicitlyEnabledAndDisabled",
 			enabledRules:  []string{"ExplicitlyEnabledAndDisabled"},
 			disabledRules: []string{"ExplicitlyEnabledAndDisabled"},
-			expected:      false,
+			expected:      true,
 		},
 		{
 			name:          "explicitly enabled rule overrides default-disabled rule",
@@ -267,10 +267,10 @@ func TestRulePriorityService_FilterRules(t *testing.T) {
 			expectedNames: []string{"ExplicitlyEnabled", "ExplicitlyEnabledAndDisabled"},
 		},
 		{
-			name:          "disabled takes precedence over enabled",
+			name:          "enabled takes precedence over disabled",
 			enabledRules:  []string{"ExplicitlyEnabledAndDisabled", "DefaultDisabled"},
 			disabledRules: []string{"ExplicitlyEnabledAndDisabled"},
-			expectedNames: []string{"DefaultEnabled", "DefaultDisabled", "ExplicitlyEnabled", "ExplicitlyDisabled"},
+			expectedNames: []string{"DefaultEnabled", "DefaultDisabled", "ExplicitlyEnabled", "ExplicitlyDisabled", "ExplicitlyEnabledAndDisabled"},
 		},
 	}
 

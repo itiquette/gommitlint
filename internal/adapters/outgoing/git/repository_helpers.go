@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -18,7 +19,6 @@ import (
 
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/itiquette/gommitlint/internal/adapters/outgoing/log"
-	commonSlices "github.com/itiquette/gommitlint/internal/common/slices"
 )
 
 // findGitDir finds the Git directory from a starting path.
@@ -291,33 +291,45 @@ func getAncestors(ctx context.Context, repo *git.Repository, commit *object.Comm
 	return getAncestorsWithAccumulator(ctx, repo, commit, make(map[plumbing.Hash]bool))
 }
 
+// Maximum number of ancestors to process to prevent DoS attacks.
+const maxAncestors = 10000
+
 // getAncestorsWithAccumulator is a helper function that builds an ancestors map.
 // This function allows accumulating results while maintaining functional purity at the public API.
 // It uses an iterative breadth-first approach for better performance while maintaining functional principles.
 func getAncestorsWithAccumulator(ctx context.Context, repo *git.Repository, commit *object.Commit, ancestors map[plumbing.Hash]bool) (map[plumbing.Hash]bool, error) {
 	logger := log.Logger(ctx)
 	logger.Trace().Str("commit_hash", commit.Hash.String()).Int("existing_ancestors", len(ancestors)).Msg("Entering getAncestorsWithAccumulator")
-	// Create a new map with the current ancestors using DeepCopyMap
-	result := commonSlices.DeepCopyMap(ancestors)
+	// Create a new map with the current ancestors using maps.Clone
+	result := maps.Clone(ancestors)
 
 	// Initialize a queue with the starting commit
 	queue := []*object.Commit{commit}
 
-	// Process commits breadth-first
-	for len(queue) > 0 {
+	// Process commits breadth-first with a limit to prevent DoS
+	processedCount := 0
+	for len(queue) > 0 && processedCount < maxAncestors {
 		// Dequeue the first commit
 		current := queue[0]
 		queue = queue[1:]
 
 		// Mark this commit as an ancestor (immutably)
-		result = commonSlices.DeepCopyMap(result)
+		result = maps.Clone(result)
 		result[current.Hash] = true
+		processedCount++
 
 		// Process all parents of the current commit
 		for _, parentHash := range current.ParentHashes {
 			// Skip if already processed
 			if result[parentHash] {
 				continue
+			}
+
+			// Limit queue size to prevent memory exhaustion
+			if len(queue) >= maxAncestors {
+				logger.Warn().Int("queue_size", len(queue)).Msg("Ancestor queue size limit reached")
+
+				break
 			}
 
 			// Get the parent commit
@@ -329,6 +341,10 @@ func getAncestorsWithAccumulator(ctx context.Context, repo *git.Repository, comm
 			// Add to queue using functional approach (create new slice)
 			queue = append(slices.Clone(queue), parent)
 		}
+	}
+
+	if processedCount >= maxAncestors {
+		logger.Warn().Int("processed", processedCount).Msg("Maximum ancestor limit reached")
 	}
 
 	return result, nil

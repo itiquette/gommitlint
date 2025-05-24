@@ -8,13 +8,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/itiquette/gommitlint/internal/adapters/incoming/cli"
 	"github.com/itiquette/gommitlint/internal/adapters/outgoing/config"
 	"github.com/itiquette/gommitlint/internal/adapters/outgoing/git"
 	"github.com/itiquette/gommitlint/internal/adapters/outgoing/output"
 	"github.com/itiquette/gommitlint/internal/config/types"
 	"github.com/itiquette/gommitlint/internal/domain"
-	"github.com/itiquette/gommitlint/internal/ports/incoming"
 	"github.com/itiquette/gommitlint/internal/ports/outgoing"
 )
 
@@ -33,7 +31,7 @@ func NewOutgoingAdapterFactory(config types.Config, logger outgoing.Logger) *Out
 }
 
 // CreateGitRepository creates a Git repository adapter.
-func (f *OutgoingAdapterFactory) CreateGitRepository(ctx context.Context, repoPath string) (domain.CommitRepository, error) {
+func (f OutgoingAdapterFactory) CreateGitRepository(ctx context.Context, repoPath string) (domain.CommitRepository, error) {
 	// Create Git repository factory
 	gitRepoFactory, err := git.NewRepositoryFactory(ctx, repoPath)
 	if err != nil {
@@ -56,42 +54,16 @@ func (f *OutgoingAdapterFactory) CreateGitRepository(ctx context.Context, repoPa
 }
 
 // CreateConfigAdapter creates a configuration adapter.
-func (f *OutgoingAdapterFactory) CreateConfigAdapter() *config.Adapter {
+func (f OutgoingAdapterFactory) CreateConfigAdapter() *config.Adapter {
 	return config.NewAdapter(f.config)
 }
 
 // CreateOutputFormatters creates all output formatters.
-func (f *OutgoingAdapterFactory) CreateOutputFormatters() map[string]domain.ResultFormatter {
-	return map[string]domain.ResultFormatter{
+func (f OutgoingAdapterFactory) CreateOutputFormatters() map[string]outgoing.ResultFormatter {
+	return map[string]outgoing.ResultFormatter{
 		"json":   output.NewJSONFormatter(),
 		"text":   output.NewTextFormatter(),
 		"github": output.NewGitHubFormatter(),
 		"gitlab": output.NewGitLabFormatter(),
-	}
-}
-
-// IncomingAdapterFactory creates incoming adapters.
-type IncomingAdapterFactory struct {
-	config types.Config
-	logger outgoing.Logger
-}
-
-// NewIncomingAdapterFactory creates a new factory for incoming adapters.
-func NewIncomingAdapterFactory(config types.Config, logger outgoing.Logger) *IncomingAdapterFactory {
-	return &IncomingAdapterFactory{
-		config: config,
-		logger: logger,
-	}
-}
-
-// CreateCLIDependencies creates CLI dependencies.
-func (f *IncomingAdapterFactory) CreateCLIDependencies(
-	validationService incoming.ValidationService,
-	gitRepository domain.CommitRepository,
-) *cli.Dependencies {
-	return &cli.Dependencies{
-		ValidationService: validationService,
-		GitRepository:     gitRepository,
-		Config:            f.config,
 	}
 }

@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/itiquette/gommitlint/internal/common/contextx"
 	commonSlices "github.com/itiquette/gommitlint/internal/common/slices"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
@@ -57,7 +56,7 @@ type ConventionalCommitOption func(ConventionalCommitRule) ConventionalCommitRul
 func WithAllowedTypes(types []string) ConventionalCommitOption {
 	return func(r ConventionalCommitRule) ConventionalCommitRule {
 		newRule := r
-		newRule.allowedTypes = deepCopyStringSlice(types)
+		newRule.allowedTypes = slices.Clone(types)
 
 		return newRule
 	}
@@ -67,7 +66,7 @@ func WithAllowedTypes(types []string) ConventionalCommitOption {
 func WithAllowedScopes(scopes []string) ConventionalCommitOption {
 	return func(r ConventionalCommitRule) ConventionalCommitRule {
 		newRule := r
-		newRule.allowedScopes = deepCopyStringSlice(scopes)
+		newRule.allowedScopes = slices.Clone(scopes)
 
 		return newRule
 	}
@@ -144,40 +143,6 @@ func NewConventionalCommitRule(options ...ConventionalCommitOption) Conventional
 // Name returns the name of the rule.
 func (r ConventionalCommitRule) Name() string {
 	return r.name
-}
-
-// WithContext implements the ConfigurableRule interface for ConventionalCommitRule.
-// It returns a new rule with configuration from the provided context.
-func (r ConventionalCommitRule) WithContext(ctx context.Context) domain.Rule {
-	// Get configuration directly from context
-	cfg := contextx.GetConfig(ctx)
-	if cfg == nil {
-		return r
-	}
-
-	// Create a copy of the rule
-	result := r
-
-	// Only override settings if they are specified in the context configuration
-	if types := cfg.GetStringSlice("conventional.types"); len(types) > 0 {
-		result.allowedTypes = deepCopyStringSlice(types)
-	}
-
-	if scopes := cfg.GetStringSlice("conventional.scopes"); len(scopes) > 0 {
-		result.allowedScopes = deepCopyStringSlice(scopes)
-	}
-
-	// Update scope requirement if explicitly set in config
-	result.requireScope = cfg.GetBool("conventional.require_scope")
-
-	if maxDescLen := cfg.GetInt("conventional.max_description_length"); maxDescLen > 0 {
-		result.maxDescLength = maxDescLen
-	} else if result.maxDescLength == 0 && cfg.GetInt("message.subject.max_length") > 0 {
-		// If maxDescLength is not set, use the subject max length from config
-		result.maxDescLength = cfg.GetInt("message.subject.max_length")
-	}
-
-	return result
 }
 
 // Validate validates a commit against the conventional commit rules.
@@ -322,10 +287,5 @@ func isValidScope(scope string, allowedScopes []string) bool {
 		return true
 	}
 
-	return commonSlices.Contains(allowedScopes, scope)
-}
-
-// Helper function for deep copying string slices.
-func deepCopyStringSlice(src []string) []string {
-	return slices.Clone(src)
+	return slices.Contains(allowedScopes, scope)
 }

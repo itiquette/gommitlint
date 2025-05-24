@@ -23,14 +23,14 @@ import (
 	"context"
 	"testing"
 
-	"github.com/itiquette/gommitlint/internal/adapters/outgoing/config"
-	"github.com/itiquette/gommitlint/internal/common/contextx"
+	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/config/types"
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	domainCrypto "github.com/itiquette/gommitlint/internal/domain/crypto"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
-	testcontext "github.com/itiquette/gommitlint/internal/testutils/context"
+	testconfig "github.com/itiquette/gommitlint/internal/testutils/config"
+	testrules "github.com/itiquette/gommitlint/internal/testutils/rules"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,18 +44,10 @@ func createTestCommit(authorName, authorEmail, signature string) domain.CommitIn
 	}
 }
 
-// createContextWithConfig creates a test context with the given config modifier.
+// createIdentityContextWithConfig creates a test context with the given config modifier.
+// This uses the new recommended pattern with testconfig.CreateTestContext.
 func createIdentityContextWithConfig(configModifier func(types.Config) types.Config) context.Context {
-	ctx := testcontext.CreateTestContext()
-	cfg := types.Config{}
-
-	if configModifier != nil {
-		cfg = configModifier(cfg)
-	}
-
-	adapter := config.NewAdapter(cfg)
-
-	return contextx.WithConfig(ctx, adapter)
+	return testconfig.CreateTestContext(nil, configModifier)
 }
 
 // TestIdentityRule_AllowedSigners tests validation of authors against the allowed signers list.
@@ -177,8 +169,24 @@ func TestIdentityRule_AllowedSigners(t *testing.T) {
 			// Create context with configuration
 			ctx := createIdentityContextWithConfig(testCase.configModifier)
 
-			// Create rule
-			rule := rules.NewIdentityRule()
+			// Get configuration from context to create rule with proper config
+			cfg := config.NewDefaultConfig()
+			if testCase.configModifier != nil {
+				cfg = testCase.configModifier(cfg)
+			}
+
+			// Create priority service
+			priorityService := domain.NewRulePriorityService(domain.GetDefaultDisabledRules())
+
+			// Create rule with proper dependencies
+			rule := rules.NewIdentityRule(
+				rules.WithConfig(rules.IdentityConfig{
+					EnabledRules:   cfg.Rules.Enabled,
+					DisabledRules:  cfg.Rules.Disabled,
+					AllowedSigners: cfg.Signing.AllowedSigners,
+				}),
+				rules.WithPriorityService(priorityService),
+			)
 
 			// Execute validation
 			errors := rule.Validate(ctx, testCase.commit)
@@ -253,8 +261,24 @@ func TestIdentityRule_RuleDisabled(t *testing.T) {
 				"dummy-signature",
 			)
 
-			// Create rule
-			rule := rules.NewIdentityRule()
+			// Get configuration from context to create rule with proper config
+			cfg := config.NewDefaultConfig()
+			if testCase.configModifier != nil {
+				cfg = testCase.configModifier(cfg)
+			}
+
+			// Create priority service
+			priorityService := domain.NewRulePriorityService(domain.GetDefaultDisabledRules())
+
+			// Create rule with proper dependencies
+			rule := rules.NewIdentityRule(
+				rules.WithConfig(rules.IdentityConfig{
+					EnabledRules:   cfg.Rules.Enabled,
+					DisabledRules:  cfg.Rules.Disabled,
+					AllowedSigners: cfg.Signing.AllowedSigners,
+				}),
+				rules.WithPriorityService(priorityService),
+			)
 
 			// Execute validation
 			errors := rule.Validate(ctx, commit)
@@ -279,7 +303,7 @@ func TestIdentityRule_NoSignature(t *testing.T) {
 	)
 
 	// Configure key directory to trigger signature check
-	rule := rules.NewIdentityRule(rules.WithKeyDirectory("/some/directory"))
+	rule := rules.NewIdentityRule(testrules.WithTestKeyDirectory("/some/directory"))
 
 	// Create context with configuration
 	ctx := createIdentityContextWithConfig(func(cfg types.Config) types.Config {

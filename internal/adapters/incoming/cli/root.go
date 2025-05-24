@@ -10,6 +10,7 @@ import (
 	"github.com/itiquette/gommitlint/internal/adapters/outgoing/log"
 	"github.com/itiquette/gommitlint/internal/common/contextx"
 	"github.com/itiquette/gommitlint/internal/config"
+	"github.com/itiquette/gommitlint/internal/ports/incoming"
 	"github.com/spf13/cobra"
 )
 
@@ -20,6 +21,23 @@ type contextKey string
 const (
 	cliDependenciesKey contextKey = "cli_dependencies"
 )
+
+// compositionRootKey is the context key for the composition root.
+type compositionRootKey struct{}
+
+// CompositionRoot defines the interface for the composition root.
+type CompositionRoot interface {
+	GetCreateValidationService() func(context.Context, string) (incoming.ValidationService, error)
+}
+
+// getCompositionRoot retrieves the composition root from context.
+func getCompositionRoot(ctx context.Context) CompositionRoot {
+	if root, ok := ctx.Value(compositionRootKey{}).(CompositionRoot); ok {
+		return root
+	}
+
+	return nil
+}
 
 // AppDependencies holds dependencies that can be injected into the application.
 // It uses domain interfaces instead of concrete implementations to follow
@@ -68,31 +86,15 @@ func newRootCommand(ctx context.Context, versionString string, deps *AppDependen
 	return rootCmd
 }
 
-// ExecuteWithContext executes the root command with the provided context and version information.
+// ExecuteWithContext executes the root command with the provided context, version information, and composition root.
 // The context should be created with context.Background() ONLY in main.go.
-func ExecuteWithContext(ctx context.Context, version, commitSHA, buildDate string) {
+func ExecuteWithContext(ctx context.Context, version, commitSHA, buildDate string, root interface{}) {
 	// Initialize basic logger
 	logger := log.InitBasicLogger()
 	ctx = logger.WithContext(ctx)
 
-	// Register the domain logger provider if not already registered
-
-	// Create a config manager with the propagated context
-	configManager, err := config.NewManager(ctx)
-	if err != nil {
-		errorLogger := contextx.GetLogger(ctx)
-		errorLogger.Error("Failed to create configuration manager", "error", err)
-		os.Exit(1)
-	}
-
-	// Get the config from the manager
-	cfg := configManager.GetConfig()
-
-	// Print loaded config information to verify
-	configLogger := contextx.GetLogger(ctx)
-	configLogger.Info("Loaded configuration",
-		"enabled_rules", cfg.Rules.Enabled,
-		"disabled_rules", cfg.Rules.Disabled)
+	// Store root in context for later use
+	ctx = context.WithValue(ctx, compositionRootKey{}, root)
 
 	// Use the ExecuteWithDependencies function with the context
 	ExecuteWithDependencies(
@@ -100,9 +102,7 @@ func ExecuteWithContext(ctx context.Context, version, commitSHA, buildDate strin
 		version,
 		commitSHA,
 		buildDate,
-		&AppDependencies{
-			ConfigManager: configManager,
-		},
+		nil, // No longer passing dependencies here
 	)
 }
 

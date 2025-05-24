@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
+// Package encutils provides encoding and decoding utility functions for testing.
 package encutils
 
 import (

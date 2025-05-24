@@ -8,52 +8,47 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/itiquette/gommitlint/internal/common/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
 
 // SubjectLengthRule validates the length of commit subjects.
-// This rule uses configuration from context rather than embedded fields.
 type SubjectLengthRule struct {
 	name      string
 	maxLength int
 }
 
+// SubjectLengthOption configures a SubjectLengthRule.
+type SubjectLengthOption func(SubjectLengthRule) SubjectLengthRule
+
+// WithMaxLength sets the maximum length for the subject.
+func WithMaxLength(maxLength int) SubjectLengthOption {
+	return func(r SubjectLengthRule) SubjectLengthRule {
+		if maxLength > 0 {
+			r.maxLength = maxLength
+		}
+
+		return r
+	}
+}
+
 // NewSubjectLengthRule creates a new SubjectLengthRule.
-func NewSubjectLengthRule() SubjectLengthRule {
-	return SubjectLengthRule{
+func NewSubjectLengthRule(options ...SubjectLengthOption) SubjectLengthRule {
+	rule := SubjectLengthRule{
 		name:      "SubjectLength",
 		maxLength: 72, // Default max length
 	}
+
+	for _, option := range options {
+		rule = option(rule)
+	}
+
+	return rule
 }
 
 // Name returns the rule name.
 func (r SubjectLengthRule) Name() string {
 	return r.name
-}
-
-// WithContext implements the ConfigurableRule interface for SubjectLengthRule.
-// It returns a new rule with configuration from the provided context.
-func (r SubjectLengthRule) WithContext(ctx context.Context) domain.Rule {
-	// Get configuration from context
-	cfg := contextx.GetConfig(ctx)
-	if cfg == nil {
-		return r
-	}
-
-	// Get max length from configuration
-	maxLength := cfg.GetInt("message.subject.max_length")
-
-	// Create a copy of the rule
-	result := r
-
-	// Only update if a value is explicitly set in config
-	if maxLength > 0 {
-		result.maxLength = maxLength
-	}
-
-	return result
 }
 
 // Validate performs validation against a commit.

@@ -8,22 +8,33 @@ package rules
 import (
 	"github.com/itiquette/gommitlint/internal/adapters/outgoing/crypto"
 	"github.com/itiquette/gommitlint/internal/core/rules"
+	"github.com/itiquette/gommitlint/internal/domain"
 )
 
-// GetRuleRepository is a test-only function to access the repository from an IdentityRule.
-// This should only be used in test code.
-func GetRuleRepository(r rules.IdentityRule) crypto.KeyRepository {
-	return r.GetRepository()
+// WithTestKeyDirectory returns an IdentityOption that sets the key directory.
+// This is the recommended replacement for the removed WithKeyDirectory.
+func WithTestKeyDirectory(dir string) rules.IdentityOption {
+	// Create a new repository and verifier with the specified directory
+	repo := crypto.NewFileSystemKeyRepository(dir)
+	verifier := crypto.NewVerificationAdapter(repo)
+
+	// Return a composite option that applies both repository and verifier
+	return func(rule rules.IdentityRule) rules.IdentityRule {
+		// Apply repository
+		rule = rules.WithKeyRepository(repo)(rule)
+		// Apply verifier
+		rule = rules.WithVerifier(verifier)(rule)
+
+		return rule
+	}
 }
 
-// SetRuleRepository is a test-only function to set the repository in an IdentityRule.
-// This should only be used in test code.
-func SetRuleRepository(r *rules.IdentityRule, repo crypto.KeyRepository) {
-	r.SetRepository(repo)
+// WithTestRepository returns an IdentityOption that sets the repository.
+func WithTestRepository(repo domain.CryptoKeyRepository) rules.IdentityOption {
+	return rules.WithKeyRepository(repo)
 }
 
-// SetRuleVerifier is a test-only function to set the verifier in an IdentityRule.
-// This should only be used in test code.
-func SetRuleVerifier(r *rules.IdentityRule, verifier *crypto.VerificationAdapter) {
-	r.SetVerifier(verifier)
+// WithTestVerifier returns an IdentityOption that sets the verifier.
+func WithTestVerifier(verifier domain.CryptoVerifier) rules.IdentityOption {
+	return rules.WithVerifier(verifier)
 }

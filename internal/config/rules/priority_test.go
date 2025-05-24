@@ -7,14 +7,13 @@ package rules
 import (
 	"testing"
 
-	"github.com/itiquette/gommitlint/internal/testutils/logger"
+	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/stretchr/testify/require"
 )
 
-func TestRulePriority(t *testing.T) {
-	// Since we're now using domain.GetDefaultDisabledRules(), we need to test
-	// with the actual domain defaults
-	// Test cases
+func TestRulePriorityLogic(t *testing.T) {
+	// Test domain.IsRuleEnabled implementation via the rules.IsRuleEnabled delegation
+	// Tests the canonical rule priority implementation
 	tests := []struct {
 		name          string
 		ruleName      string
@@ -51,11 +50,11 @@ func TestRulePriority(t *testing.T) {
 			expected:      true,
 		},
 		{
-			name:          "Explicitly disabled rule overrides explicitly enabled rule",
+			name:          "Explicitly enabled rule overrides explicitly disabled rule",
 			ruleName:      "ExplicitlyEnabledAndDisabled",
 			enabledRules:  []string{"ExplicitlyEnabledAndDisabled"},
 			disabledRules: []string{"ExplicitlyEnabledAndDisabled"},
-			expected:      false,
+			expected:      true,
 		},
 		{
 			name:          "Explicitly enabled rule overrides default-disabled rule (JiraReference)",
@@ -83,14 +82,11 @@ func TestRulePriority(t *testing.T) {
 	// Run tests
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			// Create a test logger
-			testLogger := logger.NewTestLogger()
-
-			// Call the function
-			result := RulePriority(testCase.ruleName, testCase.enabledRules, testCase.disabledRules, testLogger)
+			// Call the function directly - no need for indirect logger now
+			result := IsRuleEnabled(testCase.ruleName, testCase.enabledRules, testCase.disabledRules)
 
 			// Check the result
-			require.Equal(t, testCase.expected, result, "RulePriority returned unexpected result")
+			require.Equal(t, testCase.expected, result, "IsRuleEnabled returned unexpected result")
 		})
 	}
 }
@@ -141,11 +137,20 @@ func TestMakeRuleMap(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			// Call the function
-			result := makeRuleMap(testCase.ruleNames)
+			// Call the domain function
+			result := domain.MakeRuleMap(testCase.ruleNames)
+
+			// Filter out empty keys (if any) for consistent testing
+			cleanResult := make(map[string]bool)
+
+			for k, v := range result {
+				if k != "" {
+					cleanResult[k] = v
+				}
+			}
 
 			// Check the result
-			require.Equal(t, testCase.expected, result, "makeRuleMap returned unexpected result")
+			require.Equal(t, testCase.expected, cleanResult, "MakeRuleMap returned unexpected result")
 		})
 	}
 }

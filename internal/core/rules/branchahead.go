@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/itiquette/gommitlint/internal/common/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
@@ -70,32 +69,6 @@ func NewBranchAheadRule(options ...BranchAheadOption) BranchAheadRule {
 	}
 
 	return rule
-}
-
-// WithContext implements the ConfigurableRule interface for BranchAheadRule.
-// It returns a new rule with configuration from the provided context.
-func (r BranchAheadRule) WithContext(ctx context.Context) domain.Rule {
-	// Get configuration directly from context
-	cfg := contextx.GetConfig(ctx)
-	if cfg == nil {
-		return r
-	}
-
-	// Extract configuration values
-	maxCommitsAhead := cfg.GetInt("repo.max_commits_ahead")
-	ref := cfg.GetString("repo.branch")
-
-	// Create a copy of the rule
-	result := r
-
-	// Update with context configuration
-	result.maxCommitsAhead = maxCommitsAhead
-	result.reference = ref
-
-	// Keep the repository getter from the original rule
-	// (We don't replace it with contextual configuration)
-
-	return result
 }
 
 // Validate checks that the current branch is not too many commits ahead of the reference branch.

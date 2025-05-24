@@ -6,6 +6,7 @@ package validation
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	infraConfig "github.com/itiquette/gommitlint/internal/adapters/outgoing/config"
@@ -142,8 +143,11 @@ func TestEngineValidateCommit(t *testing.T) {
 	}
 
 	// Create a registry with these rules
-	registry := domain.NewRuleRegistry()
-	registry.SetDefaultDisabled("DisabledByDefaultRule", true)
+	// Set up default disabled rules for testing
+	defaultDisabled := make(map[string]bool)
+	defaultDisabled["disabledbydefaultrule"] = true
+	priorityService := domain.NewRulePriorityService(defaultDisabled)
+	registry := domain.NewRuleRegistry(domain.WithPriorityService(priorityService))
 
 	// Register the rules
 	registry.RegisterWithContext(ctx, "PassingRule", passingRuleFactory)
@@ -365,7 +369,17 @@ func TestEngineWithSpecificConfiguration(t *testing.T) {
 			})
 
 			// Create mock rules and factory functions for all rules
-			registry := domain.NewRuleRegistry()
+			// Set up custom default disabled rules for testing
+			defaultDisabled := make(map[string]bool)
+			for ruleName, isDisabled := range testCase.defaultDisabled {
+				if isDisabled {
+					defaultDisabled[strings.ToLower(ruleName)] = true
+				}
+			}
+
+			priorityService := domain.NewRulePriorityService(defaultDisabled)
+			registry := domain.NewRuleRegistry(domain.WithPriorityService(priorityService))
+
 			allRules := []string{"RuleA", "RuleB", "RuleC", "RuleD"}
 
 			for _, ruleName := range allRules {
@@ -374,13 +388,6 @@ func TestEngineWithSpecificConfiguration(t *testing.T) {
 					return rule
 				}
 				registry.RegisterWithContext(ctx, ruleName, factory)
-			}
-
-			// Set default disabled rules
-			for ruleName, isDisabled := range testCase.defaultDisabled {
-				if isDisabled {
-					registry.SetDefaultDisabled(ruleName, true)
-				}
 			}
 
 			// Create the registry engine using RegistryEngine

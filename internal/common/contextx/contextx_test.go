@@ -62,18 +62,18 @@ func TestMergeContext(t *testing.T) {
 	// Don't set CLIOptionsKey in ctx2 to test merging
 
 	// Merge contexts
-	merged := contextx.MergeContext(ctx1, ctx2)
+	merged := testcontext.MergeContext(ctx1, ctx2)
 
 	// Verify values from both contexts are present, with ctx2 taking precedence for common keys
 	require.Equal(t, "logger2", merged.Value(contextkeys.LoggerKey))
 	require.Equal(t, "options1", merged.Value(contextkeys.CLIOptionsKey))
 
 	// Test edge cases - verify values rather than context objects
-	mergedWithEmpty := contextx.MergeContext(testcontext.CreateTestContext(), ctx2)
+	mergedWithEmpty := testcontext.MergeContext(testcontext.CreateTestContext(), ctx2)
 	require.Equal(t, "logger2", mergedWithEmpty.Value(contextkeys.LoggerKey))
 	require.Nil(t, mergedWithEmpty.Value(contextkeys.CLIOptionsKey))
 
-	mergedWithNil := contextx.MergeContext(ctx1, nil)
+	mergedWithNil := testcontext.MergeContext(ctx1, nil)
 	require.Equal(t, "logger1", mergedWithNil.Value(contextkeys.LoggerKey))
 	require.Equal(t, "options1", mergedWithNil.Value(contextkeys.CLIOptionsKey))
 }

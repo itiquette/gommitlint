@@ -17,18 +17,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockFormatter implements the domain.ResultFormatter interface for testing.
+// mockFormatter implements the outgoing.ResultFormatter interface for testing.
 type mockFormatter struct {
-	formatFunc func(ctx context.Context, results domain.ValidationResults) string
+	formatFunc func(ctx context.Context, results interface{}) string
 }
 
-func (m mockFormatter) Format(ctx context.Context, results domain.ValidationResults) string {
+func (m mockFormatter) Format(ctx context.Context, results interface{}) string {
 	if m.formatFunc != nil {
 		return m.formatFunc(ctx, results)
 	}
 
 	return "Mock formatted output"
 }
+
+// mockLogger implements the outgoing.Logger interface for testing.
+type mockLogger struct{}
+
+func (m mockLogger) Debug(_ string, _ ...interface{}) {}
+func (m mockLogger) Info(_ string, _ ...interface{})  {}
+func (m mockLogger) Warn(_ string, _ ...interface{})  {}
+func (m mockLogger) Error(_ string, _ ...interface{}) {}
 
 // TestGeneratorValueSemantics verifies that the Generator correctly implements
 // value semantics and functional programming patterns.
@@ -47,7 +55,8 @@ func TestGeneratorValueSemantics(t *testing.T) {
 	}
 
 	// Create a generator
-	generator := report.NewGenerator(options, formatter)
+	logger := mockLogger{}
+	generator := report.NewGenerator(options, formatter, logger)
 
 	// Test WithVerbose
 	t.Run("WithVerbose maintains immutability", func(t *testing.T) {
@@ -141,14 +150,14 @@ func TestGenerateReport(t *testing.T) {
 	t.Run("Generate successful report", func(t *testing.T) {
 		buf := &bytes.Buffer{}
 		formatter := mockFormatter{
-			formatFunc: func(_ context.Context, _ domain.ValidationResults) string {
+			formatFunc: func(_ context.Context, _ interface{}) string {
 				return "Test formatted output for successful validation"
 			},
 		}
 
 		generator := report.NewGenerator(report.Options{
 			Writer: buf,
-		}, formatter)
+		}, formatter, mockLogger{})
 
 		err := generator.GenerateReport(testcontext.CreateTestContext(), results)
 		require.NoError(t, err, "GenerateReport should not return an error for successful validation")
@@ -164,7 +173,7 @@ func TestGenerateReport(t *testing.T) {
 		os.Stdout = writer
 
 		formatter := mockFormatter{
-			formatFunc: func(_ context.Context, _ domain.ValidationResults) string {
+			formatFunc: func(_ context.Context, _ interface{}) string {
 				return "Test formatted output for failed validation"
 			},
 		}
@@ -177,7 +186,7 @@ func TestGenerateReport(t *testing.T) {
 
 		generator := report.NewGenerator(report.Options{
 			Writer: os.Stdout, // Must use os.Stdout to trigger the error condition
-		}, formatter)
+		}, formatter, mockLogger{})
 
 		err := generator.GenerateReport(testcontext.CreateTestContext(), failedResults)
 		require.Error(t, err, "GenerateReport should return an error for failed validation")
@@ -211,7 +220,7 @@ func TestGenerateSummary(t *testing.T) {
 
 		generator := report.NewGenerator(report.Options{
 			Writer: buf,
-		}, formatter)
+		}, formatter, mockLogger{})
 
 		err := generator.GenerateSummary(testcontext.CreateTestContext(), results)
 		require.NoError(t, err, "GenerateSummary should not return an error for successful validation")
@@ -236,7 +245,7 @@ func TestGenerateSummary(t *testing.T) {
 
 		generator := report.NewGenerator(report.Options{
 			Writer: os.Stdout, // Must use os.Stdout to trigger the error condition
-		}, formatter)
+		}, formatter, mockLogger{})
 
 		err := generator.GenerateSummary(testcontext.CreateTestContext(), failedResults)
 		require.Error(t, err, "GenerateSummary should return an error for failed validation")

@@ -107,4 +107,4 @@ func ExtractJiraTickets(message string, _ string) []string {
 }
 
 // Note: CommitReader, CommitHistoryReader, CommitAnalyzer, and
-// RepositoryInfoProvider interfaces are defined in git_interfaces.go
+// RepositoryInfoProvider interfaces are defined in commitinterfaces.go

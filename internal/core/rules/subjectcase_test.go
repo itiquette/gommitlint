@@ -138,28 +138,15 @@ func TestSubjectCaseRule(t *testing.T) {
 				Subject: testCase.subject,
 			}
 
-			// Create rule with options if provided, otherwise use default
-			var baseRule rules.SubjectCaseRule
-			if len(testCase.options) > 0 {
-				baseRule = rules.NewSubjectCaseRule(testCase.options...)
-			} else {
-				baseRule = rules.NewSubjectCaseRule()
+			// Create rule with case choice
+			if testCase.caseChoice != "" {
+				testCase.options = append(testCase.options, rules.WithCaseChoice(testCase.caseChoice))
 			}
 
-			// Setup context with TestConfigAdapter
-			builder := testconfig.NewBuilder().
-				WithSubjectCase(testCase.caseChoice)
+			rule := rules.NewSubjectCaseRule(testCase.options...)
 
-			cfg := builder.Build()
-			testConfig := testconfig.NewAdapter(cfg).Adapter
-
-			// Create the context with config
+			// Create the context
 			ctx := testcontext.CreateTestContext()
-			ctx = contextx.WithConfig(ctx, testConfig)
-
-			// Configure the rule with context
-			rule, ok := baseRule.WithContext(ctx).(rules.SubjectCaseRule)
-			require.True(t, ok, "Expected WithContext to return a SubjectCaseRule")
 
 			// Execute validation
 			errors := rule.Validate(ctx, commit)
@@ -258,13 +245,14 @@ func TestSubjectCaseRuleWithConfig(t *testing.T) {
 			}
 
 			// Create rule with appropriate options
-			baseRule := rules.NewSubjectCaseRule(
+			options := []rules.SubjectCaseOption{
 				rules.WithSubjectCaseCommitFormat(testCase.checkCommit),
-			)
+			}
+			if testCase.caseStyle != "" {
+				options = append(options, rules.WithCaseChoice(testCase.caseStyle))
+			}
 
-			// Configure rule with context
-			rule, ok := baseRule.WithContext(ctx).(rules.SubjectCaseRule)
-			require.True(t, ok, "Expected WithContext to return a SubjectCaseRule")
+			rule := rules.NewSubjectCaseRule(options...)
 
 			// Execute validation
 			errors := rule.Validate(ctx, commit)
@@ -347,22 +335,16 @@ func TestSubjectCaseWithConventionalCommit(t *testing.T) {
 			}
 
 			// Create rule with commit format enabled
-			baseRule := rules.NewSubjectCaseRule(
+			options := []rules.SubjectCaseOption{
 				rules.WithSubjectCaseCommitFormat(true),
-			)
+			}
+			if testCase.caseType != "" {
+				options = append(options, rules.WithCaseChoice(testCase.caseType))
+			}
 
-			// Setup context with TestConfigAdapter
-			builder := testconfig.NewBuilder().
-				WithSubjectCase(testCase.caseType)
-			cfg := builder.Build()
-			testConfig := testconfig.NewAdapter(cfg).Adapter
+			rule := rules.NewSubjectCaseRule(options...)
 
 			ctx := testcontext.CreateTestContext()
-			ctx = contextx.WithConfig(ctx, testConfig)
-
-			// Configure rule with context
-			rule, ok := baseRule.WithContext(ctx).(rules.SubjectCaseRule)
-			require.True(t, ok, "Expected WithContext to return a SubjectCaseRule")
 
 			// Execute validation
 			errors := rule.Validate(ctx, commit)

@@ -8,21 +8,14 @@ package validate
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
-	"github.com/itiquette/gommitlint/internal/common/contextx"
-	"github.com/itiquette/gommitlint/internal/config"
-	"github.com/itiquette/gommitlint/internal/core/validation"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/errors"
-	"github.com/itiquette/gommitlint/internal/ports/incoming"
 )
 
-// Note: Using domain package interfaces instead of a local interface definition
-
-// Compile-time interface satisfaction check.
-var _ incoming.ValidationService = (*ValidationService)(nil)
+// ValidationService implements the business logic for commit validation.
+// It uses domain interfaces and does not depend on external layers.
 
 // ValidationOptions contains options for validation.
 type ValidationOptions struct {
@@ -49,29 +42,14 @@ type ValidationOptions struct {
 // It is designed to be used with value semantics and follows functional programming patterns.
 // Rule activation is controlled via context configuration, not stored in this struct.
 type ValidationService struct {
-	engine        validation.Engine
+	engine        domain.ValidationEngine
 	commitService domain.CommitRepository
 	infoProvider  domain.RepositoryInfoProvider
 }
 
-// Engine returns the validation engine.
-func (s ValidationService) Engine() validation.Engine {
-	return s.engine
-}
-
-// CommitService returns the commit service.
-func (s ValidationService) CommitService() domain.CommitRepository {
-	return s.commitService
-}
-
-// InfoProvider returns the repository info provider.
-func (s ValidationService) InfoProvider() domain.RepositoryInfoProvider {
-	return s.infoProvider
-}
-
 // NewValidationService creates a new ValidationService.
 func NewValidationService(
-	engine validation.Engine,
+	engine domain.ValidationEngine,
 	commitService domain.CommitRepository,
 	infoProvider domain.RepositoryInfoProvider,
 ) ValidationService {
@@ -83,7 +61,7 @@ func NewValidationService(
 }
 
 // WithEngine returns a new ValidationService with the engine replaced.
-func (s ValidationService) WithEngine(engine validation.Engine) ValidationService {
+func (s ValidationService) WithEngine(engine domain.ValidationEngine) ValidationService {
 	return ValidationService{
 		engine:        engine,
 		commitService: s.commitService,
@@ -109,58 +87,13 @@ func (s ValidationService) WithInfoProvider(infoProvider domain.RepositoryInfoPr
 	}
 }
 
-// WithCustomRule returns a new ValidationService with the custom rule added to the engine.
-// Returns an error and the original service if the engine doesn't support custom rules.
-func (s ValidationService) WithCustomRule(ctx context.Context, rule domain.Rule) (ValidationService, error) {
-	// Create a copy to ensure immutability
-	serviceCopy := s
-
-	// Check if the engine itself implements the method directly
-	if customizer, ok := s.engine.(interface {
-		WithCustomRule(rule domain.Rule) validation.Engine
-	}); ok {
-		// The engine supports the operation directly
-		serviceCopy.engine = customizer.WithCustomRule(rule)
-
-		return serviceCopy, nil
-	}
-
-	// Check if the engine can be replaced with a customized version using the registry pattern
-	if registryEngine, ok := s.engine.(*validation.RegistryEngine); ok {
-		// Get the registry from the engine
-		registry := registryEngine.GetRegistry()
-
-		// Create a new factory that always returns this rule
-		ruleName := "Custom_" + rule.Name()
-		factory := func(_ context.Context) domain.Rule {
-			return rule
-		}
-
-		// Register the factory with context
-		registry.RegisterWithContext(ctx, ruleName, factory)
-
-		// Re-initialize all rules to include the new one
-		registry.InitializeRules(ctx)
-
-		// The same engine instance will use the updated registry
-		return serviceCopy, nil
-	}
-
-	// The engine doesn't support custom rules
-	return s, errors.New("WithCustomRule", errors.ErrInvalidConfig, "validation engine does not support custom rules")
-}
-
 // ValidateCommit validates a single commit by its reference.
-func (s ValidationService) ValidateCommit(ctx context.Context, ref string) (domain.CommitResult, error) {
+func (s ValidationService) ValidateCommit(ctx context.Context, ref string, skipMergeCommits bool) (domain.CommitResult, error) {
 	// Get the commit from the repository
 	commit, err := s.commitService.GetCommit(ctx, ref)
 	if err != nil {
 		return domain.CommitResult{}, fmt.Errorf("failed to get commit %s: %w", ref, err)
 	}
-
-	// Check if we should skip merge commits
-	cfg := contextx.GetConfig(ctx)
-	skipMergeCommits := cfg.GetBool("validation.skip_merge_commits")
 
 	// Skip merge commits if requested
 	if skipMergeCommits && commit.IsMergeCommit {
@@ -176,7 +109,7 @@ func (s ValidationService) ValidateCommit(ctx context.Context, ref string) (doma
 }
 
 // ValidateCommits validates multiple commits.
-func (s ValidationService) ValidateCommits(ctx context.Context, commitHashes []string) (domain.ValidationResults, error) {
+func (s ValidationService) ValidateCommits(ctx context.Context, commitHashes []string, skipMergeCommits bool) (domain.ValidationResults, error) {
 	// Retrieve commits
 	commits := make([]domain.CommitInfo, 0, len(commitHashes))
 
@@ -188,10 +121,6 @@ func (s ValidationService) ValidateCommits(ctx context.Context, commitHashes []s
 
 		commits = append(commits, commit)
 	}
-
-	// Check if we should skip merge commits
-	cfg := contextx.GetConfig(ctx)
-	skipMergeCommits := cfg.GetBool("validation.skip_merge_commits")
 
 	// Filter out merge commits if requested
 	commitsToValidate := commits
@@ -274,20 +203,6 @@ func (s ValidationService) ValidateMessage(ctx context.Context, message string) 
 	return wrapSingleResult(result), nil
 }
 
-// ValidateMessageFile validates a commit message from a file.
-func (s ValidationService) ValidateMessageFile(ctx context.Context, path string) (domain.ValidationResults, error) {
-	// Read the message from the file
-	messageBytes, err := os.ReadFile(path)
-	if err != nil {
-		return domain.ValidationResults{}, fmt.Errorf("failed to read message file %s: %w", path, err)
-	}
-
-	message := string(messageBytes)
-
-	// Validate the message
-	return s.ValidateMessage(ctx, message)
-}
-
 // ValidateWithOptions performs validation based on the provided options.
 func (s ValidationService) ValidateWithOptions(ctx context.Context, opts ValidationOptions) (domain.ValidationResults, error) {
 	// Validate options are correct
@@ -319,10 +234,13 @@ func (s ValidationService) ValidateWithOptions(ctx context.Context, opts Validat
 	// Perform validation based on options
 	switch {
 	case opts.MessageFile != "":
-		return s.ValidateMessageFile(ctx, opts.MessageFile)
+		// This should be handled by the caller reading the file
+		// and calling ValidateMessage instead
+		return domain.ValidationResults{}, errors.New("ValidateWithOptions", errors.ErrInvalidConfig,
+			"message file validation should use ValidateMessage after reading file content")
 
 	case opts.CommitHash != "":
-		result, err := s.ValidateCommit(ctx, opts.CommitHash)
+		result, err := s.ValidateCommit(ctx, opts.CommitHash, opts.SkipMergeCommits)
 		if err != nil {
 			return domain.ValidationResults{}, err
 		}
@@ -347,24 +265,6 @@ func (s ValidationService) ValidateWithOptions(ctx context.Context, opts Validat
 	}
 }
 
-// CreateValidationService creates a validation service with context-based configuration.
-// This is the main entry point for creating validation services.
-func CreateValidationService(
-	ctx context.Context,
-	commitService domain.CommitRepository,
-	infoProvider domain.RepositoryInfoProvider,
-	analyzer domain.CommitAnalyzer,
-) ValidationService {
-	// Use default config for the engine
-	defaultConfig := config.NewDefaultConfig()
-
-	// Create the engine directly from the core validation package
-	engine := validation.CreateEngine(ctx, defaultConfig, analyzer)
-
-	// Create the service
-	return NewValidationService(engine, commitService, infoProvider)
-}
-
 // Helper functions
 
 // filterNonMergeCommits filters out merge commits from a slice of commits.
@@ -382,21 +282,5 @@ func filterNonMergeCommits(commits []domain.CommitInfo) []domain.CommitInfo {
 
 // wrapSingleResult wraps a single commit result in a validation results container.
 func wrapSingleResult(result domain.CommitResult) domain.ValidationResults {
-	results := domain.NewValidationResults()
-	results.Results = []domain.CommitResult{result}
-	results.TotalCommits = 1
-
-	if result.Passed {
-		results.PassedCommits = 1
-	}
-
-	// Update the rule summary
-	for _, ruleResult := range result.RuleResults {
-		if ruleResult.Status == domain.StatusFailed {
-			currentCount := results.RuleSummary[ruleResult.RuleID]
-			results.RuleSummary[ruleResult.RuleID] = currentCount + 1
-		}
-	}
-
-	return results
+	return domain.NewValidationResults().WithResult(result)
 }

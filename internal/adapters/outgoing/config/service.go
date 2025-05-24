@@ -18,7 +18,7 @@ type Service struct {
 }
 
 // NewService creates a new configuration service with default configuration.
-func NewService() (*Service, error) {
+func NewService() (Service, error) {
 	// Start with default config
 	config := NewDefaultConfig()
 
@@ -47,63 +47,61 @@ func NewService() (*Service, error) {
 
 	config.Rules.Disabled = defaultDisabledRules
 
-	return &Service{
+	return Service{
 		config: config,
 	}, nil
 }
 
 // NewServiceWithConfig creates a new service with the provided configuration.
-func NewServiceWithConfig(config types.Config) *Service {
-	return &Service{
+func NewServiceWithConfig(config types.Config) Service {
+	return Service{
 		config: config,
 	}
 }
 
 // GetConfig returns the current configuration.
-func (s *Service) GetConfig() types.Config {
+func (s Service) GetConfig() types.Config {
 	return s.config
 }
 
 // UpdateConfig applies a transformation to the current configuration.
 // It returns a new Service instance to maintain immutability.
-func (s *Service) UpdateConfig(transform func(types.Config) types.Config) *Service {
+func (s Service) UpdateConfig(transform func(types.Config) types.Config) Service {
 	newConfig := transform(s.config)
 
-	return &Service{
+	return Service{
 		config: newConfig,
 	}
 }
 
 // Load loads configuration from default paths using the loader.
-func (s *Service) Load() error {
+// Returns a new Service with the loaded configuration.
+func (s Service) Load() (Service, error) {
 	loader := NewLoader()
 
 	config, err := loader.Load()
 	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
+		return s, fmt.Errorf("failed to load config: %w", err)
 	}
 
-	s.config = config
-
-	return nil
+	return Service{config: config}, nil
 }
 
 // LoadFromPath loads configuration from a specific path.
-func (s *Service) LoadFromPath(path string) error {
+// Returns a new Service with the loaded configuration.
+func (s Service) LoadFromPath(path string) (Service, error) {
 	loader := NewLoader()
 
 	config, err := loader.LoadFromPath(path)
 	if err != nil {
-		return fmt.Errorf("failed to load config from %s: %w", path, err)
+		return s, fmt.Errorf("failed to load config from %s: %w", path, err)
 	}
 
-	s.config = config
-
-	return nil
+	return Service{config: config}, nil
 }
 
 // GetAdapter returns a config adapter for the current configuration.
-func (s *Service) GetAdapter() *Adapter {
+func (s Service) GetAdapter() *Adapter {
 	return NewAdapter(s.config)
 }
 

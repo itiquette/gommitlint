@@ -228,13 +228,8 @@ func SetupTestRepo(t interface{}) (*gogit.Repository, string) {
 	return repo, tempDir
 }
 
-// CleanupTestRepo removes the temporary repository.
-// This is provided for backward compatibility as testing.T.TempDir()
-// already handles cleanup automatically.
-func CleanupTestRepo(_ string) {
-	// This is now a no-op since TempDir is used and will be cleaned up automatically
-	// But we keep the function for backward compatibility
-}
+// Note: CleanupTestRepo has been removed as it was only kept for backward compatibility.
+// TempDir() now handles cleanup automatically.
 
 // CreateGitHooksDir creates the .git/hooks directory if it doesn't exist.
 func CreateGitHooksDir(repoPath string) (string, error) {

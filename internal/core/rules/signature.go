@@ -7,7 +7,6 @@ package rules
 import (
 	"context"
 
-	"github.com/itiquette/gommitlint/internal/common/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
@@ -70,29 +69,6 @@ func (r SignatureRule) Validate(_ context.Context, commit domain.CommitInfo) []a
 	}
 
 	return nil
-}
-
-// WithContext returns a new rule with configuration from the provided context.
-// This implements domain.ConfigurableRule interface.
-func (r SignatureRule) WithContext(ctx context.Context) domain.Rule {
-	// Create a copy of the rule
-	result := r
-
-	// Get configuration from context
-	cfg := contextx.GetConfig(ctx)
-	if cfg == nil {
-		return result
-	}
-
-	// Apply configuration settings related to this rule
-	requireSignature := cfg.GetBool("signing.require_signature")
-
-	// Only override if explicitly set to false (keep default otherwise)
-	if !requireSignature {
-		result.requireSignature = false
-	}
-
-	return result
 }
 
 // Name returns the rule name.

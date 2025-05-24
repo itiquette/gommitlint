@@ -8,74 +8,79 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/itiquette/gommitlint/internal/adapters/outgoing/crypto"
-	"github.com/itiquette/gommitlint/internal/common/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
 	domainCrypto "github.com/itiquette/gommitlint/internal/domain/crypto"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
 
+// IdentityConfig holds configuration for identity validation.
+type IdentityConfig struct {
+	EnabledRules     []string
+	DisabledRules    []string
+	AllowedSigners   []string
+	RequireSignature bool
+}
+
 // IdentityRule validates that commit signatures match the committer identity.
-// Uses the crypto domain for identity and signature handling.
+// Uses domain crypto interfaces for clean architecture.
 type IdentityRule struct {
-	name       string
-	keyDir     string
-	verifier   *crypto.VerificationAdapter
-	repository crypto.KeyRepository
+	name            string
+	keyDir          string
+	verifier        domain.CryptoVerifier
+	repository      domain.CryptoKeyRepository
+	priorityService *domain.RulePriorityService
+	config          IdentityConfig
 }
 
 // IdentityOption configures an IdentityRule.
 type IdentityOption func(IdentityRule) IdentityRule
 
-// WithKeyDirectory sets the directory containing trusted keys.
-// This is deprecated and will be removed in a future version.
-// Use testutils/rules.WithTestKeyDirectory for tests.
-// Production code should use configuration-based paths.
-func WithKeyDirectory(dir string) IdentityOption {
+// WithVerifier sets the crypto verifier for the rule.
+func WithVerifier(verifier domain.CryptoVerifier) IdentityOption {
 	return func(r IdentityRule) IdentityRule {
-		result := r
-		result.keyDir = dir
+		r.verifier = verifier
 
-		// Update repository if needed
-		if result.repository != nil {
-			result.repository = crypto.NewFileSystemKeyRepository(dir)
-			result.verifier = crypto.NewVerificationAdapter(result.repository)
-		}
-
-		return result
+		return r
 	}
 }
 
-// GetRepository returns the key repository. Used in test helpers only.
-// Note: Previously exported but moved to testutils/rules for proper separation.
-func (r IdentityRule) GetRepository() crypto.KeyRepository {
-	return r.repository
+// WithKeyRepository sets the key repository for the rule.
+func WithKeyRepository(repository domain.CryptoKeyRepository) IdentityOption {
+	return func(r IdentityRule) IdentityRule {
+		r.repository = repository
+
+		return r
+	}
 }
 
-// SetRepository sets the key repository. Used in test helpers only.
-// Note: Previously exported but moved to testutils/rules for proper separation.
-func (r *IdentityRule) SetRepository(repo crypto.KeyRepository) {
-	r.repository = repo
+// WithPriorityService sets the rule priority service for the rule.
+func WithPriorityService(service domain.RulePriorityService) IdentityOption {
+	return func(r IdentityRule) IdentityRule {
+		// Create a copy on the heap to get a stable pointer
+		serviceCopy := service
+		r.priorityService = &serviceCopy
+
+		return r
+	}
 }
 
-// SetVerifier sets the verification adapter. Used in test helpers only.
-// Note: Previously exported but moved to testutils/rules for proper separation.
-func (r *IdentityRule) SetVerifier(verifier *crypto.VerificationAdapter) {
-	r.verifier = verifier
+// WithConfig sets the configuration for the rule.
+func WithConfig(config IdentityConfig) IdentityOption {
+	return func(r IdentityRule) IdentityRule {
+		r.config = config
+
+		return r
+	}
 }
 
 // NewIdentityRule creates a new rule for validating signature identity.
+// Dependencies must be injected via options.
 func NewIdentityRule(options ...IdentityOption) IdentityRule {
-	// Create default repository and verifier
-	repository := crypto.NewFileSystemKeyRepository("") // Empty directory as default
-	verifier := crypto.NewVerificationAdapter(repository)
-
-	// Create a rule with default values
+	// Create a rule with default values - dependencies injected via options
 	rule := IdentityRule{
-		name:       "SignedIdentity",
-		keyDir:     "", // Default to no key directory
-		repository: repository,
-		verifier:   verifier,
+		name:   "SignedIdentity",
+		keyDir: "", // Default to no key directory
+		// verifier and repository must be injected
 	}
 
 	// Apply all options
@@ -86,49 +91,17 @@ func NewIdentityRule(options ...IdentityOption) IdentityRule {
 	return rule
 }
 
-// WithContext implements the ConfigurableRule interface for IdentityRule.
-// It returns a new rule with configuration from the provided context.
-func (r IdentityRule) WithContext(ctx context.Context) domain.Rule {
-	// Get configuration directly from context
-	cfg := contextx.GetConfig(ctx)
-	if cfg == nil {
-		return r
-	}
-
-	// Create a copy of the rule
-	result := r
-
-	// Get keyDir from configuration if available
-	keyDir := cfg.GetString("signing.key_directory")
-	if keyDir != "" && keyDir != r.keyDir {
-		result.keyDir = keyDir
-		// Update repository and verifier
-		result.repository = crypto.NewFileSystemKeyRepository(keyDir)
-		result.verifier = crypto.NewVerificationAdapter(result.repository)
-	}
-
-	return result
-}
-
 // Validate validates that signatures match the committer identity.
 func (r IdentityRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
-	// Get configuration from context
-	cfg := contextx.GetConfig(ctx)
-	if cfg == nil {
-		return nil
+	// Check if rule is enabled using injected priority service
+	if r.priorityService != nil {
+		if !r.priorityService.IsRuleEnabled(ctx, r.Name(), r.config.EnabledRules, r.config.DisabledRules) {
+			return nil
+		}
 	}
 
-	// Check if rule is enabled (use domain rule registry)
-	priorityService := domain.NewRulePriorityService(domain.GetDefaultDisabledRules())
-	enabled := cfg.GetStringSlice("rules.enabled")
-	disabled := cfg.GetStringSlice("rules.disabled")
-
-	if !priorityService.IsRuleEnabled(ctx, r.Name(), enabled, disabled) {
-		return nil
-	}
-
-	// Get allowed signers from configuration
-	allowedSigners := cfg.GetStringSlice("signing.allowed_signers")
+	// Use injected configuration
+	allowedSigners := r.config.AllowedSigners
 	if len(allowedSigners) > 0 {
 		// Create author identity
 		authorIdentity := domainCrypto.NewIdentity(commit.AuthorName, commit.AuthorEmail)
@@ -162,6 +135,11 @@ func (r IdentityRule) Validate(ctx context.Context, commit domain.CommitInfo) []
 				}),
 			}
 		}
+	}
+
+	// Skip validation if crypto dependencies are not available
+	if r.verifier == nil || r.repository == nil {
+		return nil
 	}
 
 	// Skip validation if key directory is empty

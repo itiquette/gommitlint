@@ -257,12 +257,7 @@ func SetLogLevel(logger *zerolog.Logger, level Level) *zerolog.Logger {
 //   - context.Context: A new context with the logger added
 func WithLogger(ctx context.Context, logger *zerolog.Logger) context.Context {
 	// Add logger to context using zerolog's context mechanism
-	ctx = logger.WithContext(ctx)
-
-	// Also add it through our contextx key system for compatibility
-	ctx = context.WithValue(ctx, contextkeys.LoggerKey, logger)
-
-	return ctx
+	return logger.WithContext(ctx)
 }
 
 // For test logger implementations, see the testutils/logger package

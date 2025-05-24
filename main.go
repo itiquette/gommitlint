@@ -9,8 +9,10 @@ import (
 	"os"
 
 	"github.com/itiquette/gommitlint/internal/adapters/incoming/cli"
+	"github.com/itiquette/gommitlint/internal/adapters/outgoing/log"
 	"github.com/itiquette/gommitlint/internal/application/options"
 	"github.com/itiquette/gommitlint/internal/composition"
+	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/rs/zerolog"
 	stdlog "github.com/rs/zerolog/log"
 )
@@ -54,17 +56,19 @@ func main() {
 	}
 	ctx = options.WithCLIOptions(ctx, defaultOptions)
 
-	// Initialize composition root
-	root := composition.NewRoot()
-	if err := root.Initialize(ctx); err != nil {
-		logger.Err(err).Msg("Failed to initialize application")
-		os.Exit(1)
+	// Create config manager
+	configManager, err := config.NewManager(ctx)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Failed to create config manager")
 	}
 
-	// Pass dependencies to CLI
-	ctx = cli.WithDependencies(ctx, root.GetCLIDependencies())
+	// Create logger adapter
+	loggerAdapter := log.NewSimpleAdapter(logger)
 
-	// Pass the context directly to cli.ExecuteWithContext
+	// Create composition root with dependencies
+	root := composition.NewRoot(loggerAdapter, configManager.GetConfig())
+
+	// Pass the context and composition root to cli.ExecuteWithContext
 	// All dependencies and configuration are now set up
-	cli.ExecuteWithContext(ctx, version, commit, date)
+	cli.ExecuteWithContext(ctx, version, commit, date, root)
 }

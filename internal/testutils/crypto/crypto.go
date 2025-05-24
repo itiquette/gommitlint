@@ -9,19 +9,19 @@ import (
 	"os"
 
 	"github.com/itiquette/gommitlint/internal/adapters/outgoing/crypto"
-	"github.com/itiquette/gommitlint/internal/common/security"
+	testsecurity "github.com/itiquette/gommitlint/internal/testutils/security"
 )
 
 // WithRelaxedPermissions creates a FileSystemKeyRepository with relaxed
 // security settings for testing purposes. This should only be used in tests.
 func WithRelaxedPermissions(keyDir string) *crypto.FileSystemKeyRepository {
-	// Create a test security checker that bypasses security checks
-	securityChecker := &security.TestSecurityChecker{}
+	// Create a test security service that bypasses security checks
+	securityService := testsecurity.NewTestSecurityService()
 
-	// Use type assertion to convert to the required type
+	// Use the security service option
 	return crypto.NewFileSystemKeyRepositoryWithOptions(
 		keyDir,
-		crypto.WithSecurityChecker(securityChecker),
+		crypto.WithSecurityService(securityService),
 	)
 }
 

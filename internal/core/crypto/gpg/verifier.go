@@ -7,6 +7,7 @@ package gpg
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -138,9 +139,9 @@ func (v *Verifier) Verify(signature crypto.Signature, data []byte, keyDir string
 
 // loadGPGKey loads a GPG key from a file.
 func loadGPGKey(path string) ([]*openpgp.Entity, error) {
-	data, err := fsutils.SafeReadFile(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read GPG key file: %w", err)
 	}
 
 	// Try armored format first

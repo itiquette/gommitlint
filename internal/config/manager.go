@@ -34,39 +34,56 @@ func NewManager(ctx context.Context) (*Manager, error) {
 	}
 
 	// Load configuration
-	if err := service.Load(); err != nil {
+	loadedService, err := service.Load()
+	if err != nil {
 		return nil, fmt.Errorf("failed to load configuration: %w", err)
 	}
 
 	return &Manager{
-		service: service,
+		service: &loadedService,
 	}, nil
 }
 
 // Load loads configuration from files.
 func (m *Manager) Load() error {
-	return m.service.Load()
+	service, err := m.service.Load()
+	if err != nil {
+		return err
+	}
+
+	m.service = &service
+
+	return nil
 }
 
 // LoadFromPath loads configuration from the specified path.
 func (m *Manager) LoadFromPath(path string) error {
-	return m.service.LoadFromPath(path)
+	service, err := m.service.LoadFromPath(path)
+	if err != nil {
+		return err
+	}
+
+	m.service = &service
+
+	return nil
 }
 
 // GetConfig returns the current configuration.
-func (m *Manager) GetConfig() types.Config {
+func (m Manager) GetConfig() types.Config {
 	return m.service.GetConfig()
 }
 
-// UpdateConfig updates the configuration with the given options.
-func (m *Manager) UpdateConfig(transform func(types.Config) types.Config) {
+// UpdateConfig returns a new Manager with updated configuration.
+func (m Manager) UpdateConfig(transform func(types.Config) types.Config) Manager {
 	newService := m.service.UpdateConfig(transform)
-	m.service = newService
+	newServicePtr := &newService
+
+	return Manager{service: newServicePtr}
 }
 
-// WithGitRepository sets the Git repository path in the configuration.
-func (m *Manager) WithGitRepository(path string) {
-	m.UpdateConfig(func(cfg types.Config) types.Config {
+// WithGitRepository returns a new Manager with the Git repository path set.
+func (m Manager) WithGitRepository(path string) Manager {
+	return m.UpdateConfig(func(cfg types.Config) types.Config {
 		cfg.Repo.Path = path
 
 		return cfg
@@ -74,7 +91,7 @@ func (m *Manager) WithGitRepository(path string) {
 }
 
 // WithContext returns a new context with the manager's configuration added.
-func (m *Manager) WithContext(ctx context.Context) context.Context {
+func (m Manager) WithContext(ctx context.Context) context.Context {
 	adapter := m.service.GetAdapter()
 
 	return contextx.WithConfig(ctx, adapter)

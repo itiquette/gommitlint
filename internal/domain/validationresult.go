@@ -114,6 +114,8 @@ func (r CommitResult) WithRuleResult(ruleName string, errs []errors.ValidationEr
 		RuleName: ruleName,
 		Errors:   errs,
 		Status:   StatusPassed,
+		// Note: Message formatting should be done by the caller if needed
+		// This keeps the domain model pure and independent of formatting logic
 	}
 
 	if len(errs) > 0 {
@@ -121,6 +123,50 @@ func (r CommitResult) WithRuleResult(ruleName string, errs []errors.ValidationEr
 		newResult.Passed = false
 	}
 
+	newResult.RuleResults = append(newResult.RuleResults, ruleResult)
+
+	return newResult
+}
+
+// WithFormattedRuleResult returns a new CommitResult with added rule result including formatted messages.
+func (r CommitResult) WithFormattedRuleResult(ruleResult RuleResult) CommitResult {
+	// Create new result
+	newResult := CommitResult{
+		CommitInfo: r.CommitInfo,
+		Passed:     r.Passed,
+	}
+
+	// Deep copy rule results
+	newResult.RuleResults = make([]RuleResult, len(r.RuleResults), len(r.RuleResults)+1)
+	copy(newResult.RuleResults, r.RuleResults)
+
+	// Deep copy error map
+	newResult.RuleErrorMap = make(map[string][]errors.ValidationError)
+
+	if r.RuleErrorMap != nil {
+		for k, v := range r.RuleErrorMap {
+			errCopy := make([]errors.ValidationError, len(v))
+			copy(errCopy, v)
+			newResult.RuleErrorMap[k] = errCopy
+		}
+	}
+
+	// Add errors to map
+	if len(ruleResult.Errors) > 0 {
+		newResult.RuleErrorMap[ruleResult.RuleName] = ruleResult.Errors
+		newResult.Passed = false
+	}
+
+	// Deep copy metadata
+	newResult.Metadata = make(map[string]string)
+
+	if r.Metadata != nil {
+		for k, v := range r.Metadata {
+			newResult.Metadata[k] = v
+		}
+	}
+
+	// Add the formatted rule result
 	newResult.RuleResults = append(newResult.RuleResults, ruleResult)
 
 	return newResult

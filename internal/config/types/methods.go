@@ -269,8 +269,6 @@ func (c RepoConfig) WithIgnoreMerges(ignore bool) RepoConfig {
 	return result
 }
 
-// (Removed IntegrationsConfig methods - Jira and Spell configs are now directly accessible)
-
 // JiraConfig transformation methods
 // =========================================================================
 

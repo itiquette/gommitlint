@@ -6,12 +6,13 @@ package output
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"time"
 
 	"github.com/itiquette/gommitlint/internal/adapters/outgoing/log"
-	"github.com/itiquette/gommitlint/internal/common/slices"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/errors"
+	"github.com/itiquette/gommitlint/internal/ports/outgoing"
 )
 
 // JSONFormatter formats validation results as JSON.
@@ -23,8 +24,8 @@ func NewJSONFormatter() JSONFormatter {
 	return JSONFormatter{}
 }
 
-// Ensure JSONFormatter implements domain.ResultFormatter.
-var _ domain.ResultFormatter = JSONFormatter{}
+// Ensure JSONFormatter implements outgoing.ResultFormatter.
+var _ outgoing.ResultFormatter = JSONFormatter{}
 
 // ValidationErrorOutput represents a validation error in JSON format.
 type ValidationErrorOutput struct {
@@ -69,23 +70,28 @@ type ValidationResultsOutput struct {
 }
 
 // Format formats validation results as JSON.
-func (JSONFormatter) Format(ctx context.Context, results domain.ValidationResults) string {
+func (JSONFormatter) Format(ctx context.Context, results interface{}) string {
+	validationResults, ok := results.(domain.ValidationResults)
+	if !ok {
+		return `{"error": "invalid results type"}`
+	}
+
 	logger := log.Logger(ctx)
-	logger.Trace().Int("total_commits", results.TotalCommits).Int("passed_commits", results.PassedCommits).Msg("Entering JSONFormatter.Format")
+	logger.Trace().Int("total_commits", validationResults.TotalCommits).Int("passed_commits", validationResults.PassedCommits).Msg("Entering JSONFormatter.Format")
 	// Create the initial report structure with proper initialization
 	report := ValidationResultsOutput{
 		Timestamp:     time.Now().Format(time.RFC3339),
-		AllPassed:     results.AllPassed(),
-		TotalCommits:  results.TotalCommits,
-		PassedCommits: results.PassedCommits,
-		RuleSummary:   copyRuleSummary(results.RuleSummary),
-		CommitResults: make([]CommitResultOutput, 0, len(results.Results)),
+		AllPassed:     validationResults.AllPassed(),
+		TotalCommits:  validationResults.TotalCommits,
+		PassedCommits: validationResults.PassedCommits,
+		RuleSummary:   maps.Clone(validationResults.RuleSummary),
+		CommitResults: make([]CommitResultOutput, 0, len(validationResults.Results)),
 	}
 
 	// Use a functional approach to transform commit results
-	if len(results.Results) > 0 {
+	if len(validationResults.Results) > 0 {
 		// Transform each commit result without mutating state
-		commitOutputs := transformCommitResults(results.Results)
+		commitOutputs := transformCommitResults(validationResults.Results)
 		report.CommitResults = commitOutputs
 	}
 
@@ -98,17 +104,6 @@ func (JSONFormatter) Format(ctx context.Context, results domain.ValidationResult
 	return string(jsonBytes)
 }
 
-// copyRuleSummary creates a deep copy of the rule summary map.
-// This ensures immutability of the original data.
-func copyRuleSummary(summary map[string]int) map[string]int {
-	if summary == nil {
-		return nil
-	}
-
-	// Use slices.DeepCopyMap for consistency with other functions
-	return slices.DeepCopyMap(summary)
-}
-
 // transformCommitResults transforms commit results to output format.
 // This pure function handles the transformation without modifying state.
 func transformCommitResults(commits []domain.CommitResult) []CommitResultOutput {
@@ -116,46 +111,49 @@ func transformCommitResults(commits []domain.CommitResult) []CommitResultOutput 
 		return []CommitResultOutput{}
 	}
 
-	// Filter and map commits in a single pass using FilterMap
-	return slices.FilterMap(commits,
-		// Predicate to filter out commits with empty hash
-		func(commit domain.CommitResult) bool {
-			return commit.CommitInfo.Hash != ""
-		},
-		// Map function to transform valid commits to CommitResultOutput
-		func(commitResult domain.CommitResult) CommitResultOutput {
-			// Create a new commit output
-			commit := CommitResultOutput{
-				Hash:         commitResult.CommitInfo.Hash,
-				Subject:      commitResult.CommitInfo.Subject,
-				IsMerge:      commitResult.CommitInfo.IsMergeCommit,
-				Passed:       commitResult.Passed,
-				RuleResults:  transformRuleResults(commitResult.RuleResults),
-				ErrorCount:   countErrors(commitResult.RuleResults),
-				WarningCount: 0, // Currently not tracking warnings
+	// Filter and transform commits
+	results := make([]CommitResultOutput, 0, len(commits))
+
+	for _, commitResult := range commits {
+		// Skip commits with empty hash
+		if commitResult.CommitInfo.Hash == "" {
+			continue
+		}
+
+		// Create a new commit output
+		commit := CommitResultOutput{
+			Hash:         commitResult.CommitInfo.Hash,
+			Subject:      commitResult.CommitInfo.Subject,
+			IsMerge:      commitResult.CommitInfo.IsMergeCommit,
+			Passed:       commitResult.Passed,
+			RuleResults:  transformRuleResults(commitResult.RuleResults),
+			ErrorCount:   countErrors(commitResult.RuleResults),
+			WarningCount: 0, // Currently not tracking warnings
+		}
+
+		// Set commit date with fallback
+		if commitResult.CommitInfo.CommitDate != "" {
+			commit.CommitDate = commitResult.CommitInfo.CommitDate
+		} else {
+			commit.CommitDate = time.Now().Format(time.RFC3339)
+		}
+
+		// Set author with fallback
+		if commitResult.CommitInfo.AuthorName != "" {
+			authorInfo := commitResult.CommitInfo.AuthorName
+			if commitResult.CommitInfo.AuthorEmail != "" {
+				authorInfo += " <" + commitResult.CommitInfo.AuthorEmail + ">"
 			}
 
-			// Set commit date with fallback
-			if commitResult.CommitInfo.CommitDate != "" {
-				commit.CommitDate = commitResult.CommitInfo.CommitDate
-			} else {
-				commit.CommitDate = time.Now().Format(time.RFC3339)
-			}
+			commit.Author = authorInfo
+		} else {
+			commit.Author = "Unknown"
+		}
 
-			// Set author with fallback
-			if commitResult.CommitInfo.AuthorName != "" {
-				authorInfo := commitResult.CommitInfo.AuthorName
-				if commitResult.CommitInfo.AuthorEmail != "" {
-					authorInfo += " <" + commitResult.CommitInfo.AuthorEmail + ">"
-				}
+		results = append(results, commit)
+	}
 
-				commit.Author = authorInfo
-			} else {
-				commit.Author = "Unknown"
-			}
-
-			return commit
-		})
+	return results
 }
 
 // transformRuleResults transforms rule results to output format.
@@ -165,9 +163,10 @@ func transformRuleResults(rules []domain.RuleResult) []RuleResultOutput {
 		return []RuleResultOutput{}
 	}
 
-	// Map rule results to rule outputs
-	return slices.Map(rules, func(ruleResult domain.RuleResult) RuleResultOutput {
-		return RuleResultOutput{
+	// Transform rule results to rule outputs
+	results := make([]RuleResultOutput, len(rules))
+	for i, ruleResult := range rules {
+		results[i] = RuleResultOutput{
 			ID:             ruleResult.RuleID,
 			Name:           ruleResult.RuleName,
 			Status:         string(ruleResult.Status),
@@ -176,7 +175,9 @@ func transformRuleResults(rules []domain.RuleResult) []RuleResultOutput {
 			Help:           ruleResult.HelpMessage,
 			Errors:         transformValidationErrors(ruleResult.Errors),
 		}
-	})
+	}
+
+	return results
 }
 
 // transformValidationErrors transforms validation errors to output format.
@@ -186,44 +187,30 @@ func transformValidationErrors(validationErrors []errors.ValidationError) []Vali
 		return nil
 	}
 
-	// Map validation errors to error outputs
-	return slices.Map(validationErrors, func(err errors.ValidationError) ValidationErrorOutput {
-		return ValidationErrorOutput{
+	// Transform validation errors to error outputs
+	results := make([]ValidationErrorOutput, len(validationErrors))
+	for i, err := range validationErrors {
+		results[i] = ValidationErrorOutput{
 			Rule:    err.Rule,
 			Code:    err.Code,
 			Message: err.Message,
-			Context: copyContextMap(err.Context),
+			Context: maps.Clone(err.Context),
 		}
-	})
-}
-
-// copyContextMap creates a deep copy of the context map.
-// This ensures immutability of the original data.
-func copyContextMap(context map[string]string) map[string]string {
-	if context == nil {
-		return nil
 	}
 
-	// Use slices.DeepCopyMap for consistency with other functions
-	return slices.DeepCopyMap(context)
+	return results
 }
 
 // countErrors counts the number of errors in rule results.
 // This pure function aggregates data without modifying state.
 func countErrors(rules []domain.RuleResult) int {
-	// Use FilterMap to both filter failed rules and extract error counts in one pass
-	errorCounts := slices.FilterMap(rules,
-		// Filter predicate: only include failed rules
-		func(rule domain.RuleResult) bool {
-			return rule.Status == domain.StatusFailed
-		},
-		// Map function: extract the error count from each rule
-		func(rule domain.RuleResult) int {
-			return len(rule.Errors)
-		})
+	total := 0
 
-	// Sum up all error counts
-	return slices.Reduce(errorCounts, 0, func(sum, count int) int {
-		return sum + count
-	})
+	for _, rule := range rules {
+		if rule.Status == domain.StatusFailed {
+			total += len(rule.Errors)
+		}
+	}
+
+	return total
 }

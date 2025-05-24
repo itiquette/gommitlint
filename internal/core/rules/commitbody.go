@@ -7,26 +7,70 @@ package rules
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
-	"github.com/itiquette/gommitlint/internal/common/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
 
 // CommitBodyRule validates commit message bodies based on configured requirements.
 type CommitBodyRule struct {
-	name      string
-	minLength int
+	name        string
+	minLength   int
+	minLines    int  // Minimum number of lines in the body
+	signOffOnly bool // Whether to allow commits with only sign-off lines
+}
+
+// CommitBodyOption configures a CommitBodyRule.
+type CommitBodyOption func(CommitBodyRule) CommitBodyRule
+
+// WithMinLength sets the minimum body length.
+func WithMinLength(length int) CommitBodyOption {
+	return func(r CommitBodyRule) CommitBodyRule {
+		if length > 0 {
+			r.minLength = length
+		}
+
+		return r
+	}
+}
+
+// WithMinLines sets the minimum number of lines in the body.
+func WithMinLines(lines int) CommitBodyOption {
+	return func(r CommitBodyRule) CommitBodyRule {
+		if lines > 0 {
+			r.minLines = lines
+		}
+
+		return r
+	}
+}
+
+// WithAllowSignOffOnly sets whether to allow commits with only sign-off lines.
+func WithAllowSignOffOnly(allow bool) CommitBodyOption {
+	return func(r CommitBodyRule) CommitBodyRule {
+		r.signOffOnly = allow
+
+		return r
+	}
 }
 
 // NewCommitBodyRule creates a new CommitBodyRule.
-func NewCommitBodyRule() CommitBodyRule {
-	return CommitBodyRule{
-		name:      "CommitBody",
-		minLength: 0, // Default to no minimum
+func NewCommitBodyRule(options ...CommitBodyOption) CommitBodyRule {
+	rule := CommitBodyRule{
+		name:        "CommitBody",
+		minLength:   0,    // Default to no minimum
+		minLines:    0,    // Default to no minimum
+		signOffOnly: true, // Default to allow sign-off only
 	}
+
+	for _, option := range options {
+		rule = option(rule)
+	}
+
+	return rule
 }
 
 // Name returns the rule name.
@@ -34,64 +78,46 @@ func (r CommitBodyRule) Name() string {
 	return r.name
 }
 
-// WithContext implements the ConfigurableRule interface for CommitBodyRule.
-// It returns a new rule with configuration from the provided context.
-func (r CommitBodyRule) WithContext(ctx context.Context) domain.Rule {
-	// Get configuration directly from context
-	cfg := contextx.GetConfig(ctx)
-	if cfg == nil {
-		return r
-	}
-
-	// Create a copy of the rule
-	result := r
-
-	// Get min length from configuration
-	minLength := cfg.GetInt("message.body.min_length")
-	if minLength > 0 {
-		result.minLength = minLength
-	}
-
-	return result
-}
-
 // Validate checks if a commit's body meets the required criteria.
-func (r CommitBodyRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
-	// Check if this rule is enabled using domain priority service
-	cfg := contextx.GetConfig(ctx)
-	if cfg == nil {
-		return nil
-	}
-
-	enabledRules := cfg.GetStringSlice("rules.enabled")
-	disabledRules := cfg.GetStringSlice("rules.disabled")
-	priorityService := domain.NewRulePriorityService(domain.GetDefaultDisabledRules())
-
-	if !priorityService.IsRuleEnabled(ctx, r.Name(), enabledRules, disabledRules) {
-		return nil
-	}
-
+// Rule enabling/disabling is handled by the rule registry, so we don't check it here.
+func (r CommitBodyRule) Validate(_ context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
 	errors := []appErrors.ValidationError{}
 
-	// Check if body is empty
-	if strings.TrimSpace(commit.Body) == "" {
+	// Check if body has only sign-off lines
+	trimmedBody := strings.TrimSpace(commit.Body)
+	hasOnlySignOff := hasOnlySignOffLines(trimmedBody)
+
+	// Check if body is required and missing
+	if r.minLength > 0 && trimmedBody == "" {
 		err := appErrors.NewBodyError(
 			appErrors.ErrMissingBody,
 			r.Name(),
-			"Commit message body is missing",
+			"Commit body is missing",
 			"is empty",
 			"Add a blank line after the subject, followed by a detailed description of your changes",
 		).WithContext("commit", commit.Hash)
 		errors = append(errors, err)
 	}
 
-	// Check minimum body length
-	if r.minLength > 0 && len(strings.TrimSpace(commit.Body)) < r.minLength {
-		actualLength := len(strings.TrimSpace(commit.Body))
+	// Check for sign-off only body if not allowed
+	if !r.signOffOnly && hasOnlySignOff && trimmedBody != "" {
+		err := appErrors.NewBodyError(
+			appErrors.ErrMissingBody,
+			r.Name(),
+			"Commit body cannot contain only sign-off line",
+			"contains only sign-off",
+			"Add a detailed description of your changes before the sign-off line",
+		).WithContext("commit", commit.Hash)
+		errors = append(errors, err)
+	}
+
+	// Check minimum body length (skip if body is empty or has only sign-off lines)
+	if r.minLength > 0 && len(trimmedBody) < r.minLength && trimmedBody != "" {
+		actualLength := len(trimmedBody)
 		err := appErrors.NewBodyError(
 			appErrors.ErrBodyTooShort,
 			r.Name(),
-			fmt.Sprintf("Commit body is too short (%d chars, minimum: %d)", actualLength, r.minLength),
+			fmt.Sprintf("Commit body must be at least %d characters", r.minLength),
 			fmt.Sprintf("has %d characters", actualLength),
 			fmt.Sprintf("Provide at least %d characters of detail in your commit body", r.minLength),
 		).WithContextMap(map[string]string{
@@ -102,5 +128,64 @@ func (r CommitBodyRule) Validate(ctx context.Context, commit domain.CommitInfo) 
 		errors = append(errors, err)
 	}
 
+	// Check minimum lines requirement
+	// Skip min lines check if the body is allowed to have only sign-off lines and it does
+	if !(hasOnlySignOff && r.signOffOnly) {
+		if r.minLines > 0 && trimmedBody != "" {
+			lines := strings.Split(trimmedBody, "\n")
+			actualLines := len(lines)
+
+			if actualLines < r.minLines {
+				err := appErrors.NewBodyError(
+					appErrors.ErrBodyTooShort,
+					r.Name(),
+					fmt.Sprintf("Commit body must have at least %d lines", r.minLines),
+					fmt.Sprintf("has %d lines", actualLines),
+					fmt.Sprintf("Provide at least %d lines of detail in your commit body", r.minLines),
+				).WithContextMap(map[string]string{
+					"commit":       commit.Hash,
+					"min_lines":    strconv.Itoa(r.minLines),
+					"actual_lines": strconv.Itoa(actualLines),
+				})
+				errors = append(errors, err)
+			}
+		}
+	}
+
 	return errors
+}
+
+// hasOnlySignOffLines checks if a commit body contains only sign-off lines
+// like "Signed-off-by: Name <email>".
+func hasOnlySignOffLines(body string) bool {
+	if body == "" {
+		return false
+	}
+
+	// Pattern for sign-off lines (multiple formats supported)
+	signOffPattern := regexp.MustCompile(`(?m)^(Signed-off-by|Co-authored-by|Reviewed-by|Acked-by|Tested-by):.*<.*@.*>.*$`)
+
+	// Split the body into lines and remove empty lines
+	var contentLines []string
+
+	for _, line := range strings.Split(body, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" {
+			contentLines = append(contentLines, trimmed)
+		}
+	}
+
+	// If no content lines, return false
+	if len(contentLines) == 0 {
+		return false
+	}
+
+	// Check if all non-empty lines are sign-off lines
+	for _, line := range contentLines {
+		if !signOffPattern.MatchString(line) {
+			return false
+		}
+	}
+
+	return true
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/adapters/outgoing/log"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/ports/outgoing"
 )
 
 // GitHubActionsFormatter formats validation results for GitHub Actions.
@@ -19,8 +20,8 @@ type GitHubActionsFormatter struct {
 	showHelp bool
 }
 
-// Ensure GitHubActionsFormatter implements domain.ResultFormatter.
-var _ domain.ResultFormatter = GitHubActionsFormatter{}
+// Ensure GitHubActionsFormatter implements outgoing.ResultFormatter.
+var _ outgoing.ResultFormatter = GitHubActionsFormatter{}
 
 // NewGitHubFormatter creates a new GitHub Actions formatter.
 // It implements domain.ResultFormatter interface.
@@ -48,20 +49,25 @@ func (f GitHubActionsFormatter) WithShowHelp(showHelp bool) GitHubActionsFormatt
 }
 
 // Format formats validation results for GitHub Actions output.
-func (f GitHubActionsFormatter) Format(ctx context.Context, results domain.ValidationResults) string {
+func (f GitHubActionsFormatter) Format(ctx context.Context, results interface{}) string {
+	validationResults, ok := results.(domain.ValidationResults)
+	if !ok {
+		return "Error: invalid results type"
+	}
+
 	logger := log.Logger(ctx)
-	logger.Trace().Bool("verbose", f.verbose).Bool("show_help", f.showHelp).Int("total_commits", results.TotalCommits).Msg("Entering GitHubActionsFormatter.Format")
+	logger.Trace().Bool("verbose", f.verbose).Bool("show_help", f.showHelp).Int("total_commits", validationResults.TotalCommits).Msg("Entering GitHubActionsFormatter.Format")
 
 	var builder strings.Builder
 
 	// Print summary
 	builder.WriteString("::group::Summary\n")
-	fmt.Fprintf(&builder, "Validated %d commits\n", results.TotalCommits)
-	fmt.Fprintf(&builder, "Passed: %d, Failed: %d\n", results.PassedCommits, results.TotalCommits-results.PassedCommits)
+	fmt.Fprintf(&builder, "Validated %d commits\n", validationResults.TotalCommits)
+	fmt.Fprintf(&builder, "Passed: %d, Failed: %d\n", validationResults.PassedCommits, validationResults.TotalCommits-validationResults.PassedCommits)
 	builder.WriteString("::endgroup::\n")
 
 	// Print details for each commit
-	for i, commitResult := range results.Results {
+	for i, commitResult := range validationResults.Results {
 		fmt.Fprintf(&builder, "::group::Commit #%d: %s\n", i+1, commitResult.CommitInfo.Hash)
 		fmt.Fprintf(&builder, "Subject: %s\n", commitResult.CommitInfo.Subject)
 
@@ -119,7 +125,7 @@ func (f GitHubActionsFormatter) Format(ctx context.Context, results domain.Valid
 	}
 
 	// Set output for GitHub Actions
-	if !results.AllPassed() {
+	if !validationResults.AllPassed() {
 		builder.WriteString("::set-output name=passed::false\n")
 	} else {
 		builder.WriteString("::set-output name=passed::true\n")

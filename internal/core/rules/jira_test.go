@@ -102,10 +102,23 @@ func TestJiraReferenceRule_Validate(t *testing.T) {
 			cfg := testCase.configSetup()
 			ctx := createJiraTestContext(cfg)
 
-			// Create and configure rule with context
-			baseRule := rules.NewJiraReferenceRule()
-			rule, ok := baseRule.WithContext(ctx).(rules.JiraReferenceRule)
-			require.True(t, ok, "Expected WithContext to return a JiraReferenceRule")
+			// Create rule with configuration
+			options := []rules.JiraReferenceOption{}
+			if cfg.Jira.Pattern != "" {
+				options = append(options, rules.WithJiraPattern(cfg.Jira.Pattern))
+			}
+
+			if len(cfg.Jira.Projects) > 0 {
+				options = append(options, rules.WithJiraPrefixes(cfg.Jira.Projects))
+			}
+
+			if cfg.Jira.CheckBody {
+				options = append(options, rules.WithJiraBodySearch(true))
+			}
+			// For this test, assume conventional commit is enabled
+			options = append(options, rules.WithConventionalCommit())
+
+			rule := rules.NewJiraReferenceRule(options...)
 
 			// Execute
 			errors := rule.Validate(ctx, testCase.commit)

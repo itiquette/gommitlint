@@ -11,7 +11,7 @@ import (
 )
 
 // CreateTestEngine creates an engine instance for testing with a custom rule registry.
-// This method now returns a TestEngine which is a test-specific wrapper around validation.Engine.
+// This method now returns a TestEngine which is a test-specific wrapper around domain.ValidationEngine.
 func CreateTestEngine(registry *domain.RuleRegistry) *TestEngine {
 	return &TestEngine{
 		Registry: registry,

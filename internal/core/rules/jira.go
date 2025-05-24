@@ -9,7 +9,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/itiquette/gommitlint/internal/common/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
@@ -195,58 +194,6 @@ func (r JiraReferenceRule) Validate(_ context.Context, commit domain.CommitInfo)
 	}
 
 	return nil
-}
-
-// WithContext implements the ConfigurableRule interface for JiraReferenceRule.
-// It returns a new rule with configuration from the provided context.
-func (r JiraReferenceRule) WithContext(ctx context.Context) domain.Rule {
-	// Get configuration directly from context
-	cfg := contextx.GetConfig(ctx)
-	if cfg == nil {
-		return r
-	}
-
-	// Extract configuration values
-	validateBodyRef := cfg.GetBool("jira.check_body")
-	validProjects := cfg.GetStringSlice("jira.projects")
-	pattern := cfg.GetString("jira.pattern")
-
-	// Check if conventional rule is enabled using domain priority service
-	enabledRules := cfg.GetStringSlice("rules.enabled")
-	disabledRules := cfg.GetStringSlice("rules.disabled")
-	priorityService := domain.NewRulePriorityService(domain.GetDefaultDisabledRules())
-	isConventionalEnabled := priorityService.IsRuleEnabled(ctx, "Conventional", enabledRules, disabledRules)
-
-	// Create a copy of the rule
-	result := r
-
-	// Apply configuration settings
-	if isConventionalEnabled {
-		result.checkConventionalOnly = isConventionalEnabled
-	}
-
-	if validateBodyRef {
-		result.searchInBody = validateBodyRef
-	}
-
-	if len(validProjects) > 0 {
-		result.prefixes = make([]string, len(validProjects))
-		copy(result.prefixes, validProjects)
-	}
-
-	if pattern != "" {
-		result.pattern = pattern
-	}
-
-	// Log configuration at debug level
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("Jira reference rule configuration from context",
-		"conventional_enabled", isConventionalEnabled,
-		"body_ref_checking", validateBodyRef,
-		"valid_projects", validProjects,
-		"pattern", pattern)
-
-	return result
 }
 
 // validateJiraWithState validates the JIRA references and returns both the errors and an updated rule.

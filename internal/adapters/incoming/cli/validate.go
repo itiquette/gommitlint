@@ -6,15 +6,12 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
-	infraConfig "github.com/itiquette/gommitlint/internal/adapters/outgoing/config"
-	"github.com/itiquette/gommitlint/internal/adapters/outgoing/git"
 	"github.com/itiquette/gommitlint/internal/adapters/outgoing/log"
 	"github.com/itiquette/gommitlint/internal/application/report"
-	"github.com/itiquette/gommitlint/internal/application/validate"
-	"github.com/itiquette/gommitlint/internal/common/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/spf13/cobra"
 )
@@ -80,8 +77,26 @@ func runNewValidation(ctx context.Context, cmd *cobra.Command) (int, error) {
 	// Create parameters object to encapsulate all inputs
 	params := NewValidationParameters(cmd)
 
-	// Create validation service using the context
-	service, err := params.CreateValidationService(ctx)
+	// Get composition root from context
+	root := getCompositionRoot(ctx)
+	if root == nil {
+		return 1, errors.New("composition root not found in context")
+	}
+
+	// Get repository path
+	repoPath := params.GetRepoPath()
+	if repoPath == "" {
+		// Use current directory if not specified
+		var err error
+
+		repoPath, err = os.Getwd()
+		if err != nil {
+			return 1, fmt.Errorf("failed to get current directory: %w", err)
+		}
+	}
+
+	// Create validation service using composition root
+	service, err := root.GetCreateValidationService()(ctx, repoPath)
 	if err != nil {
 		return 1, fmt.Errorf("failed to create validation service: %w", err)
 	}
@@ -90,7 +105,7 @@ func runNewValidation(ctx context.Context, cmd *cobra.Command) (int, error) {
 	// No need to convert parameters
 
 	// Try to get a specific commit directly
-	commitResult, err := service.ValidateCommit(ctx, "HEAD")
+	commitResult, err := service.ValidateCommit(ctx, "HEAD", params.SkipMergeCommits)
 	if err != nil {
 		return 1, fmt.Errorf("failed to validate HEAD commit: %w", err)
 	}
@@ -102,7 +117,10 @@ func runNewValidation(ctx context.Context, cmd *cobra.Command) (int, error) {
 	// Create formatter and report generator
 	formatter := params.CreateFormatter()
 	reportOptions := params.ToReportOptions()
-	reportGenerator := report.NewGenerator(reportOptions, formatter)
+	// Create a logger adapter that implements outgoing.Logger
+	zerologInstance := log.Logger(ctx)
+	loggerAdapter := log.NewSimpleAdapter(*zerologInstance)
+	reportGenerator := report.NewGenerator(reportOptions, formatter, loggerAdapter)
 
 	// Generate report using the domain interface
 	err = reportGenerator.GenerateReport(ctx, results)
@@ -116,30 +134,4 @@ func runNewValidation(ctx context.Context, cmd *cobra.Command) (int, error) {
 	}
 
 	return 2, nil
-}
-
-// constructValidationService creates a validation service using injected dependencies.
-func constructValidationService(ctx context.Context, deps *AppDependencies, repoPath string) (validate.ValidationService, error) {
-	logger := log.Logger(ctx)
-	logger.Trace().Str("repo_path", repoPath).Msg("Entering constructValidationService")
-
-	// Get config from manager
-	unifiedConfig := deps.ConfigManager.GetConfig()
-
-	// Add the config to the context using the standard pattern via adapter
-	ctx = contextx.WithConfig(ctx, infraConfig.NewAdapter(unifiedConfig))
-
-	// Create a repository adapter
-	repoAdapter, err := git.NewRepositoryAdapter(ctx, repoPath)
-	if err != nil {
-		return validate.ValidationService{}, fmt.Errorf("failed to create repository adapter: %w", err)
-	}
-
-	// Create a validation service that uses the registry directly
-	return validate.CreateValidationService(
-		ctx,         // Context with configuration
-		repoAdapter, // CommitRepository
-		repoAdapter, // RepositoryInfoProvider
-		repoAdapter, // CommitAnalyzer
-	), nil
 }

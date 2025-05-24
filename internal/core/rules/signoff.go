@@ -9,13 +9,14 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/itiquette/gommitlint/internal/common/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
 )
 
-// SignOffRegex is a regex for matching sign-off lines.
-var SignOffRegex = regexp.MustCompile(`(?i)^Signed-off-by:\s+.+\s+<.+>$`)
+// signOffRegex returns a regex for matching sign-off lines.
+func signOffRegex() *regexp.Regexp {
+	return regexp.MustCompile(`(?i)^Signed-off-by:\s+.+\s+<.+>$`)
+}
 
 // SignOffRule validates that commit messages include a sign-off line.
 type SignOffRule struct {
@@ -74,51 +75,8 @@ func NewSignOffRule(options ...SignOffOption) SignOffRule {
 	return rule
 }
 
-// WithContext implements the ConfigurableRule interface for SignOffRule.
-// It returns a new rule with configuration from the provided context.
-func (r SignOffRule) WithContext(ctx context.Context) domain.Rule {
-	// Get config from common interface
-	cfg := contextx.GetConfig(ctx)
-	if cfg == nil {
-		return r
-	}
-
-	// Default values - use the rule's current values
-	requireSignOff := r.requireSignOff
-	acceptAltFormat := r.acceptAltFormat
-
-	// Try to get security settings from config
-	if cfg.GetBool("message.body.require_signoff") {
-		requireSignOff = true
-	}
-
-	if cfg.GetBool("signing.allow_multiple_signoffs") {
-		acceptAltFormat = true
-	}
-
-	// Log configuration at debug level
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("Sign-off rule configuration from context",
-		"require_sign_off", requireSignOff,
-		"accept_alternative_format", acceptAltFormat)
-
-	// Create a copy of the rule
-	result := r
-
-	// Update settings from context
-	result.requireSignOff = requireSignOff
-	result.acceptAltFormat = acceptAltFormat
-
-	return result
-}
-
 // Validate checks for the presence and format of a Developer Certificate of Origin sign-off.
-func (r SignOffRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
-	logger := contextx.GetLogger(ctx)
-	logger.Debug("Validating sign-off",
-		"rule", r.Name(),
-		"commit_hash", commit.Hash)
-
+func (r SignOffRule) Validate(_ context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
 	// Check if sign-off is required
 	if !r.requireSignOff {
 		return nil
@@ -179,8 +137,7 @@ func (r SignOffRule) Name() string {
 // hasSignOffLine checks if a commit body contains a sign-off line.
 func hasSignOffLine(body string, acceptAltFormat bool) bool {
 	// Standard format: "Signed-off-by: Name <email@example.com>"
-	standardRegex := regexp.MustCompile(`(?m)^Signed-off-by:\s+.+\s+<.+>$`)
-	if standardRegex.MatchString(body) {
+	if signOffRegex().MatchString(body) {
 		return true
 	}
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/adapters/outgoing/log"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/ports/outgoing"
 )
 
 // GitLabCIFormatter formats validation results for GitLab CI.
@@ -19,8 +20,8 @@ type GitLabCIFormatter struct {
 	showHelp bool
 }
 
-// Ensure GitLabCIFormatter implements domain.ResultFormatter.
-var _ domain.ResultFormatter = GitLabCIFormatter{}
+// Ensure GitLabCIFormatter implements outgoing.ResultFormatter.
+var _ outgoing.ResultFormatter = GitLabCIFormatter{}
 
 // NewGitLabFormatter creates a new GitLab CI formatter.
 // It implements domain.ResultFormatter interface.
@@ -48,20 +49,25 @@ func (f GitLabCIFormatter) WithShowHelp(showHelp bool) GitLabCIFormatter {
 }
 
 // Format formats validation results for GitLab CI output.
-func (f GitLabCIFormatter) Format(ctx context.Context, results domain.ValidationResults) string {
+func (f GitLabCIFormatter) Format(ctx context.Context, results interface{}) string {
+	validationResults, ok := results.(domain.ValidationResults)
+	if !ok {
+		return "Error: invalid results type"
+	}
+
 	logger := log.Logger(ctx)
-	logger.Trace().Bool("verbose", f.verbose).Bool("show_help", f.showHelp).Int("total_commits", results.TotalCommits).Msg("Entering GitLabCIFormatter.Format")
+	logger.Trace().Bool("verbose", f.verbose).Bool("show_help", f.showHelp).Int("total_commits", validationResults.TotalCommits).Msg("Entering GitLabCIFormatter.Format")
 
 	var builder strings.Builder
 
 	// Print summary
 	builder.WriteString("section_start:$(date +%s):summary[collapsed=true]\n")
-	fmt.Fprintf(&builder, "Validated %d commits\n", results.TotalCommits)
-	fmt.Fprintf(&builder, "Passed: %d, Failed: %d\n", results.PassedCommits, results.TotalCommits-results.PassedCommits)
+	fmt.Fprintf(&builder, "Validated %d commits\n", validationResults.TotalCommits)
+	fmt.Fprintf(&builder, "Passed: %d, Failed: %d\n", validationResults.PassedCommits, validationResults.TotalCommits-validationResults.PassedCommits)
 	builder.WriteString("section_end:$(date +%s):summary\n")
 
 	// Print details for each commit
-	for i, commitResult := range results.Results {
+	for i, commitResult := range validationResults.Results {
 		sectionName := fmt.Sprintf("commit_%d", i+1)
 		fmt.Fprintf(&builder, "section_start:$(date ):%s[collapsed=true]\n", sectionName)
 		fmt.Fprintf(&builder, "Commit #%d: %s\n", i+1, commitResult.CommitInfo.Hash)

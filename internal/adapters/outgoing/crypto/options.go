@@ -9,6 +9,7 @@ import (
 	coreCrypto "github.com/itiquette/gommitlint/internal/core/crypto"
 	"github.com/itiquette/gommitlint/internal/core/crypto/gpg"
 	"github.com/itiquette/gommitlint/internal/core/crypto/ssh"
+	"github.com/itiquette/gommitlint/internal/domain"
 )
 
 // Option is a function that configures a VerificationAdapter.
@@ -22,10 +23,10 @@ func WithVerificationService(service coreCrypto.VerificationService) Option {
 }
 
 // WithKeyRepository sets a custom key repository.
-func WithKeyRepository(repository KeyRepository) Option {
+func WithKeyRepository(repository domain.CryptoKeyRepository) Option {
 	return func(a *VerificationAdapter) {
 		a.repository = repository
-		a.defaultDir = repository.GetKeyDirectory()
+		a.keyDir = repository.GetKeyDirectory()
 	}
 }
 
@@ -34,11 +35,11 @@ func WithKeyRepository(repository KeyRepository) Option {
 func WithConfiguration(cfg config.Config) Option {
 	return func(adapter *VerificationAdapter) {
 		// Get key directory from configuration
-		keyDir := config.ResolvePath(cfg, "signing.key_directory", adapter.defaultDir)
+		keyDir := config.ResolvePath(cfg, "signing.key_directory", adapter.keyDir)
 
 		// Create a new repository with the configured key directory
 		adapter.repository = NewFileSystemKeyRepository(keyDir)
-		adapter.defaultDir = keyDir
+		adapter.keyDir = keyDir
 	}
 }
 
@@ -59,7 +60,7 @@ func NewVerificationAdapterWithOptions(options ...Option) *VerificationAdapter {
 	adapter := &VerificationAdapter{
 		service:    service,
 		repository: repository,
-		defaultDir: repository.GetKeyDirectory(),
+		keyDir:     repository.GetKeyDirectory(),
 	}
 
 	// Apply options

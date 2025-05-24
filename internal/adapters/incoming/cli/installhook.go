@@ -79,9 +79,6 @@ func NewHookInstallationParameters(force bool, repoPath string) HookInstallation
 	}
 }
 
-// Note: WithHookType, WithForce, WithRepoPath methods have been moved to internal/testutils/cli
-// to separate test-only code from implementation.
-
 // FindHookPath determines the hook file path based on the parameters.
 // Implements security best practices for safe path handling.
 func (p HookInstallationParameters) FindHookPath() (string, error) {
@@ -119,8 +116,6 @@ func (p HookInstallationParameters) FindHookPath() (string, error) {
 
 	return hookPath, nil
 }
-
-// Note: isValidHookType function has been removed in favor of using fsutils.IsValidGitHookType directly
 
 // EnsureHooksDirectory ensures the hooks directory exists.
 // Implements security best practices for safe path handling.
@@ -217,15 +212,25 @@ func (p HookInstallationParameters) CanInstallHook() error {
 		return err
 	}
 
-	// Check if hook already exists
-	if _, err := os.Stat(hookPath); err == nil && !p.Force {
-		return fmt.Errorf("hook already exists at %s (use --force to overwrite)", hookPath)
+	// Check if hook already exists using file descriptor to prevent TOCTOU
+	file, err := os.Open(hookPath)
+	if err == nil {
+		// File exists
+		file.Close()
+
+		if !p.Force {
+			return fmt.Errorf("hook already exists at %s (use --force to overwrite)", hookPath)
+		}
+	} else if !os.IsNotExist(err) {
+		// Some other error occurred
+		return fmt.Errorf("cannot check hook existence: %w", err)
 	}
 
 	return nil
 }
 
 // installHook installs a Git commit-msg hook in the specified repository.
+// Uses atomic file operations and proper permission management to ensure security.
 func installHook(force bool, repoPath string) error {
 	// Validate and normalize the repository path using fsutils
 	validatedPath, err := fsutils.ValidateGitRepoPath(repoPath)
@@ -255,20 +260,15 @@ func installHook(force bool, repoPath string) error {
 	// Get the hook content
 	hookContent := params.GetHookContent()
 
-	// Write the hook file with safe permissions (read/write for owner only)
-	if err := os.WriteFile(hookPath, []byte(hookContent), 0600); err != nil {
+	// Write the hook file using our secure file writing function
+	// This handles creating a temporary file, setting permissions, and atomically
+	// renaming it to the final destination to prevent TOCTOU vulnerabilities
+	if err := fsutils.SafeWriteFile(hookPath, []byte(hookContent), 0700); err != nil {
 		return fmt.Errorf("could not write hook file: %w", err)
-	}
-
-	// Make the hook executable
-	if err := os.Chmod(hookPath, 0700); err != nil {
-		return fmt.Errorf("could not make hook file executable: %w", err)
 	}
 
 	return nil
 }
-
-// Note: findGitDirectory function has been removed in favor of using fsutils package directly
 
 // generateCommitMsgHook generates content for the commit-msg hook.
 func generateCommitMsgHook() string {

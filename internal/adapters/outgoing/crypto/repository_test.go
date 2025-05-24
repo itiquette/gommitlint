@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/itiquette/gommitlint/internal/adapters/outgoing/crypto"
-	"github.com/itiquette/gommitlint/internal/common/security"
+	testsecurity "github.com/itiquette/gommitlint/internal/testutils/security"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -97,10 +97,10 @@ func TestReadKeyFile(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tempDir)
 
-	// Create the repository with a test security checker that bypasses permission checks
-	testChecker := security.NewTestSecurityChecker()
+	// Create the repository with a test security service that bypasses permission checks
+	testService := testsecurity.NewTestSecurityService()
 	repo := crypto.NewFileSystemKeyRepositoryWithOptions(tempDir,
-		crypto.WithSecurityChecker(testChecker))
+		crypto.WithSecurityService(testService))
 
 	// Create test files with different permissions and types
 	tests := []struct {
@@ -122,12 +122,12 @@ func TestReadKeyFile(t *testing.T) {
 			filename:    "insecure-private.key",
 			permissions: 0644,
 			content:     "insecure private key content",
-			shouldPass:  true, // With TestSecurityChecker all files pass
+			shouldPass:  false, // Private keys need 0600 permissions
 		},
 		{
 			name:        "Public key with reasonable permissions",
 			filename:    "public.pub",
-			permissions: 0644,
+			permissions: 0640,
 			content:     "public key content",
 			shouldPass:  true,
 		},
@@ -136,7 +136,7 @@ func TestReadKeyFile(t *testing.T) {
 			filename:    "world-writable.pub",
 			permissions: 0666,
 			content:     "world-writable public key content",
-			shouldPass:  true, // With TestSecurityChecker all files pass
+			shouldPass:  false, // World-writable is insecure
 		},
 		{
 			name:        "Regular file with normal permissions",

@@ -22,29 +22,29 @@ func NewSimpleAdapter(logger zerolog.Logger) *SimpleAdapter {
 }
 
 // Ensure SimpleAdapter implements outgoing.Logger.
-var _ outgoing.Logger = (*SimpleAdapter)(nil)
+var _ outgoing.Logger = SimpleAdapter{}
 
-func (s *SimpleAdapter) Debug(msg string, args ...interface{}) {
+func (s SimpleAdapter) Debug(msg string, args ...interface{}) {
 	//nolint:zerologlint // false positive - addFields returns event that is then dispatched
 	s.addFields(s.logger.Debug(), args...).Msg(msg)
 }
 
-func (s *SimpleAdapter) Info(msg string, args ...interface{}) {
+func (s SimpleAdapter) Info(msg string, args ...interface{}) {
 	//nolint:zerologlint // false positive - addFields returns event that is then dispatched
 	s.addFields(s.logger.Info(), args...).Msg(msg)
 }
 
-func (s *SimpleAdapter) Warn(msg string, args ...interface{}) {
+func (s SimpleAdapter) Warn(msg string, args ...interface{}) {
 	//nolint:zerologlint // false positive - addFields returns event that is then dispatched
 	s.addFields(s.logger.Warn(), args...).Msg(msg)
 }
 
-func (s *SimpleAdapter) Error(msg string, args ...interface{}) {
+func (s SimpleAdapter) Error(msg string, args ...interface{}) {
 	//nolint:zerologlint // false positive - addFields returns event that is then dispatched
 	s.addFields(s.logger.Error(), args...).Msg(msg)
 }
 
-func (s *SimpleAdapter) addFields(event *zerolog.Event, args ...interface{}) *zerolog.Event {
+func (s SimpleAdapter) addFields(event *zerolog.Event, args ...interface{}) *zerolog.Event {
 	if len(args)%2 != 0 {
 		args = append(args, "")
 	}
