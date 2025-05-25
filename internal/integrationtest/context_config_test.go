@@ -19,6 +19,7 @@ import (
 	testconfig "github.com/itiquette/gommitlint/internal/testutils/config"
 	testcontext "github.com/itiquette/gommitlint/internal/testutils/context"
 	"github.com/itiquette/gommitlint/internal/testutils/integrationtest"
+	testlogger "github.com/itiquette/gommitlint/internal/testutils/logger"
 )
 
 // TestContextBasedConfigWorkflow tests the context-based configuration workflow end-to-end.
@@ -100,19 +101,19 @@ gommitlint:
 			ctx := testcontext.CreateTestContext()
 
 			// Add a logger to the context
-			logger := log.InitBasicLogger().Level(zerolog.TraceLevel)
+			logger := testlogger.InitBasicLogger().Level(zerolog.TraceLevel)
 			ctx = logger.WithContext(ctx)
 
-			// Create a config manager that loads our test config
-			configManager := createConfigManager(t, configPath)
+			// Create a config loader that loads our test config
+			configLoader := createConfigManager(t, configPath)
 
 			// Get the config
-			configObj := configManager.GetConfig()
+			configObj := configLoader.GetConfig()
 
 			// Add the config to the context with wrapper
 			ctx = testconfig.WrapAndInjectConfig(ctx, configObj)
 
-			loggerAdapter := log.NewSimpleAdapter(logger)
+			loggerAdapter := log.NewAdapter(logger)
 			validationService, err := integrationtest.CreateValidationService(ctx, loggerAdapter, repoPath)
 			require.NoError(t, err)
 
@@ -261,14 +262,14 @@ gommitlint:
 			ctx := testcontext.CreateTestContext()
 
 			// Add a logger to the context
-			logger := log.InitBasicLogger().Level(zerolog.TraceLevel)
+			logger := testlogger.InitBasicLogger().Level(zerolog.TraceLevel)
 			ctx = logger.WithContext(ctx)
 
-			// Create a config manager that loads our test config
-			configManager := createConfigManager(t, configPath)
+			// Create a config loader that loads our test config
+			configLoader := createConfigManager(t, configPath)
 
 			// Get the config
-			configObj := configManager.GetConfig()
+			configObj := configLoader.GetConfig()
 
 			// Add the config to the context with wrapper
 			ctx = testconfig.WrapAndInjectConfig(ctx, configObj)
@@ -279,7 +280,7 @@ gommitlint:
 			defer cleanup()
 
 			// Create validation service using helper
-			loggerAdapter := log.NewSimpleAdapter(logger)
+			loggerAdapter := log.NewAdapter(logger)
 			validationService, err := integrationtest.CreateValidationService(ctx, loggerAdapter, repoPath)
 			require.NoError(t, err)
 
@@ -376,23 +377,23 @@ func TestContextConfigImmutability(t *testing.T) {
 	require.False(t, modifiedConfig.Conventional.RequireScope, "Modified conventional require scope should be false")
 }
 
-// Helper function to create a config manager for testing.
+// Helper function to create a config loader for testing.
 // This function ensures that the required rules are explicitly enabled,
 // which solves the issue with TestContextBasedConfigWorkflow and TestContextBasedMessageFileWorkflow
 // where validation wasn't correctly detecting errors.
-func createConfigManager(t *testing.T, configPath string) *config.Manager {
+func createConfigManager(t *testing.T, configPath string) *config.Loader {
 	t.Helper()
-	// Create config manager with context
+	// Create config loader with context
 	ctx := testcontext.CreateTestContext()
-	configManager, err := config.NewManager(ctx)
-	require.NoError(t, err, "Failed to create config manager")
+	configLoader, err := config.NewLoader(ctx)
+	require.NoError(t, err, "Failed to create config loader")
 
 	// Load the specific config file
-	err = configManager.LoadFromPath(configPath)
+	err = configLoader.LoadFromPath(configPath)
 	require.NoError(t, err, "Failed to load config from file")
 
 	// Get the current config
-	configObj := configManager.GetConfig()
+	configObj := configLoader.GetConfig()
 
 	// Explicitly set required configuration values and enable rules
 	// This is the key fix for the failing tests
@@ -412,9 +413,9 @@ func createConfigManager(t *testing.T, configPath string) *config.Manager {
 	}))
 
 	// Update the config
-	configManager.UpdateConfig(func(_ types.Config) types.Config {
+	configLoader.UpdateConfig(func(_ types.Config) types.Config {
 		return configObj
 	})
 
-	return configManager
+	return configLoader
 }

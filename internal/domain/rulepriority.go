@@ -216,7 +216,6 @@ func GetDefaultDisabledRules() map[string]bool {
 	defaultDisabledRules := []string{
 		"jirareference", // JIRAReference rule is disabled by default as it's organization-specific
 		"commitbody",    // CommitBody rule is disabled by default as not all projects require detailed bodies
-		"spell",         // Spell rule is disabled by default due to false positives
 	}
 
 	// Create a map for O(1) lookups

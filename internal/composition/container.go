@@ -11,6 +11,7 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/adapters/outgoing/config"
 	"github.com/itiquette/gommitlint/internal/adapters/outgoing/crypto"
+	"github.com/itiquette/gommitlint/internal/application/orchestration"
 	"github.com/itiquette/gommitlint/internal/common/contextx"
 	configTypes "github.com/itiquette/gommitlint/internal/config/types"
 	"github.com/itiquette/gommitlint/internal/core/factories"
@@ -57,27 +58,24 @@ func (a ValidationServiceAdapter) ValidateMessage(ctx context.Context, message s
 	return a.service.ValidateMessage(ctx, message)
 }
 
-// Root represents the composition root for the application.
+// Container represents the dependency injection container for the application.
 // It follows functional programming principles with immutable state.
-type Root struct {
+// This is the composition root that wires up all application dependencies.
+type Container struct {
 	logger       outgoing.Logger
 	actualConfig configTypes.Config
 	ruleRegistry *domain.RuleRegistry
 	factory      *OutgoingAdapterFactory
 }
 
-// NewRoot creates a new composition root with pre-initialized dependencies.
+// NewContainer creates a new dependency injection container with pre-initialized dependencies.
 // This follows functional programming by initializing all state upfront.
-func NewRoot(logger outgoing.Logger, config configTypes.Config) Root {
-	if logger == nil {
-		logger = contextx.NewNoOpLogger()
-	}
-
+func NewContainer(logger outgoing.Logger, config configTypes.Config) Container {
 	// Initialize rule registry upfront
 	ruleRegistry := domain.NewRuleRegistry()
 	factory := NewOutgoingAdapterFactory(config, logger)
 
-	return Root{
+	return Container{
 		logger:       logger,
 		actualConfig: config,
 		ruleRegistry: ruleRegistry,
@@ -87,12 +85,12 @@ func NewRoot(logger outgoing.Logger, config configTypes.Config) Root {
 
 // CreateValidationService creates a validation service for the given repository path.
 // This is a pure function that doesn't mutate the receiver.
-func (r Root) CreateValidationService(ctx context.Context, repoPath string) (incoming.ValidationService, error) {
+func (c Container) CreateValidationService(ctx context.Context, repoPath string) (incoming.ValidationService, error) {
 	// Add the config to the context using the standard pattern via adapter
-	ctx = contextx.WithConfig(ctx, config.NewAdapter(r.actualConfig))
+	ctx = contextx.WithConfig(ctx, config.NewAdapter(c.actualConfig))
 
 	// Create git repository adapter
-	gitRepo, err := r.factory.CreateGitRepository(ctx, repoPath)
+	gitRepo, err := c.factory.CreateGitRepository(ctx, repoPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create git repository: %w", err)
 	}
@@ -109,15 +107,15 @@ func (r Root) CreateValidationService(ctx context.Context, repoPath string) (inc
 	}
 
 	// Initialize rule registry with rules if not already done
-	if !r.ruleRegistry.HasRules() {
+	if !c.ruleRegistry.HasRules() {
 		// Create rule factory with priority service from registry
 		ruleFactory := factories.NewSimpleRuleFactory().
-			WithConfig(&r.actualConfig).
-			WithPriorityService(r.ruleRegistry.GetPriorityService())
+			WithConfig(&c.actualConfig).
+			WithPriorityService(c.ruleRegistry.GetPriorityService())
 
 		// Create crypto dependencies if signing is configured
-		if r.actualConfig.Signing.KeyDirectory != "" {
-			keyRepo := crypto.NewFileSystemKeyRepository(r.actualConfig.Signing.KeyDirectory)
+		if c.actualConfig.Signing.KeyDirectory != "" {
+			keyRepo := crypto.NewFileSystemKeyRepository(c.actualConfig.Signing.KeyDirectory)
 			verifier := crypto.NewVerificationAdapterWithOptions(
 				crypto.WithKeyRepository(keyRepo),
 			)
@@ -130,29 +128,29 @@ func (r Root) CreateValidationService(ctx context.Context, repoPath string) (inc
 		// Register basic rules
 		basicRules := ruleFactory.CreateBasicRules()
 		for name, ruleFunc := range basicRules {
-			r.ruleRegistry.RegisterWithContext(ctx, name, ruleFunc)
+			c.ruleRegistry.RegisterWithContext(ctx, name, ruleFunc)
 		}
 
 		// Register analyzer rules if analyzer is available
 		if analyzer != nil {
 			analyzerRules := ruleFactory.CreateAnalyzerRules(analyzer)
 			for name, ruleFunc := range analyzerRules {
-				r.ruleRegistry.RegisterWithContext(ctx, name, ruleFunc)
+				c.ruleRegistry.RegisterWithContext(ctx, name, ruleFunc)
 			}
 		}
 
 		// Initialize rules with context that has configuration
-		r.ruleRegistry.InitializeRules(ctx)
+		c.ruleRegistry.InitializeRules(ctx)
 	}
 
 	// Create validation config from actual config
 	validationConfig := validation.Config{
-		EnabledRules:  r.actualConfig.Rules.Enabled,
-		DisabledRules: r.actualConfig.Rules.Disabled,
+		EnabledRules:  c.actualConfig.Rules.Enabled,
+		DisabledRules: c.actualConfig.Rules.Disabled,
 	}
 
 	// Create validation engine with injected dependencies
-	engine := validation.CreateEngine(validationConfig, analyzer, r.ruleRegistry)
+	engine := validation.CreateEngine(validationConfig, analyzer, c.ruleRegistry)
 
 	// Create validation service dependencies
 	deps := validation.ServiceDependencies{
@@ -163,7 +161,7 @@ func (r Root) CreateValidationService(ctx context.Context, repoPath string) (inc
 	}
 
 	// Create and return service with proper dependency injection
-	service := validation.NewService(deps, r.actualConfig)
+	service := validation.NewService(deps, c.actualConfig)
 
 	return ValidationServiceAdapter{service: service}, nil
 }
@@ -172,6 +170,24 @@ func (r Root) CreateValidationService(ctx context.Context, repoPath string) (inc
 
 // GetCreateValidationService returns a function that creates validation services.
 // This allows the CLI to create services for different repository paths.
-func (r Root) GetCreateValidationService() func(context.Context, string) (incoming.ValidationService, error) {
-	return r.CreateValidationService
+func (c Container) GetCreateValidationService() func(context.Context, string) (incoming.ValidationService, error) {
+	return c.CreateValidationService
+}
+
+// CreateValidationOrchestrator creates a validation orchestrator for the given repository path.
+// This orchestrates validation and report generation.
+func (c Container) CreateValidationOrchestrator(ctx context.Context, repoPath string, formatter outgoing.ResultFormatter) (incoming.ValidationOrchestrator, error) {
+	// Create validation service
+	validationService, err := c.CreateValidationService(ctx, repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create validation service: %w", err)
+	}
+
+	// Create and return orchestrator
+	return orchestration.NewValidationOrchestrator(validationService, formatter, c.logger), nil
+}
+
+// GetCreateValidationOrchestrator returns a function that creates validation orchestrators.
+func (c Container) GetCreateValidationOrchestrator() func(context.Context, string, outgoing.ResultFormatter) (incoming.ValidationOrchestrator, error) {
+	return c.CreateValidationOrchestrator
 }

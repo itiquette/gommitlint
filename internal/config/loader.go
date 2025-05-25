@@ -10,19 +10,18 @@ import (
 
 	infra "github.com/itiquette/gommitlint/internal/adapters/outgoing/config"
 	"github.com/itiquette/gommitlint/internal/adapters/outgoing/log"
-	"github.com/itiquette/gommitlint/internal/common/contextx"
 	"github.com/itiquette/gommitlint/internal/config/types"
 )
 
-// Manager provides a simplified configuration management interface
+// Loader provides a simplified configuration loading interface
 // that works directly with the configuration service.
-type Manager struct {
+type Loader struct {
 	// service is the underlying configuration service
 	service *infra.Service
 }
 
-// NewManager creates a new configuration manager.
-func NewManager(ctx context.Context) (*Manager, error) {
+// NewLoader creates a new configuration loader.
+func NewLoader(ctx context.Context) (*Loader, error) {
 	// Use the logger from the context
 	logger := log.Logger(ctx)
 	logger.Trace().Msg("Entering config.NewManager")
@@ -39,60 +38,54 @@ func NewManager(ctx context.Context) (*Manager, error) {
 		return nil, fmt.Errorf("failed to load configuration: %w", err)
 	}
 
-	return &Manager{
+	return &Loader{
 		service: &loadedService,
 	}, nil
 }
 
 // Load loads configuration from files.
-func (m *Manager) Load() error {
-	service, err := m.service.Load()
+func (l *Loader) Load() error {
+	service, err := l.service.Load()
 	if err != nil {
 		return err
 	}
 
-	m.service = &service
+	l.service = &service
 
 	return nil
 }
 
 // LoadFromPath loads configuration from the specified path.
-func (m *Manager) LoadFromPath(path string) error {
-	service, err := m.service.LoadFromPath(path)
+func (l *Loader) LoadFromPath(path string) error {
+	service, err := l.service.LoadFromPath(path)
 	if err != nil {
 		return err
 	}
 
-	m.service = &service
+	l.service = &service
 
 	return nil
 }
 
 // GetConfig returns the current configuration.
-func (m Manager) GetConfig() types.Config {
-	return m.service.GetConfig()
+func (l Loader) GetConfig() types.Config {
+	return l.service.GetConfig()
 }
 
-// UpdateConfig returns a new Manager with updated configuration.
-func (m Manager) UpdateConfig(transform func(types.Config) types.Config) Manager {
-	newService := m.service.UpdateConfig(transform)
+// UpdateConfig returns a new Loader with updated configuration.
+func (l Loader) UpdateConfig(transform func(types.Config) types.Config) Loader {
+	newService := l.service.UpdateConfig(transform)
 	newServicePtr := &newService
 
-	return Manager{service: newServicePtr}
+	return Loader{service: newServicePtr}
 }
 
-// WithGitRepository returns a new Manager with the Git repository path set.
-func (m Manager) WithGitRepository(path string) Manager {
-	return m.UpdateConfig(func(cfg types.Config) types.Config {
+// WithGitRepository returns a new Loader with the Git repository path set.
+func (l Loader) WithGitRepository(path string) Loader {
+	return l.UpdateConfig(func(cfg types.Config) types.Config {
 		cfg.Repo.Path = path
 
 		return cfg
 	})
 }
 
-// WithContext returns a new context with the manager's configuration added.
-func (m Manager) WithContext(ctx context.Context) context.Context {
-	adapter := m.service.GetAdapter()
-
-	return contextx.WithConfig(ctx, adapter)
-}

@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 /*
-Package composition provides the composition root for the application,
+Package composition provides the dependency injection container for the application,
 following hexagonal architecture principles.
 
 # Overview
@@ -18,10 +18,10 @@ The composition package is responsible for:
 
 The package follows these architectural patterns:
 
-1. Composition Root Pattern:
+1. Dependency Injection Container Pattern:
   - All dependency injection happens in this package
-  - The Root struct acts as the central wiring point
-  - Dependencies flow from the composition root outward
+  - The Container struct acts as the central wiring point
+  - Dependencies flow from the container outward
 
 2. Factory Pattern:
   - Separate factories for incoming and outgoing adapters
@@ -35,23 +35,19 @@ The package follows these architectural patterns:
 
 # Structure
 
-  - root.go: Main composition root with dependency getters
-  - initialization.go: Phased initialization of components
+  - container.go: Main dependency injection container with dependency getters
   - factories.go: Factory classes for creating adapters
   - git_repository.go: Composite Git repository implementation
-  - service_adapter.go: Validation service interface adapter
 
 # Usage
 
-The composition root is created and initialized in main.go:
+The dependency container is created in main.go:
 
-	root := composition.NewRoot()
-	if err := root.Initialize(ctx); err != nil {
-		// Handle error
-	}
+	container := composition.NewContainer(logger, config)
+	cli.ExecuteWithContext(ctx, version, commit, date, container)
 
-	// Get dependencies for CLI
-	cliDeps := root.GetCLIDependencies()
+	// Container provides factory methods for services
+	orchestrator, err := container.CreateValidationOrchestrator(ctx, repoPath, formatter)
 
 # Extension Points
 
@@ -60,13 +56,13 @@ To add new components:
 1. Define the interface in the appropriate domain/ports package
 2. Implement the adapter in the adapters package
 3. Add creation logic to the appropriate factory
-4. Wire it up in the initialization phase
-5. Add a getter method to the Root struct
+4. Wire it up in the container
+5. Add a getter/creator method to the Container struct
 
 # Design Decisions
 
 - Separate factories for incoming/outgoing adapters maintain clear boundaries
-- Phased initialization ensures proper dependency ordering
+- Container pattern provides centralized dependency management
 - Composite pattern for Git repository provides unified interface
 - Context-based configuration allows runtime flexibility
 */

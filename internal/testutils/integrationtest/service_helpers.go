@@ -27,9 +27,9 @@ func CreateValidationService(ctx context.Context, logger outgoing.Logger, repoPa
 		return nil, err
 	}
 
-	// Create composition root
-	root := composition.NewRoot(logger, configService.GetAdapter().GetConfig())
+	// Create dependency container
+	container := composition.NewContainer(logger, configService.GetAdapter().GetConfig())
 
 	// Create validation service
-	return root.CreateValidationService(ctx, repoPath)
+	return container.CreateValidationService(ctx, repoPath)
 }

@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/itiquette/gommitlint/internal/adapters/incoming/cli"
@@ -13,8 +14,6 @@ import (
 	"github.com/itiquette/gommitlint/internal/application/options"
 	"github.com/itiquette/gommitlint/internal/composition"
 	"github.com/itiquette/gommitlint/internal/config"
-	"github.com/rs/zerolog"
-	stdlog "github.com/rs/zerolog/log"
 )
 
 // These variables are set by the build process.
@@ -25,50 +24,23 @@ var (
 )
 
 func main() {
-	// Configure initial basic logging
-	// Set global log level to panic to avoid any logging during initial setup
-	// The logger will be properly configured in InitLogger later
-	zerolog.SetGlobalLevel(zerolog.PanicLevel)
-
-	// IMPORTANT: Use Stderr for logs to separate them from regular report output
-	stdlog.Logger = stdlog.Output(zerolog.ConsoleWriter{
-		Out:        os.Stderr,
-		TimeFormat: "15:04PM",
-		NoColor:    false,
-	})
-
-	// Create the root context - this is the ONLY context.Background() in the application
+	// The ONLY ctx that should flow through the application
 	ctx := context.Background()
 
-	// Add logger to the context for future use - this will be replaced by a proper logger in cli.ExecuteWithContext
-	logger := stdlog.Logger
-	ctx = logger.WithContext(ctx)
-
-	// No need to register domain logger provider anymore
-	// Logger is accessed via context
-
 	// Add default CLI options to context
-	defaultOptions := options.CLIOptions{
-		Verbosity:           "brief",
-		Quiet:               false,
-		VerbosityWithCaller: false,
-		OutputFormat:        "text",
-	}
+	defaultOptions := options.DefaultCLIOptions()
 	ctx = options.WithCLIOptions(ctx, defaultOptions)
 
-	// Create config manager
-	configManager, err := config.NewManager(ctx)
+	configLoader, err := config.NewLoader(ctx)
 	if err != nil {
-		logger.Fatal().Err(err).Msg("Failed to create config manager")
+		fmt.Fprintf(os.Stderr, "Failed to create config loader: %v\n", err)
+		os.Exit(1)
 	}
 
-	// Create logger adapter
-	loggerAdapter := log.NewSimpleAdapter(logger)
+	// Create a simple stderr logger for initialization
+	// The actual logger will be configured when CLI flags are parsed
+	stderrLogger := log.NewStderrLogger()
+	container := composition.NewContainer(stderrLogger, configLoader.GetConfig())
 
-	// Create composition root with dependencies
-	root := composition.NewRoot(loggerAdapter, configManager.GetConfig())
-
-	// Pass the context and composition root to cli.ExecuteWithContext
-	// All dependencies and configuration are now set up
-	cli.ExecuteWithContext(ctx, version, commit, date, root)
+	cli.Execute(ctx, version, commit, date, container)
 }

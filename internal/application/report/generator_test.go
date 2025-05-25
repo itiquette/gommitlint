@@ -7,8 +7,6 @@ package report_test
 import (
 	"bytes"
 	"context"
-	"io"
-	"os"
 	"testing"
 
 	"github.com/itiquette/gommitlint/internal/application/report"
@@ -166,12 +164,6 @@ func TestGenerateReport(t *testing.T) {
 
 	// Test failed validation report
 	t.Run("Generate failed report", func(t *testing.T) {
-		// We need to use os.Stdout as the writer since the error is only returned
-		// when writing to stdout
-		originalStdout := os.Stdout
-		reader, writer, _ := os.Pipe()
-		os.Stdout = writer
-
 		formatter := mockFormatter{
 			formatFunc: func(_ context.Context, _ interface{}) string {
 				return "Test formatted output for failed validation"
@@ -184,25 +176,14 @@ func TestGenerateReport(t *testing.T) {
 			TotalCommits:  1,
 		}
 
+		var buf bytes.Buffer
 		generator := report.NewGenerator(report.Options{
-			Writer: os.Stdout, // Must use os.Stdout to trigger the error condition
+			Writer: &buf,
 		}, formatter, mockLogger{})
 
 		err := generator.GenerateReport(testcontext.CreateTestContext(), failedResults)
-		require.Error(t, err, "GenerateReport should return an error for failed validation")
-		require.Contains(t, err.Error(), "validation failed", "Error should indicate validation failed")
-
-		// Restore stdout
-		writer.Close()
-
-		var buf bytes.Buffer
-
-		_, err = io.Copy(&buf, reader)
-		require.NoError(t, err, "Failed to copy from reader")
-
-		os.Stdout = originalStdout
-
-		require.Contains(t, buf.String(), "Test formatted output", "Output should still be written")
+		require.NoError(t, err, "GenerateReport should not return an error for failed validation")
+		require.Contains(t, buf.String(), "Test formatted output", "Output should be written")
 	})
 }
 
@@ -229,12 +210,6 @@ func TestGenerateSummary(t *testing.T) {
 
 	// Test failed summary
 	t.Run("Generate failed summary", func(t *testing.T) {
-		// We need to use os.Stdout as the writer since the error is only returned
-		// when writing to stdout
-		originalStdout := os.Stdout
-		reader, writer, _ := os.Pipe()
-		os.Stdout = writer
-
 		formatter := mockFormatter{}
 
 		// Create results with a failure
@@ -243,24 +218,13 @@ func TestGenerateSummary(t *testing.T) {
 			TotalCommits:  1,
 		}
 
+		var buf bytes.Buffer
 		generator := report.NewGenerator(report.Options{
-			Writer: os.Stdout, // Must use os.Stdout to trigger the error condition
+			Writer: &buf,
 		}, formatter, mockLogger{})
 
 		err := generator.GenerateSummary(testcontext.CreateTestContext(), failedResults)
-		require.Error(t, err, "GenerateSummary should return an error for failed validation")
-		require.Contains(t, err.Error(), "validation failed", "Error should indicate validation failed")
-
-		// Restore stdout
-		writer.Close()
-
-		var buf bytes.Buffer
-
-		_, err = io.Copy(&buf, reader)
-		require.NoError(t, err, "Failed to copy from reader")
-
-		os.Stdout = originalStdout
-
+		require.NoError(t, err, "GenerateSummary should not return an error for failed validation")
 		require.Contains(t, buf.String(), "Some commits failed", "Output should indicate failure")
 	})
 }

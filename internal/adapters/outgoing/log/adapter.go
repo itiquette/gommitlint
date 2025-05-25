@@ -11,40 +11,40 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// SimpleAdapter adapts the zerolog logger to the simpler outgoing.Logger interface.
-type SimpleAdapter struct {
+// Adapter adapts the zerolog logger to the simpler outgoing.Logger interface.
+type Adapter struct {
 	logger zerolog.Logger
 }
 
-// NewSimpleAdapter creates a new adapter for the simpler outgoing.Logger interface.
-func NewSimpleAdapter(logger zerolog.Logger) *SimpleAdapter {
-	return &SimpleAdapter{logger: logger}
+// NewAdapter creates a new adapter for the simpler outgoing.Logger interface.
+func NewAdapter(logger zerolog.Logger) *Adapter {
+	return &Adapter{logger: logger}
 }
 
-// Ensure SimpleAdapter implements outgoing.Logger.
-var _ outgoing.Logger = SimpleAdapter{}
+// Ensure Adapter implements outgoing.Logger.
+var _ outgoing.Logger = Adapter{}
 
-func (s SimpleAdapter) Debug(msg string, args ...interface{}) {
+func (s Adapter) Debug(msg string, args ...any) {
 	//nolint:zerologlint // false positive - addFields returns event that is then dispatched
 	s.addFields(s.logger.Debug(), args...).Msg(msg)
 }
 
-func (s SimpleAdapter) Info(msg string, args ...interface{}) {
+func (s Adapter) Info(msg string, args ...any) {
 	//nolint:zerologlint // false positive - addFields returns event that is then dispatched
 	s.addFields(s.logger.Info(), args...).Msg(msg)
 }
 
-func (s SimpleAdapter) Warn(msg string, args ...interface{}) {
+func (s Adapter) Warn(msg string, args ...any) {
 	//nolint:zerologlint // false positive - addFields returns event that is then dispatched
 	s.addFields(s.logger.Warn(), args...).Msg(msg)
 }
 
-func (s SimpleAdapter) Error(msg string, args ...interface{}) {
+func (s Adapter) Error(msg string, args ...any) {
 	//nolint:zerologlint // false positive - addFields returns event that is then dispatched
 	s.addFields(s.logger.Error(), args...).Msg(msg)
 }
 
-func (s SimpleAdapter) addFields(event *zerolog.Event, args ...interface{}) *zerolog.Event {
+func (s Adapter) addFields(event *zerolog.Event, args ...any) *zerolog.Event {
 	if len(args)%2 != 0 {
 		args = append(args, "")
 	}

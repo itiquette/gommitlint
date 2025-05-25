@@ -30,16 +30,16 @@ func TestLoadConfigFromYAML(t *testing.T) {
 	err = os.WriteFile(configPath, []byte(configContent), 0600)
 	require.NoError(t, err)
 
-	// Create a manager and load the config
-	manager, err := NewManager(context.Background())
+	// Create a loader and load the config
+	loader, err := NewLoader(context.Background())
 	require.NoError(t, err)
 
 	// Load the config from the test file
-	err = manager.LoadFromPath(configPath)
+	err = loader.LoadFromPath(configPath)
 	require.NoError(t, err)
 
 	// Get the config
-	config := manager.GetConfig()
+	config := loader.GetConfig()
 
 	// Log what we actually got
 	t.Logf("Enabled rules: %v", config.Rules.Enabled)
@@ -103,12 +103,12 @@ func TestDisabledOverridesEnabled(t *testing.T) {
 	err = os.WriteFile(configPath, []byte(configContent), 0600)
 	require.NoError(t, err)
 
-	// Create a manager and load the config
-	manager, err := NewManager(context.Background())
+	// Create a loader and load the config
+	loader, err := NewLoader(context.Background())
 	require.NoError(t, err)
 
-	// The manager should add JiraReference to disabled_rules by default
-	disabledRules := manager.GetConfig().Rules.Disabled
+	// The loader should add JiraReference to disabled_rules by default
+	disabledRules := loader.GetConfig().Rules.Disabled
 	t.Logf("Default disabled rules: %v", disabledRules)
 
 	// Check if JiraReference is in the default disabled rules in domain
@@ -132,11 +132,11 @@ func TestDisabledOverridesEnabled(t *testing.T) {
 	}
 
 	// Now load the config file where it's both enabled and disabled
-	err = manager.LoadFromPath(configPath)
+	err = loader.LoadFromPath(configPath)
 	require.NoError(t, err)
 
 	// Get the config
-	config := manager.GetConfig()
+	config := loader.GetConfig()
 
 	// Print the full config for debugging
 	t.Logf("Enabled rules: %v", config.Rules.Enabled)

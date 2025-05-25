@@ -8,7 +8,6 @@ import (
 	"fmt"
 
 	"github.com/itiquette/gommitlint/internal/config/types"
-	"github.com/itiquette/gommitlint/internal/domain"
 )
 
 // Service provides configuration management functionality.
@@ -23,25 +22,27 @@ func NewService() (Service, error) {
 	config := NewDefaultConfig()
 
 	// Apply default disabled rules
-	defaultDisabledRules := append([]string{}, config.Rules.Disabled...)
+	// In hexagonal architecture, adapters should not depend on domain.
+	// The default disabled rules should be part of the configuration layer.
+	defaultDisabledRules := []string{
+		"jirareference", // JIRAReference rule is disabled by default as it's organization-specific
+		"commitbody",    // CommitBody rule is disabled by default as not all projects require detailed bodies
+	}
 
-	// Add rules that should be disabled by default from the central list
-	domainDefaultDisabled := domain.GetDefaultDisabledRules()
-	for ruleName := range domainDefaultDisabled {
-		// Check if the rule is explicitly enabled in the default config
-		isExplicitlyEnabled := false
+	// Merge with any existing disabled rules from the config
+	for _, rule := range config.Rules.Disabled {
+		found := false
 
-		for _, enabledRule := range config.Rules.Enabled {
-			if enabledRule == ruleName {
-				isExplicitlyEnabled = true
+		for _, defaultRule := range defaultDisabledRules {
+			if rule == defaultRule {
+				found = true
 
 				break
 			}
 		}
 
-		// Only add to disabled if not explicitly enabled
-		if !isExplicitlyEnabled {
-			defaultDisabledRules = append(defaultDisabledRules, ruleName)
+		if !found {
+			defaultDisabledRules = append(defaultDisabledRules, rule)
 		}
 	}
 
@@ -107,12 +108,11 @@ func (s Service) GetAdapter() *Adapter {
 
 // NewDefaultConfig creates a default configuration.
 func NewDefaultConfig() types.Config {
-	// Get default disabled rules from domain
-	defaultDisabledRules := domain.GetDefaultDisabledRules()
-	disabledRules := make([]string, 0, len(defaultDisabledRules))
-
-	for rule := range defaultDisabledRules {
-		disabledRules = append(disabledRules, rule)
+	// Default disabled rules - defined here instead of importing from domain
+	// to maintain proper hexagonal architecture boundaries
+	disabledRules := []string{
+		"jirareference", // JIRAReference rule is disabled by default as it's organization-specific
+		"commitbody",    // CommitBody rule is disabled by default as not all projects require detailed bodies
 	}
 
 	config := types.Config{
@@ -167,29 +167,8 @@ func NewDefaultConfig() types.Config {
 		},
 	}
 
-	// Apply default disabled rules from domain
-	domainDisabledRules := []string{}
-
-	domainDefaultDisabled := domain.GetDefaultDisabledRules()
-	for ruleName := range domainDefaultDisabled {
-		// Check if the rule is explicitly enabled
-		isEnabled := false
-
-		for _, enabledRule := range config.Rules.Enabled {
-			if enabledRule == ruleName {
-				isEnabled = true
-
-				break
-			}
-		}
-
-		// Only add to disabled if not explicitly enabled
-		if !isEnabled {
-			domainDisabledRules = append(domainDisabledRules, ruleName)
-		}
-	}
-
-	config.Rules.Disabled = domainDisabledRules
+	// The disabled rules have already been set above
+	// No need to apply them again
 
 	return config
 }

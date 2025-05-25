@@ -13,6 +13,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/itiquette/gommitlint/internal/application/options"
 	"github.com/itiquette/gommitlint/internal/common/contextkeys"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
@@ -116,8 +117,8 @@ func InitLogger(ctx context.Context, cmd *cobra.Command, withCaller bool, output
 	logger = loggerContext.Logger()
 
 	// Add CLI options to context
-	cliOptions := CLIOptionsFromContext(ctx)
-	cliOpts := SimpleCLIOptions{
+	cliOptions := options.CLIOptionsFromContext(ctx)
+	cliOpts := options.CLIOptions{
 		Verbosity:           level.String(),
 		Quiet:               cliOptions.GetQuiet(),
 		VerbosityWithCaller: withCaller,
@@ -145,44 +146,7 @@ func InitLogger(ctx context.Context, cmd *cobra.Command, withCaller bool, output
 //	logger.Info().Msg("This is an info message")
 func Logger(ctx context.Context) *zerolog.Logger {
 	// Get from zerolog context
-	logger := zerolog.Ctx(ctx)
-	if logger.GetLevel() != zerolog.Disabled {
-		return logger
-	}
-
-	// Return a default logger if none found
-	return defaultLogger()
-}
-
-// defaultLogger returns a default zerolog logger.
-func defaultLogger() *zerolog.Logger {
-	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr}).
-		Level(zerolog.InfoLevel).
-		With().
-		Timestamp().
-		Logger()
-
-	return &logger
-}
-
-// InitBasicLogger initializes and returns a zerolog.Logger configured with sensible defaults.
-// This is useful when you need a logger before command-line flags are parsed.
-//
-// Returns:
-//   - zerolog.Logger: A basic logger instance
-//
-// The logger is set up with a console writer for human-readable output and INFO level logging.
-func InitBasicLogger() zerolog.Logger {
-	writer := zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339}
-
-	// Configure logger with timestamp and INFO level
-	logger := zerolog.New(writer).
-		Level(zerolog.InfoLevel).
-		With().
-		Timestamp().
-		Logger()
-
-	return logger
+	return zerolog.Ctx(ctx)
 }
 
 // getLogLevel determines the log level based on command flags.
@@ -261,31 +225,3 @@ func WithLogger(ctx context.Context, logger *zerolog.Logger) context.Context {
 }
 
 // For test logger implementations, see the testutils/logger package
-
-// SimpleCLIOptions is a basic implementation of CLIOptions.
-type SimpleCLIOptions struct {
-	Verbosity           string
-	Quiet               bool
-	VerbosityWithCaller bool
-	OutputFormat        string
-}
-
-// GetVerbosity implements CLIOptions.GetVerbosity.
-func (o SimpleCLIOptions) GetVerbosity() string {
-	return o.Verbosity
-}
-
-// GetQuiet implements CLIOptions.GetQuiet.
-func (o SimpleCLIOptions) GetQuiet() bool {
-	return o.Quiet
-}
-
-// GetVerbosityWithCaller implements CLIOptions.GetVerbosityWithCaller.
-func (o SimpleCLIOptions) GetVerbosityWithCaller() bool {
-	return o.VerbosityWithCaller
-}
-
-// GetOutputFormat implements CLIOptions.GetOutputFormat.
-func (o SimpleCLIOptions) GetOutputFormat() string {
-	return o.OutputFormat
-}

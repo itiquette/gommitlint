@@ -11,8 +11,6 @@ import (
 	"os"
 
 	"github.com/itiquette/gommitlint/internal/adapters/outgoing/log"
-	"github.com/itiquette/gommitlint/internal/application/report"
-	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/spf13/cobra"
 )
 
@@ -74,13 +72,14 @@ Examples:
 func runNewValidation(ctx context.Context, cmd *cobra.Command) (int, error) {
 	logger := log.Logger(ctx)
 	logger.Trace().Msg("Entering runNewValidation")
-	// Create parameters object to encapsulate all inputs
-	params := NewValidationParameters(cmd)
 
-	// Get composition root from context
-	root := getCompositionRoot(ctx)
-	if root == nil {
-		return 1, errors.New("composition root not found in context")
+	// Create parameters object to encapsulate all inputs
+	params := NewValidateParams(cmd)
+
+	// Get dependency container from context
+	container := getContainer(ctx)
+	if container == nil {
+		return 1, errors.New("dependency container not found in context")
 	}
 
 	// Get repository path
@@ -95,43 +94,52 @@ func runNewValidation(ctx context.Context, cmd *cobra.Command) (int, error) {
 		}
 	}
 
-	// Create validation service using composition root
-	service, err := root.GetCreateValidationService()(ctx, repoPath)
-	if err != nil {
-		return 1, fmt.Errorf("failed to create validation service: %w", err)
-	}
-
-	// We'll directly validate HEAD instead of using options
-	// No need to convert parameters
-
-	// Try to get a specific commit directly
-	commitResult, err := service.ValidateCommit(ctx, "HEAD", params.SkipMergeCommits)
-	if err != nil {
-		return 1, fmt.Errorf("failed to validate HEAD commit: %w", err)
-	}
-
-	// Create a validation results object with this commit
-	results := domain.NewValidationResults()
-	results = results.WithResult(commitResult)
-
-	// Create formatter and report generator
+	// Create formatter based on parameters
 	formatter := params.CreateFormatter()
-	reportOptions := params.ToReportOptions()
-	// Create a logger adapter that implements outgoing.Logger
-	zerologInstance := log.Logger(ctx)
-	loggerAdapter := log.NewSimpleAdapter(*zerologInstance)
-	reportGenerator := report.NewGenerator(reportOptions, formatter, loggerAdapter)
 
-	// Generate report using the domain interface
-	err = reportGenerator.GenerateReport(ctx, results)
+	// Create validation orchestrator using dependency container
+	orchestrator, err := container.CreateValidationOrchestrator(ctx, repoPath, formatter)
 	if err != nil {
-		return 1, fmt.Errorf("failed to generate report: %w", err)
+		return 1, fmt.Errorf("failed to create validation orchestrator: %w", err)
 	}
 
-	// Return success if all rules passed, validation failure code otherwise
-	if results.AllPassed() {
-		return 0, nil
+	// Get report options from parameters
+	reportOptions := params.ToReportOptions()
+
+	// Determine what to validate
+	targetType, target1, target2, err := params.GetValidationTarget()
+	if err != nil {
+		return 1, err
 	}
 
-	return 2, nil
+	// Perform validation based on target type
+	switch targetType {
+	case "message":
+		// Read message from file
+		message, err := os.ReadFile(target1)
+		if err != nil {
+			return 1, fmt.Errorf("failed to read message file: %w", err)
+		}
+
+		return orchestrator.ValidateMessageAndReport(ctx, string(message), reportOptions)
+
+	case "range":
+		// Validate commit range
+		return orchestrator.ValidateRangeAndReport(ctx, target1, target2, params.SkipMergeCommits, reportOptions)
+
+	case "commit":
+		// Validate single commit
+		return orchestrator.ValidateAndReport(ctx, target1, params.SkipMergeCommits, reportOptions)
+
+	case "count":
+		// For commit count, we need to convert to a range
+		// This is a limitation of the current interface - we'd need to extend the orchestrator
+		// to support commit count directly. For now, just validate HEAD.
+		logger.Warn().Msg("Commit count validation not fully implemented, validating HEAD instead")
+
+		return orchestrator.ValidateAndReport(ctx, "HEAD", params.SkipMergeCommits, reportOptions)
+
+	default:
+		return 1, fmt.Errorf("unknown validation target type: %s", targetType)
+	}
 }

@@ -34,6 +34,7 @@ package contextx
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/itiquette/gommitlint/internal/common/config"
 	"github.com/itiquette/gommitlint/internal/common/contextkeys"
@@ -73,8 +74,7 @@ func Value[T any](ctx context.Context, key contextkeys.ContextKey) (T, bool) {
 	return result, ok
 }
 
-// GetLogger retrieves a logger from the context.
-// If no logger is found, it returns a no-op logger.
+// GetLogger retrieves the logger from the context.
 //
 // Example:
 //
@@ -86,7 +86,8 @@ func GetLogger(ctx context.Context) outgoing.Logger {
 		return logger
 	}
 
-	return NewNoOpLogger()
+	fmt.Println("fatal error, no logger found, exiting")
+	panic(1)
 }
 
 // WithLogger adds a logger to the context.

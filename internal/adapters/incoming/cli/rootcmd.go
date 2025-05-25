@@ -8,49 +8,32 @@ import (
 	"os"
 
 	"github.com/itiquette/gommitlint/internal/adapters/outgoing/log"
+	"github.com/itiquette/gommitlint/internal/application/options"
 	"github.com/itiquette/gommitlint/internal/common/contextx"
-	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/ports/incoming"
+	"github.com/itiquette/gommitlint/internal/ports/outgoing"
 	"github.com/spf13/cobra"
 )
 
-// contextKey is a custom type for context keys to avoid collisions.
-type contextKey string
+// containerKey is the context key for the dependency injection container.
+type containerKey struct{}
 
-// Context keys.
-const (
-	cliDependenciesKey contextKey = "cli_dependencies"
-)
-
-// compositionRootKey is the context key for the composition root.
-type compositionRootKey struct{}
-
-// CompositionRoot defines the interface for the composition root.
-type CompositionRoot interface {
+// DependencyContainer defines the interface for the dependency injection container.
+type DependencyContainer interface {
 	GetCreateValidationService() func(context.Context, string) (incoming.ValidationService, error)
+	CreateValidationOrchestrator(ctx context.Context, repoPath string, formatter outgoing.ResultFormatter) (incoming.ValidationOrchestrator, error)
 }
 
-// getCompositionRoot retrieves the composition root from context.
-func getCompositionRoot(ctx context.Context) CompositionRoot {
-	if root, ok := ctx.Value(compositionRootKey{}).(CompositionRoot); ok {
-		return root
+// getContainer retrieves the dependency injection container from context.
+func getContainer(ctx context.Context) DependencyContainer {
+	if container, ok := ctx.Value(containerKey{}).(DependencyContainer); ok {
+		return container
 	}
 
 	return nil
 }
 
-// AppDependencies holds dependencies that can be injected into the application.
-// It uses domain interfaces instead of concrete implementations to follow
-// the Dependency Inversion Principle.
-type AppDependencies struct {
-	// ConfigManager provides access to configuration in a more structured way
-	ConfigManager *config.Manager
-}
-
-func newRootCommand(ctx context.Context, versionString string, deps *AppDependencies) *cobra.Command {
-	// Store dependencies in the context
-	ctx = context.WithValue(ctx, cliDependenciesKey, deps)
-
+func newRootCommand(ctx context.Context, versionString string) *cobra.Command {
 	// Create root command
 	var rootCmd = &cobra.Command{
 		Use:     "gommitlint",
@@ -59,8 +42,8 @@ func newRootCommand(ctx context.Context, versionString string, deps *AppDependen
 		Long:    `A tool to validate git commit messages against configurable rules.`,
 		// Set the context for the command
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			// Initialize logger with command flags
-			ctx = log.InitLoggerContext(ctx, cmd)
+			cliOptions := options.CLIOptionsFromContext(ctx)
+			ctx = log.InitLogger(ctx, cmd, cliOptions.GetVerbosityWithCaller(), cliOptions.GetOutputFormat())
 
 			// Propagate the context to all commands
 			cmd.SetContext(ctx)
@@ -86,42 +69,16 @@ func newRootCommand(ctx context.Context, versionString string, deps *AppDependen
 	return rootCmd
 }
 
-// ExecuteWithContext executes the root command with the provided context, version information, and composition root.
-// The context should be created with context.Background() ONLY in main.go.
-func ExecuteWithContext(ctx context.Context, version, commitSHA, buildDate string, root interface{}) {
-	// Initialize basic logger
-	logger := log.InitBasicLogger()
-	ctx = logger.WithContext(ctx)
+// Execute executes the root command with the provided context, version information, and dependency container.
+func Execute(ctx context.Context, version, commitSHA, buildDate string, container DependencyContainer) {
+	// Store container in context for later use
+	ctx = context.WithValue(ctx, containerKey{}, container)
 
-	// Store root in context for later use
-	ctx = context.WithValue(ctx, compositionRootKey{}, root)
-
-	// Use the ExecuteWithDependencies function with the context
-	ExecuteWithDependencies(
-		ctx,
-		version,
-		commitSHA,
-		buildDate,
-		nil, // No longer passing dependencies here
-	)
-}
-
-// ExecuteWithDependencies executes the root command with explicit dependencies.
-// This allows for better testability by injecting mock dependencies.
-// It follows the Dependency Inversion Principle by accepting domain interfaces
-// rather than concrete implementations.
-func ExecuteWithDependencies(
-	ctx context.Context,
-	version,
-	commitSHA,
-	buildDate string,
-	deps *AppDependencies,
-) {
-	// Create a logger
+	// Create version string
 	versionString := version + " (Commit SHA: " + commitSHA + ", Build date: " + buildDate + ")"
 
-	// Create and execute root command with dependencies
-	err := newRootCommand(ctx, versionString, deps).Execute()
+	// Create and execute root command
+	err := newRootCommand(ctx, versionString).Execute()
 
 	HandleError(ctx, err)
 }

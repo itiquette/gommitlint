@@ -676,7 +676,7 @@ func setupRulesInContext(
 ) (context.Context, incoming.ValidationService) {
 	// Get logger from context and adapt it
 	logger := log.Logger(ctx)
-	loggerAdapter := log.NewSimpleAdapter(*logger)
+	loggerAdapter := log.NewAdapter(*logger)
 
 	// Create a new validation service with the context
 	validationService, err := integrationtest.CreateValidationService(ctx, loggerAdapter, repoPath)

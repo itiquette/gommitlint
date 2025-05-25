@@ -84,9 +84,6 @@ func NewHookRemovalParameters(cmd *cobra.Command, repoPath string, skipConfirm b
 	}
 }
 
-// Note: WithHookType and WithSkipConfirm methods have been moved to internal/testutils/cli
-// to separate test-only code from implementation.
-
 // FindHookPath determines the hook file path based on the parameters.
 // Applies security best practices for safe path handling using fsutils.
 func (p HookRemovalParameters) FindHookPath() (string, error) {

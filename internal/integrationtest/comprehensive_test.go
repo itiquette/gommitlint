@@ -106,9 +106,9 @@ gommitlint:
 
 	// Create validation service using composition root
 	logger := log.Logger(ctx)
-	loggerAdapter := log.NewSimpleAdapter(*logger)
-	root := composition.NewRoot(loggerAdapter, configService.GetAdapter().GetConfig())
-	service, err := root.CreateValidationService(ctx, repoPath)
+	loggerAdapter := log.NewAdapter(*logger)
+	container := composition.NewContainer(loggerAdapter, configService.GetAdapter().GetConfig())
+	service, err := container.CreateValidationService(ctx, repoPath)
 	require.NoError(t, err)
 
 	validationService := service

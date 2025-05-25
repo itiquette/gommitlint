@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/domain"
@@ -65,12 +64,8 @@ func (g Generator) Options() Options {
 var _ outgoing.ReportGenerator = Generator{}
 
 // NewGenerator creates a new report generator.
+// The writer must be provided in options - no default will be set.
 func NewGenerator(options Options, formatter outgoing.ResultFormatter, logger outgoing.Logger) Generator {
-	// Ensure writer is initialized with a default if not provided
-	if options.Writer == nil {
-		options.Writer = os.Stdout
-	}
-
 	return Generator{
 		options:   options,
 		formatter: formatter,
@@ -127,14 +122,9 @@ func writeReport(writer io.Writer, content string) error {
 }
 
 // handleFailure is a pure function that returns appropriate error for failed validations.
-func handleFailure(results domain.ValidationResults, writer io.Writer) error {
-	// If the validation failed and this is the final output, write an error code
-	if !results.AllPassed() && writer == os.Stdout {
-		// This is a convention to indicate failure to the shell
-		return fmt.Errorf("validation failed: %d of %d commits failed",
-			results.TotalCommits-results.PassedCommits, results.TotalCommits)
-	}
-
+func handleFailure(_ domain.ValidationResults, _ io.Writer) error {
+	// The application layer doesn't decide about exit codes or stdout handling
+	// That's the responsibility of the CLI adapter
 	return nil
 }
 

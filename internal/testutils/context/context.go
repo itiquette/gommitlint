@@ -8,13 +8,23 @@ package context
 import (
 	"context"
 
+	"github.com/itiquette/gommitlint/internal/adapters/outgoing/log"
 	"github.com/itiquette/gommitlint/internal/common/contextkeys"
+	"github.com/itiquette/gommitlint/internal/testutils/logger"
 )
 
 // CreateTestContext creates a new context for testing.
 // This is the only place in test code where context.Background() should be called.
 func CreateTestContext() context.Context {
-	return context.Background()
+	ctx := context.Background()
+	zerologLogger := logger.InitBasicLogger()
+	// Wrap the zerolog logger in an adapter that implements outgoing.Logger
+	loggerAdapter := log.NewAdapter(zerologLogger)
+	ctx = context.WithValue(ctx, contextkeys.LoggerKey, loggerAdapter)
+	// Also set the zerolog context for compatibility
+	ctx = zerologLogger.WithContext(ctx)
+
+	return ctx
 }
 
 // MergeContext combines two contexts, with values from the second context
