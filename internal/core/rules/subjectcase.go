@@ -154,7 +154,7 @@ func (r SubjectCaseRule) Validate(_ context.Context, commit domain.CommitInfo) [
 				"SubjectCase",
 				"Unable to extract a word to validate case",
 				"Ensure your commit message starts with an alphabetic character",
-			).WithContext("subject", textToCheck),
+			).WithContextMap(map[string]string{"subject": textToCheck}),
 		}
 	}
 

@@ -65,14 +65,14 @@ func (l Level) ToZerologLevel() zerolog.Level {
 //
 // The logger is set up with a console writer for human-readable output unless json is specified.
 // If the log level is set to trace, it includes the caller information in the log output.
-func InitLogger(ctx context.Context, cmd *cobra.Command, withCaller bool, outputFormat string) context.Context {
+func InitLogger(ctx context.Context, cmd *cobra.Command, cliOptions options.CLIOptions) context.Context {
 	level := getLogLevel(cmd)
 
 	// Set global log level
 	zerolog.SetGlobalLevel(level)
 
 	var writer io.Writer
-	if outputFormat == "json" {
+	if cliOptions.GetOutputFormat() == "json" {
 		writer = os.Stdout
 		zerolog.TimeFieldFormat = time.RFC3339
 	} else {
@@ -106,7 +106,7 @@ func InitLogger(ctx context.Context, cmd *cobra.Command, withCaller bool, output
 	// Configure logger based on settings
 	loggerContext := zerolog.New(writer).Level(level).With()
 
-	if withCaller {
+	if cliOptions.GetVerbosityWithCaller() {
 		loggerContext = loggerContext.Caller()
 	}
 
@@ -116,15 +116,14 @@ func InitLogger(ctx context.Context, cmd *cobra.Command, withCaller bool, output
 	// Build the logger
 	logger = loggerContext.Logger()
 
-	// Add CLI options to context
-	cliOptions := options.CLIOptionsFromContext(ctx)
-	cliOpts := options.CLIOptions{
+	// Add CLI options to context (with updated verbosity level)
+	updatedCLIOptions := options.CLIOptions{
 		Verbosity:           level.String(),
 		Quiet:               cliOptions.GetQuiet(),
-		VerbosityWithCaller: withCaller,
-		OutputFormat:        outputFormat,
+		VerbosityWithCaller: cliOptions.GetVerbosityWithCaller(),
+		OutputFormat:        cliOptions.GetOutputFormat(),
 	}
-	ctx = context.WithValue(ctx, contextkeys.CLIOptionsKey, cliOpts)
+	ctx = context.WithValue(ctx, contextkeys.CLIOptionsKey, updatedCLIOptions)
 
 	// Add logger to context
 	ctx = logger.WithContext(ctx)
@@ -173,28 +172,6 @@ func getLogLevel(cmd *cobra.Command) zerolog.Level {
 	return Level(level).ToZerologLevel()
 }
 
-// LoggerWith returns a new logger with the provided key-value pair added to its context.
-// This is useful for adding structured fields to log output.
-//
-// Parameters:
-//   - ctx: The context containing the base logger
-//   - key: The key for the field to add
-//   - value: The value for the field to add
-//
-// Returns:
-//   - *zerolog.Logger: A new logger with the field added
-//
-// Usage:
-//
-//	logger := log.LoggerWith(ctx, "user_id", userID)
-//	logger.Info().Msg("User logged in")
-func LoggerWith(ctx context.Context, key string, value interface{}) *zerolog.Logger {
-	logger := Logger(ctx)
-	newLogger := logger.With().Interface(key, value).Logger()
-
-	return &newLogger
-}
-
 // SetLogLevel sets the log level of a logger.
 // This is useful for dynamically changing the log level.
 //
@@ -209,19 +186,3 @@ func SetLogLevel(logger *zerolog.Logger, level Level) *zerolog.Logger {
 
 	return &newLogger
 }
-
-// WithLogger adds a logger to the context.
-// This is a convenience function for adding a logger to a context.
-//
-// Parameters:
-//   - ctx: The context to add the logger to
-//   - logger: The logger to add
-//
-// Returns:
-//   - context.Context: A new context with the logger added
-func WithLogger(ctx context.Context, logger *zerolog.Logger) context.Context {
-	// Add logger to context using zerolog's context mechanism
-	return logger.WithContext(ctx)
-}
-
-// For test logger implementations, see the testutils/logger package

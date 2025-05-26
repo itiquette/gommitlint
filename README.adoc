@@ -48,7 +48,7 @@ TE
 == Documentation
 
 * link:docs/usage.adoc[Usage Guide] - How to use Gommitlint
-* link:docs/CONFIGURATION_GUIDE.md[Configuration Guide] - How to configure Gommitlint
+* link:.gommitlint-full-example.yaml[Configuration Example] - Full configuration with all options
 * link:docs/ARCHITECTURE.md[Architecture Overview] - Understand the design
 
 == Getting Started
@@ -57,23 +57,23 @@ TODO
 // 2. The link:INSTALL.adoc[Installation Guide] will get you up and running.
 
   gommitlint:
-    subject:
-      case: "sentence"           # Options: sentence, lower, upper
-      max_length: 72             # Maximum length of subject line
-      require_imperative: true   # Whether subjects should use imperative mood
-      disallowed_suffixes:       # List of disallowed ending characters
-        - "."
-        - ","
-        - ";"
+    message:
+      subject:
+        max_length: 72           # Maximum length of subject line
+        imperative: true         # Whether subjects should use imperative mood
+        case: "sentence"         # Options: sentence, lower, upper, title
+        forbid_endings:          # List of forbidden subject line endings
+          - "."
+          - ","
+          - ";"
 
-    body:
-      required: false            # Whether a commit body is required
-      min_length: 10             # Minimum body length
-      minimum_lines: 3           # Minimum number of lines in body
-      allow_sign_off_only: true  # Whether body can only contain sign-off info
+      body:
+        min_length: 10           # Minimum body length
+        min_lines: 3             # Minimum number of lines in body
+        allow_signoff_only: true # Whether body can only contain sign-off info
+        require_sign_off: false  # Whether sign-off is required
 
     conventional:
-      required: true             # Whether conventional commits are required
       require_scope: false       # Whether scope is required in conventional format
       types:                     # Allowed commit types
         - "feat"
@@ -88,7 +88,6 @@ TODO
         - "chore"
         - "revert"
       scopes: []                 # Allowed scopes (empty means any scope is allowed)
-      allow_breaking_changes: true # Whether breaking changes are allowed
       max_description_length: 72 # Maximum length of description
 
     rules:

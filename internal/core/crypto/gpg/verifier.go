@@ -37,24 +37,24 @@ type Verifier struct {
 }
 
 // NewVerifier creates a new GPG verifier with the given security settings.
-func NewVerifier(settings SecuritySettings) *Verifier {
-	return &Verifier{
+func NewVerifier(settings SecuritySettings) Verifier {
+	return Verifier{
 		settings: settings,
 	}
 }
 
 // NewDefaultVerifier creates a new GPG verifier with default security settings.
-func NewDefaultVerifier() *Verifier {
+func NewDefaultVerifier() Verifier {
 	return NewVerifier(DefaultSecuritySettings())
 }
 
 // CanVerify checks if this verifier can handle the given signature.
-func (v *Verifier) CanVerify(signature crypto.Signature) bool {
+func (v Verifier) CanVerify(signature crypto.Signature) bool {
 	return signature.Type() == crypto.SignatureTypeGPG
 }
 
 // Verify checks if the GPG signature is valid for the given data.
-func (v *Verifier) Verify(signature crypto.Signature, data []byte, keyDir string) crypto.VerificationResult {
+func (v Verifier) Verify(signature crypto.Signature, data []byte, keyDir string) crypto.VerificationResult {
 	if signature.IsEmpty() {
 		return crypto.NewVerificationResult(
 			crypto.VerificationStatusFailed,

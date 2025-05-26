@@ -33,7 +33,7 @@ func TestGetHelp(t *testing.T) {
 
 func TestFormatAsText(t *testing.T) {
 	err := New("TestRule", ErrInvalidFormat, "Test message")
-	err = err.WithContext("key1", "value1")
+	err = err.WithContextMap(map[string]string{"key1": "value1"})
 	err = err.WithHelp("This is a help message")
 
 	// Test non-verbose format (level 0)
@@ -52,7 +52,7 @@ func TestFormatAsText(t *testing.T) {
 
 func TestFormatAsJSON(t *testing.T) {
 	err := New("TestRule", ErrInvalidFormat, "Test message")
-	err = err.WithContext("key1", "value1")
+	err = err.WithContextMap(map[string]string{"key1": "value1"})
 	err = err.WithHelp("This is a help message")
 
 	// Format as JSON using JSONFormatter
@@ -78,7 +78,7 @@ func TestFormatAsJSON(t *testing.T) {
 
 func TestFormatAsMarkdown(t *testing.T) {
 	err := New("TestRule", ErrInvalidFormat, "Test message")
-	err = err.WithContext("key1", "value1")
+	err = err.WithContextMap(map[string]string{"key1": "value1"})
 	err = err.WithHelp("This is a help message")
 
 	// Format as Markdown using MarkdownFormatter
@@ -106,7 +106,7 @@ func TestNewFormatValidationError(t *testing.T) {
 
 func TestFormatterInterface(t *testing.T) {
 	err := New("TestRule", ErrInvalidFormat, "Test message")
-	err = err.WithContext("key1", "value1")
+	err = err.WithContextMap(map[string]string{"key1": "value1"})
 	err = err.WithHelp("This is a help message")
 
 	// Test text formatter

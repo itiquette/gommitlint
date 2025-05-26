@@ -21,13 +21,13 @@ type Config struct {
 // RegistryEngine is responsible for running validation rules against commits.
 // This implementation uses RuleRegistry directly and follows dependency injection principles.
 type RegistryEngine struct {
-	registry      *domain.RuleRegistry
+	registry      domain.RuleRegistry
 	enabledRules  []string
 	disabledRules []string
 }
 
 // CreateEngine creates a validation engine with explicit dependencies.
-func CreateEngine(config Config, _ domain.CommitAnalyzer, ruleRegistry *domain.RuleRegistry) domain.ValidationEngine {
+func CreateEngine(config Config, _ domain.CommitAnalyzer, ruleRegistry domain.RuleRegistry) domain.ValidationEngine {
 	return &RegistryEngine{
 		registry:      ruleRegistry,
 		enabledRules:  config.EnabledRules,

@@ -68,7 +68,7 @@ func (r SubjectLengthRule) Validate(_ context.Context, commit domain.CommitInfo)
 		fmt.Sprintf("Commit subject is %d characters too long", len(subject)-r.maxLength),
 		len(subject),
 		r.maxLength,
-	).WithContext("subject", subject)
+	).WithContextMap(map[string]string{"subject": subject})
 
 	return []appErrors.ValidationError{err}
 }

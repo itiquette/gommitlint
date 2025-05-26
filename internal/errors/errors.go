@@ -134,24 +134,21 @@ func (e ValidationError) Error() string {
 	return e.Message
 }
 
-// WithContext adds context information to a ValidationError.
-func (e ValidationError) WithContext(key, value string) ValidationError {
+// WithContextMap adds context values to a ValidationError.
+func (e ValidationError) WithContextMap(ctx map[string]string) ValidationError {
 	result := e
 
-	// Create a new context map if needed
-	if result.Context == nil {
-		result.Context = make(map[string]string)
-	} else {
-		// Copy the existing map
-		newContext := make(map[string]string, len(result.Context)+1)
-		for k, v := range result.Context {
-			newContext[k] = v
-		}
-
-		result.Context = newContext
+	// Copy existing context plus new values
+	newContext := make(map[string]string, len(result.Context)+len(ctx))
+	for k, v := range result.Context {
+		newContext[k] = v
 	}
 
-	result.Context[key] = value
+	for k, v := range ctx {
+		newContext[k] = v
+	}
+
+	result.Context = newContext
 
 	return result
 }
@@ -169,32 +166,6 @@ func (e ValidationError) WithHelp(help string) ValidationError {
 func (e ValidationError) WithUserMessage(format string, args ...interface{}) ValidationError {
 	result := e
 	result.Message = fmt.Sprintf(format, args...)
-
-	return result
-}
-
-// WithContextMap adds multiple context values at once to a ValidationError.
-// This simplifies adding multiple context entries and maintains immutability.
-func (e ValidationError) WithContextMap(ctx map[string]string) ValidationError {
-	result := e
-
-	// Create new context map if needed
-	if result.Context == nil {
-		result.Context = make(map[string]string, len(ctx))
-	} else {
-		// Copy existing context
-		newContext := make(map[string]string, len(result.Context)+len(ctx))
-		for k, v := range result.Context {
-			newContext[k] = v
-		}
-
-		result.Context = newContext
-	}
-
-	// Add new context values
-	for k, v := range ctx {
-		result.Context[k] = v
-	}
 
 	return result
 }

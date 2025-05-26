@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/itiquette/gommitlint/internal/common/contextx"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/errors"
 	testcontext "github.com/itiquette/gommitlint/internal/testutils/context"
@@ -105,11 +104,11 @@ func TestRuleRegistry_InitializeAndGetActiveRules(t *testing.T) {
 				factory := func(_ context.Context) domain.Rule {
 					return TestRule{ruleName: ruleName, result: nil}
 				}
-				registry.RegisterWithContext(ctx, name, factory)
+				registry = registry.Register(name, factory)
 			}
 
 			// Initialize rules
-			registry.InitializeRules(ctx)
+			registry = registry.WithInitializedRules(ctx)
 
 			// Get active rules
 			activeRules := registry.GetActiveRules(ctx, testCase.enabledRules, testCase.disabledRules)
@@ -166,11 +165,11 @@ func TestRuleRegistry_CreationDeduplication(t *testing.T) {
 
 			return TestRule{ruleName: name, result: nil}
 		}
-		registry.RegisterWithContext(ctx, name, factory)
+		registry = registry.Register(name, factory)
 	}
 
 	// Initialize rules once
-	registry.InitializeRules(ctx)
+	registry = registry.WithInitializedRules(ctx)
 
 	// Verify each rule was created exactly once
 	for _, name := range ruleNames {
@@ -188,40 +187,4 @@ func TestRuleRegistry_CreationDeduplication(t *testing.T) {
 		require.Equal(t, 1, creationCount[name],
 			"Rule %s should not be recreated when filtering active rules", name)
 	}
-}
-
-// TestRuleRegistry_WithContext tests that the context is correctly passed to the rule.
-func TestRuleRegistry_WithContext(t *testing.T) {
-	// Create a test context with a logger
-	ctx := testcontext.CreateTestContext()
-
-	// Create a registry
-	registry := domain.NewRuleRegistry()
-
-	// Track whether context was correctly passed
-	contextReceived := false
-
-	// Register a rule factory that checks the context
-	registry.RegisterWithContext(ctx, "ContextTestRule", func(ruleCtx context.Context) domain.Rule {
-		// Verify that the context has a logger
-		logger := contextx.GetLogger(ruleCtx)
-		if logger != nil {
-			contextReceived = true
-		}
-
-		return TestRule{ruleName: "ContextTestRule", result: nil}
-	})
-
-	// Initialize the rules
-	registry.InitializeRules(ctx)
-
-	// Verify context was correctly passed
-	require.True(t, contextReceived, "Context should be passed to rule factory")
-
-	// Get active rules
-	activeRules := registry.GetActiveRules(ctx, []string{}, []string{})
-
-	// Verify rule was returned and is active
-	require.Len(t, activeRules, 1, "One rule should be active")
-	require.Equal(t, "ContextTestRule", activeRules[0].Name(), "Rule name should match")
 }

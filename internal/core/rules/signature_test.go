@@ -18,12 +18,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/itiquette/gommitlint/internal/config"
-	"github.com/itiquette/gommitlint/internal/config/types"
 	"github.com/itiquette/gommitlint/internal/core/rules"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
-	testconfig "github.com/itiquette/gommitlint/internal/testutils/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -56,12 +53,6 @@ func createCommit(signature string) domain.CommitInfo {
 		Hash:      "test-commit",
 		Signature: signature,
 	}
-}
-
-// createContextWithConfig creates a test context with the given config modifier.
-// This uses the new recommended pattern with testconfig.CreateTestContext.
-func createContextWithConfig(configModifier func(types.Config) types.Config) context.Context {
-	return testconfig.CreateTestContext(nil, configModifier)
 }
 
 // assertNoErrors checks that validation produced no errors.
@@ -147,151 +138,6 @@ func TestSignatureRule_RequireSignature(t *testing.T) {
 				assertNoErrors(t, errors)
 			} else {
 				assertErrorMatch(t, errors, testCase.expectedCode, testCase.expectedMsg)
-			}
-		})
-	}
-}
-
-// TestSignatureRule_WithContext tests the WithContext method.
-func TestSignatureRule_WithContext(t *testing.T) {
-	tests := []struct {
-		name           string
-		signature      string
-		configModifier func(types.Config) types.Config
-		expectedValid  bool
-		expectedCode   string
-		expectedMsg    string
-	}{
-		{
-			name:      "Configuration with require_signature=false",
-			signature: "", // Missing signature which would normally fail
-			configModifier: func(cfg types.Config) types.Config {
-				result := cfg
-				result.Signing.RequireSignature = false
-
-				return result
-			},
-			expectedValid: true,
-		},
-		{
-			name:      "Configuration with require_signature=true",
-			signature: "",
-			configModifier: func(cfg types.Config) types.Config {
-				result := cfg
-				result.Signing.RequireSignature = true
-
-				return result
-			},
-			expectedValid: false,
-			expectedCode:  string(appErrors.ErrMissingSignature),
-			expectedMsg:   "must be cryptographically signed",
-		},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			// Create a commit for testing
-			commit := createCommit(testCase.signature)
-
-			// Create context with configuration
-			ctx := createContextWithConfig(testCase.configModifier)
-
-			// Apply config modifier to get the requirement setting
-			cfg := config.NewDefaultConfig()
-			if testCase.configModifier != nil {
-				cfg = testCase.configModifier(cfg)
-			}
-
-			// Create rule with proper configuration via constructor
-			configuredRule := rules.NewSignatureRule(
-				rules.WithRequireSignature(cfg.Signing.RequireSignature),
-			)
-
-			// Validate directly using the configured rule
-			errors := configuredRule.Validate(ctx, commit)
-
-			// Check for expected validation result
-			if testCase.expectedValid {
-				assertNoErrors(t, errors)
-			} else {
-				assertErrorMatch(t, errors, testCase.expectedCode, testCase.expectedMsg)
-			}
-		})
-	}
-}
-
-// TestSignatureRule_OptionConsistency tests priority between constructor options and context config.
-func TestSignatureRule_OptionConsistency(t *testing.T) {
-	tests := []struct {
-		name                   string
-		optionRequired         bool
-		configRequireSignature bool
-		signature              string
-		expectedValid          bool
-	}{
-		{
-			name:                   "Option=true, Config=true, signature missing",
-			optionRequired:         true,
-			configRequireSignature: true,
-			signature:              "",
-			expectedValid:          false,
-		},
-		{
-			name:                   "Option=false, Config=true, signature missing",
-			optionRequired:         false,
-			configRequireSignature: true,
-			signature:              "",
-			expectedValid:          true, // Option takes precedence
-		},
-		{
-			name:                   "Option=true, Config=false, signature missing",
-			optionRequired:         true,
-			configRequireSignature: false,
-			signature:              "",
-			expectedValid:          false, // Option takes precedence
-		},
-		{
-			name:                   "Option=false, Config=false, signature missing",
-			optionRequired:         false,
-			configRequireSignature: false,
-			signature:              "",
-			expectedValid:          true,
-		},
-		{
-			name:                   "Valid signature always passes",
-			optionRequired:         true,
-			configRequireSignature: true,
-			signature:              validGPGSignature,
-			expectedValid:          true,
-		},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			// Create context with configuration
-			ctx := createContextWithConfig(func(cfg types.Config) types.Config {
-				result := cfg
-				result.Signing.RequireSignature = testCase.configRequireSignature
-
-				return result
-			})
-
-			// Create a commit for testing
-			commit := createCommit(testCase.signature)
-
-			// Create rule with proper configuration via constructor
-			configuredRule := rules.NewSignatureRule(
-				rules.WithRequireSignature(testCase.optionRequired),
-			)
-
-			// Validate with the configured rule
-			errors := configuredRule.Validate(ctx, commit)
-
-			// Check for expected validation result
-			if testCase.expectedValid {
-				assertNoErrors(t, errors)
-			} else {
-				require.NotEmpty(t, errors, "Expected validation errors")
 			}
 		})
 	}

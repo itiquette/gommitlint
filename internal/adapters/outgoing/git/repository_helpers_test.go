@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/itiquette/gommitlint/internal/common/contextx"
 	testcontext "github.com/itiquette/gommitlint/internal/testutils/context"
 	testgit "github.com/itiquette/gommitlint/internal/testutils/git"
 	"github.com/stretchr/testify/require"
@@ -24,11 +25,14 @@ func TestFindGitDir(t *testing.T) {
 	// Create context
 	ctx := testcontext.CreateTestContext()
 
+	// Get logger from context
+	logger := contextx.GetLogger(ctx)
+
 	// Create temporary git repository with auto-cleanup using t.TempDir
 	_, tempDir := testgit.SetupTestRepo(t)
 
 	// Test finding git directory from the repo root
-	gitDir, err := findGitDir(ctx, tempDir)
+	gitDir, err := findGitDir(ctx, tempDir, logger)
 	require.NoError(t, err)
 	require.Equal(t, tempDir, gitDir)
 
@@ -37,12 +41,12 @@ func TestFindGitDir(t *testing.T) {
 	err = os.Mkdir(subDir, 0755)
 	require.NoError(t, err)
 
-	gitDir, err = findGitDir(ctx, subDir)
+	gitDir, err = findGitDir(ctx, subDir, logger)
 	require.NoError(t, err)
 	require.Equal(t, tempDir, gitDir)
 
 	// Test finding git directory from a non-existent path
-	_, err = findGitDir(ctx, "/path/that/does/not/exist")
+	_, err = findGitDir(ctx, "/path/that/does/not/exist", logger)
 	require.Error(t, err)
 }
 
@@ -59,6 +63,9 @@ func TestCollectCommits(t *testing.T) {
 		// Create test repository (return values unused intentionally)
 		_, _ = testgit.SetupTestRepo(t)
 
+		// Get logger from context
+		logger := contextx.GetLogger(ctx)
+
 		// Create a mock iterator function for testing
 		mockIter := testgit.NewMockCommitIter([]*object.Commit{
 			{Hash: plumbing.NewHash("hash1")},
@@ -67,7 +74,7 @@ func TestCollectCommits(t *testing.T) {
 		}, "")
 
 		// Collect commits with limit
-		commits, err := collectCommits(ctx, mockIter, 2, nil)
+		commits, err := collectCommits(ctx, mockIter, 2, nil, logger)
 
 		// Verify results
 		require.NoError(t, err)
@@ -77,6 +84,9 @@ func TestCollectCommits(t *testing.T) {
 	t.Run("Should stop at condition", func(t *testing.T) {
 		// Create test repository (return values unused intentionally)
 		_, _ = testgit.SetupTestRepo(t)
+
+		// Get logger from context
+		logger := contextx.GetLogger(ctx)
 
 		// Create test commits with distinct hashes
 		hash1 := plumbing.NewHash("aaa1111111111111111111111111111111111111")
@@ -109,7 +119,7 @@ func TestCollectCommits(t *testing.T) {
 		require.Equal(t, hash1, collectedCommits[0].Hash, "Test setup should collect only commit1")
 
 		// Now test the actual collectCommits function with a real stop condition
-		commits, err := collectCommits(ctx, testgit.NewMockCommitIter([]*object.Commit{commit1, commit2, commit3}, ""), 0, stopOnHash2)
+		commits, err := collectCommits(ctx, testgit.NewMockCommitIter([]*object.Commit{commit1, commit2, commit3}, ""), 0, stopOnHash2, logger)
 
 		// Verify results
 		require.NoError(t, err)
@@ -138,8 +148,11 @@ func TestCollectCommits(t *testing.T) {
 			{Hash: plumbing.NewHash("hash3")},
 		}, "")
 
+		// Get logger from context
+		logger := contextx.GetLogger(ctx)
+
 		// Collect commits with nil commit
-		_, err := collectCommits(ctx, mockIter, 0, nil)
+		_, err := collectCommits(ctx, mockIter, 0, nil, logger)
 
 		// Verify results
 		require.Error(t, err)

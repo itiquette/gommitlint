@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/itiquette/gommitlint/internal/adapters/outgoing/log"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/ports/outgoing"
 )
@@ -49,14 +48,11 @@ func (f GitLabCIFormatter) WithShowHelp(showHelp bool) GitLabCIFormatter {
 }
 
 // Format formats validation results for GitLab CI output.
-func (f GitLabCIFormatter) Format(ctx context.Context, results interface{}) string {
+func (f GitLabCIFormatter) Format(_ context.Context, results interface{}) string {
 	validationResults, ok := results.(domain.ValidationResults)
 	if !ok {
 		return "Error: invalid results type"
 	}
-
-	logger := log.Logger(ctx)
-	logger.Trace().Bool("verbose", f.verbose).Bool("show_help", f.showHelp).Int("total_commits", validationResults.TotalCommits).Msg("Entering GitLabCIFormatter.Format")
 
 	var builder strings.Builder
 

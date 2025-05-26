@@ -9,7 +9,6 @@ import (
 	"maps"
 	"time"
 
-	"github.com/itiquette/gommitlint/internal/adapters/outgoing/log"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/errors"
 	"github.com/itiquette/gommitlint/internal/ports/outgoing"
@@ -70,14 +69,12 @@ type ValidationResultsOutput struct {
 }
 
 // Format formats validation results as JSON.
-func (JSONFormatter) Format(ctx context.Context, results interface{}) string {
+func (JSONFormatter) Format(_ context.Context, results interface{}) string {
 	validationResults, ok := results.(domain.ValidationResults)
 	if !ok {
 		return `{"error": "invalid results type"}`
 	}
 
-	logger := log.Logger(ctx)
-	logger.Trace().Int("total_commits", validationResults.TotalCommits).Int("passed_commits", validationResults.PassedCommits).Msg("Entering JSONFormatter.Format")
 	// Create the initial report structure with proper initialization
 	report := ValidationResultsOutput{
 		Timestamp:     time.Now().Format(time.RFC3339),

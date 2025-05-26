@@ -13,6 +13,7 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/config/types"
 	"github.com/itiquette/gommitlint/internal/domain"
+	internalErrors "github.com/itiquette/gommitlint/internal/errors"
 )
 
 // Options contains options for validation.
@@ -66,32 +67,41 @@ func NewService(deps ServiceDependencies, cfg types.Config) Service {
 	}
 }
 
-// WithDependencies returns a new Service with the specified dependencies.
-func (s Service) WithDependencies(deps ServiceDependencies) Service {
-	return Service{
-		dependencies: deps,
-		config:       s.config,
-	}
-}
-
-// WithConfig returns a new Service with the specified configuration.
-func (s Service) WithConfig(cfg types.Config) Service {
-	return Service{
-		dependencies: s.dependencies,
-		config:       cfg,
-	}
-}
-
 // ValidateCommit validates a single commit.
-func (s Service) ValidateCommit(ctx context.Context, hash string) (domain.CommitResult, error) {
+func (s Service) ValidateCommit(ctx context.Context, hash string, skipMergeCommits bool) (domain.CommitResult, error) {
 	// Get the commit from the git repository
 	commit, err := s.dependencies.CommitService.GetCommit(ctx, hash)
 	if err != nil {
 		return domain.CommitResult{}, fmt.Errorf("failed to get commit: %w", err)
 	}
 
+	// Skip merge commits if requested
+	if skipMergeCommits && commit.IsMergeCommit {
+		return domain.CommitResult{
+			CommitInfo:   commit,
+			RuleResults:  []domain.RuleResult{},
+			RuleErrorMap: make(map[string][]internalErrors.ValidationError),
+		}, nil
+	}
+
 	// Validate the commit
 	return s.dependencies.Engine.ValidateCommit(ctx, commit), nil
+}
+
+// ValidateCommits validates multiple commits by their hashes.
+func (s Service) ValidateCommits(ctx context.Context, commitHashes []string, skipMergeCommits bool) (domain.ValidationResults, error) {
+	allResults := domain.NewValidationResults()
+
+	for _, hash := range commitHashes {
+		result, err := s.ValidateCommit(ctx, hash, skipMergeCommits)
+		if err != nil {
+			return allResults, err
+		}
+
+		allResults = allResults.WithResult(result)
+	}
+
+	return allResults, nil
 }
 
 // ValidateHeadCommits validates the specified number of commits from HEAD.
@@ -166,7 +176,7 @@ func (s Service) ValidateWithOptions(ctx context.Context, opts Options) (domain.
 
 	// Validate specific commit
 	if opts.CommitHash != "" {
-		result, err := s.ValidateCommit(ctx, opts.CommitHash)
+		result, err := s.ValidateCommit(ctx, opts.CommitHash, opts.SkipMergeCommits)
 		if err != nil {
 			return domain.NewValidationResults(), err
 		}
@@ -185,7 +195,7 @@ func (s Service) ValidateWithOptions(ctx context.Context, opts Options) (domain.
 	}
 
 	// Default to validating the HEAD commit
-	result, err := s.ValidateCommit(ctx, "HEAD")
+	result, err := s.ValidateCommit(ctx, "HEAD", opts.SkipMergeCommits)
 	if err != nil {
 		return domain.NewValidationResults(), err
 	}

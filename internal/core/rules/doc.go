@@ -14,7 +14,7 @@ with value semantics, focusing on validating specific aspects of commit messages
 The rules package follows these design principles:
 
   - Value Semantics: All rules use value receivers and immutable data structures
-  - Context-Based Configuration: Rules retrieve configuration from context
+  - Explicit Dependencies: Rules receive configuration through constructors
   - Functional Options: Rules use the functional options pattern for initialization
   - Pure Functions: Validation logic is side-effect free
   - Consistent Pattern: All rules follow the same structural pattern
@@ -24,13 +24,13 @@ The rules package follows these design principles:
 All rules share these common patterns:
 
  1. Simple Structure:
-    Each rule has a simple struct with a name field.
+    Each rule has a simple struct with a name field and configuration.
 
  2. Functional Options:
-    Rules are configured using functional options pattern when needed.
+    Rules are configured using functional options pattern for initialization.
 
- 3. Configuration Access:
-    Rules retrieve configuration from context using contextx.GetConfig(ctx).
+ 3. Explicit Dependencies:
+    Configuration is injected through constructors, not retrieved from context.
 
  4. Validation Interface:
     All rules implement the Validate method that returns []errors.ValidationError.
@@ -40,22 +40,48 @@ All rules share these common patterns:
 To add a new rule:
 
 1. Create a new file named after your rule (e.g., myfeature.go)
-2. Define a struct with a name field
-3. Implement the Name() and Validate() methods
-4. Create a constructor that sets the name
-5. Access configuration from context, not embedded fields
+2. Define a struct with a name field and configuration fields
+3. Create functional option types and functions for configuration
+4. Implement the Name() and Validate() methods
+5. Create a constructor that accepts functional options
 6. Write comprehensive tests
 
 Example:
 
 	type MyFeatureRule struct {
-		name string
+		name      string
+		maxItems  int
+		checkBody bool
 	}
 
-	func NewMyFeatureRule() MyFeatureRule {
-		return MyFeatureRule{
-			name: "MyFeature",
+	type MyFeatureOption func(MyFeatureRule) MyFeatureRule
+
+	func WithMaxItems(max int) MyFeatureOption {
+		return func(r MyFeatureRule) MyFeatureRule {
+			r.maxItems = max
+			return r
 		}
+	}
+
+	func WithCheckBody(check bool) MyFeatureOption {
+		return func(r MyFeatureRule) MyFeatureRule {
+			r.checkBody = check
+			return r
+		}
+	}
+
+	func NewMyFeatureRule(options ...MyFeatureOption) MyFeatureRule {
+		rule := MyFeatureRule{
+			name:      "MyFeature",
+			maxItems:  10,        // default
+			checkBody: true,      // default
+		}
+
+		for _, option := range options {
+			rule = option(rule)
+		}
+
+		return rule
 	}
 
 	func (r MyFeatureRule) Name() string {
@@ -63,24 +89,35 @@ Example:
 	}
 
 	func (r MyFeatureRule) Validate(ctx context.Context, commit domain.CommitInfo) []errors.ValidationError {
-		cfg := contextx.GetConfig(ctx)
-		enabled := cfg.GetBool("myfeature.enabled")
-		if !enabled {
+		// Use injected configuration, not context
+		if r.maxItems <= 0 {
 			return nil
 		}
-		// Validation logic
+		// Validation logic using r.maxItems and r.checkBody
 		return errors
 	}
 
 # Configuration
 
-Rules access configuration through context using the standard pattern:
+Rules receive configuration through their constructors via functional options.
+The factory (SimpleRuleFactory) is responsible for reading configuration and
+passing it to rules during initialization:
 
-	cfg := contextx.GetConfig(ctx)
-	maxLength := cfg.GetInt("subject.max_length")
-	enabled := cfg.GetBool("myfeature.enabled")
+	// In the factory
+	func (f SimpleRuleFactory) createSubjectLengthRule() domain.Rule {
+		options := []rules.SubjectLengthOption{}
 
-This ensures consistent configuration access and maintains separation of concerns.
+		if f.config != nil {
+			maxLength := f.config.Message.Subject.MaxLength
+			if maxLength > 0 {
+				options = append(options, rules.WithMaxLength(maxLength))
+			}
+		}
+
+		return rules.NewSubjectLengthRule(options...)
+	}
+
+This ensures explicit dependencies and maintains separation of concerns.
 
 # Available Rules
 

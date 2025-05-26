@@ -10,7 +10,7 @@ import (
 )
 
 // NewTestRuleRegistry creates a new rule registry with custom default disabled rules for testing.
-func NewTestRuleRegistry(defaultDisabledRules map[string]bool) *domain.RuleRegistry {
+func NewTestRuleRegistry(defaultDisabledRules map[string]bool) domain.RuleRegistry {
 	priorityService := domain.NewRulePriorityService(defaultDisabledRules)
 
 	return domain.NewRuleRegistry(
@@ -19,7 +19,7 @@ func NewTestRuleRegistry(defaultDisabledRules map[string]bool) *domain.RuleRegis
 }
 
 // WithDefaultDisabledRules creates a test rule registry with specific rules disabled by default.
-func WithDefaultDisabledRules(rules ...string) *domain.RuleRegistry {
+func WithDefaultDisabledRules(rules ...string) domain.RuleRegistry {
 	disabledMap := make(map[string]bool, len(rules))
 	for _, rule := range rules {
 		disabledMap[rule] = true

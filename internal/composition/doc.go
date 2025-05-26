@@ -31,7 +31,6 @@ The package follows these architectural patterns:
 3. Adapter Pattern:
   - Adapts between different interfaces across architectural boundaries
   - GitRepositoryAdapter combines multiple Git interfaces
-  - ValidationServiceAdapter bridges validation interfaces
 
 # Structure
 

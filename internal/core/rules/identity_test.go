@@ -175,9 +175,6 @@ func TestIdentityRule_AllowedSigners(t *testing.T) {
 				cfg = testCase.configModifier(cfg)
 			}
 
-			// Create priority service
-			priorityService := domain.NewRulePriorityService(domain.GetDefaultDisabledRules())
-
 			// Create rule with proper dependencies
 			rule := rules.NewIdentityRule(
 				rules.WithConfig(rules.IdentityConfig{
@@ -185,7 +182,6 @@ func TestIdentityRule_AllowedSigners(t *testing.T) {
 					DisabledRules:  cfg.Rules.Disabled,
 					AllowedSigners: cfg.Signing.AllowedSigners,
 				}),
-				rules.WithPriorityService(priorityService),
 			)
 
 			// Execute validation
@@ -203,7 +199,8 @@ func TestIdentityRule_AllowedSigners(t *testing.T) {
 	}
 }
 
-// TestIdentityRule_RuleDisabled tests the rule disabling mechanism.
+// TestIdentityRule_ConfiguredSigners tests the rule with various signer configurations.
+// Note: Rules no longer check if they're enabled - that's the responsibility of the validation engine.
 func TestIdentityRule_RuleDisabled(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -211,41 +208,26 @@ func TestIdentityRule_RuleDisabled(t *testing.T) {
 		expectedValid  bool
 	}{
 		{
-			name: "Rule explicitly disabled",
+			name: "Author in allowed signers - no crypto deps",
 			configModifier: func(cfg types.Config) types.Config {
 				result := cfg
 				// Add author to allowed signers
 				result.Signing.AllowedSigners = []string{"John Doe <john@example.com>"}
-				// But explicitly disable the rule
-				result.Rules.Disabled = append(result.Rules.Disabled, "SignedIdentity")
 
 				return result
 			},
-			expectedValid: true, // Rule is disabled, so any commit is valid
+			expectedValid: true, // No crypto dependencies, so validation skipped
 		},
 		{
-			name: "Rule not enabled and not in default rules",
-			configModifier: func(cfg types.Config) types.Config {
-				result := cfg
-				// Add author to allowed signers but don't explicitly enable the rule
-				result.Signing.AllowedSigners = []string{"John Doe <john@example.com>"}
-
-				return result
-			},
-			expectedValid: true, // Rule not enabled, so any commit is valid
-		},
-		{
-			name: "Rule explicitly enabled",
+			name: "Author not in allowed signers - no crypto deps",
 			configModifier: func(cfg types.Config) types.Config {
 				result := cfg
 				// Non-matching author
 				result.Signing.AllowedSigners = []string{"Jane Doe <jane@example.com>"}
-				// Explicitly enable rule
-				result.Rules.Enabled = append(result.Rules.Enabled, "SignedIdentity")
 
 				return result
 			},
-			expectedValid: false, // Rule enabled, non-matching author
+			expectedValid: false, // Author not in allowed signers
 		},
 	}
 
@@ -267,9 +249,6 @@ func TestIdentityRule_RuleDisabled(t *testing.T) {
 				cfg = testCase.configModifier(cfg)
 			}
 
-			// Create priority service
-			priorityService := domain.NewRulePriorityService(domain.GetDefaultDisabledRules())
-
 			// Create rule with proper dependencies
 			rule := rules.NewIdentityRule(
 				rules.WithConfig(rules.IdentityConfig{
@@ -277,7 +256,6 @@ func TestIdentityRule_RuleDisabled(t *testing.T) {
 					DisabledRules:  cfg.Rules.Disabled,
 					AllowedSigners: cfg.Signing.AllowedSigners,
 				}),
-				rules.WithPriorityService(priorityService),
 			)
 
 			// Execute validation

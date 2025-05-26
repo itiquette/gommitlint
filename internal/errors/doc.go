@@ -45,9 +45,9 @@ Creating errors:
 	errWithHelp := baseErr.WithHelp("Keep subject under 50 chars")
 
 	// Add context
-	enhancedErr := errWithHelp.WithContext("subject_length", "60")
-		.WithContext("max_length", "50")
-		.WithContext("commit_sha", "abc123")
+	enhancedErr := errWithHelp.WithContextMap(map[string]string{"subject_length": "60"})
+		.WithContextMap(map[string]string{"max_length": "50"})
+		.WithContextMap(map[string]string{"commit_sha": "abc123"})
 
 	// Get help message
 	helpText := enhancedErr.GetHelp() // Returns the help field directly
@@ -102,9 +102,9 @@ Example
 
 	err := errors.New(rule.Name(), errors.ErrSubjectTooLong, errorMessage)
 	err = err.WithHelp(rule.Help())
-	err = err.WithContext("subject_length", fmt.Sprintf("%d", subjectLength))
-	    .WithContext("max_length", fmt.Sprintf("%d", rule.MaxLength))
-	    .WithContext("subject", commit.Subject)
-	    .WithContext("commit_sha", commit.Hash)
+	err = err.WithContextMap(map[string]string{"subject_length": fmt.Sprintf("%d", subjectLength}))
+	    .WithContextMap(map[string]string{"max_length": fmt.Sprintf("%d", rule.MaxLength}))
+	    .WithContextMap(map[string]string{"subject": commit.Subject})
+	    .WithContextMap(map[string]string{"commit_sha": commit.Hash})
 */
 package errors

@@ -12,14 +12,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	infra "github.com/itiquette/gommitlint/internal/adapters/outgoing/config"
-	"github.com/itiquette/gommitlint/internal/adapters/outgoing/log"
 	"github.com/itiquette/gommitlint/internal/common/contextx"
 	"github.com/itiquette/gommitlint/internal/composition"
 	"github.com/itiquette/gommitlint/internal/config/types"
 	"github.com/itiquette/gommitlint/internal/domain"
 	testcontext "github.com/itiquette/gommitlint/internal/testutils/context"
 	"github.com/itiquette/gommitlint/internal/testutils/integrationtest"
-	testlogger "github.com/itiquette/gommitlint/internal/testutils/logger"
 )
 
 // TestSimpleValidation tests basic validation rules that are expected to pass.
@@ -64,7 +62,6 @@ gommitlint:
 
 	// Create a base context with logger
 	ctx := testcontext.CreateTestContext()
-	ctx = log.WithLogger(ctx, testlogger.NewTestLogger())
 
 	// Create a config service with our test settings
 	configService, err := infra.NewService()
@@ -105,8 +102,7 @@ gommitlint:
 	ctx = contextx.WithConfig(ctx, adapter)
 
 	// Create validation service using composition root
-	logger := log.Logger(ctx)
-	loggerAdapter := log.NewAdapter(*logger)
+	loggerAdapter := contextx.GetLogger(ctx)
 	container := composition.NewContainer(loggerAdapter, configService.GetAdapter().GetConfig())
 	service, err := container.CreateValidationService(ctx, repoPath)
 	require.NoError(t, err)

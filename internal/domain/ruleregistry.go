@@ -11,26 +11,29 @@ import (
 	"strings"
 )
 
-// RuleRegistry provides a simplified rule management system.
+// RuleRegistry provides an immutable rule management system.
+// All operations return new instances rather than modifying state.
 type RuleRegistry struct {
 	factories       map[string]func(context.Context) Rule
-	priorityService RulePriorityService // Priority service for consistent rule enabling logic
-	rules           map[string]Rule     // Stores pre-created rules for efficient filtering
+	priorityService RulePriorityService
+	rules           map[string]Rule
 }
 
 // RuleRegistryOption is a functional option for configuring a RuleRegistry.
-type RuleRegistryOption func(*RuleRegistry)
+type RuleRegistryOption func(RuleRegistry) RuleRegistry
 
 // WithPriorityService sets a custom priority service for the registry.
 func WithPriorityService(service RulePriorityService) RuleRegistryOption {
-	return func(r *RuleRegistry) {
+	return func(r RuleRegistry) RuleRegistry {
 		r.priorityService = service
+
+		return r
 	}
 }
 
 // NewRuleRegistry creates a new rule registry.
-func NewRuleRegistry(opts ...RuleRegistryOption) *RuleRegistry {
-	registry := &RuleRegistry{
+func NewRuleRegistry(opts ...RuleRegistryOption) RuleRegistry {
+	registry := RuleRegistry{
 		factories:       make(map[string]func(context.Context) Rule),
 		priorityService: NewRulePriorityService(GetDefaultDisabledRules()),
 		rules:           make(map[string]Rule),
@@ -38,33 +41,48 @@ func NewRuleRegistry(opts ...RuleRegistryOption) *RuleRegistry {
 
 	// Apply options
 	for _, opt := range opts {
-		opt(registry)
+		registry = opt(registry)
 	}
 
 	return registry
 }
 
-// RegisterWithContext must be used to add a rule to the registry
-// to ensure proper context propagation.
+// Register returns a new registry with the added rule factory.
+// This maintains immutability by creating a new instance.
+func (r RuleRegistry) Register(name string, factory func(context.Context) Rule) RuleRegistry {
+	// Create new factories map
+	newFactories := make(map[string]func(context.Context) Rule, len(r.factories)+1)
+	for k, v := range r.factories {
+		newFactories[k] = v
+	}
 
-// RegisterWithContext adds a rule factory to the registry with a context.
-func (r *RuleRegistry) RegisterWithContext(_ context.Context, name string, factory func(context.Context) Rule) {
-	r.factories[name] = factory
+	newFactories[name] = factory
+
+	return RuleRegistry{
+		factories:       newFactories,
+		priorityService: r.priorityService,
+		rules:           r.rules,
+	}
 }
 
-// InitializeRules creates all rules at once with the provided context.
-// This should be called once after all rule factories are registered,
-// before any validation is performed.
-func (r *RuleRegistry) InitializeRules(ctx context.Context) {
-	// Clear any existing rules
-	r.rules = make(map[string]Rule, len(r.factories))
+// WithInitializedRules returns a new registry with all rules initialized.
+// This replaces the mutable InitializeRules method.
+func (r RuleRegistry) WithInitializedRules(ctx context.Context) RuleRegistry {
+	// Create new rules map
+	newRules := make(map[string]Rule, len(r.factories))
 
 	// Create all rules
 	for name, factory := range r.factories {
 		rule := factory(ctx)
 		if rule != nil {
-			r.rules[name] = rule
+			newRules[name] = rule
 		}
+	}
+
+	return RuleRegistry{
+		factories:       r.factories,
+		priorityService: r.priorityService,
+		rules:           newRules,
 	}
 }
 
@@ -97,6 +115,11 @@ func (r RuleRegistry) GetEnabledRules(ctx context.Context, enabledRules, disable
 	}
 
 	// Otherwise create rules that are enabled on-demand
+	return r.createEnabledRules(ctx, enabledRules, disabledRules)
+}
+
+// createEnabledRules creates rules that are enabled based on configuration.
+func (r RuleRegistry) createEnabledRules(ctx context.Context, enabledRules, disabledRules []string) []Rule {
 	var rules []Rule
 
 	for name, factory := range r.factories {
@@ -111,7 +134,7 @@ func (r RuleRegistry) GetEnabledRules(ctx context.Context, enabledRules, disable
 }
 
 // MakeRuleMap converts rule names to a map for fast lookups.
-// This is a package-level function that uses the canonical implementation.
+// This is a pure function that creates a new map.
 func MakeRuleMap(rules []string) map[string]bool {
 	ruleMap := make(map[string]bool, len(rules))
 

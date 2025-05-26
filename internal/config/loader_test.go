@@ -35,7 +35,7 @@ func TestLoadConfigFromYAML(t *testing.T) {
 	require.NoError(t, err)
 
 	// Load the config from the test file
-	err = loader.LoadFromPath(configPath)
+	loader, err = loader.LoadFromPath(configPath)
 	require.NoError(t, err)
 
 	// Get the config
@@ -132,7 +132,7 @@ func TestDisabledOverridesEnabled(t *testing.T) {
 	}
 
 	// Now load the config file where it's both enabled and disabled
-	err = loader.LoadFromPath(configPath)
+	loader, err = loader.LoadFromPath(configPath)
 	require.NoError(t, err)
 
 	// Get the config

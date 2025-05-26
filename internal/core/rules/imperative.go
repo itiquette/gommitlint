@@ -175,7 +175,7 @@ func (r ImperativeVerbRule) Validate(_ context.Context, commit domain.CommitInfo
 				"ImperativeVerb",
 				"Cannot extract first word from commit message",
 				"Ensure your commit message starts with a verb",
-			).WithContext("subject", subject),
+			).WithContextMap(map[string]string{"subject": subject}),
 		}
 	}
 

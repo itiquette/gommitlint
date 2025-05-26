@@ -15,7 +15,6 @@ import (
 
 	infra "github.com/itiquette/gommitlint/internal/adapters/outgoing/config"
 	"github.com/itiquette/gommitlint/internal/adapters/outgoing/git"
-	"github.com/itiquette/gommitlint/internal/adapters/outgoing/log"
 	"github.com/itiquette/gommitlint/internal/common/contextx"
 	"github.com/itiquette/gommitlint/internal/config/types"
 	"github.com/itiquette/gommitlint/internal/domain"
@@ -23,7 +22,6 @@ import (
 	"github.com/itiquette/gommitlint/internal/ports/incoming"
 	testcontext "github.com/itiquette/gommitlint/internal/testutils/context"
 	"github.com/itiquette/gommitlint/internal/testutils/integrationtest"
-	testlogger "github.com/itiquette/gommitlint/internal/testutils/logger"
 )
 
 // Mock implementations for testing
@@ -101,8 +99,10 @@ func NewTypeCheckingMockRule(name string, allowedTypes []string) *MockRule {
 						name,
 						"invalid_type",
 						"commit type is not allowed",
-					).WithContext("type", commitType).
-						WithContext("allowed_types", strings.Join(allowedTypes, ", ")),
+					).WithContextMap(map[string]string{
+						"type":          commitType,
+						"allowed_types": strings.Join(allowedTypes, ", "),
+					}),
 				}
 			}
 		}
@@ -244,7 +244,6 @@ gommitlint:
 
 			// Create a base context with logger
 			ctx := testcontext.CreateTestContext()
-			ctx = log.WithLogger(ctx, testlogger.NewTestLogger())
 
 			// Create a config provider with our test settings
 			configService, err := infra.NewService()
@@ -262,14 +261,17 @@ gommitlint:
 			adapter := configService.GetAdapter()
 			ctx = contextx.WithConfig(ctx, adapter)
 
-			// Create repository factory with the context
-			repoFactory, err := git.NewRepositoryFactory(ctx, repoPath)
+			// Get logger from context
+			logger := contextx.GetLogger(ctx)
+
+			// Create repository adapter with the context
+			gitAdapter, err := git.NewRepositoryAdapter(ctx, repoPath, logger)
 			require.NoError(t, err)
 
-			// Get services from factory
-			commitService := repoFactory.CreateCommitRepository()
-			infoProvider := repoFactory.CreateRepositoryInfoProvider()
-			analyzer := repoFactory.CreateCommitAnalyzer()
+			// Use adapter for all services
+			commitService := gitAdapter
+			infoProvider := gitAdapter
+			analyzer := gitAdapter
 
 			// Use the context-based approach to configure rules
 			rulesToEnable := []string{"SubjectLength", "ConventionalCommit"}
@@ -432,7 +434,6 @@ gommitlint:
 
 			// Create a base context with logger
 			ctx := testcontext.CreateTestContext()
-			ctx = log.WithLogger(ctx, testlogger.NewTestLogger())
 
 			// Create a config provider with our test settings
 			configService, err := infra.NewService()
@@ -455,14 +456,17 @@ gommitlint:
 			repoPath, cleanup := integrationtest.SetupTestRepository(t, "Initial commit\n\nThis is a properly formatted initial commit with a body.")
 			defer cleanup()
 
-			// Create repository factory
-			repoFactory, err := git.NewRepositoryFactory(ctx, repoPath)
+			// Get logger from context
+			logger := contextx.GetLogger(ctx)
+
+			// Create repository adapter
+			gitAdapter, err := git.NewRepositoryAdapter(ctx, repoPath, logger)
 			require.NoError(t, err)
 
-			// Get services from factory
-			commitService := repoFactory.CreateCommitRepository()
-			infoProvider := repoFactory.CreateRepositoryInfoProvider()
-			analyzer := repoFactory.CreateCommitAnalyzer()
+			// Use adapter for all services
+			commitService := gitAdapter
+			infoProvider := gitAdapter
+			analyzer := gitAdapter
 
 			// Use the context-based approach to configure rules
 			rulesToEnable := []string{"SubjectLength", "ConventionalCommit"}
@@ -584,7 +588,6 @@ gommitlint:
 
 	// Create a base context with logger
 	ctx := testcontext.CreateTestContext()
-	ctx = log.WithLogger(ctx, testlogger.NewTestLogger())
 
 	// Create a config service with our test settings
 	cfgService, err := infra.NewService()
@@ -627,8 +630,11 @@ gommitlint:
 	repoPath, cleanup := integrationtest.SetupTestRepository(t, "Initial commit\n\nThis is a proper commit message.")
 	defer cleanup()
 
-	// Create repository factory
-	_, err = git.NewRepositoryFactory(ctx, repoPath)
+	// Get logger from context
+	logger := contextx.GetLogger(ctx)
+
+	// Create repository adapter
+	_, err = git.NewRepositoryAdapter(ctx, repoPath, logger)
 	require.NoError(t, err)
 }
 
@@ -675,8 +681,7 @@ func setupRulesInContext(
 	repoPath string,
 ) (context.Context, incoming.ValidationService) {
 	// Get logger from context and adapt it
-	logger := log.Logger(ctx)
-	loggerAdapter := log.NewAdapter(*logger)
+	loggerAdapter := contextx.GetLogger(ctx)
 
 	// Create a new validation service with the context
 	validationService, err := integrationtest.CreateValidationService(ctx, loggerAdapter, repoPath)

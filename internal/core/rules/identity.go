@@ -24,12 +24,11 @@ type IdentityConfig struct {
 // IdentityRule validates that commit signatures match the committer identity.
 // Uses domain crypto interfaces for clean architecture.
 type IdentityRule struct {
-	name            string
-	keyDir          string
-	verifier        domain.CryptoVerifier
-	repository      domain.CryptoKeyRepository
-	priorityService *domain.RulePriorityService
-	config          IdentityConfig
+	name       string
+	keyDir     string
+	verifier   domain.CryptoVerifier
+	repository domain.CryptoKeyRepository
+	config     IdentityConfig
 }
 
 // IdentityOption configures an IdentityRule.
@@ -48,17 +47,6 @@ func WithVerifier(verifier domain.CryptoVerifier) IdentityOption {
 func WithKeyRepository(repository domain.CryptoKeyRepository) IdentityOption {
 	return func(r IdentityRule) IdentityRule {
 		r.repository = repository
-
-		return r
-	}
-}
-
-// WithPriorityService sets the rule priority service for the rule.
-func WithPriorityService(service domain.RulePriorityService) IdentityOption {
-	return func(r IdentityRule) IdentityRule {
-		// Create a copy on the heap to get a stable pointer
-		serviceCopy := service
-		r.priorityService = &serviceCopy
 
 		return r
 	}
@@ -93,13 +81,6 @@ func NewIdentityRule(options ...IdentityOption) IdentityRule {
 
 // Validate validates that signatures match the committer identity.
 func (r IdentityRule) Validate(ctx context.Context, commit domain.CommitInfo) []appErrors.ValidationError {
-	// Check if rule is enabled using injected priority service
-	if r.priorityService != nil {
-		if !r.priorityService.IsRuleEnabled(ctx, r.Name(), r.config.EnabledRules, r.config.DisabledRules) {
-			return nil
-		}
-	}
-
 	// Use injected configuration
 	allowedSigners := r.config.AllowedSigners
 	if len(allowedSigners) > 0 {

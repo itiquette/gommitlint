@@ -37,7 +37,7 @@ func WithConfig(ctx context.Context, cfg Config) context.Context {
 // GetConfig retrieves configuration from the context.
 func GetConfig(ctx context.Context) Config {
 	if ctx == nil {
-		return &emptyConfig{}
+		return emptyConfig{}
 	}
 
 	// Get config from context
@@ -46,7 +46,7 @@ func GetConfig(ctx context.Context) Config {
 		return cfg
 	}
 
-	return &emptyConfig{}
+	return emptyConfig{}
 }
 
 // configKey is a private type for context keys to avoid collisions.
@@ -55,8 +55,8 @@ type configKey struct{}
 // emptyConfig is a Config implementation that returns empty values.
 type emptyConfig struct{}
 
-func (c *emptyConfig) Get(_ string) interface{}         { return nil }
-func (c *emptyConfig) GetString(_ string) string        { return "" }
-func (c *emptyConfig) GetBool(_ string) bool            { return false }
-func (c *emptyConfig) GetInt(_ string) int              { return 0 }
-func (c *emptyConfig) GetStringSlice(_ string) []string { return []string{} }
+func (c emptyConfig) Get(_ string) interface{}         { return nil }
+func (c emptyConfig) GetString(_ string) string        { return "" }
+func (c emptyConfig) GetBool(_ string) bool            { return false }
+func (c emptyConfig) GetInt(_ string) int              { return 0 }
+func (c emptyConfig) GetStringSlice(_ string) []string { return []string{} }

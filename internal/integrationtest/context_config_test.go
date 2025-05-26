@@ -9,17 +9,16 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 
-	"github.com/itiquette/gommitlint/internal/adapters/outgoing/log"
+	"github.com/itiquette/gommitlint/internal/common/contextkeys"
 	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/config/types"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/ports/outgoing"
 	testconfig "github.com/itiquette/gommitlint/internal/testutils/config"
 	testcontext "github.com/itiquette/gommitlint/internal/testutils/context"
 	"github.com/itiquette/gommitlint/internal/testutils/integrationtest"
-	testlogger "github.com/itiquette/gommitlint/internal/testutils/logger"
 )
 
 // TestContextBasedConfigWorkflow tests the context-based configuration workflow end-to-end.
@@ -100,10 +99,6 @@ gommitlint:
 			// Create a context for the entire test
 			ctx := testcontext.CreateTestContext()
 
-			// Add a logger to the context
-			logger := testlogger.InitBasicLogger().Level(zerolog.TraceLevel)
-			ctx = logger.WithContext(ctx)
-
 			// Create a config loader that loads our test config
 			configLoader := createConfigManager(t, configPath)
 
@@ -113,7 +108,10 @@ gommitlint:
 			// Add the config to the context with wrapper
 			ctx = testconfig.WrapAndInjectConfig(ctx, configObj)
 
-			loggerAdapter := log.NewAdapter(logger)
+			// Get logger from context
+			loggerAdapter, ok := ctx.Value(contextkeys.LoggerKey).(outgoing.Logger)
+			require.True(t, ok, "Logger not found in context")
+
 			validationService, err := integrationtest.CreateValidationService(ctx, loggerAdapter, repoPath)
 			require.NoError(t, err)
 
@@ -261,10 +259,6 @@ gommitlint:
 			// Create a context for the entire test
 			ctx := testcontext.CreateTestContext()
 
-			// Add a logger to the context
-			logger := testlogger.InitBasicLogger().Level(zerolog.TraceLevel)
-			ctx = logger.WithContext(ctx)
-
 			// Create a config loader that loads our test config
 			configLoader := createConfigManager(t, configPath)
 
@@ -279,8 +273,10 @@ gommitlint:
 			repoPath, cleanup := integrationtest.SetupTestRepository(t, "Initial commit\n\nThis is an initial commit for testing.")
 			defer cleanup()
 
-			// Create validation service using helper
-			loggerAdapter := log.NewAdapter(logger)
+			// Get logger from context
+			loggerAdapter, ok := ctx.Value(contextkeys.LoggerKey).(outgoing.Logger)
+			require.True(t, ok, "Logger not found in context")
+
 			validationService, err := integrationtest.CreateValidationService(ctx, loggerAdapter, repoPath)
 			require.NoError(t, err)
 
@@ -381,7 +377,7 @@ func TestContextConfigImmutability(t *testing.T) {
 // This function ensures that the required rules are explicitly enabled,
 // which solves the issue with TestContextBasedConfigWorkflow and TestContextBasedMessageFileWorkflow
 // where validation wasn't correctly detecting errors.
-func createConfigManager(t *testing.T, configPath string) *config.Loader {
+func createConfigManager(t *testing.T, configPath string) config.Loader {
 	t.Helper()
 	// Create config loader with context
 	ctx := testcontext.CreateTestContext()
@@ -389,7 +385,7 @@ func createConfigManager(t *testing.T, configPath string) *config.Loader {
 	require.NoError(t, err, "Failed to create config loader")
 
 	// Load the specific config file
-	err = configLoader.LoadFromPath(configPath)
+	configLoader, err = configLoader.LoadFromPath(configPath)
 	require.NoError(t, err, "Failed to load config from file")
 
 	// Get the current config
@@ -413,7 +409,7 @@ func createConfigManager(t *testing.T, configPath string) *config.Loader {
 	}))
 
 	// Update the config
-	configLoader.UpdateConfig(func(_ types.Config) types.Config {
+	configLoader = configLoader.UpdateConfig(func(_ types.Config) types.Config {
 		return configObj
 	})
 

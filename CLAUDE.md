@@ -4,39 +4,44 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Configuration Access Pattern
 
-Always use `contextx.GetConfig(ctx)` to access configuration throughout the codebase. This is the standard pattern for accessing configuration in gommitlint.
+Configuration is passed explicitly through constructor parameters and function options throughout the codebase. This follows hexagonal architecture principles.
 
 Example:
 ```go
-// Get configuration directly from context
-cfg := contextx.GetConfig(ctx)
+// Rules receive configuration via constructor options
+rule := NewSubjectLengthRule(
+    WithMaxLength(config.GetInt("subject.max_length")),
+    WithEnabled(config.GetBool("subject.enabled")),
+)
 
-// Access configuration values using key-based access
-maxLength := cfg.GetInt("subject.max_length")
-isBodyRequired := cfg.GetBool("body.required")
-enabledRules := cfg.GetStringSlice("rules.enabled")
+// Services receive configuration as a constructor parameter
+service := validate.NewService(config, repository, logger)
+
+// Access configuration values directly from the config parameter
+maxLength := config.GetInt("subject.max_length")
+isBodyRequired := config.GetBool("body.required")
+enabledRules := config.GetStringSlice("rules.enabled")
 ```
 
-The configuration is stored in the context early in the application lifecycle and should be accessed directly from there. This approach ensures:
-1. Consistent access pattern throughout the codebase
-2. Clean dependency management
-3. No need to deal with provider interfaces
+This approach ensures:
+1. Explicit dependencies (no hidden configuration access)
+2. Testability (easy to provide test configurations)
+3. Clean architecture boundaries
+4. No anti-patterns (configuration in context is an anti-pattern)
 
 ## Context Key Architecture
 
-Gommitlint uses a hybrid approach for context key management:
+Gommitlint uses context only for cross-cutting concerns:
 
-- **Public keys** (`internal/common/contextkeys`): Used for cross-cutting concerns like logging and CLI options
-- **Private keys**: Used within packages (like `configKey{}` in `common/config`) to enforce encapsulation
+- **Public keys** (`internal/common/contextkeys`): Used only for logging and CLI options
+- **No configuration in context**: Configuration flows through explicit parameters
 
 This design follows hexagonal architecture principles by:
-- Preventing direct access to package internals via context
-- Forcing interaction through defined interfaces
+- Making all dependencies explicit
 - Maintaining clear boundaries between architectural layers
+- Avoiding the anti-pattern of storing configuration in context
 
-Most configuration access uses private keys to ensure it goes through the `GetConfig()` interface rather than direct context access.
-
-> **IMPORTANT**: The old `domain.GetConfigProviderFromContext(ctx)` pattern has been deprecated and completely removed. All code must use the `contextx.GetConfig(ctx)` pattern.
+> **IMPORTANT**: Configuration must never be stored in or accessed from context. It should always be passed as an explicit parameter.
 
 ## Rule Logic
 
@@ -1388,41 +1393,43 @@ func TestValidateService(t *testing.T) {
 
 ## Function Options Pattern
 
-Use functional options for configuration:
+Use functional options for rule configuration:
 
 ```go
-type Option func(*Service)
+type RuleOption func(Rule) Rule
 
-func WithLogger(logger Logger) Option {
-    return func(s *Service) {
-        s.logger = logger
+func WithMaxLength(length int) RuleOption {
+    return func(r Rule) Rule {
+        r.maxLength = length
+        return r
     }
 }
 
-func WithTimeout(timeout time.Duration) Option {
-    return func(s *Service) {
-        s.timeout = timeout
+func WithCaseSensitivity(sensitive bool) RuleOption {
+    return func(r Rule) Rule {
+        r.caseSensitive = sensitive
+        return r
     }
 }
 
-func NewService(repo Repository, options ...Option) *Service {
-    s := &Service{
-        repo:    repo,
-        timeout: defaultTimeout,
+func NewRule(name string, options ...RuleOption) Rule {
+    r := Rule{
+        name:      name,
+        maxLength: defaultMaxLength,
     }
     
     for _, option := range options {
-        option(s)
+        r = option(r)
     }
     
-    return s
+    return r
 }
 
 // Usage
-service := NewService(
-    repo,
-    WithLogger(logger),
-    WithTimeout(5*time.Second),
+rule := NewRule(
+    "SubjectLength",
+    WithMaxLength(72),
+    WithCaseSensitivity(false),
 )
 ```
 

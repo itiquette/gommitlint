@@ -14,7 +14,7 @@ import (
 // TestEngine is a thin wrapper around domain.ValidationEngine that implements
 // domain.ValidationEngine for testing purposes.
 type TestEngine struct {
-	Registry *domain.RuleRegistry
+	Registry domain.RuleRegistry
 }
 
 // ValidateCommit implements domain.ValidationEngine.
@@ -92,9 +92,4 @@ func (e TestEngine) ValidateCommits(ctx context.Context, commits []domain.Commit
 	}
 
 	return results
-}
-
-// GetRegistry implements domain.ValidationEngine.
-func (e TestEngine) GetRegistry() *domain.RuleRegistry {
-	return e.Registry
 }

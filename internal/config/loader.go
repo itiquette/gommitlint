@@ -21,7 +21,7 @@ type Loader struct {
 }
 
 // NewLoader creates a new configuration loader.
-func NewLoader(ctx context.Context) (*Loader, error) {
+func NewLoader(ctx context.Context) (Loader, error) {
 	// Use the logger from the context
 	logger := log.Logger(ctx)
 	logger.Trace().Msg("Entering config.NewManager")
@@ -29,42 +29,38 @@ func NewLoader(ctx context.Context) (*Loader, error) {
 	// Create a new service
 	service, err := infra.NewService()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create configuration service: %w", err)
+		return Loader{}, fmt.Errorf("failed to create configuration service: %w", err)
 	}
 
 	// Load configuration
 	loadedService, err := service.Load()
 	if err != nil {
-		return nil, fmt.Errorf("failed to load configuration: %w", err)
+		return Loader{}, fmt.Errorf("failed to load configuration: %w", err)
 	}
 
-	return &Loader{
+	return Loader{
 		service: &loadedService,
 	}, nil
 }
 
-// Load loads configuration from files.
-func (l *Loader) Load() error {
+// Load returns a new Loader with reloaded configuration from files.
+func (l Loader) Load() (Loader, error) {
 	service, err := l.service.Load()
 	if err != nil {
-		return err
+		return l, err
 	}
 
-	l.service = &service
-
-	return nil
+	return Loader{service: &service}, nil
 }
 
-// LoadFromPath loads configuration from the specified path.
-func (l *Loader) LoadFromPath(path string) error {
+// LoadFromPath returns a new Loader with configuration loaded from the specified path.
+func (l Loader) LoadFromPath(path string) (Loader, error) {
 	service, err := l.service.LoadFromPath(path)
 	if err != nil {
-		return err
+		return l, err
 	}
 
-	l.service = &service
-
-	return nil
+	return Loader{service: &service}, nil
 }
 
 // GetConfig returns the current configuration.
@@ -88,4 +84,3 @@ func (l Loader) WithGitRepository(path string) Loader {
 		return cfg
 	})
 }
-

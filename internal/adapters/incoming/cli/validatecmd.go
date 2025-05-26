@@ -10,12 +10,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/itiquette/gommitlint/internal/adapters/outgoing/log"
 	"github.com/spf13/cobra"
 )
 
 // newValidateCmd creates a new validate command.
-func newValidateCmd(ctx context.Context) *cobra.Command {
+func newValidateCmd(containerProvider func(context.Context) DependencyContainer) *cobra.Command {
 	var validateCmd = &cobra.Command{
 		Use:   "validate",
 		Short: "Validates commit messages",
@@ -34,8 +33,11 @@ Examples:
   # Validate a range of commits
   gommitlint validate --revision-range=main..HEAD`,
 		Run: func(cmd *cobra.Command, _ []string) {
+			// Get context from command (set by root command)
+			ctx := cmd.Context()
+
 			// Process validation request
-			exitCode, err := runNewValidation(ctx, cmd)
+			exitCode, err := runNewValidation(ctx, cmd, containerProvider(ctx))
 			if err != nil {
 				cmd.PrintErrf("Error: %v\n", err)
 				os.Exit(1)
@@ -69,17 +71,13 @@ Examples:
 }
 
 // runNewValidation handles the core validation logic and returns an exit code.
-func runNewValidation(ctx context.Context, cmd *cobra.Command) (int, error) {
-	logger := log.Logger(ctx)
-	logger.Trace().Msg("Entering runNewValidation")
-
+func runNewValidation(ctx context.Context, cmd *cobra.Command, container DependencyContainer) (int, error) {
 	// Create parameters object to encapsulate all inputs
 	params := NewValidateParams(cmd)
 
-	// Get dependency container from context
-	container := getContainer(ctx)
+	// Validate container
 	if container == nil {
-		return 1, errors.New("dependency container not found in context")
+		return 1, errors.New("dependency container is nil")
 	}
 
 	// Get repository path
@@ -135,7 +133,7 @@ func runNewValidation(ctx context.Context, cmd *cobra.Command) (int, error) {
 		// For commit count, we need to convert to a range
 		// This is a limitation of the current interface - we'd need to extend the orchestrator
 		// to support commit count directly. For now, just validate HEAD.
-		logger.Warn().Msg("Commit count validation not fully implemented, validating HEAD instead")
+		container.GetLogger().Warn("Commit count validation not fully implemented, validating HEAD instead")
 
 		return orchestrator.ValidateAndReport(ctx, "HEAD", params.SkipMergeCommits, reportOptions)
 

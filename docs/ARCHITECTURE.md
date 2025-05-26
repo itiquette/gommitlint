@@ -314,9 +314,9 @@ func ValidateSubjectLength(commit CommitInfo, maxLength int) []Error {
 
 ### Implementation Notes
 
-1. **Domain Layer**: Mostly follows value semantics with pure functions. Some registry types use pointer receivers for pragmatic reasons.
-2. **Rule Implementation**: Rules use value receivers and access configuration via `contextx.GetConfig(ctx)`
-3. **Collection Operations**: Extensive use of functional patterns with `Filter`, `Map`, `Any`, `All`
+1. **Domain Layer**: Follows value semantics with pure functions
+2. **Rule Implementation**: Rules use value receivers and receive configuration via constructor options
+3. **Collection Operations**: Functional patterns with `Filter`, `Map`, `Any`, `All`
 4. **Immutability**: Collections and validation results always return new instances
 
 ### Separation of I/O and Logic
@@ -361,8 +361,7 @@ Domain logic
 Context enrichment flow:
 
 1. Logger addition: `ctx = logger.WithContext(ctx)`
-2. Configuration: `ctx = contextx.WithConfig(ctx, config)`
-3. Domain options: `ctx = domain.WithCLIOptions(ctx, options)`
+2. Domain options: `ctx = domain.WithCLIOptions(ctx, options)`
 
 ### Context Best Practices
 
@@ -400,24 +399,27 @@ func TestSuite(t *testing.T) {
 
 ## Configuration Access
 
-Always use `contextx.GetConfig(ctx)` for configuration access:
+Configuration is passed explicitly through constructor options and parameters:
 
 ```go
-// Get configuration from context
-cfg := contextx.GetConfig(ctx)
+// Rules receive configuration during construction
+rule := NewSubjectLengthRule(WithMaxLength(config.GetInt("subject.max_length")))
 
-// Access values
-maxLength := cfg.GetInt("subject.max_length")
-isRequired := cfg.GetBool("body.required")
-enabledRules := cfg.GetStringSlice("rules.enabled")
+// Services receive configuration through constructor
+service := validate.NewService(config, repository, logger)
+
+// Access values from the config parameter
+maxLength := config.GetInt("subject.max_length")
+isRequired := config.GetBool("body.required")
+enabledRules := config.GetStringSlice("rules.enabled")
 ```
 
 ### Configuration Notes
 
-- Private context keys enforce encapsulation
-- No direct config provider access
-- Key-based configuration access
-- Deprecated patterns completely removed
+- Configuration flows through explicit parameters
+- No configuration stored in context (anti-pattern)
+- Rules receive configuration via constructor options
+- Services receive configuration as constructor parameter
 
 ## Rule Priority System
 
@@ -582,7 +584,7 @@ internal/
 - ✅ Separate I/O from business logic
 - ✅ Test with table-driven patterns
 - ✅ Use functional composition
-- ✅ Access config via `contextx.GetConfig(ctx)`
+- ✅ Pass configuration explicitly through parameters
 - ✅ Create interfaces at consumption site, not implementation
 - ✅ Follow dependency direction (inward only)
 - ✅ Use composition over inheritance
@@ -594,7 +596,7 @@ internal/
 - ❌ Store context in structs (except composition root)
 - ❌ Create mutable state
 - ❌ Use global variables
-- ❌ Access config via deprecated patterns
+- ❌ Store configuration in context
 - ❌ Put implementations in ports package
 - ❌ Create interfaces for everything
 - ❌ Violate dependency direction
@@ -645,7 +647,7 @@ internal/
 
 1. **Architecture Compliance**: The codebase closely follows the documented hexagonal architecture
 2. **Functional Patterns**: Domain mostly uses value semantics with some pragmatic exceptions
-3. **Configuration Access**: Consistent use of `contextx.GetConfig(ctx)` throughout
+3. **Configuration Access**: Explicit parameter passing for configuration
 4. **Testing**: Good use of table-driven tests with high coverage
 5. **Context Management**: Well-implemented single context pattern
 6. **Rule System**: Clearly defined priority system as documented
@@ -664,14 +666,12 @@ internal/
 type CustomRule struct {
     BaseRule
     pattern string
+    enabled bool
 }
 
 // Pure validation function
 func (r CustomRule) Validate(ctx context.Context, commit CommitInfo) []Error {
-    cfg := contextx.GetConfig(ctx)
-    enabled := cfg.GetBool("custom.enabled")
-    
-    if !enabled || matches(commit.Subject, r.pattern) {
+    if !r.enabled || matches(commit.Subject, r.pattern) {
         return nil
     }
     
@@ -685,6 +685,7 @@ func NewCustomRule(opts ...Option) CustomRule {
     rule := CustomRule{
         BaseRule: NewBaseRule("CustomRule"),
         pattern:  "default",
+        enabled:  true,
     }
     
     for _, opt := range opts {
@@ -694,10 +695,17 @@ func NewCustomRule(opts ...Option) CustomRule {
     return rule
 }
 
-// Functional option
+// Functional options
 func WithPattern(pattern string) Option {
     return func(r CustomRule) CustomRule {
         r.pattern = pattern
+        return r
+    }
+}
+
+func WithEnabled(enabled bool) Option {
+    return func(r CustomRule) CustomRule {
+        r.enabled = enabled
         return r
     }
 }

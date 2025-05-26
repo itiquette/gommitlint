@@ -32,7 +32,7 @@ func (e ValidationError) GetHelp() string {
 func NewFormatValidationError(ruleName string, message string, helpText string, subject string) ValidationError {
 	err := New(ruleName, ErrInvalidFormat, message)
 	err = err.WithHelp(helpText)
-	err = err.WithContext("subject", subject)
+	err = err.WithContextMap(map[string]string{"subject": subject})
 
 	return err
 }
@@ -89,7 +89,7 @@ func NewConventionalCommitError(code ValidationErrorCode, ruleName string, issue
 	err := New(ruleName, code, issue)
 	err = err.WithUserMessage(issue)
 	err = err.WithHelp("Use the format: " + format)
-	err = err.WithContext("expected_format", format)
+	err = err.WithContextMap(map[string]string{"expected_format": format})
 
 	return err
 }

@@ -32,22 +32,17 @@ func NewOutgoingAdapterFactory(config types.Config, logger outgoing.Logger) *Out
 
 // CreateGitRepository creates a Git repository adapter.
 func (f OutgoingAdapterFactory) CreateGitRepository(ctx context.Context, repoPath string) (domain.CommitRepository, error) {
-	// Create Git repository factory
-	gitRepoFactory, err := git.NewRepositoryFactory(ctx, repoPath)
+	// Create repository adapter directly
+	adapter, err := git.NewRepositoryAdapter(ctx, repoPath, f.logger)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create repository factory: %w", err)
+		return nil, fmt.Errorf("failed to create repository adapter: %w", err)
 	}
-
-	// Create service adapters
-	gitCommitService := gitRepoFactory.CreateCommitRepository()
-	repoInfoProvider := gitRepoFactory.CreateRepositoryInfoProvider()
-	commitAnalyzer := gitRepoFactory.CreateCommitAnalyzer()
 
 	// Create composite repository
 	compositeRepo := &GitRepositoryAdapter{
-		commitService:  gitCommitService,
-		infoProvider:   repoInfoProvider,
-		commitAnalyzer: commitAnalyzer,
+		commitService:  adapter,
+		infoProvider:   adapter,
+		commitAnalyzer: adapter,
 	}
 
 	return compositeRepo, nil

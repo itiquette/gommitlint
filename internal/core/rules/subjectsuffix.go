@@ -64,7 +64,7 @@ func (r SubjectSuffixRule) Validate(_ context.Context, commit domain.CommitInfo)
 				"SubjectSuffix",
 				"Commit subject is missing",
 				"Add a descriptive subject line to your commit",
-			).WithContext("subject", ""),
+			).WithContextMap(map[string]string{"subject": ""}),
 		}
 	}
 

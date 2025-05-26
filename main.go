@@ -10,9 +10,7 @@ import (
 	"os"
 
 	"github.com/itiquette/gommitlint/internal/adapters/incoming/cli"
-	"github.com/itiquette/gommitlint/internal/adapters/outgoing/log"
 	"github.com/itiquette/gommitlint/internal/application/options"
-	"github.com/itiquette/gommitlint/internal/composition"
 	"github.com/itiquette/gommitlint/internal/config"
 )
 
@@ -24,23 +22,19 @@ var (
 )
 
 func main() {
-	// The ONLY ctx that should flow through the application
+	// Create the root context
 	ctx := context.Background()
 
-	// Add default CLI options to context
-	defaultOptions := options.DefaultCLIOptions()
-	ctx = options.WithCLIOptions(ctx, defaultOptions)
+	// Add default CLI options
+	ctx = options.WithCLIOptions(ctx, options.DefaultCLIOptions())
 
+	// Create config loader
 	configLoader, err := config.NewLoader(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create config loader: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Create a simple stderr logger for initialization
-	// The actual logger will be configured when CLI flags are parsed
-	stderrLogger := log.NewStderrLogger()
-	container := composition.NewContainer(stderrLogger, configLoader.GetConfig())
-
-	cli.Execute(ctx, version, commit, date, container)
+	// Pass config to CLI - container will be created after logger initialization
+	cli.Execute(ctx, version, commit, date, configLoader.GetConfig())
 }

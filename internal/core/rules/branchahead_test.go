@@ -8,12 +8,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/itiquette/gommitlint/internal/common/contextx"
-	"github.com/itiquette/gommitlint/internal/config"
-	"github.com/itiquette/gommitlint/internal/config/types"
 	"github.com/itiquette/gommitlint/internal/domain"
 	appErrors "github.com/itiquette/gommitlint/internal/errors"
-	testconfig "github.com/itiquette/gommitlint/internal/testutils/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -181,260 +177,91 @@ func TestBranchAheadRule_ReferenceBranch(t *testing.T) {
 		"Expected reference branch 'develop' to be passed to analyzer")
 }
 
-// TestBranchAheadRule_WithContext tests configuration via context.
-func TestBranchAheadRule_WithContext(t *testing.T) {
-	// We'll create test contexts with different configurations
-	testCases := []struct {
-		name           string
-		configModifier func(types.Config) types.Config
-		commitsAhead   int
-		wantErrors     bool
-	}{
-		{
-			name: "context: default limits",
-			configModifier: func(cfg types.Config) types.Config {
-				return cfg // No changes
-			},
-			commitsAhead: 5,
-			wantErrors:   false,
-		},
-		{
-			name: "context: custom max ahead within limit",
-			configModifier: func(cfg types.Config) types.Config {
-				cfg.Repo.MaxCommitsAhead = 10
-
-				return cfg
-			},
-			commitsAhead: 8,
-			wantErrors:   false,
-		},
-		{
-			name: "context: custom max ahead exceeded",
-			configModifier: func(cfg types.Config) types.Config {
-				cfg.Repo.MaxCommitsAhead = 4
-
-				return cfg
-			},
-			commitsAhead: 5,
-			wantErrors:   true,
-		},
-		{
-			name: "context: custom reference branch",
-			configModifier: func(cfg types.Config) types.Config {
-				cfg.Repo.Branch = "develop"
-
-				return cfg
-			},
-			commitsAhead: 3,
-			wantErrors:   false,
-		},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			// Apply custom configuration
-			cfg := testconfig.NewBuilder().Build()
-			cfg = testCase.configModifier(cfg)
-			ctx := context.Background()
-
-			// Create rule with configuration
-			configuredRule := NewBranchAheadRule(
-				WithRepositoryGetter(func() domain.CommitAnalyzer {
-					return &mockCommitAnalyzer{
-						commitsAhead: testCase.commitsAhead,
-					}
-				}),
-				WithMaxCommitsAhead(cfg.Repo.MaxCommitsAhead),
-				WithReference(cfg.Repo.Branch),
-			)
-
-			// Check that rule has correct values
-			require.Equal(t, cfg.Repo.MaxCommitsAhead, configuredRule.maxCommitsAhead,
-				"Rule should have max commits ahead from config")
-			require.Equal(t, cfg.Repo.Branch, configuredRule.reference,
-				"Rule should have reference branch from config")
-
-			// Create an empty commit to validate
-			commit := domain.CommitInfo{
-				Hash:    "test-commit",
-				Subject: "test subject",
-			}
-
-			// Validate the commit
-			errors := configuredRule.Validate(ctx, commit)
-
-			// Check for expected errors
-			if testCase.wantErrors {
-				require.NotEmpty(t, errors, "Expected validation errors")
-			} else {
-				require.Empty(t, errors, "Expected no validation errors")
-			}
-		})
-	}
-}
-
-func TestBranchAheadRuleWithConfig(t *testing.T) {
-	// More direct tests for configuration handling
+// TestBranchAheadRule_Configuration tests the rule with various configurations.
+func TestBranchAheadRule_Configuration(t *testing.T) {
 	tests := []struct {
-		name        string
-		configSetup func() types.Config
-		analyzer    domain.CommitAnalyzer
-		wantErrors  bool
-		description string
+		name            string
+		maxCommitsAhead int
+		reference       string
+		commitsAhead    int
+		analyzerErr     error
+		wantError       bool
+		wantErrorCode   string
 	}{
 		{
-			name: "commits ahead check enabled, within limit",
-			configSetup: func() types.Config {
-				cfg := config.NewDefaultConfig()
-				cfg.Repo.MaxCommitsAhead = 5
-				cfg.Repo.Branch = "main"
-
-				return cfg
-			},
-			analyzer: &mockCommitAnalyzer{
-				commitsAhead: 3,
-				err:          nil,
-			},
-			wantErrors:  false,
-			description: "Should pass when number of commits ahead is within the limit",
+			name:            "within limit",
+			maxCommitsAhead: 5,
+			reference:       "main",
+			commitsAhead:    3,
+			wantError:       false,
 		},
 		{
-			name: "commits ahead check enabled, exceeds limit",
-			configSetup: func() types.Config {
-				cfg := config.NewDefaultConfig()
-				cfg.Repo.MaxCommitsAhead = 5
-				cfg.Repo.Branch = "main"
-
-				return cfg
-			},
-			analyzer: &mockCommitAnalyzer{
-				commitsAhead: 8,
-				err:          nil,
-			},
-			wantErrors:  true,
-			description: "Should fail when number of commits ahead exceeds the limit",
+			name:            "exceeds limit",
+			maxCommitsAhead: 5,
+			reference:       "main",
+			commitsAhead:    8,
+			wantError:       true,
+			wantErrorCode:   string(appErrors.ErrTooManyCommits),
 		},
 		{
-			name: "commits ahead check disabled",
-			configSetup: func() types.Config {
-				cfg := config.NewDefaultConfig()
-				cfg.Repo.MaxCommitsAhead = 0 // Disabled
-				cfg.Repo.Branch = "main"
-
-				return cfg
-			},
-			analyzer: &mockCommitAnalyzer{
-				commitsAhead: 10,
-				err:          nil,
-			},
-			wantErrors:  false,
-			description: "Should pass when the check is disabled",
+			name:            "disabled check (max=0)",
+			maxCommitsAhead: 0,
+			reference:       "main",
+			commitsAhead:    100,
+			wantError:       false,
 		},
 		{
-			name: "commits ahead check enabled, analyzer error",
-			configSetup: func() types.Config {
-				cfg := config.NewDefaultConfig()
-				cfg.Repo.MaxCommitsAhead = 5
-				cfg.Repo.Branch = "main"
-
-				return cfg
-			},
-			analyzer: &mockCommitAnalyzer{
-				commitsAhead: 0,
-				err:          errors.New("git error"),
-			},
-			wantErrors:  true,
-			description: "Should fail when the analyzer returns an error",
+			name:            "git error",
+			maxCommitsAhead: 5,
+			reference:       "main",
+			analyzerErr:     errors.New("git error"),
+			wantError:       true,
+			wantErrorCode:   string(appErrors.ErrGitOperationFailed),
 		},
 		{
-			name: "custom reference branch",
-			configSetup: func() types.Config {
-				cfg := config.NewDefaultConfig()
-				cfg.Repo.MaxCommitsAhead = 5
-				cfg.Repo.Branch = "develop"
-
-				return cfg
-			},
-			analyzer: &mockCommitAnalyzer{
-				commitsAhead: 3,
-				err:          nil,
-			},
-			wantErrors:  false,
-			description: "Should use the custom reference branch from config",
+			name:            "custom reference branch",
+			maxCommitsAhead: 5,
+			reference:       "develop",
+			commitsAhead:    3,
+			wantError:       false,
 		},
 	}
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			// Create the config using the setup function
-			cfg := testCase.configSetup()
-
-			// Create context with test config
-			ctx := context.Background()
-			adapter := testconfig.NewAdapter(cfg)
-			ctx = contextx.WithConfig(ctx, adapter.Adapter)
-
-			// Log test parameters
-			t.Logf("Test '%s': maxCommitsAhead=%d", testCase.name, cfg.Repo.MaxCommitsAhead)
-
-			// Create rule with the analyzer and configuration
-			configuredRule := NewBranchAheadRule(
-				WithRepositoryGetter(func() domain.CommitAnalyzer {
-					return testCase.analyzer
-				}),
-				WithMaxCommitsAhead(cfg.Repo.MaxCommitsAhead),
-				WithReference(cfg.Repo.Branch),
-			)
-
-			// Log the configured rule parameters
-			t.Logf("Configured rule: maxCommitsAhead=%d, reference=%s",
-				configuredRule.maxCommitsAhead, configuredRule.reference)
-
-			// Create empty commit info for validation
-			commit := domain.CommitInfo{
-				Subject: "Test commit",
-				Body:    "",
+			// Create mock analyzer
+			analyzer := &mockCommitAnalyzer{
+				commitsAhead: testCase.commitsAhead,
+				err:          testCase.analyzerErr,
 			}
 
-			// Validate commit
-			errors := configuredRule.Validate(ctx, commit)
+			// Create rule with configuration
+			rule := NewBranchAheadRule(
+				WithMaxCommitsAhead(testCase.maxCommitsAhead),
+				WithReference(testCase.reference),
+				WithRepositoryGetter(func() domain.CommitAnalyzer {
+					return analyzer
+				}),
+			)
 
-			// Log validation results
-			t.Logf("Validation errors (%d): %v", len(errors), errors)
+			// Validate
+			commit := domain.CommitInfo{
+				Hash:    "test-commit",
+				Subject: "test subject",
+			}
+			errors := rule.Validate(context.Background(), commit)
 
-			// Verify results
-			if testCase.wantErrors {
-				// For special case with analyzer error
-				mockAnalyzer, isAnalyzerMock := testCase.analyzer.(*mockCommitAnalyzer)
-				if testCase.analyzer != nil && isAnalyzerMock && mockAnalyzer.err != nil {
-					// We expect a git operation error
-					hasGitError := false
-
-					for _, err := range errors {
-						if err.Code == string(appErrors.ErrGitOperationFailed) {
-							hasGitError = true
-
-							break
-						}
-					}
-
-					require.True(t, hasGitError, "Expected git operation error but got: %v", errors)
-				} else {
-					// For limit exceeded case
-					hasLimitError := false
-
-					for _, err := range errors {
-						if err.Code == string(appErrors.ErrTooManyCommits) {
-							hasLimitError = true
-
-							break
-						}
-					}
-
-					require.True(t, hasLimitError, "Expected too many commits error but got: %v", errors)
-				}
+			// Check results
+			if testCase.wantError {
+				require.NotEmpty(t, errors, "Expected validation errors")
+				require.Equal(t, testCase.wantErrorCode, errors[0].Code)
 			} else {
-				require.Empty(t, errors, "Expected no errors but got: %v", errors)
+				require.Empty(t, errors, "Expected no validation errors")
+			}
+
+			// Verify correct reference was used
+			if testCase.analyzerErr == nil {
+				require.Equal(t, testCase.reference, analyzer.refBranchName)
 			}
 		})
 	}

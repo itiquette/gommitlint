@@ -9,41 +9,65 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/adapters/outgoing/log"
 	"github.com/itiquette/gommitlint/internal/application/options"
+	"github.com/itiquette/gommitlint/internal/common/contextkeys"
 	"github.com/itiquette/gommitlint/internal/common/contextx"
+	"github.com/itiquette/gommitlint/internal/composition"
+	configTypes "github.com/itiquette/gommitlint/internal/config/types"
 	"github.com/itiquette/gommitlint/internal/ports/incoming"
 	"github.com/itiquette/gommitlint/internal/ports/outgoing"
 	"github.com/spf13/cobra"
 )
 
-// containerKey is the context key for the dependency injection container.
-type containerKey struct{}
-
 // DependencyContainer defines the interface for the dependency injection container.
 type DependencyContainer interface {
 	GetCreateValidationService() func(context.Context, string) (incoming.ValidationService, error)
 	CreateValidationOrchestrator(ctx context.Context, repoPath string, formatter outgoing.ResultFormatter) (incoming.ValidationOrchestrator, error)
+	GetLogger() outgoing.Logger
 }
 
-// getContainer retrieves the dependency injection container from context.
-func getContainer(ctx context.Context) DependencyContainer {
-	if container, ok := ctx.Value(containerKey{}).(DependencyContainer); ok {
-		return container
-	}
+// Execute executes the root command with the provided context, version information, and config.
+func Execute(ctx context.Context, version, commitSHA, buildDate string, config configTypes.Config) {
+	// Create version string
+	versionString := version + " (Commit SHA: " + commitSHA + ", Build date: " + buildDate + ")"
 
-	return nil
-}
+	// Container will be created after logger is initialized
+	var container DependencyContainer
 
-func newRootCommand(ctx context.Context, versionString string) *cobra.Command {
 	// Create root command
-	var rootCmd = &cobra.Command{
+	rootCmd := &cobra.Command{
 		Use:     "gommitlint",
 		Version: versionString,
 		Short:   "Commit validator.",
 		Long:    `A tool to validate git commit messages against configurable rules.`,
-		// Set the context for the command
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			cliOptions := options.CLIOptionsFromContext(ctx)
-			ctx = log.InitLogger(ctx, cmd, cliOptions.GetVerbosityWithCaller(), cliOptions.GetOutputFormat())
+			// Extract CLI options directly from command flags
+			verbosity, _ := cmd.Flags().GetString("verbosity")
+			quiet, _ := cmd.Flags().GetBool("quiet")
+			caller, _ := cmd.Flags().GetBool("caller")
+			output, _ := cmd.Flags().GetString("output")
+
+			cliOptions := options.CLIOptions{
+				Verbosity:           verbosity,
+				Quiet:               quiet,
+				VerbosityWithCaller: caller,
+				OutputFormat:        output,
+			}
+
+			ctx = log.InitLogger(ctx, cmd, cliOptions)
+
+			// Get the logger adapter from context
+			logger, ok := ctx.Value(contextkeys.LoggerKey).(outgoing.Logger)
+			if !ok {
+				// Create adapter from zerolog logger
+				zlog := log.Logger(ctx)
+				logger = log.NewAdapter(*zlog)
+				// Store the logger adapter in context
+				ctx = context.WithValue(ctx, contextkeys.LoggerKey, logger)
+			}
+
+			// Create container with proper logger and config
+			containerImpl := composition.NewContainer(logger, config)
+			container = &containerImpl
 
 			// Propagate the context to all commands
 			cmd.SetContext(ctx)
@@ -58,39 +82,27 @@ func newRootCommand(ctx context.Context, versionString string) *cobra.Command {
 	rootCmd.PersistentFlags().Bool("caller", false, "Include caller information in logs")
 	rootCmd.PersistentFlags().String("output", "text", "Output format (text, json, github, gitlab)")
 
-	// Create validate command
-	validateCmd := newValidateCmd(ctx)
-
-	// Add the validate command
-	rootCmd.AddCommand(validateCmd)
+	// Add commands
+	rootCmd.AddCommand(newValidateCmd(func(_ context.Context) DependencyContainer { return container })) //nolint:contextcheck // container is captured from closure
 	rootCmd.AddCommand(newInstallHookCmd())
 	rootCmd.AddCommand(newRemoveHookCmd())
 
-	return rootCmd
-}
-
-// Execute executes the root command with the provided context, version information, and dependency container.
-func Execute(ctx context.Context, version, commitSHA, buildDate string, container DependencyContainer) {
-	// Store container in context for later use
-	ctx = context.WithValue(ctx, containerKey{}, container)
-
-	// Create version string
-	versionString := version + " (Commit SHA: " + commitSHA + ", Build date: " + buildDate + ")"
-
-	// Create and execute root command
-	err := newRootCommand(ctx, versionString).Execute()
-
-	HandleError(ctx, err)
+	// Execute
+	err := rootCmd.Execute()
+	if container != nil {
+		HandleError(container.GetLogger(), err)
+	} else {
+		// Fallback to context logger if container is not available
+		HandleError(contextx.GetLogger(ctx), err)
+	}
 }
 
 // HandleError processes errors in a consistent way across the application.
 // It logs the error with appropriate context and exits with the correct status code.
-func HandleError(ctx context.Context, err error) {
+func HandleError(logger outgoing.Logger, err error) {
 	if err == nil {
 		return
 	}
-
-	logger := contextx.GetLogger(ctx)
 
 	// Get exit code - default to 1 for general errors
 	exitCode := 1
