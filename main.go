@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/itiquette/gommitlint/internal/adapters/incoming/cli"
-	"github.com/itiquette/gommitlint/internal/application/options"
-	"github.com/itiquette/gommitlint/internal/config"
+	"github.com/itiquette/gommitlint/internal/adapters/cli"
+	"github.com/itiquette/gommitlint/internal/adapters/loader"
+	"github.com/itiquette/gommitlint/internal/adapters/logging"
 )
 
 // These variables are set by the build process.
@@ -25,16 +25,28 @@ func main() {
 	// Create the root context
 	ctx := context.Background()
 
-	// Add default CLI options
-	ctx = options.WithCLIOptions(ctx, options.DefaultCLIOptions())
+	// Initialize logger early in the application flow
+	ctx = log.InitLogger(ctx, nil, "text") // Basic logger setup
 
-	// Create config loader
-	configLoader, err := config.NewLoader(ctx)
+	// Create config service
+	configService, err := loader.NewService()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to create config loader: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Failed to create config service: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Pass config to CLI - container will be created after logger initialization
-	cli.Execute(ctx, version, commit, date, configLoader.GetConfig())
+	// Load configuration
+	configService, err = configService.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load configuration: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Ensure logger is available in CLI context
+	zlog := log.GetLogger(ctx)
+	logger := log.NewLogger(*zlog)
+	ctx = cli.WithLogger(ctx, logger)
+
+	// Pass config to CLI with logger context
+	cli.Execute(ctx, version, commit, date, configService.GetConfig())
 }

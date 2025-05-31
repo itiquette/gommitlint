@@ -4,11 +4,11 @@ Gommitlint follows a **functional hexagonal architecture** with value semantics 
 
 ## Core Principles
 
-1. **Hexagonal Architecture** - Clear separation between domain logic and adapters
+1. **Hexagonal Architecture** - Clear separation between core logic and adapters
 2. **Functional Programming** - Pure functions, immutability, and value semantics
 3. **Single Context Pattern** - Context flows from main through the entire application
 4. **Table-Driven Testing** - Consistent test patterns with `testCase` naming
-5. **Domain-First Design** - Business logic is isolated from infrastructure
+5. **Core-First Design** - Business logic is isolated from infrastructure
 
 ## Architecture Overview
 
@@ -42,23 +42,17 @@ Located on the right/bottom side. The interaction is triggered by the applicatio
 │  CLI • API • Git Repository • Configuration                   │
 ├───────────────────────────────────────────────────────────────┤
 │                    Adapters Layer                             │
-│        incoming/              outgoing/                       │
-│          cli/                   git/                          │
-│          (future: api/)         config/                       │
-│                                log/                           │
-│                                output/                        │
+│        cli/                   git/                          │
+│        loader/                logging/                       │
+│        output/                signing/                       │
+│        (future: api/)                                        │
 ├───────────────────────────────────────────────────────────────┤
 │                      Ports Layer                              │
-│       incoming/               outgoing/                       │
-│         validation            logger                          │
-│         hooks                                                 │
+│                    interfaces.go                              │
+│         ValidationService, Logger, Formatter,                 │
+│         ConfigProvider                                        │
 ├───────────────────────────────────────────────────────────────┤
-│                   Application Layer                           │
-│       validate/               report/                         │
-│         service                generator                      │
-│       factories/              options/                        │
-├───────────────────────────────────────────────────────────────┤
-│                     Domain Layer                              │
+│                     Core Layer                                │
 │                   (Core Business Logic)                       │
 │     Immutable Entities • Pure Rules • Value Objects           │
 └───────────────────────────────────────────────────────────────┘
@@ -68,50 +62,47 @@ Located on the right/bottom side. The interaction is triggered by the applicatio
 
 Ports are the application boundary - interfaces that define interactions between the hexagon and the outside world. They belong to the application.
 
-#### Primary Ports (Driver Ports) - internal/ports/incoming
+#### Port Interfaces
 
-These define the API that the application offers:
+Port interfaces are defined where they are consumed, following Go best practices:
 
-- **ValidationService**: Port for validating commits (`validation.go`)
-- **HookService**: Port for git hook operations (`hooks.go`)
-
-#### Secondary Ports (Driven Ports) - internal/ports/outgoing
-
-These define the SPI that the application requires:
-
-- **Logger**: Port for logging operations (`logger.go`)
+- **Domain interfaces**: Defined in `internal/domain` (e.g., rule interfaces, validation interfaces)
+- **Unified ports**: Defined in `internal/ports/ports.go` to eliminate duplication
+- **Domain interfaces**: Still defined in domain package where they belong
 
 ### Adapters
 
 Adapters connect actors to ports using specific technology. They are outside the application.
 
-#### Primary Adapters (Driver Adapters) - internal/adapters/incoming
+#### Adapters - internal/adapters
 
-Use the primary ports, converting technology-specific requests:
+Simplified structure without incoming/outgoing categorization:
 
-- **cli/**: Command-line interface adapter
+- **cli/**: Command-line interface (primary adapter)
   - Root command setup
-  - Validation command
+  - Validation command  
   - Hook installation/removal commands
-
-#### Secondary Adapters (Driven Adapters) - internal/adapters/outgoing
-
-Implement the secondary ports, converting to specific technologies:
-
-- **git/**: Git repository adapter using go-git
+- **git/**: Git repository using go-git (secondary adapter)
   - Repository operations
   - Commit retrieval
   - Repository analysis
-- **config/**: Configuration adapter using Viper
+- **loader/**: Configuration loading service using koanf (secondary adapter)
   - Config loading
   - Environment variable support
-- **log/**: Logging adapter implementations
-  - Simple console adapter
-- **output/**: Output formatting adapters
+- **logging/**: Logging implementations (secondary adapter)
+  - Zerolog adapter
+  - Stderr logger
+- **output/**: Output formatters (secondary adapter)
   - Text formatter
   - JSON formatter
   - GitHub Actions formatter
   - GitLab CI formatter
+  - Report generation
+- **signing/**: Cryptographic signature verification (secondary adapter)
+  - GPG signature verification
+  - SSH signature verification
+  - Key repository management
+  - Signature encoding/decoding
 
 ### Configurable Dependency Pattern
 
@@ -120,15 +111,15 @@ The architecture uses the Configurable Dependency pattern (generalization of Dep
 - **Primary Side**: Adapters depend on port interfaces (implemented by the application)
 - **Secondary Side**: Application depends on port interfaces (implemented by adapters)
 
-### Composition Root
+### Dependency Wiring
 
-The composition root (main component) is responsible for:
+Dependency wiring happens through simple factory functions in `internal/wire.go`:
 
-1. Initializing the environment
-2. Creating instances of driven adapters
-3. Creating the application instance with driven adapters
-4. Creating driver adapter instances with the application
-5. Starting the driver adapters
+1. Initialize the environment
+2. Create driven adapters (git, config, logger)
+3. Create validation service with dependencies
+4. Create CLI commands with the service
+5. Execute the CLI
 
 ### Dependency Flow
 
@@ -138,13 +129,12 @@ Dependencies always flow inward:
 graph LR
     subgraph "Dependency Direction"
         Adapters[Adapters] --> Ports[Port Interfaces]
-        Application[Application Services] --> Ports
-        Application --> Domain[Domain]
-        Ports --> Domain
-        Composition[Composition Root] --> Everything[All Components]
+        Core[Core Services] --> Ports
+        Ports --> Core
+        Wire[wire.go] --> Everything[All Components]
     end
     
-    style Domain fill:#99ff99
+    style Core fill:#99ff99
     style Ports fill:#87CEEB
 ```
 
@@ -164,69 +154,58 @@ graph TB
         Output[Output Systems]
     end
     
-    subgraph "internal/ports"
-        subgraph "incoming (Primary Ports)"
-            ValidationPort[<<interface>><br/>ValidationService]
-            HookPort[<<interface>><br/>HookService]
-        end
-        subgraph "outgoing (Secondary Ports)"
-            LogPort[<<interface>><br/>Logger]
-        end
+    subgraph "Port Interfaces"
+        Interfaces[Port Interfaces<br/>Defined locally in packages<br/>• domain/interfaces.go<br/>• adapters/*/ports.go<br/>No central ports package]
     end
     
     subgraph "internal/adapters"
-        subgraph "incoming (Primary Adapters)"
-            CLIAdapter[CLI Adapter]
-            APIAdapter[Future API Adapter]
-        end
-        subgraph "outgoing (Secondary Adapters)"
-            GitAdapter[Git Adapter]
-            ConfigAdapter[Config Adapter]
-            LogAdapter[Log Adapter]
-            OutputAdapter[Output Adapters]
-        end
+        CLIAdapter[CLI Adapter]
+        GitAdapter[Git Adapter]
+        ConfigAdapter[Config Adapter]
+        LogAdapter[Logging Adapter]
+        FormatAdapter[Output Adapters]
+        SigningAdapter[Signing Adapter]
     end
     
     subgraph "internal/domain"
-        PureDomain[Pure Business Logic<br/>✓ Value semantics<br/>✓ Immutable data<br/>✓ Pure functions<br/>✓ No framework deps<br/>✓ Technology agnostic]
+        DomainServices[Domain Business Logic<br/>✓ Value semantics<br/>✓ Immutable data<br/>✓ Pure functions<br/>✓ No framework deps<br/>✓ Technology agnostic<br/>+ Entities<br/>+ Rules<br/>+ Validation]
     end
     
     subgraph "internal/application"
-        AppService[Application Services<br/>+ Validate Service<br/>+ Report Generator<br/>+ Factories<br/>+ Options]
+        ApplicationServices[Application Services<br/>+ Validation Service<br/>+ Orchestration<br/>+ Use Cases]
     end
     
-    subgraph "internal/composition"
-        Root[Composition Root<br/>Main Component]
+    subgraph "internal/"
+        Wire[wire.go<br/>Factory Functions]
     end
     
     CLI --> CLIAdapter
-    API -.-> APIAdapter
-    CLIAdapter --> ValidationPort
-    CLIAdapter --> HookPort
-    APIAdapter -.-> ValidationPort
-    ValidationPort --> AppService
-    HookPort --> AppService
-    AppService --> PureDomain
-    AppService --> LogPort
-    LogPort --> LogAdapter
-    AppService --> GitAdapter
-    AppService --> ConfigAdapter
-    AppService --> OutputAdapter
+    CLIAdapter --> Interfaces
+    Interfaces --> ApplicationServices
+    ApplicationServices --> DomainServices
+    DomainServices --> Interfaces
+    Interfaces --> GitAdapter
+    Interfaces --> ConfigAdapter
+    Interfaces --> LogAdapter
+    Interfaces --> FormatAdapter
+    Interfaces --> SigningAdapter
+    DomainServices --> Interfaces
+    Interfaces --> FormatAdapter
     GitAdapter --> Git
     ConfigAdapter --> Config
     LogAdapter --> Logs
-    OutputAdapter --> Output
-    Root --> CLIAdapter
-    Root --> AppService
-    Root --> GitAdapter
-    Root --> ConfigAdapter
-    Root --> LogAdapter
-    Root --> OutputAdapter
+    FormatAdapter --> Output
+    SigningAdapter --> Git
+    Wire --> CLIAdapter
+    Wire --> ApplicationServices
+    Wire --> GitAdapter
+    Wire --> ConfigAdapter
+    Wire --> LogAdapter
+    Wire --> FormatAdapter
+    Wire --> SigningAdapter
     
-    style PureDomain fill:#99ff99
-    style ValidationPort fill:#87CEEB
-    style HookPort fill:#87CEEB
-    style LogPort fill:#87CEEB
+    style DomainServices fill:#99ff99
+    style Interfaces fill:#87CEEB
 ```
 
 ## Directory Structure
@@ -234,42 +213,57 @@ graph TB
 ```plaintext
 gommitlint/
 ├── cmd/                    # Application entry points
+│   └── gommitlint/        # Main CLI application
 ├── internal/
-│   ├── domain/             # Core business logic (pure)
+│   ├── domain/             # Core business logic (hexagon center)
 │   │   ├── commit.go       # Commit entities (value semantics)
-│   │   ├── rule.go         # Rule interfaces and registry
-│   │   └── types.go        # Domain types
-│   ├── core/               # Business rules implementation
+│   │   ├── rule.go         # Rule interfaces and types
+│   │   ├── types.go        # Core domain types
+│   │   ├── errors.go       # Domain-specific errors
+│   │   ├── identity.go     # Identity types and validation
+│   │   ├── signature.go    # Signature types and validation
+│   │   ├── verification.go # Verification logic
+│   │   ├── formatter.go    # Result formatting interfaces
+│   │   ├── formatting.go   # Result formatting logic
+│   │   ├── functional_*.go # Functional utilities
+│   │   ├── validation.go   # Validation engine
 │   │   ├── rules/          # All validation rules
-│   │   └── validation/     # Validation engine
-│   ├── ports/              # Interface definitions
-│   │   ├── incoming/       # Primary ports (API)
-│   │   │   ├── validation.go
-│   │   │   └── hooks.go
-│   │   └── outgoing/       # Secondary ports (SPI)
-│   │       └── logger.go
-│   ├── adapters/           # Port implementations
-│   │   ├── incoming/       # Primary adapters
-│   │   │   └── cli/        # CLI implementation
-│   │   └── outgoing/       # Secondary adapters
-│   │       ├── git/        # Git operations
-│   │       ├── config/     # Configuration
-│   │       ├── log/        # Logging
-│   │       └── output/     # Output formatting
-│   ├── application/        # Use case orchestration
-│   │   ├── validate/       # Validation service
-│   │   ├── report/         # Report generation
-│   │   ├── factories/      # Rule and object factories
-│   │   └── options/        # CLI and runtime options
-│   ├── composition/        # Dependency injection
+│   │   │   └── factory.go  # Rule factory
+│   │   └── testdata/       # Test data for domain
+│   ├── adapters/           # External adapters (hexagon edges)
+│   │   ├── cli/            # CLI adapter
+│   │   │   ├── context/    # CLI context utilities
+│   │   │   └── ports.go    # CLI-specific port interfaces
+│   │   ├── git/            # Git repository adapter
+│   │   │   ├── ports.go    # Git-specific port interfaces
+│   │   │   └── testdata/   # Test repositories
+│   │   ├── config/         # Configuration adapter
+│   │   ├── signing/        # Cryptographic signature adapters
+│   │   │   ├── gpg.go      # GPG verification
+│   │   │   ├── ssh.go      # SSH verification
+│   │   │   ├── encoding.go # Signature encoding/decoding
+│   │   │   └── testdata/   # Test keys and signatures
+│   │   ├── logging/        # Logging adapters
+│   │   │   └── ports.go    # Logging-specific port interfaces
+│   │   └── output/         # Output formatting adapters
+│   │       ├── report.go   # Report generation
+│   │       └── ports.go    # Output-specific port interfaces
+│   ├── config/             # Configuration types and loading
+│   │   ├── rules/          # Rule configuration extensions
+│   │   └── types/          # Configuration type definitions
 │   ├── common/             # Shared utilities
-│   │   ├── contextx/       # Context utilities
 │   │   ├── contextkeys/    # Context key definitions
-│   │   └── slices/         # Functional utilities
-│   ├── config/             # Configuration types
-│   ├── errors/             # Error types and formatting
-│   ├── testutils/          # Test helpers
-│   └── integtest/          # Integration tests
+│   │   ├── contextx/       # Context utilities
+│   │   ├── fsutils/        # File system utilities
+│   │   ├── functional/     # Functional programming utilities
+│   │   ├── security/       # Security utilities
+│   │   └── slices/         # Slice utilities
+│   ├── integrationtest/    # Integration tests
+│   ├── testutils/          # Test utilities (consolidated)
+│   │   ├── builders.go     # Test data builders
+│   │   ├── git.go          # Git test helpers
+│   │   └── assertions.go   # Custom test assertions
+│   └── wire.go             # Dependency wiring
 └── docs/                   # Documentation
 ```
 
@@ -277,7 +271,7 @@ gommitlint/
 
 ### Value Semantics
 
-All domain types use value receivers and return new instances:
+All core types use value receivers and return new instances:
 
 ```go
 // Immutable transformations
@@ -314,7 +308,7 @@ func ValidateSubjectLength(commit CommitInfo, maxLength int) []Error {
 
 ### Implementation Notes
 
-1. **Domain Layer**: Follows value semantics with pure functions
+1. **Core Layer**: Follows value semantics with pure functions
 2. **Rule Implementation**: Rules use value receivers and receive configuration via constructor options
 3. **Collection Operations**: Functional patterns with `Filter`, `Map`, `Any`, `All`
 4. **Immutability**: Collections and validation results always return new instances
@@ -355,13 +349,13 @@ Command setup
     ↓
 Application services
     ↓
-Domain logic
+Core logic
 ```
 
 Context enrichment flow:
 
 1. Logger addition: `ctx = logger.WithContext(ctx)`
-2. Domain options: `ctx = domain.WithCLIOptions(ctx, options)`
+2. Core options: `ctx = core.WithCLIOptions(ctx, options)`
 
 ### Context Best Practices
 
@@ -442,9 +436,8 @@ gommitlint:
 
 Default-disabled rules:
 
-- `JiraReference` - Requires JIRA ticket references
-- `CommitBody` - Validates message body
-- `SignedIdentity` - Validates signed commits
+- `jirareference` - Requires JIRA ticket references (organization-specific)
+- `commitbody` - Validates commit body (not all projects need detailed bodies)
 
 ### Rule Priority Logic
 
@@ -502,11 +495,11 @@ func TestValidation(t *testing.T) {
 
 ```plaintext
 internal/
-├── testutils/           # Shared test utilities
-│   ├── builders/        # Test data builders
-│   ├── config/          # Configuration helpers
-│   └── mocks/           # Mock implementations
-├── integtest/           # Integration tests
+├── testutils/           # Shared test utilities (consolidated)
+│   ├── builders.go      # Test data builders
+│   ├── git.go           # Git repository helpers
+│   └── assertions.go    # Test assertions
+├── integrationtest/     # Integration tests
 └── *_test.go            # Unit tests alongside code
 ```
 
@@ -522,20 +515,22 @@ internal/
 
 | Component | Location | Rationale |
 |-----------|----------|-----------|
-| Business Rules | `internal/domain` & `internal/core` | Pure domain logic |
-| CLI Implementation | `internal/adapters/incoming/cli` | Concrete adapter |
-| Git Operations | `internal/adapters/outgoing/git` | Infrastructure adapter |
-| Configuration | `internal/adapters/outgoing/config` | Single adapter pattern |
-| Port Interfaces | `internal/ports` | Architectural boundaries |
-| Factories | `internal/application/factories` | Application concern |
-| Composition | `internal/composition` | Dependency injection |
-| Domain Entities | `internal/domain` | Core business concepts |
+| Business Rules | `internal/domain` | All business logic in domain layer |
+| CLI Implementation | `internal/adapters/cli` | Concrete adapter |
+| Git Operations | `internal/adapters/git` | Infrastructure adapter |
+| Configuration | `internal/adapters/config` | Single adapter pattern |
+| Port Interfaces | Local to consumers | Interfaces defined at consumption sites |
+| Rule Factory | `internal/domain/rules/factory.go` | Rule creation logic |
+| Dependency Wiring | `internal/wire.go` | Simplified factory functions |
+| Domain Entities | `internal/domain` | All business concepts |
 | Value Objects | `internal/domain` | Immutable domain values |
-| Use Cases | `internal/application` | Application services |
+| Report Generation | `internal/adapters/output` | Output adapter concern |
+| Signature Verification | `internal/adapters/signing` | Cryptographic operations |
+| Logging | `internal/adapters/logging` | Logging implementations |
 
 ### Decision Criteria
 
-#### Is it Domain?
+#### Is it Core?
 
 - **Yes if**: Core business concept, rule, or entity
 - **No if**: Framework specific, I/O operation, external dependency
@@ -544,11 +539,6 @@ internal/
 
 - **Yes if**: Interface defining a boundary
 - **No if**: Concrete implementation
-
-#### Is it Application Layer?
-
-- **Yes if**: Use case coordination, orchestration, factories
-- **No if**: Pure business logic or external integration
 
 #### Is it an Adapter?
 
@@ -559,28 +549,27 @@ internal/
 
 | Component | Pattern | Example |
 |-----------|---------|---------|
-| Domain Entity | `{Noun}` | `Commit`, `Rule` |
+| Core Entity | `{Noun}` | `Commit`, `Rule` |
 | Port Interface | `{Purpose}Port` or `{Purpose}Service` | `ValidationService`, `Logger` |
-| Adapter | `{Technology}Adapter` | `GitAdapter`, `CLIAdapter` |
-| Application Service | `{UseCase}Service` | `ValidationService` |
+| Adapter | `{Technology}` | `Git`, `CLI` |
+| Core Service | `{UseCase}Service` | `ValidationService` |
 | Factory | `{Entity}Factory` | `RuleFactory` |
 
 ### Testing Strategy by Layer
 
 | Layer | Test Type | Mock Strategy | Focus |
 |-------|-----------|---------------|-------|
-| Domain | Unit | No mocks needed | Business logic |
+| Core | Unit | No mocks needed | Business logic |
 | Ports | Contract | N/A | Interface contracts |
-| Application | Integration | Mock ports | Use case flow |
 | Adapters | Integration | Mock external | I/O behavior |
-| Composition | E2E | Real implementations | Full flow |
+| Wire.go | E2E | Real implementations | Full flow |
 
 ## Best Practices
 
 ### DO
 
 - ✅ Use value semantics everywhere
-- ✅ Keep domain logic pure
+- ✅ Keep core logic pure
 - ✅ Separate I/O from business logic
 - ✅ Test with table-driven patterns
 - ✅ Use functional composition
@@ -591,9 +580,9 @@ internal/
 
 ### DON'T
 
-- ❌ Use pointer receivers for domain types
+- ❌ Use pointer receivers for core types
 - ❌ Mix I/O with business logic
-- ❌ Store context in structs (except composition root)
+- ❌ Store context in structs
 - ❌ Create mutable state
 - ❌ Use global variables
 - ❌ Store configuration in context
@@ -605,10 +594,10 @@ internal/
 
 1. **Don't put implementations in ports package**
    - ❌ `ports/cli/validate.go` (implementation)
-   - ✓ `ports/incoming/validation.go` (interface)
+   - ✓ `ports/interfaces.go` (interface definitions only)
 
-2. **Don't mix concerns in domain**
-   - ❌ Domain knowing about CLI or logging
+2. **Don't mix concerns in core**
+   - ❌ Core knowing about CLI or logging
    - ✓ Pure business rules only
 
 3. **Don't create unnecessary abstractions**
@@ -616,28 +605,28 @@ internal/
    - ✓ Interface only at boundaries
 
 4. **Don't violate dependency direction**
-   - ❌ Domain depending on infrastructure
-   - ✓ Infrastructure depending on domain
+   - ❌ Core depending on infrastructure
+   - ✓ Infrastructure depending on core
 
 ### Success Indicators
 
 ✅ **Good Signs**
 
 - Can swap implementations easily
-- Domain has no external dependencies
+- Core has no external dependencies
 - Tests don't need complex mocks
 - Clear separation of concerns
-- Pure functions throughout domain
+- Pure functions throughout core
 - Immutable data structures
 - Context flows cleanly through layers
 
 ❌ **Warning Signs**
 
 - Circular dependencies
-- Domain imports infrastructure
+- Core imports infrastructure
 - Ports contain implementation
 - Complex dependency injection
-- Mutable state in domain
+- Mutable state in core
 - Side effects in business logic
 - Mixed I/O and computation
 
@@ -646,18 +635,18 @@ internal/
 ### Current State
 
 1. **Architecture Compliance**: The codebase closely follows the documented hexagonal architecture
-2. **Functional Patterns**: Domain mostly uses value semantics with some pragmatic exceptions
+2. **Functional Patterns**: Core mostly uses value semantics with some pragmatic exceptions
 3. **Configuration Access**: Explicit parameter passing for configuration
 4. **Testing**: Good use of table-driven tests with high coverage
 5. **Context Management**: Well-implemented single context pattern
 6. **Rule System**: Clearly defined priority system as documented
-7. **Composition**: Clean dependency injection via composition root
+7. **Dependency Wiring**: Simple factory functions via wire.go
 
 ### Areas for Improvement
 
 1. Continue enforcing value semantics in new code
 2. Maintain hexagonal architecture boundaries
-3. Keep domain logic pure and testable
+3. Keep core logic pure and testable
 
 ## Example: Creating a Custom Rule
 
@@ -755,41 +744,37 @@ flowchart TB
         subgraph SecondaryAdapters[Secondary Adapters]
             GitAdapter[Git Adapter]
             ConfigAdapter[Config Adapter]
-            LogAdapter[Log Adapter]
+            LogAdapter[Logging Adapter]
             OutputAdapter[Output Adapters]
+            SigningAdapter[Signing Adapter]
         end
     end
     
     subgraph Ports[Ports]
-        InPorts[Primary Ports<br/>ValidationService<br/>HookService]
-        OutPorts[Secondary Ports<br/>Logger]
+        Interfaces[Domain Interfaces<br/>Defined where consumed<br/>No central interface file]
     end
     
-    subgraph Application[Application]
-        Services[Services<br/>validate/<br/>report/]
-        Factories[Factories]
-        Options[Options]
-    end
-    
-    subgraph Domain[Domain]
+    subgraph Core[Core]
         Rules[Rules<br/>Value Semantics]
         Entities[Entities<br/>CommitInfo]
         ValueObjects[Value Objects<br/>ValidationResult]
+        Services[Validation Engine<br/>Result Formatting]
     end
     
     CLI --> CLIAdapter
-    CLIAdapter --> InPorts
-    InPorts --> Services
-    Services --> Domain
-    Services --> OutPorts
-    OutPorts --> LogAdapter
-    Services --> GitAdapter
-    Services --> ConfigAdapter
-    Services --> OutputAdapter
+    CLIAdapter --> Interfaces
+    Interfaces --> Services
+    Services --> Interfaces
+    Interfaces --> LogAdapter
+    Interfaces --> GitAdapter
+    Interfaces --> ConfigAdapter
+    Interfaces --> OutputAdapter
+    Interfaces --> SigningAdapter
     GitAdapter --> Git
     ConfigAdapter --> Config
     LogAdapter --> Logs
     OutputAdapter --> Output
+    SigningAdapter --> Git
 ```
 
 This architecture ensures:

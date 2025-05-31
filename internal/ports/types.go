@@ -2,26 +2,66 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package ports defines shared types used by port interfaces.
 package ports
 
-import "io"
+// This file provides documentation for all port interfaces in the system.
+// The actual interfaces are defined in their respective packages to avoid circular dependencies.
 
-// ReportOptions defines options for report generation.
-// This is a port-level type to avoid adapters depending on application types.
-type ReportOptions struct {
-	// Format specifies the output format (text, json, github, gitlab).
-	Format string
-	// Verbose indicates whether to include detailed information.
-	Verbose bool
-	// ExtraVerbose indicates whether to include extra detailed information.
-	ExtraVerbose bool
-	// ShowHelp indicates whether to show help for rules.
-	ShowHelp bool
-	// RuleToShowHelp specifies a specific rule to show help for.
-	RuleToShowHelp string
-	// LightMode indicates whether to use light color scheme.
-	LightMode bool
-	// Writer is the output writer.
-	Writer io.Writer
-}
+// Domain Ports (defined in internal/domain/)
+// ==========================================
+
+// CommitRepository (domain.CommitRepository) provides access to Git commit information.
+// Methods:
+//   - GetCommit(ctx, hash) (CommitInfo, error)
+//   - GetCommits(ctx, limit) ([]CommitInfo, error)
+//   - GetCommitRange(ctx, fromHash, toHash) ([]CommitInfo, error)
+//   - GetHeadCommits(ctx, count) ([]CommitInfo, error)
+
+// RepositoryInfoProvider (domain.RepositoryInfoProvider) provides repository metadata.
+// Methods:
+//   - GetCurrentBranch(ctx) (string, error)
+//   - GetRepositoryName(ctx) string
+//   - IsValid(ctx) (bool, error)
+
+// CommitAnalyzer (domain.CommitAnalyzer) provides commit analysis operations.
+// Methods:
+//   - GetCommitsAhead(ctx, ref) (int, error)
+
+// CryptoVerifier (domain.CryptoVerifier) verifies commit signatures.
+// Methods:
+//   - VerifyCommit(ctx, commit) (VerificationResult, error)
+
+// CryptoKeyRepository (domain.CryptoKeyRepository) manages cryptographic keys.
+// Methods:
+//   - GetKeyDirectory() string
+//   - FindKeyFiles(extensions) ([]string, error)
+//   - ReadKeyFile(path) ([]byte, error)
+
+// Formatter (format.Formatter) formats validation results.
+// Methods:
+//   - Format(ctx, results) string
+//   - ContentType() string
+
+// Adapter Ports (defined in internal/adapters/*/ports.go)
+// =======================================================
+
+// Logger provides logging capabilities.
+// This interface is defined in multiple packages following dependency inversion.
+// Methods:
+//   - Debug(msg, keysAndValues...)
+//   - Info(msg, keysAndValues...)
+//   - Warn(msg, keysAndValues...)
+//   - Error(msg, keysAndValues...)
+
+// Application Ports (defined in internal/application/*/ports.go)
+// ==============================================================
+
+// ValidationService provides commit validation operations.
+// This is typically implemented by the validation.Service type.
+// Methods:
+//   - ValidateCommit(ctx, hash) (ValidationResult, error)
+//   - ValidateCommits(ctx, hashes) ([]ValidationResult, error)
+//   - ValidateBranch(ctx, branch, baseBranch) ([]ValidationResult, error)
+//   - ValidateRange(ctx, fromHash, toHash) ([]ValidationResult, error)
+//   - ValidateMessage(ctx, message) (ValidationResult, error)
+//   - ValidateMessagesFromFile(ctx, filePath) ([]ValidationResult, error)

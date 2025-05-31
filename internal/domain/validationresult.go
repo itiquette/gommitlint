@@ -4,35 +4,21 @@
 
 package domain
 
-import (
-	"github.com/itiquette/gommitlint/internal/errors"
-)
-
 // RuleResult represents the result of validating a single rule against a commit.
+// Simplified to focus only on essential information.
 type RuleResult struct {
-	// RuleID is the unique identifier of the rule.
-	RuleID string
-
 	// RuleName is the human-readable name of the rule.
 	RuleName string
 
 	// Status indicates whether the rule passed, failed, or was skipped.
 	Status ValidationStatus
 
-	// Message is a human-readable result message.
-	Message string
-
-	// VerboseMessage is a detailed result message with more information.
-	VerboseMessage string
-
-	// HelpMessage provides guidance on how to fix rule violations.
-	HelpMessage string
-
 	// Errors contains any validation errors detected by the rule.
-	Errors []errors.ValidationError
+	Errors []ValidationError
 }
 
 // CommitResult represents the results of validating all rules against a single commit.
+// Simplified to contain only necessary fields.
 type CommitResult struct {
 	// CommitInfo contains information about the validated commit.
 	CommitInfo CommitInfo
@@ -40,133 +26,58 @@ type CommitResult struct {
 	// RuleResults contains the results of each rule applied to the commit.
 	RuleResults []RuleResult
 
-	// RuleErrorMap contains validation errors for each rule by name
-	RuleErrorMap map[string][]errors.ValidationError
-
-	// Metadata contains additional information about the validation
-	Metadata map[string]string
-
 	// Passed indicates whether all rules passed validation.
 	Passed bool
 }
 
 // ValidationResults contains the validation results for multiple commits.
+// Simplified to focus on core functionality.
 type ValidationResults struct {
 	// Results contains individual commit validation results
 	Results []CommitResult
-
-	// RuleSummary summarizes rule failures across all commits.
-	RuleSummary map[string]int
 
 	// TotalCommits is the total number of commits validated.
 	TotalCommits int
 
 	// PassedCommits is the number of commits that passed all validations.
 	PassedCommits int
-
-	// Metadata contains additional information
-	Metadata map[string]string
 }
 
 // NewCommitResult creates a new commit result.
 func NewCommitResult(commit CommitInfo) CommitResult {
 	return CommitResult{
-		CommitInfo:   commit,
-		RuleResults:  []RuleResult{},
-		RuleErrorMap: make(map[string][]errors.ValidationError),
-		Metadata:     make(map[string]string),
-		Passed:       true,
+		CommitInfo:  commit,
+		RuleResults: []RuleResult{},
+		Passed:      true,
 	}
 }
 
-// WithRuleResult returns a new CommitResult with added rule errors (functional).
-func (r CommitResult) WithRuleResult(ruleName string, errs []errors.ValidationError) CommitResult {
-	// Create new result
+// AddRuleResult adds a rule result to the commit result.
+// This replaces the complex WithRuleResult and WithFormattedRuleResult methods.
+func (r CommitResult) AddRuleResult(ruleName string, errs []ValidationError) CommitResult {
+	// Create new result with copied data
 	newResult := CommitResult{
 		CommitInfo: r.CommitInfo,
 		Passed:     r.Passed,
 	}
 
-	// Deep copy rule results
+	// Copy existing rule results
 	newResult.RuleResults = make([]RuleResult, len(r.RuleResults), len(r.RuleResults)+1)
 	copy(newResult.RuleResults, r.RuleResults)
 
-	// Deep copy error map
-	newResult.RuleErrorMap = make(map[string][]errors.ValidationError)
-
-	for k, v := range r.RuleErrorMap {
-		errCopy := make([]errors.ValidationError, len(v))
-		copy(errCopy, v)
-		newResult.RuleErrorMap[k] = errCopy
-	}
-
-	newResult.RuleErrorMap[ruleName] = errs
-
-	// Deep copy metadata
-	newResult.Metadata = make(map[string]string)
-	for k, v := range r.Metadata {
-		newResult.Metadata[k] = v
-	}
-
-	// Create and add rule result
-	ruleResult := RuleResult{
-		RuleID:   ruleName,
-		RuleName: ruleName,
-		Errors:   errs,
-		Status:   StatusPassed,
-		// Note: Message formatting should be done by the caller if needed
-		// This keeps the domain model pure and independent of formatting logic
-	}
-
+	// Determine status
+	status := StatusPassed
 	if len(errs) > 0 {
-		ruleResult.Status = StatusFailed
+		status = StatusFailed
 		newResult.Passed = false
 	}
 
-	newResult.RuleResults = append(newResult.RuleResults, ruleResult)
-
-	return newResult
-}
-
-// WithFormattedRuleResult returns a new CommitResult with added rule result including formatted messages.
-func (r CommitResult) WithFormattedRuleResult(ruleResult RuleResult) CommitResult {
-	// Create new result
-	newResult := CommitResult{
-		CommitInfo: r.CommitInfo,
-		Passed:     r.Passed,
+	// Add new rule result
+	ruleResult := RuleResult{
+		RuleName: ruleName,
+		Status:   status,
+		Errors:   errs,
 	}
-
-	// Deep copy rule results
-	newResult.RuleResults = make([]RuleResult, len(r.RuleResults), len(r.RuleResults)+1)
-	copy(newResult.RuleResults, r.RuleResults)
-
-	// Deep copy error map
-	newResult.RuleErrorMap = make(map[string][]errors.ValidationError)
-
-	if r.RuleErrorMap != nil {
-		for k, v := range r.RuleErrorMap {
-			errCopy := make([]errors.ValidationError, len(v))
-			copy(errCopy, v)
-			newResult.RuleErrorMap[k] = errCopy
-		}
-	}
-
-	// Add errors to map
-	if len(ruleResult.Errors) > 0 {
-		newResult.RuleErrorMap[ruleResult.RuleName] = ruleResult.Errors
-		newResult.Passed = false
-	}
-
-	// Deep copy metadata
-	newResult.Metadata = make(map[string]string)
-
-	if r.Metadata != nil {
-		for k, v := range r.Metadata {
-			newResult.Metadata[k] = v
-		}
-	}
-
-	// Add the formatted rule result
 	newResult.RuleResults = append(newResult.RuleResults, ruleResult)
 
 	return newResult
@@ -175,14 +86,13 @@ func (r CommitResult) WithFormattedRuleResult(ruleResult RuleResult) CommitResul
 // NewValidationResults creates a new ValidationResults instance.
 func NewValidationResults() ValidationResults {
 	return ValidationResults{
-		Results:     []CommitResult{},
-		RuleSummary: make(map[string]int),
-		Metadata:    make(map[string]string),
+		Results: []CommitResult{},
 	}
 }
 
-// WithResult returns a new ValidationResults with an added result (functional).
-func (r ValidationResults) WithResult(result CommitResult) ValidationResults {
+// AddResult adds a commit result to the validation results.
+// This replaces the WithResult method with a simpler name.
+func (r ValidationResults) AddResult(result CommitResult) ValidationResults {
 	newResults := ValidationResults{
 		TotalCommits:  r.TotalCommits + 1,
 		PassedCommits: r.PassedCommits,
@@ -192,29 +102,10 @@ func (r ValidationResults) WithResult(result CommitResult) ValidationResults {
 		newResults.PassedCommits++
 	}
 
-	// Deep copy results
+	// Copy existing results and add new one
 	newResults.Results = make([]CommitResult, len(r.Results), len(r.Results)+1)
 	copy(newResults.Results, r.Results)
 	newResults.Results = append(newResults.Results, result)
-
-	// Deep copy rule summary
-	newResults.RuleSummary = make(map[string]int)
-	for k, v := range r.RuleSummary {
-		newResults.RuleSummary[k] = v
-	}
-
-	// Update summary for failed rules
-	for _, ruleResult := range result.RuleResults {
-		if ruleResult.Status == StatusFailed {
-			newResults.RuleSummary[ruleResult.RuleID]++
-		}
-	}
-
-	// Deep copy metadata
-	newResults.Metadata = make(map[string]string)
-	for k, v := range r.Metadata {
-		newResults.Metadata[k] = v
-	}
 
 	return newResults
 }
@@ -227,4 +118,20 @@ func (r ValidationResults) AllPassed() bool {
 // Count returns the total number of commits in the validation results.
 func (r ValidationResults) Count() int {
 	return r.TotalCommits
+}
+
+// GetFailedRules returns a map of rule names to the number of commits that failed that rule.
+// This provides the essential functionality without the complex RuleSummary map.
+func (r ValidationResults) GetFailedRules() map[string]int {
+	summary := make(map[string]int)
+
+	for _, result := range r.Results {
+		for _, ruleResult := range result.RuleResults {
+			if ruleResult.Status == StatusFailed {
+				summary[ruleResult.RuleName]++
+			}
+		}
+	}
+
+	return summary
 }

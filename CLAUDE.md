@@ -8,11 +8,8 @@ Configuration is passed explicitly through constructor parameters and function o
 
 Example:
 ```go
-// Rules receive configuration via constructor options
-rule := NewSubjectLengthRule(
-    WithMaxLength(config.GetInt("subject.max_length")),
-    WithEnabled(config.GetBool("subject.enabled")),
-)
+// Rules receive configuration directly via constructors
+rule := NewSubjectLengthRule(config)
 
 // Services receive configuration as a constructor parameter
 service := validate.NewService(config, repository, logger)
@@ -33,7 +30,7 @@ This approach ensures:
 
 Gommitlint uses context only for cross-cutting concerns:
 
-- **Public keys** (`internal/common/contextkeys`): Used only for logging and CLI options
+- **Context keys** (`internal/adapters/cli/context_keys.go`): Used only for logging and CLI options
 - **No configuration in context**: Configuration flows through explicit parameters
 
 This design follows hexagonal architecture principles by:
@@ -43,35 +40,48 @@ This design follows hexagonal architecture principles by:
 
 > **IMPORTANT**: Configuration must never be stored in or accessed from context. It should always be passed as an explicit parameter.
 
-## Rule Logic
+## Rule Priority System
 
-Rules in gommitlint can have three states which follow a specific priority order:
+Gommitlint uses a three-level priority system for rule activation:
 
-1. **Rule States**:
-   - Enabled: Rule is active and will be validated
-   - Disabled: Rule is inactive and will be skipped
-   - Default: Rule's state depends on DefaultDisabledRules map (most rules are enabled by default)
+### Priority Levels (highest to lowest)
 
-2. **Priority System**:
-   - An enabled rule always wins - it has higher priority than any disable setting
-   - A rule in `enabled` will always be validated, regardless of other settings
-   - A rule is disabled if it's in the `disabled` list, unless it's also in `enabled`
-   - Most rules are enabled by default, regardless of the `enabled` setting
-   - To deactivate a default-enabled rule, it must be added to the `disabled` configuration
+1. **Explicitly enabled**: Rules in the `enabled` list always run
+2. **Explicitly disabled**: Rules in the `disabled` list are skipped
+3. **Default behavior**: Most rules are enabled by default
 
-3. **Rule States Combinations**:
-   - Default-enabled: Not in DefaultDisabledRules map, not in any configuration lists
-   - Default-disabled: In DefaultDisabledRules map, not in any configuration lists
-   - Explicitly enabled: In enabled list (overrides any other setting)
-   - Explicitly disabled: In disabled list (unless also explicitly enabled)
+### How It Works
 
-4. **Validation Process**:
-   - First check if a rule is in enabled - if yes, include it
-   - Then check if a rule is in disabled - if yes, exclude it (unless it was explicitly enabled)
-   - Finally check if a rule is in DefaultDisabledRules - if yes, exclude it (unless it was explicitly enabled)
-   - If none of the above apply, include the rule (default behavior)
+```yaml
+gommitlint:
+  rules:
+    enabled:
+      - spell           # Overrides default-disabled
+      - subjectlength   # Explicitly enabled
+    disabled:
+      - commitbody      # Always disabled (unless also in enabled)
+```
 
-## Best Practices for Cost-Effective Usage
+### Resolution Logic
+
+```text
+if rule in enabled:
+    ✓ include rule (highest priority)
+else if rule in disabled:
+    ✗ exclude rule
+else if rule in DefaultDisabledRules:
+    ✗ exclude rule  
+else:
+    ✓ include rule (default enabled)
+```
+
+### Default-Disabled Rules
+
+Only two rules are disabled by default:
+- `jirareference` - Validates JIRA ticket references (organization-specific)
+- `commitbody` - Requires commit body (not all projects need detailed bodies)
+
+All other rules are enabled by default unless explicitly disabled.
 
 ## Build Commands
 
@@ -117,10 +127,8 @@ Rules in gommitlint can have three states which follow a specific priority order
   - Validation errors: `model.NewValidationError("RuleName", "error_code", "message")`
 - Naming: PascalCase for exported, camelCase for non-exported identifiers
 - Test-only code:
-  - All test utilities should be placed in the `internal/testutils` package
-  - Organize test utilities by domain area (e.g., `testutils/git`, `testutils/config`)
-  - Every testutils package should have clear documentation indicating it's for testing only
-  - Integration tests should be in the `internal/integtest` package
+  - Test utilities are organized by domain within their respective packages
+  - Integration tests should be in the `internal/integrationtest` package
 
 ### Working with Code
 
@@ -158,6 +166,9 @@ Rules in gommitlint can have three states which follow a specific priority order
 
 ### Documentation
 
+- Request updates to README or other docs when implementing new features
+- Ensure doc.go files are present for all packages
+- Follow godoc conventions for all public APIs
 
 ## Core Guidelines for Claude
 
@@ -1574,5 +1585,47 @@ Keep architecture only as complex as needed:
 7. **Separate concerns**: Core domain logic shouldn't depend on external systems
 8. **Use standard project layout**: Follow Go conventions for project structure
 9. **Favor composition**: Build complex systems from simple components
-10. **Be consise**:
-11. **Be conherent**:
+10. **Be concise**: Write clear, minimal code that expresses intent
+11. **Be coherent**: Maintain consistency in style and approach throughout
+
+## Container Pattern
+
+The project uses an immutable container pattern for dependency injection:
+
+### Design Principles
+- **Immutable state**: Container never mutates after creation  
+- **Explicit dependencies**: All dependencies passed as parameters
+- **No service locator**: No global registry lookups
+- **Fresh instances**: Each service gets fresh dependencies
+
+### Implementation
+```go
+type Container struct {
+    logger       log.Logger
+    actualConfig configTypes.Config
+    factory      *AdapterFactory
+}
+
+// Services created with fresh dependencies
+func (c Container) ValidationService() *validation.Service {
+    return validation.NewService(
+        c.actualConfig,
+        c.factory.GitRepository(),
+        c.createRegistry(),
+        c.logger,
+    )
+}
+
+// Fresh registry for each service
+func (c Container) createRegistry() domain.RuleRegistry {
+    registry := domain.NewRuleRegistry()
+    // Register all rules
+    return registry
+}
+```
+
+### Benefits
+- **Thread-safe**: No shared mutable state
+- **Testable**: Easy to provide test implementations  
+- **Predictable**: No hidden dependencies
+- **Functional**: Aligns with functional programming principles

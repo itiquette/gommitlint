@@ -94,8 +94,10 @@ func IsValidCommitMessage(message string) bool {
 func ExtractJiraTickets(message string, _ string) []string {
 	parts := strings.Split(message, " ")
 
-	// Filter parts that look like JIRA tickets
-	result := []string{}
+	// Filter parts that look like JIRA tickets using functional approach
+	// TODO: This needs to be updated to use domain.Filter
+	// For now, implementing inline to avoid circular dependency
+	result := make([]string, 0) // Initialize as empty slice, not nil
 
 	for _, part := range parts {
 		if strings.Contains(part, "-") && len(part) >= 3 {

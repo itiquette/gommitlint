@@ -6,36 +6,20 @@ package domain
 
 import "context"
 
-// CommitRepository provides access to Git commit information.
-// This interface combines repository access and analysis capabilities.
-type CommitRepository interface {
-	// GetCommit retrieves a commit by its hash.
+// Repository provides all Git repository operations in a single interface.
+// This consolidates commit access, repository info, and analysis capabilities.
+type Repository interface {
+	// Commit operations
 	GetCommit(ctx context.Context, hash string) (CommitInfo, error)
-
-	// GetCommits retrieves a list of commits.
 	GetCommits(ctx context.Context, limit int) ([]CommitInfo, error)
-
-	// GetCommitRange retrieves a range of commits.
 	GetCommitRange(ctx context.Context, fromHash, toHash string) ([]CommitInfo, error)
-
-	// GetHeadCommits returns the specified number of commits from HEAD.
 	GetHeadCommits(ctx context.Context, count int) ([]CommitInfo, error)
-}
 
-// RepositoryInfoProvider provides general information about the repository.
-type RepositoryInfoProvider interface {
-	// GetCurrentBranch returns the name of the current branch.
+	// Repository information
 	GetCurrentBranch(ctx context.Context) (string, error)
-
-	// GetRepositoryName returns the name of the repository.
 	GetRepositoryName(ctx context.Context) string
-
-	// IsValid checks if the repository is a valid Git repository.
 	IsValid(ctx context.Context) (bool, error)
-}
 
-// CommitAnalyzer provides commit analysis operations.
-type CommitAnalyzer interface {
-	// GetCommitsAhead returns the number of commits ahead of a reference.
+	// Analysis operations
 	GetCommitsAhead(ctx context.Context, ref string) (int, error)
 }

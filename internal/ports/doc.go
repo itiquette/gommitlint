@@ -2,12 +2,20 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package ports defines the port interfaces for hexagonal architecture.
+// Package ports defines all the port interfaces for the hexagonal architecture.
+// These interfaces represent the boundaries between the core domain and the outside world.
 //
-// This package contains only interface definitions, no implementations.
-// It is divided into:
-//   - incoming: Driver ports that external adapters use to interact with the application
-//   - outgoing: Driven ports that the application uses to interact with external systems
+// This package centralizes all adapter-facing port interfaces to eliminate duplication
+// across adapter packages. Domain interfaces remain in the domain package.
 //
-// All implementations of these interfaces should be placed in the adapters package.
+// Port interfaces defined here:
+//   - Logger: Used by all adapters for structured logging
+//   - ValidationService: Used by CLI adapter for validation operations
+//
+// Domain interfaces (defined in domain package):
+//   - Repository: Git repository operations
+//   - CryptoVerifier: Cryptographic verification
+//   - Formatter: Output formatting
+//
+// This approach provides clean boundaries while avoiding interface duplication.
 package ports

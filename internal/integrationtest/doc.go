@@ -15,19 +15,20 @@ in realistic scenarios. They test complete workflows including:
 
 # Test Organization
 
+  - branch_comparison_test.go: Tests branch comparison functionality
   - cli_workflow_test.go: Tests the CLI validate command end-to-end
   - comprehensive_test.go: Tests comprehensive validation scenarios
   - context_config_test.go: Tests context-based configuration workflow
+  - crypto_workflow_test.go: Tests cryptographic verification workflows
+  - rulepriority_integration_test.go: Tests rule priority system
   - validation_workflow_test.go: Tests core validation workflow
-  - gittest_helper.go: Shared utilities for setting up test Git repositories
 
 # Important Notes
 
 THIS PACKAGE CONTAINS TEST-ONLY CODE AND SHOULD NOT BE IMPORTED BY PRODUCTION CODE.
 
-Integration tests may be skipped in CI environments without Git by setting:
-  - CI=true
-  - NO_GIT=true
+Integration tests are automatically skipped in environments without Git.
+The tests check for git availability using the git command.
 
 These tests create temporary Git repositories and configuration files to test
 real-world scenarios.

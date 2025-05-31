@@ -2,10 +2,12 @@
 //
 // SPDX-License-Identifier: CC0-1.0
 = Gommitlint
+
 :revdate: {docdatetime}
 :doctype: article
 :imagesdir: assets
 :source-highlighter: rouge
+
 ifdef::env-github[]
 :tip-caption: :bulb:
 :note-caption: :information_source:
@@ -13,166 +15,182 @@ ifdef::env-github[]
 :caution-caption: :fire:
 :warning-caption: :warning:
 endif::[]
+
 image:https://img.shields.io/github/v/tag/itiquette/gommitlint?style=for-the-badge&color=yellow[Tag,link=https://github.com/itiquette/gommitlint/tags]
 https://scorecard.dev/viewer/?uri=github.com/itiquette/gommitlint[image:https://api.scorecard.dev/projects/github.com/itiquette/gommitlint/badge?style=for-the-badge[OpenSSF Scorecard]]
 link:LICENSE[image:https://img.shields.io/badge/License-EUPL%201.2-blue?style=for-the-badge[EUPL 1.2]]
 image:https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.reuse.software%2Fstatus%2Fgithub.com%2Fitiquette%2Fgommitlint&query=status&style=for-the-badge&label=REUSE[REUSE,link=https://api.reuse.software/info/github.com/itiquette/gommitlint]
 
-== What can this tool do for you?
-*Gommitlint* is a simple CLI-tool for validating Git commit messages and repository state.
-At the moment it is in early development.
+== Enforce Consistent Git Commit Messages
 
-== Where can you use it?
+*Gommitlint* footnote:[Dad joke intended - Commitlint, written in Go-lang - it has to be Go-mmitlint, right] validates Git commit messages (and repository state) to help you maintain a quality project history.
+It works out-of-the-box with strict sensible (imho) defaults while being configurable.
 
-* As a CLI-tool for pre-commit validation
-* In a CI/CD-pipeline to enforce team standards
-* As a Git hook for automatic validation
+* **Zero Configuration** - Strict sensible defaults for good commit practices, with Conventional Commits
+* **CI/CD Ready** - Multiple output formats for automation
 
-=== Available validation rules:
 
-TE
-==== Commit Message Rules
+== Available Rules
 
-* *CommitsAhead* - Limits how far a branch can diverge from a reference branch
-* *ConventionalCommit* - Enforces https://www.conventionalcommits.org[Conventional Commits] format with configurable types and scopes
-* *ImperativeVerb* - Validates that commit messages begin with a verb in the imperative mood
-* *JiraReference* - Verifies commits reference valid Jira issue keys in a consistent format
-* *SubjectCase* - Enforces consistent capitalization in commit subjects
-* *SubjectSuffix* - Prevents commit subjects from ending with specified characters
-* *SubjectLength* - Limits commit subject line length for readability (default: 100 chars)
-* *SignOff* - Ensures commits include a Developer Certificate of Origin sign-off line
-* *Spell* - Catches common spelling mistakes with locale-specific dictionaries
-* *Signature* - Verifies commits have a cryptographic signature (GPG or SSH)
-* *SignedIdentity* - Validates signatures against trusted keys with full cryptographic verification
+All rules are enabled by default except `jirareference` and `commitbody`.
+
+=== Message Rules
+* **subjectlength** - Limits subject line length (default: 72 chars)
+* **subjectcase** - Enforces consistent capitalization (sentence/lower/upper/title)
+* **subjectsuffix** - Prevents subjects ending with periods, commas, etc.
+* **imperative** - Requires imperative mood ("Add" not "Added")
+* **commitbody** - Validates body length and content _(disabled by default)_
+* **signoff** - Ensures Developer Certificate of Origin
+* **spell** - Checks common spelling (only for English)
+
+=== Format Rules  
+* **conventional** - Enforces https://www.conventionalcommits.org[Conventional Commits]
+* **jirareference** - Requires JIRA ticket references _(disabled by default)_
+
+=== Security Rules
+* **signature** - Verifies GPG/SSH signatures  
+* **identity** - Validates signer identity against allowed keys
+
+=== Repository Rules
+* **branchahead** - Limits branch divergence from main
+
+== Installation and Quickstart
+
+=== Alternative 1. Download Packages or Binary
+Get pre-built binaries from https://github.com/itiquette/gommitlint/releases[releases].
+
+=== Alternative 2. Use Go Install
+[source,bash]
+----
+go install github.com/itiquette/gommitlint/cmd/gommitlint@latest
+----
+
+=== Alternative 3. Run in a Container
+[source,bash]
+----
+podman run --rm -v $PWD:/src -w /src ghcr.io/itiquette/gommitlint:latest validate
+----
+
+That's it! Gommitlint is now ready to protect your commit quality.
+
+== Usage Examples
+
+=== Basic Validation
+[source,bash]
+----
+# Validate last commit
+gommitlint validate
+
+# Validate specific commit
+gommitlint validate --git-reference=abc123
+
+# Validate commit range
+gommitlint validate --git-reference=main..HEAD
+----
+
+=== Git Hooks
+[source,bash]
+----
+# Install commit-msg hook
+gommitlint install-hook
+
+# Remove hook
+gommitlint remove-hook
+----
+
+=== CI/CD Integration
+[source,yaml]
+----
+# GitHub Actions
+- name: Validate commits
+  run: |
+    go install github.com/itiquette/gommitlint/cmd/gommitlint@latest
+    gommitlint validate --git-reference=${{ github.event.pull_request.base.sha }}..HEAD
+----
+
+== Configuration
+
+Gommitlint works without configuration, having sensible defaults.
+To customize, create `.gommitlint.yaml`:
+
+=== Simple Configuration
+[source,yaml]
+----
+gommitlint:
+  rules:
+    enabled:
+      - jirareference    # Enable JIRA validation  
+    disabled:
+      - spell           # Disable spell checking
+  message:
+    subject:
+      max_length: 50    # Customize subject length
+----
+
+See link:docs/usage.adoc[Usage Guide] for complete configuration options.
 
 == Documentation
 
-* link:docs/usage.adoc[Usage Guide] - How to use Gommitlint
-* link:.gommitlint-full-example.yaml[Configuration Example] - Full configuration with all options
-* link:docs/ARCHITECTURE.md[Architecture Overview] - Understand the design
+* link:docs/usage.adoc[**Usage Guide**] - Detailed usage and configuration
+* link:docs/ARCHITECTURE.md[**Architecture**] - Design principles and structure  
+* link:.gommitlint-full-example.yaml[**Full Config Example**] - All available options
 
-== Getting Started
-TODO
-//1. Check out the link:docs/usage.adoc[Usage Guide] for a quick start.
-// 2. The link:INSTALL.adoc[Installation Guide] will get you up and running.
+== Contributing
 
-  gommitlint:
-    message:
-      subject:
-        max_length: 72           # Maximum length of subject line
-        imperative: true         # Whether subjects should use imperative mood
-        case: "sentence"         # Options: sentence, lower, upper, title
-        forbid_endings:          # List of forbidden subject line endings
-          - "."
-          - ","
-          - ";"
+We welcome contributions!
 
-      body:
-        min_length: 10           # Minimum body length
-        min_lines: 3             # Minimum number of lines in body
-        allow_signoff_only: true # Whether body can only contain sign-off info
-        require_sign_off: false  # Whether sign-off is required
+You can help by:
 
-    conventional:
-      require_scope: false       # Whether scope is required in conventional format
-      types:                     # Allowed commit types
-        - "feat"
-        - "fix"
-        - "docs"
-        - "style"
-        - "refactor"
-        - "perf"
-        - "test"
-        - "build"
-        - "ci"
-        - "chore"
-        - "revert"
-      scopes: []                 # Allowed scopes (empty means any scope is allowed)
-      max_description_length: 72 # Maximum length of description
+* Reporting bugs in our https://github.com/itiquette/gommitlint/issues[Issue Tracker]
+* Sharing ideas for improvements
+* Testing and providing feedback
 
-    rules:
-      enabled:                   # Explicitly enabled rules
-        - SubjectLength
-        - SubjectCase
-        - SubjectSuffix
-        - ConventionalCommit
-        - ImperativeVerb
-        - Signature
-        - SignOff
-        - Spell
-        - JiraReference
-        - CommitsAhead
-      disabled:                  # Explicitly disabled rules
-        - CommitBody           # Disabled by default
+Also, check out our link:CONTRIBUTING.md[Contribution Guide] to get started.
 
-    security:
-      sign_off_required: true    # Whether sign-off is required
-      require_signature: false   # Whether cryptographic signature is required
-      key_directory: ""          # Path to key directory
-      allowed_keyrings: []       # List of allowed keyrings
-      allowed_identities: []     # List of allowed identities
-      allow_multiple_sign_offs: true # Whether multiple sign-offs are allowed
-
-    repository:
-      path: ""                   # Path to repository
-      reference_branch: "main"   # Reference branch for CommitsAhead rule
-      max_commits_ahead: 5       # Maximum commits ahead of reference
-      max_history_days: 365      # Maximum days to look back in history
-      output_format: "text"      # Output format
-      ignore_merge_commits: true # Whether to ignore merge commits
-
-    output:
-      format: "text"             # Output format: text, json, github, gitlab
-      verbose: false             # Whether to show verbose output
-      quiet: false               # Whether to suppress output
-      color: true                # Whether to colorize output
-
-    spell_check:
-      language: "en-US"          # Spell check language
-      ignore_case: false         # Whether to ignore case in spell checking
-      custom_dictionary:         # Custom words to allow
-        - "gommitlint"
-        - "zerolog"
-
-    jira:
-      pattern: "[A-Z]+-\\d+"     # Pattern for JIRA ticket references
-      projects: []               # List of allowed JIRA projects
-      body_ref: false            # Whether JIRA references can be in body
-== Make Gommitlint better?
-ED: Currently I'm not reading PRs as there are a few base things to fix before that.
-
-Here's how you can contribute:
-
-* Found a bug or have a great idea? Let us know in our https://github.com/itiquette/gommitlint/issues[Issue Tracker]
-* Want to contribute code? Check out our link:CONTRIBUTING.md[Contribution Guide] to get started.
-
-== For developers
+== For Developers
 
 === Design Philosophy
 
-Gommitlint is built using:
+Gommitlint tries to follow the following practices:
 
-* *Hexagonal Architecture* for clean separation of concerns
-* *Functional Programming* principles for predictable and testable code
-* *Value Semantics* for improved safety and reasoning
+* **Hexagonal Architecture** - Clean separation of concerns with simplified ports
+* **Functional Programming** - Pure functions and immutability throughout
+* **Value Semantics** - Predictable behavior without pointer receivers
+* **Simple Dependency Injection** - Direct instantiation without containers
 
-See our link:docs/ARCHITECTURE.md[Architecture Documentation] and link:docs/FUNCTIONAL_PROGRAMMING.md[Functional Programming Guide] for more details.
+Read more in the link:docs/ARCHITECTURE.md[Architecture Documentation].
 
-== What's next?
-Check out our https://github.com/itiquette/gommitlint/issues[Issues page].
+=== Building from Source
+[source,bash]
+----
+# Clone
+git clone https://github.com/itiquette/gommitlint
+cd gommitlint
 
-== A friendly reminder
-**Please Note**: Gommitlint is currently in Alpha. This means:
+# Build
+make build/plain
 
-* APIs might change in breaking ways
-* Documentation is still being developed
-* Feel free to share ideas on how we can make it better
+# Test
+make quality
 
-== Credits & History
+# Install locally
+make install
+----
 
-Gommitlint was inspired by Sidero Labs https://github.com/siderolabs/conform[Conform tool].
+== Project Status
 
-== Legal Stuff
-Gommitlint is licensed under the EUPL 1.2 License.
-Most of the non-code bits are under Creative Commons CC0-1.0.
-For all the details, check out our link:LICENSE[LICENSE] file and the headers in each file.
+[IMPORTANT]
+====
+**Beta Candidate**: CLI-flags might may change. Configuration file format might change. Rule functionality might change.
+====
+
+See our https://github.com/itiquette/gommitlint/milestones[Milestones] for roadmap.
+
+== License
+
+* Code: EUPL 1.2 (see link:LICENSE[LICENSE])
+* Documentation: CC0 1.0
+
+== Credits
+
+Inspired by https://github.com/siderolabs/conform[Conform] by Sidero Labs.

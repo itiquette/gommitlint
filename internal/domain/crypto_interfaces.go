@@ -6,13 +6,11 @@ package domain
 
 import (
 	"context"
-
-	domainCrypto "github.com/itiquette/gommitlint/internal/domain/crypto"
 )
 
 // CryptoVerifier defines the interface for signature verification operations.
 type CryptoVerifier interface {
-	VerifyCommit(ctx context.Context, commit CommitInfo) (domainCrypto.VerificationResult, error)
+	VerifyCommit(ctx context.Context, commit CommitInfo) (VerificationResult, error)
 }
 
 // CryptoKeyRepository defines the interface for key management operations.

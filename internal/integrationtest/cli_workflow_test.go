@@ -14,7 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/itiquette/gommitlint/internal/testutils/integrationtest"
+	gitTestdata "github.com/itiquette/gommitlint/internal/adapters/git/testdata"
 )
 
 // TestCLIValidateCommand tests the CLI validate command for commit validation.
@@ -63,9 +63,9 @@ func getCurrentFilePath() string {
 }
 
 func TestCLIValidateCommand(t *testing.T) {
-	// Skip if running in CI environment without git
-	if os.Getenv("CI") == "true" && !integrationtest.IsGitAvailable() {
-		t.Skip("Skipping integration test in CI environment without git")
+	// Skip if git is not available
+	if !gitTestdata.IsGitAvailable() {
+		t.Skip("Skipping integration test: git is not available")
 	}
 
 	// Build the CLI binary for testing
@@ -235,7 +235,7 @@ gommitlint:
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			// Setup test repository
-			repoPath, cleanup := integrationtest.SetupTestRepository(t, testCase.commitMessage)
+			repoPath, cleanup := gitTestdata.GitRepo(t, testCase.commitMessage)
 			defer cleanup()
 
 			// Create config file in the repository

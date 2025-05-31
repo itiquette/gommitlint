@@ -6,8 +6,6 @@ package domain
 
 import (
 	"context"
-
-	"github.com/itiquette/gommitlint/internal/errors"
 )
 
 // Rule defines the interface for all validation rules.
@@ -18,5 +16,5 @@ type Rule interface {
 
 	// Validate performs validation against a commit.
 	// This should be a pure function that returns errors without side effects.
-	Validate(ctx context.Context, commit CommitInfo) []errors.ValidationError
+	Validate(ctx context.Context, commit CommitInfo) []ValidationError
 }
