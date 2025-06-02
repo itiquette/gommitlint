@@ -4,12 +4,11 @@
 package rules
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
-	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain/config"
 )
 
 // DefaultInvalidSuffixes contains the default invalid subject suffixes.
@@ -17,7 +16,6 @@ const DefaultInvalidSuffixes = ".,"
 
 // SubjectSuffixRule validates that commit subjects don't end with invalid suffixes.
 type SubjectSuffixRule struct {
-	name            string
 	invalidSuffixes string
 }
 
@@ -38,28 +36,25 @@ func NewSubjectSuffixRule(cfg config.Config) SubjectSuffixRule {
 	}
 
 	return SubjectSuffixRule{
-		name:            "SubjectSuffix",
 		invalidSuffixes: invalidSuffixes,
 	}
 }
 
 // Validate checks that the commit subject doesn't end with invalid characters.
-func (r SubjectSuffixRule) Validate(_ context.Context, commit domain.CommitInfo) []domain.ValidationError {
+func (r SubjectSuffixRule) Validate(ctx domain.ValidationContext) []domain.RuleFailure {
 	// Empty subject is always an error
-	if len(commit.Subject) == 0 {
-		return []domain.ValidationError{
-			domain.New(
-				"SubjectSuffix",
-				domain.ErrMissingSubject,
-				"Commit subject is missing",
-			).WithHelp("Add a descriptive subject line to your commit").WithContextMap(map[string]string{"subject": ""}),
-		}
+	if len(ctx.Commit.Subject) == 0 {
+		return []domain.RuleFailure{{
+			Rule:    r.Name(),
+			Message: "Commit subject is missing",
+			Help:    "Add a descriptive subject line to your commit",
+		}}
 	}
 
 	// Real validation logic - check if the subject ends with any of the invalid suffixes
-	if len(commit.Subject) > 0 {
+	if len(ctx.Commit.Subject) > 0 {
 		// Get the last character, properly handling multi-byte characters like emojis
-		subjectRunes := []rune(commit.Subject)
+		subjectRunes := []rune(ctx.Commit.Subject)
 		if len(subjectRunes) > 0 {
 			lastRune := subjectRunes[len(subjectRunes)-1]
 			lastChar := string(lastRune)
@@ -78,18 +73,11 @@ func (r SubjectSuffixRule) Validate(_ context.Context, commit domain.CommitInfo)
 
 			// If the last character is an invalid suffix, create an error
 			if suffixContainsLastChar {
-				return []domain.ValidationError{
-					domain.New(
-						"SubjectSuffix",
-						domain.ErrSubjectSuffix,
-						fmt.Sprintf("Subject ends with invalid character '%s'", lastChar),
-					).WithHelp(fmt.Sprintf("Remove the trailing '%s' from your commit subject", lastChar)).WithContextMap(map[string]string{
-						"subject":          commit.Subject,
-						"invalid_suffix":   lastChar,
-						"last_char":        lastChar,
-						"invalid_suffixes": r.invalidSuffixes,
-					}),
-				}
+				return []domain.RuleFailure{{
+					Rule:    r.Name(),
+					Message: fmt.Sprintf("Subject ends with invalid character '%s'", lastChar),
+					Help:    fmt.Sprintf("Remove the trailing '%s' from your commit subject", lastChar),
+				}}
 			}
 		}
 	}
@@ -100,5 +88,5 @@ func (r SubjectSuffixRule) Validate(_ context.Context, commit domain.CommitInfo)
 
 // Name returns the rule name.
 func (r SubjectSuffixRule) Name() string {
-	return r.name
+	return "SubjectSuffix"
 }

@@ -4,11 +4,10 @@
 package rules_test
 
 import (
-	"context"
 	"testing"
 
-	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain/config"
 	"github.com/itiquette/gommitlint/internal/domain/rules"
 	"github.com/itiquette/gommitlint/internal/domain/testdata"
 	"github.com/stretchr/testify/require"
@@ -148,19 +147,23 @@ func TestConventionalCommitRule_Validate(t *testing.T) {
 
 			rule := rules.NewConventionalCommitRule(cfg)
 
-			ctx := context.Background()
-			errs := rule.Validate(ctx, commit)
+			ctx := domain.ValidationContext{
+				Commit:     commit,
+				Repository: nil,
+				Config:     &cfg,
+			}
+			failures := rule.Validate(ctx)
 
 			// Verify results
 			if testCase.wantErrors {
-				require.NotEmpty(t, errs, "Expected validation errors but got none for case: %s", testCase.description)
+				require.NotEmpty(t, failures, "Expected validation errors but got none for case: %s", testCase.description)
 
 				if testCase.expectedErr != "" {
 					// Only check error code if we specified one
-					testdata.AssertValidationError(t, errs[0], testCase.expectedErr, "ConventionalCommit")
+					testdata.AssertRuleFailure(t, failures[0], "ConventionalCommit")
 				}
 			} else {
-				require.Empty(t, errs, "Expected no validation errors but got: %v for case: %s", errs, testCase.description)
+				require.Empty(t, failures, "Expected no validation errors but got: %v for case: %s", failures, testCase.description)
 			}
 
 			// Always verify the rule name
@@ -243,13 +246,17 @@ func TestConventionalCommitRuleWithContextConfig(t *testing.T) {
 
 			rule := rules.NewConventionalCommitRule(cfg)
 
-			ctx := context.Background()
-			errs := rule.Validate(ctx, commit)
+			ctx := domain.ValidationContext{
+				Commit:     commit,
+				Repository: nil,
+				Config:     &cfg,
+			}
+			failures := rule.Validate(ctx)
 
 			if testCase.expectValid {
-				require.Empty(t, errs, "Expected no validation errors but got: %v for case: %s", errs, testCase.description)
+				require.Empty(t, failures, "Expected no validation errors but got: %v for case: %s", failures, testCase.description)
 			} else {
-				require.NotEmpty(t, errs, "Expected validation errors but got none for case: %s", testCase.description)
+				require.NotEmpty(t, failures, "Expected validation errors but got none for case: %s", testCase.description)
 			}
 		})
 	}
@@ -296,15 +303,19 @@ func TestConventionalCommitRuleErrorMessages(t *testing.T) {
 			cfg := config.Config{}
 			rule := rules.NewConventionalCommitRule(cfg)
 
-			ctx := context.Background()
-			errs := rule.Validate(ctx, commit)
+			ctx := domain.ValidationContext{
+				Commit:     commit,
+				Repository: nil,
+				Config:     &cfg,
+			}
+			failures := rule.Validate(ctx)
 
 			if testCase.expectedErr != "" {
-				require.NotEmpty(t, errs, "Expected validation errors for case: %s", testCase.description)
-				testdata.AssertValidationError(t, errs[0], testCase.expectedErr, "ConventionalCommit")
+				require.NotEmpty(t, failures, "Expected validation errors for case: %s", testCase.description)
+				testdata.AssertRuleFailure(t, failures[0], "ConventionalCommit")
 			} else {
 				// No expected error means we expect it to be valid
-				require.Empty(t, errs, "Expected no validation errors for case: %s but got: %v", testCase.description, errs)
+				require.Empty(t, failures, "Expected no validation errors for case: %s but got: %v", testCase.description, failures)
 			}
 		})
 	}
@@ -365,13 +376,17 @@ func TestConventionalCommitRuleEdgeCases(t *testing.T) {
 			cfg := config.Config{}
 			rule := rules.NewConventionalCommitRule(cfg)
 
-			ctx := context.Background()
-			errs := rule.Validate(ctx, commit)
+			ctx := domain.ValidationContext{
+				Commit:     commit,
+				Repository: nil,
+				Config:     &cfg,
+			}
+			failures := rule.Validate(ctx)
 
 			if testCase.expectValid {
-				require.Empty(t, errs, "Expected no validation errors but got: %v for case: %s", errs, testCase.description)
+				require.Empty(t, failures, "Expected no validation errors but got: %v for case: %s", failures, testCase.description)
 			} else {
-				require.NotEmpty(t, errs, "Expected validation errors but got none for case: %s", testCase.description)
+				require.NotEmpty(t, failures, "Expected validation errors but got none for case: %s", testCase.description)
 			}
 		})
 	}

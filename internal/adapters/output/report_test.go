@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockFormatter implements the ports.Formatter interface for testing.
+// mockFormatter implements the Formatter interface for testing.
 type mockFormatter struct {
 	formatFunc func(ctx context.Context, results interface{}) string
 }
@@ -31,7 +31,7 @@ func (m mockFormatter) ContentType() string {
 	return "text/plain"
 }
 
-// mockLogger implements the ports.Logger interface for testing.
+// mockLogger implements the Logger interface for testing.
 type mockLogger struct{}
 
 func (m mockLogger) Debug(_ string, _ ...interface{}) {}

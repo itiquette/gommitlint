@@ -5,36 +5,32 @@
 package rules
 
 import (
-	"context"
-	"strconv"
 	"strings"
 
 	"github.com/client9/misspell"
-	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain/config"
 )
 
 // SpellRule validates spelling in commit messages.
 type SpellRule struct {
-	name        string
 	ignoreWords []string
 }
 
 // NewSpellRule creates a new SpellRule from config.
 func NewSpellRule(cfg config.Config) SpellRule {
 	return SpellRule{
-		name:        "Spell",
 		ignoreWords: cfg.Spell.IgnoreWords,
 	}
 }
 
 // Name returns the rule name.
 func (r SpellRule) Name() string {
-	return r.name
+	return "Spell"
 }
 
 // Validate checks spelling in the commit message.
-func (r SpellRule) Validate(_ context.Context, commit domain.CommitInfo) []domain.ValidationError {
+func (r SpellRule) Validate(ctx domain.ValidationContext) []domain.RuleFailure {
 	// Create a map of ignored words for efficient lookup
 	ignoreWordsMap := make(map[string]bool)
 	for _, word := range r.ignoreWords {
@@ -45,7 +41,7 @@ func (r SpellRule) Validate(_ context.Context, commit domain.CommitInfo) []domai
 	replacer := misspell.New()
 
 	// Process commit subject and body
-	textToCheck := r.preprocessText(commit.Subject + " " + commit.Body)
+	textToCheck := r.preprocessText(ctx.Commit.Subject + " " + ctx.Commit.Body)
 
 	// Skip spell check if text is empty after preprocessing
 	if strings.TrimSpace(textToCheck) == "" {
@@ -81,22 +77,19 @@ func (r SpellRule) Validate(_ context.Context, commit domain.CommitInfo) []domai
 		})
 	}
 
-	// Create errors
-	errors := make([]domain.ValidationError, 0, len(validMisspellings))
+	// Create failures
+	failures := make([]domain.RuleFailure, 0, len(validMisspellings))
 
 	for _, misspelling := range validMisspellings {
-		err := domain.New(
-			r.Name(),
-			domain.ErrMisspelledWord,
-			"Misspelled word: "+misspelling.word,
-		).WithContextMap(map[string]string{
-			"word":     misspelling.word,
-			"position": strconv.Itoa(misspelling.position),
-		})
-		errors = append(errors, err)
+		failure := domain.RuleFailure{
+			Rule:    r.Name(),
+			Message: "Misspelled word: " + misspelling.word,
+			Help:    "Check spelling or add to ignore list",
+		}
+		failures = append(failures, failure)
 	}
 
-	return errors
+	return failures
 }
 
 // preprocessText prepares text for spell checking by cleaning up special characters.

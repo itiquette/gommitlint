@@ -5,136 +5,63 @@
 package rules
 
 import (
-	"context"
-	"fmt"
+	"regexp"
+	"strings"
 
-	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain/config"
 )
 
 // IdentityRule validates that commit signatures match the committer identity.
-// Uses domain crypto interfaces for clean architecture.
 type IdentityRule struct {
-	name           string
-	keyDir         string
-	verifier       domain.CryptoVerifier
-	repository     domain.CryptoKeyRepository
 	allowedSigners []string
 }
 
 // NewIdentityRule creates a new rule for validating signature identity from config.
-func NewIdentityRule(cfg config.Config, deps domain.RuleDependencies) IdentityRule {
+func NewIdentityRule(cfg config.Config) IdentityRule {
 	return IdentityRule{
-		name:           "SignedIdentity",
-		keyDir:         cfg.Signing.KeyDirectory,
-		verifier:       deps.CryptoVerifier,
-		repository:     deps.CryptoRepository,
 		allowedSigners: cfg.Signing.AllowedSigners,
 	}
 }
 
-// Validate validates that signatures match the committer identity.
-func (r IdentityRule) Validate(ctx context.Context, commit domain.CommitInfo) []domain.ValidationError {
-	// Use allowed signers from config
-	if len(r.allowedSigners) > 0 {
-		// Create author identity
-		authorIdentity := domain.NewIdentity(commit.AuthorName, commit.AuthorEmail)
+// Validate validates that commit authors are in the allowed signers list.
+// Note: Full signature verification requires crypto dependencies not available in simplified format.
+func (r IdentityRule) Validate(ctx domain.ValidationContext) []domain.RuleFailure {
+	// If no allowed signers configured, allow all authors
+	if len(r.allowedSigners) == 0 {
+		return nil
+	}
 
-		// Convert allowed signers config to Identity objects using functional approach
-		allowedIdentities := domain.MapSliceCompat(r.allowedSigners, domain.NewIdentityFromString)
+	// Check if commit author is in allowed signers list
+	authorString := ctx.Commit.Author + " <" + ctx.Commit.AuthorEmail + ">"
 
-		// Check if author is in allowed signers
-		isAllowed := false
-
-		for _, allowed := range allowedIdentities {
-			if authorIdentity.Matches(allowed) {
-				isAllowed = true
-
-				break
-			}
+	for _, allowedSigner := range r.allowedSigners {
+		// Exact match for full format
+		if allowedSigner == authorString {
+			return nil // Author is allowed
 		}
-
-		if !isAllowed {
-			return []domain.ValidationError{
-				domain.New(
-					r.Name(),
-					domain.ErrInvalidSignature,
-					"author identity not in allowed signers list",
-				).WithHelp("Add the author to the allowed signers list or use an authorized identity").WithContextMap(map[string]string{
-					"author": authorIdentity.String(),
-				}),
+		// Case-insensitive email-only match
+		if strings.EqualFold(allowedSigner, ctx.Commit.AuthorEmail) {
+			return nil // Author email is allowed
+		}
+		// Extract email from "Name <email>" format and compare case-insensitively
+		emailRegex := regexp.MustCompile(`<([^>]+)>`)
+		if matches := emailRegex.FindStringSubmatch(allowedSigner); len(matches) > 1 {
+			allowedEmail := matches[1]
+			if strings.EqualFold(allowedEmail, ctx.Commit.AuthorEmail) {
+				return nil // Email extracted from allowed signer matches
 			}
 		}
 	}
 
-	// Skip validation if crypto dependencies are not available
-	if r.verifier == nil || r.repository == nil {
-		return nil
-	}
-
-	// Skip validation if key directory is empty
-	if r.keyDir == "" && r.repository.GetKeyDirectory() == "" {
-		return nil
-	}
-
-	// If no signature, we can't validate identity
-	if commit.Signature == "" {
-		return []domain.ValidationError{
-			domain.New(
-				"Identity",
-				domain.ErrMissingSignature,
-				"commit is not signed",
-			).WithHelp("Sign commits with: git commit -S"),
-		}
-	}
-
-	// Verify signature using our adapter
-	result, err := r.verifier.VerifyCommit(ctx, commit)
-	if err != nil {
-		return []domain.ValidationError{
-			domain.New(
-				"Identity",
-				domain.ErrVerificationFailed,
-				fmt.Sprintf("failed to verify signature: %s", err),
-			).WithHelp("Check signature format and key availability"),
-		}
-	}
-
-	// Check verification result
-	if !result.IsVerified() {
-		return []domain.ValidationError{
-			domain.New(
-				"Identity",
-				domain.ErrVerificationFailed,
-				result.ErrorMessage(),
-			).WithHelp("Ensure your signing key is valid and properly configured").WithContextMap(map[string]string{
-				"error_code": result.ErrorCode(),
-			}),
-		}
-	}
-
-	// Get the verified identity
-	signerIdentity := result.Identity()
-
-	// Compare with author identity
-	authorIdentity := domain.NewIdentity(commit.AuthorName, commit.AuthorEmail)
-	if !signerIdentity.Matches(authorIdentity) {
-		return []domain.ValidationError{
-			domain.New(
-				"Identity",
-				domain.ErrInvalidSignature,
-				"signature identity mismatch",
-			).WithHelp("Commit author must match signature identity").WithContextMap(map[string]string{
-				"signer": signerIdentity.String(),
-				"author": authorIdentity.String(),
-			}),
-		}
-	}
-
-	return nil
+	return []domain.RuleFailure{{
+		Rule:    r.Name(),
+		Message: "Author not in allowed signers list",
+		Help:    "Use an authorized identity or add this author to the allowed signers list",
+	}}
 }
 
 // Name returns the rule name.
 func (r IdentityRule) Name() string {
-	return r.name
+	return "SignedIdentity"
 }

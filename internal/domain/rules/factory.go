@@ -5,8 +5,8 @@
 package rules
 
 import (
-	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain/config"
 )
 
 // RuleConstructor creates a rule from configuration and dependencies.
@@ -86,14 +86,14 @@ func createSignatureRule(cfg *config.Config, _ domain.RuleDependencies) domain.R
 	return NewSignatureRule(*cfg)
 }
 
-func createIdentityRule(cfg *config.Config, deps domain.RuleDependencies) domain.Rule {
-	return NewIdentityRule(*cfg, deps)
+func createIdentityRule(cfg *config.Config, _ domain.RuleDependencies) domain.Rule {
+	return NewIdentityRule(*cfg)
 }
 
 func createSpellRule(cfg *config.Config, _ domain.RuleDependencies) domain.Rule {
 	return NewSpellRule(*cfg)
 }
 
-func createBranchAheadRule(cfg *config.Config, deps domain.RuleDependencies) domain.Rule {
-	return NewBranchAheadRule(*cfg, deps)
+func createBranchAheadRule(cfg *config.Config, _ domain.RuleDependencies) domain.Rule {
+	return NewBranchAheadRule(*cfg)
 }

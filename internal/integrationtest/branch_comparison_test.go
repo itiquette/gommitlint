@@ -16,8 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/itiquette/gommitlint/internal/adapters/git"
-	"github.com/itiquette/gommitlint/internal/adapters/logging"
-	integrationTestdata "github.com/itiquette/gommitlint/internal/integrationtest/testdata"
 )
 
 // TestBranchComparisonGetCommitRange tests that GetCommitRange correctly handles diverged branches.
@@ -90,8 +88,7 @@ func TestBranchComparisonGetCommitRange(t *testing.T) {
 
 			// Create repository adapter
 			ctx := context.Background()
-			testLogger := log.NewLogger(*integrationTestdata.CreateTestLogger(t, false))
-			adapter, err := git.NewRepository(ctx, tmpDir, testLogger)
+			adapter, err := git.NewRepository(ctx, tmpDir)
 			require.NoError(t, err)
 
 			commitRepo := adapter

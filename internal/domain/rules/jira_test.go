@@ -4,12 +4,11 @@
 package rules_test
 
 import (
-	"context"
 	"testing"
 
-	"github.com/itiquette/gommitlint/internal/config"
-	configTestdata "github.com/itiquette/gommitlint/internal/config/testdata"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain/config"
+	configTestdata "github.com/itiquette/gommitlint/internal/domain/config/testdata"
 	"github.com/itiquette/gommitlint/internal/domain/rules"
 	"github.com/itiquette/gommitlint/internal/domain/testdata"
 	"github.com/stretchr/testify/require"
@@ -18,7 +17,7 @@ import (
 func TestJiraReferenceRule_Validate(t *testing.T) {
 	tests := []struct {
 		name        string
-		commit      domain.CommitInfo
+		commit      domain.Commit
 		configSetup func() config.Config
 		wantErrors  bool
 		description string
@@ -28,7 +27,7 @@ func TestJiraReferenceRule_Validate(t *testing.T) {
 			configSetup: func() config.Config {
 				return configTestdata.NewConfigBuilder().Build()
 			},
-			commit: func() domain.CommitInfo {
+			commit: func() domain.Commit {
 				commit := testdata.Commit("feat: add new feature\n\nThis commit adds a new feature that enhances the user experience.")
 				commit.Subject = "Add new feature PROJ-123"
 				commit.Body = "This is a description"
@@ -45,7 +44,7 @@ func TestJiraReferenceRule_Validate(t *testing.T) {
 					WithJiraCheckBody(true).
 					Build()
 			},
-			commit: func() domain.CommitInfo {
+			commit: func() domain.Commit {
 				commit := testdata.Commit("feat: add new feature\n\nThis commit adds a new feature that enhances the user experience.")
 				commit.Subject = "Add new feature"
 				commit.Body = "This is a description\n\nRefs: PROJ-123"
@@ -60,7 +59,7 @@ func TestJiraReferenceRule_Validate(t *testing.T) {
 			configSetup: func() config.Config {
 				return configTestdata.NewConfigBuilder().Build()
 			},
-			commit: func() domain.CommitInfo {
+			commit: func() domain.Commit {
 				commit := testdata.Commit("feat: add new feature\n\nThis commit adds a new feature that enhances the user experience.")
 				commit.Subject = "Add new feature"
 				commit.Body = "This is a description"
@@ -77,7 +76,7 @@ func TestJiraReferenceRule_Validate(t *testing.T) {
 					WithJiraProjects([]string{"PROJ", "TEAM"}).
 					Build()
 			},
-			commit: func() domain.CommitInfo {
+			commit: func() domain.Commit {
 				commit := testdata.Commit("feat: add new feature\n\nThis commit adds a new feature that enhances the user experience.")
 				commit.Subject = "feat: add login feature PROJ-123"
 				commit.Body = "This is a description"
@@ -94,7 +93,7 @@ func TestJiraReferenceRule_Validate(t *testing.T) {
 					WithJiraProjects([]string{"PROJ", "TEAM"}).
 					Build()
 			},
-			commit: func() domain.CommitInfo {
+			commit: func() domain.Commit {
 				commit := testdata.Commit("feat: add new feature\n\nThis commit adds a new feature that enhances the user experience.")
 				commit.Subject = "feat: add login feature OTHER-123"
 				commit.Body = "This is a description"
@@ -110,7 +109,6 @@ func TestJiraReferenceRule_Validate(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			// Setup config
 			cfg := testCase.configSetup()
-			ctx := context.Background()
 
 			// Create rule with configuration
 			// For this test, assume conventional commit is enabled
@@ -119,13 +117,18 @@ func TestJiraReferenceRule_Validate(t *testing.T) {
 			rule := rules.NewJiraReferenceRule(cfg)
 
 			// Execute
-			errors := rule.Validate(ctx, testCase.commit)
+			ctx := domain.ValidationContext{
+				Commit:     testCase.commit,
+				Repository: nil,
+				Config:     &cfg,
+			}
+			failures := rule.Validate(ctx)
 
 			// Assert
 			if testCase.wantErrors {
-				require.NotEmpty(t, errors, "Expected validation errors but got none")
+				require.NotEmpty(t, failures, "Expected validation errors but got none")
 			} else {
-				require.Empty(t, errors, "Expected no validation errors but got: %v", errors)
+				require.Empty(t, failures, "Expected no validation errors but got: %v", failures)
 			}
 		})
 	}

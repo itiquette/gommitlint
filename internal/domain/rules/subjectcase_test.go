@@ -4,11 +4,10 @@
 package rules_test
 
 import (
-	"context"
 	"testing"
 
-	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain/config"
 	"github.com/itiquette/gommitlint/internal/domain/rules"
 	"github.com/itiquette/gommitlint/internal/domain/testdata"
 	"github.com/stretchr/testify/require"
@@ -20,7 +19,6 @@ func TestSubjectCaseRule(t *testing.T) {
 		subject        string
 		caseChoice     string
 		expectValid    bool
-		expectedCode   string
 		description    string
 		configModifier func(config.Config) config.Config
 	}{
@@ -39,12 +37,11 @@ func TestSubjectCaseRule(t *testing.T) {
 			description: "All lowercase with lower case setting",
 		},
 		{
-			name:         "uppercase not allowed by default",
-			subject:      "ADD NEW FEATURE",
-			caseChoice:   "sentence",
-			expectValid:  false,
-			expectedCode: string(domain.ErrSubjectCase),
-			description:  "All uppercase not allowed with default setting",
+			name:        "uppercase not allowed by default",
+			subject:     "ADD NEW FEATURE",
+			caseChoice:  "sentence",
+			expectValid: false,
+			description: "All uppercase not allowed with default setting",
 		},
 		{
 			name:        "uppercase explicitly allowed",
@@ -68,20 +65,18 @@ func TestSubjectCaseRule(t *testing.T) {
 			description: "Sentence case explicitly allowed",
 		},
 		{
-			name:         "invalid lowercase with uppercase rule",
-			subject:      "add new feature",
-			caseChoice:   "upper",
-			expectValid:  false,
-			expectedCode: string(domain.ErrSubjectCase),
-			description:  "Lowercase not allowed with uppercase setting",
+			name:        "invalid lowercase with uppercase rule",
+			subject:     "add new feature",
+			caseChoice:  "upper",
+			expectValid: false,
+			description: "Lowercase not allowed with uppercase setting",
 		},
 		{
-			name:         "invalid uppercase with lowercase rule",
-			subject:      "ADD NEW FEATURE",
-			caseChoice:   "lower",
-			expectValid:  false,
-			expectedCode: string(domain.ErrSubjectCase),
-			description:  "Uppercase not allowed with lowercase setting",
+			name:        "invalid uppercase with lowercase rule",
+			subject:     "ADD NEW FEATURE",
+			caseChoice:  "lower",
+			expectValid: false,
+			description: "Uppercase not allowed with lowercase setting",
 		},
 		{
 			name:        "sentence with conventional commit format",
@@ -99,9 +94,8 @@ func TestSubjectCaseRule(t *testing.T) {
 
 				return cfg
 			},
-			expectValid:  false,
-			expectedCode: string(domain.ErrSubjectCase),
-			description:  "Uppercase not valid with sentence case and conventional format",
+			expectValid: false,
+			description: "Uppercase not valid with sentence case and conventional format",
 		},
 		{
 			name:        "mixed case with any option",
@@ -122,8 +116,9 @@ func TestSubjectCaseRule(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			// Create commit using builder
-			commit := testdata.Commit("feat: add new feature\n\nThis commit adds a new feature that enhances the user experience.")
-			commit.Subject = testCase.subject
+			commitInfo := testdata.Commit("feat: add new feature\n\nThis commit adds a new feature that enhances the user experience.")
+			commitInfo.Subject = testCase.subject
+			commit := commitInfo
 
 			// Create rule with case choice
 			cfg := config.Config{}
@@ -135,18 +130,19 @@ func TestSubjectCaseRule(t *testing.T) {
 
 			rule := rules.NewSubjectCaseRule(cfg)
 
-			ctx := context.Background()
-			errs := rule.Validate(ctx, commit)
+			ctx := domain.ValidationContext{
+				Commit:     commit,
+				Repository: nil,
+				Config:     &cfg,
+			}
+			failures := rule.Validate(ctx)
 
 			// Verify results
 			if testCase.expectValid {
-				require.Empty(t, errs, "Expected no validation errors but got: %v", errs)
+				require.Empty(t, failures, "Expected no validation failures but got: %v", failures)
 			} else {
-				require.NotEmpty(t, errs, "Expected validation errors but got none")
-
-				if testCase.expectedCode != "" {
-					testdata.AssertValidationError(t, errs[0], testCase.expectedCode, "SubjectCase")
-				}
+				require.NotEmpty(t, failures, "Expected validation failures but got none")
+				testdata.AssertRuleFailure(t, failures[0], "SubjectCase")
 			}
 
 			// Always verify the rule name
@@ -217,8 +213,9 @@ func TestSubjectCaseRuleWithConfig(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			// Create commit using builder
-			commit := testdata.Commit("feat: add new feature\n\nThis commit adds a new feature that enhances the user experience.")
-			commit.Subject = testCase.subject
+			commitInfo := testdata.Commit("feat: add new feature\n\nThis commit adds a new feature that enhances the user experience.")
+			commitInfo.Subject = testCase.subject
+			commit := commitInfo
 
 			// Create rule with appropriate options
 			cfg := config.Config{
@@ -234,14 +231,18 @@ func TestSubjectCaseRuleWithConfig(t *testing.T) {
 
 			rule := rules.NewSubjectCaseRule(cfg)
 
-			ctx := context.Background()
-			errs := rule.Validate(ctx, commit)
+			ctx := domain.ValidationContext{
+				Commit:     commit,
+				Repository: nil,
+				Config:     &cfg,
+			}
+			failures := rule.Validate(ctx)
 
 			// Verify results
 			if testCase.expectValid {
-				require.Empty(t, errs, "Expected no validation errors but got: %v", errs)
+				require.Empty(t, failures, "Expected no validation failures but got: %v", failures)
 			} else {
-				require.NotEmpty(t, errs, "Expected validation errors but got none")
+				require.NotEmpty(t, failures, "Expected validation failures but got none")
 			}
 		})
 	}
@@ -309,8 +310,9 @@ func TestSubjectCaseWithConventionalCommit(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			// Create commit using builder
-			commit := testdata.Commit("feat: add new feature\n\nThis commit adds a new feature that enhances the user experience.")
-			commit.Subject = testCase.subject
+			commitInfo := testdata.Commit("feat: add new feature\n\nThis commit adds a new feature that enhances the user experience.")
+			commitInfo.Subject = testCase.subject
+			commit := commitInfo
 
 			// Create rule with commit format enabled
 			cfg := config.Config{
@@ -326,14 +328,18 @@ func TestSubjectCaseWithConventionalCommit(t *testing.T) {
 
 			rule := rules.NewSubjectCaseRule(cfg)
 
-			ctx := context.Background()
-			errs := rule.Validate(ctx, commit)
+			ctx := domain.ValidationContext{
+				Commit:     commit,
+				Repository: nil,
+				Config:     &cfg,
+			}
+			failures := rule.Validate(ctx)
 
 			// Check result
 			if testCase.expectValid {
-				require.Empty(t, errs, "Expected no validation errors but got: %v", errs)
+				require.Empty(t, failures, "Expected no validation failures but got: %v", failures)
 			} else {
-				require.NotEmpty(t, errs, "Expected validation errors but got none")
+				require.NotEmpty(t, failures, "Expected validation failures but got none")
 			}
 		})
 	}

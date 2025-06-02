@@ -2,20 +2,20 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-package loader_test
+package config_test
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/itiquette/gommitlint/internal/adapters/loader"
-	configTypes "github.com/itiquette/gommitlint/internal/config"
+	"github.com/itiquette/gommitlint/internal/adapters/config"
+	configTypes "github.com/itiquette/gommitlint/internal/domain/config"
 )
 
 func TestService_Creation(t *testing.T) {
 	// Test creating a new service
-	service, err := loader.NewService()
+	service, err := config.NewService()
 	require.NoError(t, err)
 	require.NotNil(t, service)
 
@@ -28,7 +28,7 @@ func TestService_Creation(t *testing.T) {
 
 func TestService_UpdateConfig(t *testing.T) {
 	// Create service
-	service, err := loader.NewService()
+	service, err := config.NewService()
 	require.NoError(t, err)
 
 	// Update config

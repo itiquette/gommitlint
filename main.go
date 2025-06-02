@@ -10,7 +10,7 @@ import (
 	"os"
 
 	"github.com/itiquette/gommitlint/internal/adapters/cli"
-	"github.com/itiquette/gommitlint/internal/adapters/loader"
+	"github.com/itiquette/gommitlint/internal/adapters/config"
 	"github.com/itiquette/gommitlint/internal/adapters/logging"
 )
 
@@ -28,15 +28,8 @@ func main() {
 	// Initialize logger early in the application flow
 	ctx = log.InitLogger(ctx, nil, "text") // Basic logger setup
 
-	// Create config service
-	configService, err := loader.NewService()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to create config service: %v\n", err)
-		os.Exit(1)
-	}
-
 	// Load configuration
-	configService, err = configService.Load()
+	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load configuration: %v\n", err)
 		os.Exit(1)
@@ -48,5 +41,5 @@ func main() {
 	ctx = cli.WithLogger(ctx, logger)
 
 	// Pass config to CLI with logger context
-	cli.Execute(ctx, version, commit, date, configService.GetConfig())
+	cli.Execute(ctx, version, commit, date, cfg)
 }

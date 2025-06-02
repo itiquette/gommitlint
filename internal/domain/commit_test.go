@@ -11,76 +11,76 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCommitInfoMethods(t *testing.T) {
+func TestCommitMethods(t *testing.T) {
 	tests := []struct {
 		name     string
-		commit   domain.CommitInfo
-		testFunc func(domain.CommitInfo) bool
+		commit   domain.Commit
+		testFunc func(domain.Commit) bool
 		expected bool
 	}{
 		{
 			name: "HasBody returns true for commit with body",
-			commit: domain.CommitInfo{
+			commit: domain.Commit{
 				Body: "This is a commit body",
 			},
-			testFunc: domain.CommitInfo.HasBody,
+			testFunc: domain.Commit.HasBody,
 			expected: true,
 		},
 		{
 			name: "HasBody returns false for commit without body",
-			commit: domain.CommitInfo{
+			commit: domain.Commit{
 				Body: "",
 			},
-			testFunc: domain.CommitInfo.HasBody,
+			testFunc: domain.Commit.HasBody,
 			expected: false,
 		},
 		{
 			name: "HasBody returns false for whitespace-only body",
-			commit: domain.CommitInfo{
+			commit: domain.Commit{
 				Body: "   \n\t  ",
 			},
-			testFunc: domain.CommitInfo.HasBody,
+			testFunc: domain.Commit.HasBody,
 			expected: false,
 		},
 		{
 			name: "IsValid returns true for valid commit",
-			commit: domain.CommitInfo{
+			commit: domain.Commit{
 				Hash:    "abc123",
 				Subject: "feat: add feature",
 			},
-			testFunc: domain.CommitInfo.IsValid,
+			testFunc: domain.Commit.IsValid,
 			expected: true,
 		},
 		{
 			name: "IsValid returns false for commit without hash",
-			commit: domain.CommitInfo{
+			commit: domain.Commit{
 				Subject: "feat: add feature",
 			},
-			testFunc: domain.CommitInfo.IsValid,
+			testFunc: domain.Commit.IsValid,
 			expected: false,
 		},
 		{
 			name: "IsValid returns false for commit without subject",
-			commit: domain.CommitInfo{
+			commit: domain.Commit{
 				Hash: "abc123",
 			},
-			testFunc: domain.CommitInfo.IsValid,
+			testFunc: domain.Commit.IsValid,
 			expected: false,
 		},
 		{
 			name: "IsSigned returns true for signed commit",
-			commit: domain.CommitInfo{
+			commit: domain.Commit{
 				Signature: "-----BEGIN PGP SIGNATURE-----",
 			},
-			testFunc: domain.CommitInfo.IsSigned,
+			testFunc: domain.Commit.IsSigned,
 			expected: true,
 		},
 		{
 			name: "IsSigned returns false for unsigned commit",
-			commit: domain.CommitInfo{
+			commit: domain.Commit{
 				Signature: "",
 			},
-			testFunc: domain.CommitInfo.IsSigned,
+			testFunc: domain.Commit.IsSigned,
 			expected: false,
 		},
 	}
@@ -132,19 +132,19 @@ func TestIsValidCommitSubject(t *testing.T) {
 func TestContainsSignature(t *testing.T) {
 	tests := []struct {
 		name     string
-		commit   domain.CommitInfo
+		commit   domain.Commit
 		expected bool
 	}{
 		{
 			name: "commit with signature",
-			commit: domain.CommitInfo{
+			commit: domain.Commit{
 				Signature: "-----BEGIN PGP SIGNATURE-----\n...\n-----END PGP SIGNATURE-----",
 			},
 			expected: true,
 		},
 		{
 			name: "commit without signature",
-			commit: domain.CommitInfo{
+			commit: domain.Commit{
 				Signature: "",
 			},
 			expected: false,

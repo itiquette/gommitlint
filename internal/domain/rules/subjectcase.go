@@ -4,19 +4,17 @@
 package rules
 
 import (
-	"context"
 	"fmt"
 	"regexp"
 	"strings"
 	"unicode"
 
-	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain/config"
 )
 
 // SubjectCaseRule validates the case style of commit subjects.
 type SubjectCaseRule struct {
-	name          string
 	caseChoice    string
 	checkCommit   bool
 	allowNonAlpha bool
@@ -33,7 +31,6 @@ func NewSubjectCaseRule(cfg config.Config) SubjectCaseRule {
 	isConventionalEnabled := domain.ShouldRunRule("conventional", cfg.Rules.Enabled, cfg.Rules.Disabled)
 
 	return SubjectCaseRule{
-		name:          "SubjectCase",
 		caseChoice:    caseChoice,
 		checkCommit:   isConventionalEnabled,
 		allowNonAlpha: cfg.Message.Subject.RequireImperative,
@@ -41,24 +38,22 @@ func NewSubjectCaseRule(cfg config.Config) SubjectCaseRule {
 }
 
 // Validate checks that commit subjects follow the required case style.
-func (r SubjectCaseRule) Validate(_ context.Context, commit domain.CommitInfo) []domain.ValidationError {
+func (r SubjectCaseRule) Validate(ctx domain.ValidationContext) []domain.RuleFailure {
 	// Special handling for "ignore" or "any" case choice - always valid
 	if r.caseChoice == "ignore" || r.caseChoice == "any" {
 		return nil
 	}
 
 	// Extract subject
-	subject := commit.Subject
+	subject := ctx.Commit.Subject
 
 	// Check for empty subject first
 	if subject == "" {
-		return []domain.ValidationError{
-			domain.New(
-				"SubjectCase",
-				domain.ErrEmptyDescription,
-				"Commit message must have a description",
-			).WithHelp("Add a meaningful description after your commit type"),
-		}
+		return []domain.RuleFailure{{
+			Rule:    r.Name(),
+			Message: "Commit message must have a description",
+			Help:    "Add a meaningful description after your commit type",
+		}}
 	}
 
 	// For conventional commits, need to extract the description part
@@ -75,26 +70,22 @@ func (r SubjectCaseRule) Validate(_ context.Context, commit domain.CommitInfo) [
 			// Found conventional format, extract description
 			if matches[1] == "" {
 				// Conventional format but empty description
-				return []domain.ValidationError{
-					domain.New(
-						"SubjectCase",
-						domain.ErrEmptyDescription,
-						"Conventional commit requires a description after the type",
-					).WithHelp("Format: type(scope): description"),
-				}
+				return []domain.RuleFailure{{
+					Rule:    r.Name(),
+					Message: "Conventional commit requires a description after the type",
+					Help:    "Format: type(scope): description",
+				}}
 			}
 
 			// Use the description part after the conventional commit prefix
 			textToCheck = matches[1]
 		} else if isConventionalCommitLike(subject) {
 			// It's trying to be a conventional commit but the format is invalid
-			return []domain.ValidationError{
-				domain.New(
-					"SubjectCase",
-					domain.ErrInvalidFormat,
-					"Invalid conventional commit format",
-				).WithHelp("Use format: type(scope): description"),
-			}
+			return []domain.RuleFailure{{
+				Rule:    r.Name(),
+				Message: "Invalid conventional commit format",
+				Help:    "Use format: type(scope): description",
+			}}
 		} else {
 			// Not a conventional commit, check whole subject
 			textToCheck = subject
@@ -112,30 +103,22 @@ func (r SubjectCaseRule) Validate(_ context.Context, commit domain.CommitInfo) [
 	// Get the first word to check its case
 	firstWord := extractFirstWordForCase(textToCheck, r.allowNonAlpha)
 	if firstWord == "" {
-		return []domain.ValidationError{
-			domain.New(
-				"SubjectCase",
-				domain.ErrSubjectCase,
-				"Unable to extract a word to validate case",
-			).WithHelp("Ensure your commit message starts with an alphabetic character").WithContextMap(map[string]string{"subject": textToCheck}),
-		}
+		return []domain.RuleFailure{{
+			Rule:    r.Name(),
+			Message: "Unable to extract a word to validate case",
+			Help:    "Ensure your commit message starts with an alphabetic character",
+		}}
 	}
 
 	// Check the case
-	actualCase, isValid := checkCase(firstWord, r.caseChoice)
+	_, isValid := checkCase(firstWord, r.caseChoice)
 
 	if !isValid {
-		return []domain.ValidationError{
-			domain.New(
-				"SubjectCase",
-				domain.ErrSubjectCase,
-				fmt.Sprintf("First word '%s' should be in %s case", firstWord, r.caseChoice),
-			).WithHelp(fmt.Sprintf("Change '%s' to %s case", firstWord, r.caseChoice)).WithContextMap(map[string]string{
-				"word":          firstWord,
-				"required_case": r.caseChoice,
-				"actual_case":   actualCase,
-			}),
-		}
+		return []domain.RuleFailure{{
+			Rule:    r.Name(),
+			Message: fmt.Sprintf("First word '%s' should be in %s case", firstWord, r.caseChoice),
+			Help:    fmt.Sprintf("Change '%s' to %s case", firstWord, r.caseChoice),
+		}}
 	}
 
 	return nil
@@ -143,7 +126,7 @@ func (r SubjectCaseRule) Validate(_ context.Context, commit domain.CommitInfo) [
 
 // Name returns the rule name.
 func (r SubjectCaseRule) Name() string {
-	return r.name
+	return "SubjectCase"
 }
 
 // isConventionalCommitLike checks if a string looks like it's trying to be a conventional commit

@@ -14,16 +14,16 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/adapters/git"
 	"github.com/itiquette/gommitlint/internal/adapters/logging"
-	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain/config"
 	"github.com/itiquette/gommitlint/internal/domain/rules"
 )
 
 // NewValidationService creates a validation service with direct construction.
 // Simplified dependency injection - no complex factory patterns.
-func NewValidationService(ctx context.Context, config config.Config, repoPath string, logger log.Logger) (*domain.Service, error) {
+func NewValidationService(ctx context.Context, config config.Config, repoPath string, _ log.Logger) (*domain.Service, error) {
 	// Create git repository - single responsibility, direct construction
-	gitRepo, err := git.NewRepository(ctx, repoPath, logger)
+	gitRepo, err := git.NewRepository(ctx, repoPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create git repository: %w", err)
 	}

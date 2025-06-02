@@ -20,8 +20,8 @@ type RuleResult struct {
 // CommitResult represents the results of validating all rules against a single commit.
 // Simplified to contain only necessary fields.
 type CommitResult struct {
-	// CommitInfo contains information about the validated commit.
-	CommitInfo CommitInfo
+	// Commit contains information about the validated commit.
+	Commit Commit
 
 	// RuleResults contains the results of each rule applied to the commit.
 	RuleResults []RuleResult
@@ -36,6 +36,9 @@ type ValidationResults struct {
 	// Results contains individual commit validation results
 	Results []CommitResult
 
+	// RepositoryResults contains repository-level validation results
+	RepositoryResults []RuleResult
+
 	// TotalCommits is the total number of commits validated.
 	TotalCommits int
 
@@ -44,9 +47,9 @@ type ValidationResults struct {
 }
 
 // NewCommitResult creates a new commit result.
-func NewCommitResult(commit CommitInfo) CommitResult {
+func NewCommitResult(commit Commit) CommitResult {
 	return CommitResult{
-		CommitInfo:  commit,
+		Commit:      commit,
 		RuleResults: []RuleResult{},
 		Passed:      true,
 	}
@@ -57,8 +60,8 @@ func NewCommitResult(commit CommitInfo) CommitResult {
 func (r CommitResult) AddRuleResult(ruleName string, errs []ValidationError) CommitResult {
 	// Create new result with copied data
 	newResult := CommitResult{
-		CommitInfo: r.CommitInfo,
-		Passed:     r.Passed,
+		Commit: r.Commit,
+		Passed: r.Passed,
 	}
 
 	// Copy existing rule results
@@ -86,7 +89,8 @@ func (r CommitResult) AddRuleResult(ruleName string, errs []ValidationError) Com
 // NewValidationResults creates a new ValidationResults instance.
 func NewValidationResults() ValidationResults {
 	return ValidationResults{
-		Results: []CommitResult{},
+		Results:           []CommitResult{},
+		RepositoryResults: []RuleResult{},
 	}
 }
 
@@ -94,8 +98,9 @@ func NewValidationResults() ValidationResults {
 // This replaces the WithResult method with a simpler name.
 func (r ValidationResults) AddResult(result CommitResult) ValidationResults {
 	newResults := ValidationResults{
-		TotalCommits:  r.TotalCommits + 1,
-		PassedCommits: r.PassedCommits,
+		TotalCommits:      r.TotalCommits + 1,
+		PassedCommits:     r.PassedCommits,
+		RepositoryResults: r.RepositoryResults, // Copy repository results
 	}
 
 	if result.Passed {
@@ -110,8 +115,31 @@ func (r ValidationResults) AddResult(result CommitResult) ValidationResults {
 	return newResults
 }
 
-// AllPassed returns true if all commits passed validation.
+// AddRepositoryResults adds repository-level rule results.
+func (r ValidationResults) AddRepositoryResults(repoResults []RuleResult) ValidationResults {
+	newResults := ValidationResults{
+		Results:       r.Results,
+		TotalCommits:  r.TotalCommits,
+		PassedCommits: r.PassedCommits,
+	}
+
+	// Copy existing repository results and add new ones
+	newResults.RepositoryResults = make([]RuleResult, len(r.RepositoryResults), len(r.RepositoryResults)+len(repoResults))
+	copy(newResults.RepositoryResults, r.RepositoryResults)
+	newResults.RepositoryResults = append(newResults.RepositoryResults, repoResults...)
+
+	return newResults
+}
+
+// AllPassed returns true if all commits passed validation and no repository rules failed.
 func (r ValidationResults) AllPassed() bool {
+	// Check if any repository rules failed
+	for _, repoResult := range r.RepositoryResults {
+		if repoResult.Status != StatusPassed {
+			return false
+		}
+	}
+
 	return r.TotalCommits == r.PassedCommits
 }
 
@@ -125,11 +153,19 @@ func (r ValidationResults) Count() int {
 func (r ValidationResults) GetFailedRules() map[string]int {
 	summary := make(map[string]int)
 
+	// Count failures from commit results
 	for _, result := range r.Results {
 		for _, ruleResult := range result.RuleResults {
 			if ruleResult.Status == StatusFailed {
 				summary[ruleResult.RuleName]++
 			}
+		}
+	}
+
+	// Count failures from repository results
+	for _, ruleResult := range r.RepositoryResults {
+		if ruleResult.Status == StatusFailed {
+			summary[ruleResult.RuleName]++
 		}
 	}
 

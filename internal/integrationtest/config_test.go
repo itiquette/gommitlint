@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gitTestdata "github.com/itiquette/gommitlint/internal/adapters/git/testdata"
-	"github.com/itiquette/gommitlint/internal/config"
+	"github.com/itiquette/gommitlint/internal/domain/config"
 )
 
 // TestConfigurationWorkflow tests different configuration scenarios.

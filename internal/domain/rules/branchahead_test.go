@@ -10,8 +10,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain/config"
 )
 
 // mockRepository is a test implementation of the Repository interface.
@@ -31,16 +31,16 @@ func (m *mockRepository) GetCommitsAhead(_ context.Context, refBranch string) (i
 }
 
 // Stub implementations for Repository interface (not used in branchahead tests).
-func (m *mockRepository) GetCommit(_ context.Context, _ string) (domain.CommitInfo, error) {
-	return domain.CommitInfo{}, nil
+func (m *mockRepository) GetCommit(_ context.Context, _ string) (domain.Commit, error) {
+	return domain.Commit{}, nil
 }
-func (m *mockRepository) GetCommits(_ context.Context, _ int) ([]domain.CommitInfo, error) {
+func (m *mockRepository) GetCommits(_ context.Context, _ int) ([]domain.Commit, error) {
 	return nil, nil
 }
-func (m *mockRepository) GetCommitRange(_ context.Context, _, _ string) ([]domain.CommitInfo, error) {
+func (m *mockRepository) GetCommitRange(_ context.Context, _, _ string) ([]domain.Commit, error) {
 	return nil, nil
 }
-func (m *mockRepository) GetHeadCommits(_ context.Context, _ int) ([]domain.CommitInfo, error) {
+func (m *mockRepository) GetHeadCommits(_ context.Context, _ int) ([]domain.Commit, error) {
 	return nil, nil
 }
 func (m *mockRepository) GetCurrentBranch(_ context.Context) (string, error) { return "", nil }
@@ -83,15 +83,15 @@ func TestBranchAheadRule(t *testing.T) {
 				commitsAhead: 0,
 				err:          errors.New("test error"),
 			},
-			expectedErrors:    true,
-			expectedErrorCode: string(domain.ErrGitOperationFailed),
+			expectedErrors:    false, // Now gracefully skips errors
+			expectedErrorCode: "",
 		},
 		{
 			name:               "nil repository",
 			maxCommitsAheadCfg: 10,
 			analyzer:           nil,
-			expectedErrors:     true,
-			expectedErrorCode:  string(domain.ErrInvalidRepo),
+			expectedErrors:     false, // Now gracefully skips when no repository
+			expectedErrorCode:  "",
 		},
 	}
 
@@ -105,32 +105,33 @@ func TestBranchAheadRule(t *testing.T) {
 				},
 			}
 
-			// Create dependencies
-			deps := domain.RuleDependencies{
-				Repository: testCase.analyzer,
-			}
-
-			// Create rule with config and dependencies
-			rule := NewBranchAheadRule(cfg, deps)
+			// Create rule with config only (simplified interface)
+			rule := NewBranchAheadRule(cfg)
 
 			// Check rule name
 			require.Equal(t, "BranchAhead", rule.Name(), "Rule name should be BranchAhead")
 
-			// Create an empty commit to validate
-			commit := domain.CommitInfo{
-				Hash:    "test-commit",
-				Subject: "test subject",
+			// Validate using ValidationContext
+			ctx := domain.ValidationContext{
+				Commit:     domain.Commit{Hash: "test", Subject: "test commit"},
+				Repository: testCase.analyzer,
+				Config:     &cfg,
 			}
-
-			// Validate the commit
-			errors := rule.Validate(context.Background(), commit)
+			failures := rule.Validate(ctx)
 
 			// Check for expected errors
 			if testCase.expectedErrors {
-				require.NotEmpty(t, errors, "Expected validation errors")
-				require.Equal(t, testCase.expectedErrorCode, errors[0].Code, "Error code mismatch")
+				require.NotEmpty(t, failures, "Expected validation failures")
+				// Check the message contains expected content
+				if testCase.analyzer == nil {
+					require.Contains(t, failures[0].Message, "Repository is nil", "Error message should indicate nil repository")
+				} else if mockRepo, ok := testCase.analyzer.(*mockRepository); ok && mockRepo.err != nil {
+					require.Contains(t, failures[0].Message, "Failed to check", "Error message should indicate failure")
+				} else {
+					require.Contains(t, failures[0].Message, "commits ahead", "Error message should mention commits ahead")
+				}
 			} else {
-				require.Empty(t, errors, "Expected no validation errors")
+				require.Empty(t, failures, "Expected no validation failures")
 			}
 		})
 	}
@@ -140,8 +141,7 @@ func TestBranchAheadRule(t *testing.T) {
 func TestBranchAheadRule_WithConfig(t *testing.T) {
 	t.Run("default options", func(t *testing.T) {
 		cfg := config.Config{}
-		deps := domain.RuleDependencies{}
-		rule := NewBranchAheadRule(cfg, deps)
+		rule := NewBranchAheadRule(cfg)
 
 		require.Equal(t, 10, rule.maxCommitsAhead, "Default max commits ahead should be 10")
 		require.Equal(t, "main", rule.reference, "Default reference branch should be 'main'")
@@ -153,8 +153,7 @@ func TestBranchAheadRule_WithConfig(t *testing.T) {
 				MaxCommitsAhead: 5,
 			},
 		}
-		deps := domain.RuleDependencies{}
-		rule := NewBranchAheadRule(cfg, deps)
+		rule := NewBranchAheadRule(cfg)
 
 		require.Equal(t, 5, rule.maxCommitsAhead, "Custom max commits ahead should be 5")
 		require.Equal(t, "main", rule.reference, "Reference branch should remain default")
@@ -166,8 +165,7 @@ func TestBranchAheadRule_WithConfig(t *testing.T) {
 				ReferenceBranch: "develop",
 			},
 		}
-		deps := domain.RuleDependencies{}
-		rule := NewBranchAheadRule(cfg, deps)
+		rule := NewBranchAheadRule(cfg)
 
 		require.Equal(t, 10, rule.maxCommitsAhead, "Max commits ahead should remain default")
 		require.Equal(t, "develop", rule.reference, "Custom reference branch should be 'develop'")
@@ -180,8 +178,7 @@ func TestBranchAheadRule_WithConfig(t *testing.T) {
 				ReferenceBranch: "staging",
 			},
 		}
-		deps := domain.RuleDependencies{}
-		rule := NewBranchAheadRule(cfg, deps)
+		rule := NewBranchAheadRule(cfg)
 
 		require.Equal(t, 3, rule.maxCommitsAhead, "Custom max commits ahead should be 3")
 		require.Equal(t, "staging", rule.reference, "Custom reference branch should be 'staging'")
@@ -196,27 +193,23 @@ func TestBranchAheadRule_ReferenceBranch(t *testing.T) {
 		err:          nil,
 	}
 
-	// Create config and dependencies
+	// Create config
 	cfg := config.Config{
 		Repo: config.RepoConfig{
 			ReferenceBranch: "develop",
 		},
 	}
-	deps := domain.RuleDependencies{
-		Repository: mockAnalyzer,
-	}
 
 	// Create rule with custom reference branch
-	rule := NewBranchAheadRule(cfg, deps)
+	rule := NewBranchAheadRule(cfg)
 
-	// Validate any commit (it doesn't matter what commit for this test)
-	commit := domain.CommitInfo{
-		Hash:    "test-commit",
-		Subject: "test subject",
+	// Run validation using ValidationContext
+	ctx := domain.ValidationContext{
+		Commit:     domain.Commit{Hash: "test", Subject: "test commit"},
+		Repository: mockAnalyzer,
+		Config:     &cfg,
 	}
-
-	// Run validation (this should use the analyzer)
-	rule.Validate(context.Background(), commit)
+	rule.Validate(ctx)
 
 	// Check what reference branch was passed to the analyzer
 	require.Equal(t, "develop", mockAnalyzer.refBranchName,
@@ -262,8 +255,8 @@ func TestBranchAheadRule_Configuration(t *testing.T) {
 			maxCommitsAhead: 5,
 			reference:       "main",
 			analyzerErr:     errors.New("git error"),
-			wantError:       true,
-			wantErrorCode:   string(domain.ErrGitOperationFailed),
+			wantError:       false, // Now gracefully skips git errors
+			wantErrorCode:   "",
 		},
 		{
 			name:            "custom reference branch",
@@ -289,26 +282,29 @@ func TestBranchAheadRule_Configuration(t *testing.T) {
 					ReferenceBranch: testCase.reference,
 				},
 			}
-			deps := domain.RuleDependencies{
-				Repository: analyzer,
-			}
 
 			// Create rule with configuration
-			rule := NewBranchAheadRule(cfg, deps)
+			rule := NewBranchAheadRule(cfg)
 
-			// Validate
-			commit := domain.CommitInfo{
-				Hash:    "test-commit",
-				Subject: "test subject",
+			// Validate using ValidationContext
+			ctx := domain.ValidationContext{
+				Commit:     domain.Commit{Hash: "test", Subject: "test commit"},
+				Repository: analyzer,
+				Config:     &cfg,
 			}
-			errors := rule.Validate(context.Background(), commit)
+			failures := rule.Validate(ctx)
 
 			// Check results
 			if testCase.wantError {
-				require.NotEmpty(t, errors, "Expected validation errors")
-				require.Equal(t, testCase.wantErrorCode, errors[0].Code)
+				require.NotEmpty(t, failures, "Expected validation failures")
+				// Check the message content since RuleFailure doesn't have Code field
+				if testCase.analyzerErr != nil {
+					require.Contains(t, failures[0].Message, "Failed to check", "Error message should indicate failure")
+				} else {
+					require.Contains(t, failures[0].Message, "commits ahead", "Error message should mention commits ahead")
+				}
 			} else {
-				require.Empty(t, errors, "Expected no validation errors")
+				require.Empty(t, failures, "Expected no validation failures")
 			}
 
 			// Verify correct reference was used

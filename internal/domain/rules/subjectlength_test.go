@@ -4,14 +4,12 @@
 package rules_test
 
 import (
-	"context"
-	"strconv"
 	"strings"
 	"testing"
 	"unicode/utf8"
 
-	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain/config"
 	"github.com/itiquette/gommitlint/internal/domain/rules"
 	"github.com/itiquette/gommitlint/internal/domain/testdata"
 	"github.com/stretchr/testify/require"
@@ -88,41 +86,28 @@ func TestSubjectLengthRule(t *testing.T) {
 			commit := testdata.Commit("feat: add new feature\n\nThis commit adds a new feature that enhances the user experience.")
 			commit.Subject = testCase.subject
 
-			ctx := context.Background()
-			errs := rule.Validate(ctx, commit)
+			// Create validation context
+			ctx := domain.ValidationContext{
+				Commit:     commit,
+				Repository: nil,
+				Config:     &cfg,
+			}
+
+			failures := rule.Validate(ctx)
 
 			if testCase.expectError {
-				require.NotEmpty(t, errs, "Expected validation error")
-				require.Len(t, errs, 1, "Expected exactly one error")
+				require.NotEmpty(t, failures, "Expected validation failure")
+				require.Len(t, failures, 1, "Expected exactly one failure")
 
 				// Use assertion helper
-				testdata.AssertValidationError(t, errs[0], string(domain.ErrMaxLengthExceeded), "SubjectLength")
-				require.Contains(t, errs[0].Error(), "too long", "Error message should contain 'too long'")
-
-				// Check context values
-				actualLengthStr, hasActualLength := errs[0].Context["actual"]
-				require.True(t, hasActualLength, "Error should have actual context")
-
-				actualLength, err := strconv.Atoi(actualLengthStr)
-				require.NoError(t, err, "actual should be a valid integer")
-				require.Equal(t, len(testCase.subject), actualLength, "actual should match subject length")
-
-				maxLengthStr, hasMaxLength := errs[0].Context["max"]
-				require.True(t, hasMaxLength, "Error should have max context")
-
-				maxLength, err := strconv.Atoi(maxLengthStr)
-				require.NoError(t, err, "max should be a valid integer")
-				require.Equal(t, testCase.maxLength, maxLength, "max should match configured max length")
-
-				subject, hasSubject := errs[0].Context["subject"]
-				require.True(t, hasSubject, "Error should have subject context")
-				require.Equal(t, testCase.subject, subject, "subject context should match original subject")
+				testdata.AssertRuleFailure(t, failures[0], "SubjectLength")
+				require.Contains(t, failures[0].Message, "exceeds", "Message should contain 'exceeds'")
 
 				// Help is accessible through Help field
-				help := errs[0].Help
-				require.NotEmpty(t, help, "Error should have help text")
+				help := failures[0].Help
+				require.NotEmpty(t, help, "Failure should have help text")
 			} else {
-				require.Empty(t, errs, "Expected no validation errors")
+				require.Empty(t, failures, "Expected no validation failures")
 			}
 		})
 	}
@@ -154,14 +139,17 @@ func TestSubjectLengthRuleWithoutContext(t *testing.T) {
 	commit := testdata.Commit("feat: add new feature\n\nThis commit adds a new feature that enhances the user experience.")
 	commit.Subject = strings.Repeat("a", 100)
 
-	ctx := context.Background()
-
 	// When no config is available, the rule should use default max length of 72
-	errs := rule.Validate(ctx, commit)
-	require.NotEmpty(t, errs, "Should return error when subject exceeds default max length")
-	require.Len(t, errs, 1, "Should return exactly one error")
-	testdata.AssertValidationError(t, errs[0], string(domain.ErrMaxLengthExceeded), "SubjectLength")
-	require.Contains(t, errs[0].Error(), "28 characters too long", "Error should indicate how many characters over the limit")
+	ctx := domain.ValidationContext{
+		Commit:     commit,
+		Repository: nil,
+		Config:     &cfg,
+	}
+	failures := rule.Validate(ctx)
+	require.NotEmpty(t, failures, "Should return failure when subject exceeds default max length")
+	require.Len(t, failures, 1, "Should return exactly one failure")
+	testdata.AssertRuleFailure(t, failures[0], "SubjectLength")
+	require.Contains(t, failures[0].Message, "exceeds 72 characters", "Message should indicate it exceeds the limit")
 }
 
 // Test that UTF-8 characters are counted correctly (by bytes, not runes).
@@ -184,11 +172,17 @@ func TestSubjectLengthRuleUTF8(t *testing.T) {
 	commit := testdata.Commit("feat: add new feature\n\nThis commit adds a new feature that enhances the user experience.")
 	commit.Subject = subject
 
-	ctx := context.Background()
-	errs := rule.Validate(ctx, commit)
+	// Create validation context
+	ctx := domain.ValidationContext{
+		Commit:     commit,
+		Repository: nil,
+		Config:     &cfg,
+	}
+
+	failures := rule.Validate(ctx)
 
 	// Should fail because byte length exceeds 72
-	require.NotEmpty(t, errs, "Expected validation error for UTF-8 string")
+	require.NotEmpty(t, failures, "Expected validation failure for UTF-8 string")
 
 	// Verify the actual byte length
 	actualLength := len(subject)

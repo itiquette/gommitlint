@@ -6,23 +6,20 @@ package rules
 import (
 	"context"
 	"fmt"
-	"strconv"
 
-	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain/config"
 )
 
 // BranchAheadRule validates that the current branch is not too many commits ahead
 // of the reference branch.
 type BranchAheadRule struct {
-	name             string
-	maxCommitsAhead  int
-	reference        string
-	repositoryGetter func() domain.Repository
+	maxCommitsAhead int
+	reference       string
 }
 
 // NewBranchAheadRule creates a new rule for checking commits ahead of a reference branch from config.
-func NewBranchAheadRule(cfg config.Config, deps domain.RuleDependencies) BranchAheadRule {
+func NewBranchAheadRule(cfg config.Config) BranchAheadRule {
 	// Set defaults if not configured
 	maxCommitsAhead := cfg.Repo.MaxCommitsAhead
 	if maxCommitsAhead <= 0 {
@@ -35,77 +32,33 @@ func NewBranchAheadRule(cfg config.Config, deps domain.RuleDependencies) BranchA
 	}
 
 	return BranchAheadRule{
-		name:            "BranchAhead",
 		maxCommitsAhead: maxCommitsAhead,
 		reference:       reference,
-		repositoryGetter: func() domain.Repository {
-			return deps.Repository
-		},
 	}
 }
 
 // Validate checks that the current branch is not too many commits ahead of the reference branch.
-// This implementation uses the rule's pre-configured state set by WithContext.
-func (r BranchAheadRule) Validate(ctx context.Context, _ domain.CommitInfo) []domain.ValidationError {
-	// Get the repository
-	if r.repositoryGetter == nil {
-		// This should not happen in normal operation
-		// Create a clear error when repository getter is unavailable
-		return []domain.ValidationError{
-			domain.New(
-				"BranchAhead",
-				domain.ErrInvalidRepo,
-				"Repository analyzer unavailable - cannot verify commit distance",
-			).WithHelp("Ensure the repository is properly initialized"),
-		}
-	}
-
-	repository := r.repositoryGetter()
-	if repository == nil {
-		// This is another error that should not happen in normal operation
-		// Without a repository, we can't validate
-		return []domain.ValidationError{
-			domain.New(
-				"BranchAhead",
-				domain.ErrInvalidRepo,
-				"Cannot access repository - validation impossible",
-			).WithHelp("Check repository permissions and initialization state"),
-		}
+// This rule requires repository access, so it checks if Repository is available in the context.
+func (r BranchAheadRule) Validate(ctx domain.ValidationContext) []domain.RuleFailure {
+	// Skip if no repository is provided
+	if ctx.Repository == nil {
+		return nil
 	}
 
 	// Get the number of commits ahead
-	commitsAhead, err := repository.GetCommitsAhead(ctx, r.reference)
+	commitsAhead, err := ctx.Repository.GetCommitsAhead(context.Background(), r.reference)
 	if err != nil {
-		// Handle errors from the repository
-		return []domain.ValidationError{
-			domain.New(
-				"BranchAhead",
-				domain.ErrGitOperationFailed,
-				"Failed to get commits ahead of reference",
-			).WithHelp(fmt.Sprintf("Check if the reference branch '%s' exists", r.reference)).WithContextMap(map[string]string{
-				"reference": r.reference,
-				"error":     err.Error(),
-			}),
-		}
+		// Skip on error rather than fail - repository might not have the reference branch
+		return nil
 	}
-
-	// The commitsAhead field is not used since the rule is stateless
-	// Keeping it as a local variable instead
 
 	// Validate against the maximum
 	if r.maxCommitsAhead > 0 && commitsAhead > r.maxCommitsAhead {
-		return []domain.ValidationError{
-			domain.New(
-				"BranchAhead",
-				domain.ErrTooManyCommits,
-				fmt.Sprintf("Your branch is %d commits ahead of '%s' (max allowed: %d)",
-					commitsAhead, r.reference, r.maxCommitsAhead),
-			).WithHelp(fmt.Sprintf("Rebase on %s or squash some commits to reduce the distance", r.reference)).WithContextMap(map[string]string{
-				"reference":     r.reference,
-				"commits_ahead": strconv.Itoa(commitsAhead),
-				"max_allowed":   strconv.Itoa(r.maxCommitsAhead),
-			}),
-		}
+		return []domain.RuleFailure{{
+			Rule:    r.Name(),
+			Message: fmt.Sprintf("Branch is %d commits ahead of %s (max: %d)", commitsAhead, r.reference, r.maxCommitsAhead),
+			Help:    fmt.Sprintf("Consider rebasing or creating a pull request when ahead by more than %d commits", r.maxCommitsAhead),
+		}}
 	}
 
 	return nil
@@ -113,5 +66,10 @@ func (r BranchAheadRule) Validate(ctx context.Context, _ domain.CommitInfo) []do
 
 // Name returns the rule name.
 func (r BranchAheadRule) Name() string {
-	return r.name
+	return "BranchAhead"
+}
+
+// IsRepositoryLevel returns true since this rule operates at repository level.
+func (r BranchAheadRule) IsRepositoryLevel() bool {
+	return true
 }

@@ -4,18 +4,16 @@
 package rules
 
 import (
-	"context"
 	"fmt"
 	"regexp"
 	"strings"
 
-	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain/config"
 )
 
 // JiraReferenceRule validates that commit messages reference JIRA issues.
 type JiraReferenceRule struct {
-	name                  string
 	pattern               string
 	prefixes              []string
 	excludedTypes         []string
@@ -26,7 +24,7 @@ type JiraReferenceRule struct {
 
 // Name returns the rule name.
 func (r JiraReferenceRule) Name() string {
-	return r.name
+	return "JiraReference"
 }
 
 // NewJiraReferenceRule creates a new rule for validating JIRA references from config.
@@ -44,7 +42,6 @@ func NewJiraReferenceRule(cfg config.Config) JiraReferenceRule {
 	isConventionalEnabled := domain.ShouldRunRule("conventional", cfg.Rules.Enabled, cfg.Rules.Disabled)
 
 	return JiraReferenceRule{
-		name:                  "JiraReference",
 		pattern:               pattern,
 		prefixes:              cfg.Jira.ProjectPrefixes,
 		excludedTypes:         []string{"docs", "chore", "style", "refactor", "test"},
@@ -59,21 +56,21 @@ func NewJiraReferenceRule(cfg config.Config) JiraReferenceRule {
 // Helper function to check if a JIRA reference is in the scope part of a conventional commit.
 
 // Validate checks a commit for Jira reference compliance.
-func (r JiraReferenceRule) Validate(_ context.Context, commit domain.CommitInfo) []domain.ValidationError {
+func (r JiraReferenceRule) Validate(ctx domain.ValidationContext) []domain.RuleFailure {
 	// Check if this commit type should be excluded from JIRA validation
-	if shouldExcludeCommitType(commit.Subject, r.excludedTypes) {
+	if shouldExcludeCommitType(ctx.Commit.Subject, r.excludedTypes) {
 		return nil
 	}
 
 	// Check if JIRA is required for this commit type
-	if !isJiraRequiredForType(commit.Subject, r.requiredForTypes) && r.checkConventionalOnly {
+	if !isJiraRequiredForType(ctx.Commit.Subject, r.requiredForTypes) && r.checkConventionalOnly {
 		return nil
 	}
 
 	// Prepare the text to search
-	textToSearch := commit.Subject
-	if r.searchInBody && commit.Body != "" {
-		textToSearch = fmt.Sprintf("%s\n%s", commit.Subject, commit.Body)
+	textToSearch := ctx.Commit.Subject
+	if r.searchInBody && ctx.Commit.Body != "" {
+		textToSearch = fmt.Sprintf("%s\n%s", ctx.Commit.Subject, ctx.Commit.Body)
 	}
 
 	// Extract JIRA references
@@ -86,13 +83,11 @@ func (r JiraReferenceRule) Validate(_ context.Context, commit domain.CommitInfo)
 			expectedPattern = r.prefixes[0] + "-123"
 		}
 
-		return []domain.ValidationError{
-			domain.New(
-				"JiraReference",
-				domain.ErrMissingJira,
-				"JIRA reference missing",
-			).WithHelp("Add a JIRA reference like " + expectedPattern),
-		}
+		return []domain.RuleFailure{{
+			Rule:    r.Name(),
+			Message: "JIRA reference missing",
+			Help:    "Add a JIRA reference like " + expectedPattern,
+		}}
 	}
 
 	// Validate projects if configured
@@ -100,23 +95,18 @@ func (r JiraReferenceRule) Validate(_ context.Context, commit domain.CommitInfo)
 		for _, ref := range references {
 			project := extractProjectFromReference(ref)
 			if !isValidProject(project, r.prefixes) {
-				return []domain.ValidationError{
-					domain.New(
-						"JiraReference",
-						domain.ErrInvalidProject,
-						fmt.Sprintf("Invalid JIRA project '%s'; allowed projects: %s", project, strings.Join(r.prefixes, ", ")),
-					).WithHelp("Use one of: " + strings.Join(r.prefixes, ", ")).WithContextMap(map[string]string{
-						"project":        project,
-						"valid_projects": strings.Join(r.prefixes, ", "),
-					}),
-				}
+				return []domain.RuleFailure{{
+					Rule:    r.Name(),
+					Message: fmt.Sprintf("Invalid JIRA project '%s'", project),
+					Help:    "Use one of: " + strings.Join(r.prefixes, ", "),
+				}}
 			}
 		}
 	}
 
 	// Check reference placement in conventional commits
-	if r.checkConventionalOnly && isConventionalCommit(commit.Subject) {
-		conventionalType, _, _ := parseConventionalCommit(commit.Subject)
+	if r.checkConventionalOnly && isConventionalCommit(ctx.Commit.Subject) {
+		conventionalType, _, _ := parseConventionalCommit(ctx.Commit.Subject)
 
 		// For merge commits, we're more lenient
 		if conventionalType == "merge" {
@@ -124,14 +114,12 @@ func (r JiraReferenceRule) Validate(_ context.Context, commit domain.CommitInfo)
 		}
 
 		// Check if JIRA is in the correct position (not in description)
-		if hasJiraInDescription(commit.Subject, r.pattern) {
-			return []domain.ValidationError{
-				domain.New(
-					"JiraReference",
-					domain.ErrMisplacedJira,
-					"JIRA reference should be in scope, not description",
-				).WithHelp("Use format: type(JIRA-123): description"),
-			}
+		if hasJiraInDescription(ctx.Commit.Subject, r.pattern) {
+			return []domain.RuleFailure{{
+				Rule:    r.Name(),
+				Message: "JIRA reference should be in scope, not description",
+				Help:    "Use format: type(JIRA-123): description",
+			}}
 		}
 	}
 

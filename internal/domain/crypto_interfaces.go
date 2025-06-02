@@ -10,7 +10,7 @@ import (
 
 // CryptoVerifier defines the interface for signature verification operations.
 type CryptoVerifier interface {
-	VerifyCommit(ctx context.Context, commit CommitInfo) (VerificationResult, error)
+	VerifyCommit(ctx context.Context, commit Commit) (VerificationResult, error)
 }
 
 // CryptoKeyRepository defines the interface for key management operations.

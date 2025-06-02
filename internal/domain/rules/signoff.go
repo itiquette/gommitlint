@@ -4,13 +4,11 @@
 package rules
 
 import (
-	"context"
-	"fmt"
 	"regexp"
 	"strings"
 
-	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain/config"
 )
 
 // signOffRegex returns a regex for matching sign-off lines.
@@ -20,7 +18,6 @@ func signOffRegex() *regexp.Regexp {
 
 // SignOffRule validates that commit messages include a sign-off line.
 type SignOffRule struct {
-	name            string
 	requireSignOff  bool
 	acceptAltFormat bool
 }
@@ -28,59 +25,42 @@ type SignOffRule struct {
 // NewSignOffRule creates a new rule for validating commit sign-offs from config.
 func NewSignOffRule(cfg config.Config) SignOffRule {
 	return SignOffRule{
-		name:            "SignOff",
 		requireSignOff:  cfg.Message.Body.RequireSignoff,
 		acceptAltFormat: cfg.Signing.RequireMultiSignoff,
 	}
 }
 
 // Validate checks for the presence and format of a Developer Certificate of Origin sign-off.
-func (r SignOffRule) Validate(_ context.Context, commit domain.CommitInfo) []domain.ValidationError {
+func (r SignOffRule) Validate(ctx domain.ValidationContext) []domain.RuleFailure {
 	// Check if sign-off is required
 	if !r.requireSignOff {
 		return nil
 	}
 
-	// Use the commit message text for validation
-	messageText := commit.Message
-	bodyText := commit.Body
-
-	// If message is empty but body isn't, use the body as the message
-	// This is a valid production scenario where only the body field might be populated
-	if messageText == "" && bodyText != "" {
-		messageText = bodyText
-	}
-
-	// Handle empty message cases separately - only if both Message and Body are empty
-	if messageText == "" && bodyText == "" {
-		return []domain.ValidationError{
-			domain.New(
-				"SignOff",
-				domain.ErrMissingSignoff,
-				"Missing sign-off",
-			).WithHelp("Add 'Signed-off-by: Your Name <email@example.com>'"),
-		}
-	}
-
 	// For signoff checking, focus on the body text
-	textToCheck := bodyText
-	if bodyText == "" {
-		// If no dedicated body, check the whole message
-		textToCheck = messageText
+	textToCheck := ctx.Commit.Body
+	if ctx.Commit.Body == "" {
+		// If no body, check the whole subject (though sign-offs should be in body)
+		textToCheck = ctx.Commit.Subject
+	}
+
+	// Handle empty message cases
+	if textToCheck == "" {
+		return []domain.RuleFailure{{
+			Rule:    r.Name(),
+			Message: "Missing sign-off",
+			Help:    "Add 'Signed-off-by: Your Name <email@example.com>'",
+		}}
 	}
 
 	// Check for sign-off in the text
 	hasSignOff := hasSignOffLine(textToCheck, r.acceptAltFormat)
 	if !hasSignOff {
-		return []domain.ValidationError{
-			domain.New(
-				"SignOff",
-				domain.ErrMissingSignoff,
-				"Missing sign-off",
-			).WithHelp("Add 'Signed-off-by: Your Name <email@example.com>'").WithContextMap(map[string]string{
-				"author": fmt.Sprintf("%s <%s>", commit.AuthorName, commit.AuthorEmail),
-			}),
-		}
+		return []domain.RuleFailure{{
+			Rule:    r.Name(),
+			Message: "Missing sign-off",
+			Help:    "Add 'Signed-off-by: Your Name <email@example.com>'",
+		}}
 	}
 
 	return nil
@@ -88,7 +68,7 @@ func (r SignOffRule) Validate(_ context.Context, commit domain.CommitInfo) []dom
 
 // Name returns the rule name.
 func (r SignOffRule) Name() string {
-	return r.name
+	return "SignOff"
 }
 
 // hasSignOffLine checks if a commit body contains a sign-off line.

@@ -15,10 +15,9 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/adapters/git"
 	gitTestdata "github.com/itiquette/gommitlint/internal/adapters/git/testdata"
-	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain/config"
 	"github.com/itiquette/gommitlint/internal/domain/rules"
-	integrationTestdata "github.com/itiquette/gommitlint/internal/integrationtest/testdata"
 )
 
 // ValidationResult represents the result of a validation operation.
@@ -36,10 +35,7 @@ func TestValidation(t *testing.T, repoPath string, config config.Config) Validat
 	ctx := context.Background()
 
 	// Create git repository adapter directly
-	logger := integrationTestdata.CreateTestLogger(t, false)
-	logAdapter := integrationTestdata.NewLogAdapter(logger)
-
-	gitRepo, err := git.NewRepository(ctx, repoPath, logAdapter)
+	gitRepo, err := git.NewRepository(ctx, repoPath)
 	require.NoError(t, err, "Failed to create git repository")
 
 	// Create rule dependencies

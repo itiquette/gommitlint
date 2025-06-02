@@ -14,12 +14,11 @@
 package rules_test
 
 import (
-	"context"
 	"strings"
 	"testing"
 
-	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain/config"
 	"github.com/itiquette/gommitlint/internal/domain/rules"
 	"github.com/stretchr/testify/require"
 )
@@ -48,37 +47,35 @@ LwAAACRrZXktMS11c2VyQHVuaXQuZXhhbXBsZQAAAAAAAAAAAAAAAA==
 // Helper functions for common test patterns
 
 // createCommit creates a test commit with the given signature.
-func createCommit(signature string) domain.CommitInfo {
-	return domain.CommitInfo{
+func createCommit(signature string) domain.Commit {
+	return domain.Commit{
 		Hash:      "test-commit",
 		Signature: signature,
 	}
 }
 
 // assertNoErrors checks that validation produced no domain.
-func assertNoErrors(t *testing.T, errors []domain.ValidationError) {
+func assertNoErrors(t *testing.T, failures []domain.RuleFailure) {
 	t.Helper()
-	require.Empty(t, errors, "Expected no validation errors")
+	require.Empty(t, failures, "Expected no validation failures")
 }
 
-// assertErrorMatch checks that an error with the given code and message exists.
-func assertErrorMatch(t *testing.T, errors []domain.ValidationError, expectedCode string, expectedMsg string) {
+// assertErrorMatch checks that an error with the given message exists.
+func assertErrorMatch(t *testing.T, failures []domain.RuleFailure, expectedMsg string) {
 	t.Helper()
-	require.NotEmpty(t, errors, "Expected validation errors")
+	require.NotEmpty(t, failures, "Expected validation failures")
 
 	found := false
 
-	for _, err := range errors {
-		if err.Code == expectedCode {
-			if expectedMsg == "" || strings.Contains(strings.ToLower(err.Message), strings.ToLower(expectedMsg)) {
-				found = true
+	for _, err := range failures {
+		if expectedMsg == "" || strings.Contains(strings.ToLower(err.Message), strings.ToLower(expectedMsg)) {
+			found = true
 
-				break
-			}
+			break
 		}
 	}
 
-	require.True(t, found, "Expected error with code %q and message containing %q", expectedCode, expectedMsg)
+	require.True(t, found, "Expected error message not found: %s", expectedMsg)
 }
 
 // TestSignatureRule_RequireSignature tests the basic validation of required and optional signatures.
@@ -88,7 +85,6 @@ func TestSignatureRule_RequireSignature(t *testing.T) {
 		signature     string
 		required      bool
 		expectedValid bool
-		expectedCode  string
 		expectedMsg   string
 	}{
 		{
@@ -108,7 +104,6 @@ func TestSignatureRule_RequireSignature(t *testing.T) {
 			signature:     "",
 			required:      true,
 			expectedValid: false,
-			expectedCode:  string(domain.ErrMissingSignature),
 			expectedMsg:   "must be cryptographically signed",
 		},
 		{
@@ -134,17 +129,19 @@ func TestSignatureRule_RequireSignature(t *testing.T) {
 			// Create a commit for testing
 			commit := createCommit(testCase.signature)
 
-			// Use a simple context without configuration
-			var ctx context.Context // Nil context to use direct rule settings
-
 			// Validate
-			errors := rule.Validate(ctx, commit)
+			ctx := domain.ValidationContext{
+				Commit:     commit,
+				Repository: nil,
+				Config:     &cfg,
+			}
+			failures := rule.Validate(ctx)
 
 			// Check for expected validation result
 			if testCase.expectedValid {
-				assertNoErrors(t, errors)
+				assertNoErrors(t, failures)
 			} else {
-				assertErrorMatch(t, errors, testCase.expectedCode, testCase.expectedMsg)
+				require.NotEmpty(t, failures, "Expected validation failures")
 			}
 		})
 	}
@@ -170,12 +167,16 @@ func TestSignatureRule_NilContext(t *testing.T) {
 	// Create commit with no signature
 	commit := createCommit("")
 
-	// Validate with TODO context
-	errors := rule.Validate(context.TODO(), commit)
+	// Validate
+	ctx := domain.ValidationContext{
+		Commit:     commit,
+		Repository: nil,
+		Config:     &cfg,
+	}
+	failures := rule.Validate(ctx)
 
 	// Should error since signature is required by default
-	require.NotEmpty(t, errors, "Should error with nil context and no signature")
-	require.Equal(t, string(domain.ErrMissingSignature), errors[0].Code)
+	require.NotEmpty(t, failures, "Should error with nil context and no signature")
 }
 
 // TestSignatureRule_EmptyConfig tests behavior with empty configuration.
@@ -191,15 +192,16 @@ func TestSignatureRule_EmptyConfig(t *testing.T) {
 	// Create commit with no signature
 	commit := createCommit("")
 
-	// Use a Background context
-	ctx := context.Background()
-
 	// Validate with empty config
-	errors := rule.Validate(ctx, commit)
+	ctx := domain.ValidationContext{
+		Commit:     commit,
+		Repository: nil,
+		Config:     &cfg,
+	}
+	failures := rule.Validate(ctx)
 
 	// Should error since signature is required by default
-	require.NotEmpty(t, errors, "Should error with empty config and no signature")
-	require.Equal(t, string(domain.ErrMissingSignature), errors[0].Code)
+	require.NotEmpty(t, failures, "Should error with empty config and no signature")
 }
 
 // TestSignatureRule_OptionsCombination tests multiple options together.
@@ -212,17 +214,25 @@ func TestSignatureRule_OptionsCombination(t *testing.T) {
 	}
 	rule := rules.NewSignatureRule(cfg)
 
-	// Create commits and context
-	ctx := context.Background()
-
+	// Create commits
 	gpgCommit := createCommit(validGPGSignature)
 	noSigCommit := createCommit("")
 
 	// GPG signature should be valid
-	gpgErrors := rule.Validate(ctx, gpgCommit)
-	assertNoErrors(t, gpgErrors)
+	ctx := domain.ValidationContext{
+		Commit:     gpgCommit,
+		Repository: nil,
+		Config:     &cfg,
+	}
+	gpgFailures := rule.Validate(ctx)
+	assertNoErrors(t, gpgFailures)
 
 	// No signature should be invalid
-	noSigErrors := rule.Validate(ctx, noSigCommit)
-	assertErrorMatch(t, noSigErrors, string(domain.ErrMissingSignature), "must be cryptographically signed")
+	ctx2 := domain.ValidationContext{
+		Commit:     noSigCommit,
+		Repository: nil,
+		Config:     &cfg,
+	}
+	noSigFailures := rule.Validate(ctx2)
+	assertErrorMatch(t, noSigFailures, "must be cryptographically signed")
 }

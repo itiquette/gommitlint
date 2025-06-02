@@ -25,7 +25,7 @@ func NewVerificationAdapter(keyRepository domain.CryptoKeyRepository) *Verificat
 }
 
 // VerifyCommit verifies the signature on a commit.
-func (a VerificationAdapter) VerifyCommit(_ context.Context, commit domain.CommitInfo) (domain.VerificationResult, error) {
+func (a VerificationAdapter) VerifyCommit(_ context.Context, commit domain.Commit) (domain.VerificationResult, error) {
 	// Create a signature from the commit
 	signature := domain.NewSignature(commit.Signature)
 

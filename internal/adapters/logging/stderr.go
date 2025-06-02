@@ -14,27 +14,27 @@ import (
 // It's used during initialization before the full logger is configured.
 type StderrLogger struct{}
 
-// Debug implements ports.Logger.
+// Debug implements Logger.
 func (StderrLogger) Debug(_ string, _ ...interface{}) {
 	// Debug messages are suppressed in stderr logger
 }
 
-// Info implements ports.Logger.
+// Info implements Logger.
 func (StderrLogger) Info(msg string, _ ...interface{}) {
 	fmt.Fprintf(os.Stderr, "[INFO] %s\n", msg)
 }
 
-// Warn implements ports.Logger.
+// Warn implements Logger.
 func (StderrLogger) Warn(msg string, _ ...interface{}) {
 	fmt.Fprintf(os.Stderr, "[WARN] %s\n", msg)
 }
 
-// Error implements ports.Logger.
+// Error implements Logger.
 func (StderrLogger) Error(msg string, _ ...interface{}) {
 	fmt.Fprintf(os.Stderr, "[ERROR] %s\n", msg)
 }
 
-// WithContext implements ports.Logger.
+// WithContext implements Logger.
 func (s StderrLogger) WithContext(ctx context.Context) context.Context {
 	return ctx
 }

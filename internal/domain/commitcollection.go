@@ -5,10 +5,10 @@
 package domain
 
 // CommitCollection provides functional operations on commit slices.
-type CommitCollection []CommitInfo
+type CommitCollection []Commit
 
 // NewCommitCollection creates a new CommitCollection from a slice of commits.
-func NewCommitCollection(commits []CommitInfo) CommitCollection {
+func NewCommitCollection(commits []Commit) CommitCollection {
 	result := make(CommitCollection, len(commits))
 	copy(result, commits)
 
@@ -16,7 +16,7 @@ func NewCommitCollection(commits []CommitInfo) CommitCollection {
 }
 
 // Filter returns a new collection with commits matching the predicate.
-func (c CommitCollection) Filter(predicate func(CommitInfo) bool) CommitCollection {
+func (c CommitCollection) Filter(predicate func(Commit) bool) CommitCollection {
 	result := make(CommitCollection, 0)
 
 	for _, commit := range c {
@@ -30,20 +30,20 @@ func (c CommitCollection) Filter(predicate func(CommitInfo) bool) CommitCollecti
 
 // FilterMergeCommits returns a new collection with merge commits filtered out.
 func (c CommitCollection) FilterMergeCommits() CommitCollection {
-	return c.Filter(func(commit CommitInfo) bool {
+	return c.Filter(func(commit Commit) bool {
 		return !commit.IsMergeCommit
 	})
 }
 
 // FilterByAuthor returns a new collection with commits by the specified author.
 func (c CommitCollection) FilterByAuthor(authorNameOrEmail string) CommitCollection {
-	return c.Filter(func(commit CommitInfo) bool {
-		return commit.AuthorName == authorNameOrEmail || commit.AuthorEmail == authorNameOrEmail
+	return c.Filter(func(commit Commit) bool {
+		return commit.Author == authorNameOrEmail || commit.AuthorEmail == authorNameOrEmail
 	})
 }
 
 // Map transforms commits using the provided function.
-func (c CommitCollection) Map(fn func(CommitInfo) CommitInfo) CommitCollection {
+func (c CommitCollection) Map(fn func(Commit) Commit) CommitCollection {
 	result := make(CommitCollection, len(c))
 	for i, commit := range c {
 		result[i] = fn(commit)
@@ -53,7 +53,7 @@ func (c CommitCollection) Map(fn func(CommitInfo) CommitInfo) CommitCollection {
 }
 
 // Any returns true if any commit matches the predicate.
-func (c CommitCollection) Any(predicate func(CommitInfo) bool) bool {
+func (c CommitCollection) Any(predicate func(Commit) bool) bool {
 	for _, commit := range c {
 		if predicate(commit) {
 			return true
@@ -64,7 +64,7 @@ func (c CommitCollection) Any(predicate func(CommitInfo) bool) bool {
 }
 
 // All returns true if all commits match the predicate.
-func (c CommitCollection) All(predicate func(CommitInfo) bool) bool {
+func (c CommitCollection) All(predicate func(Commit) bool) bool {
 	for _, commit := range c {
 		if !predicate(commit) {
 			return false
@@ -74,19 +74,19 @@ func (c CommitCollection) All(predicate func(CommitInfo) bool) bool {
 	return true
 }
 
-// First returns the first commit or empty CommitInfo if collection is empty.
-func (c CommitCollection) First() CommitInfo {
+// First returns the first commit or empty Commit if collection is empty.
+func (c CommitCollection) First() Commit {
 	if len(c) == 0 {
-		return CommitInfo{}
+		return Commit{}
 	}
 
 	return c[0]
 }
 
-// Last returns the last commit or empty CommitInfo if collection is empty.
-func (c CommitCollection) Last() CommitInfo {
+// Last returns the last commit or empty Commit if collection is empty.
+func (c CommitCollection) Last() Commit {
 	if len(c) == 0 {
-		return CommitInfo{}
+		return Commit{}
 	}
 
 	return c[len(c)-1]
@@ -104,13 +104,13 @@ func (c CommitCollection) IsEmpty() bool {
 
 // Contains returns true if the collection contains a commit with the specified hash.
 func (c CommitCollection) Contains(hash string) bool {
-	return c.Any(func(commit CommitInfo) bool {
+	return c.Any(func(commit Commit) bool {
 		return commit.Hash == hash
 	})
 }
 
 // With returns a new collection with the commit added.
-func (c CommitCollection) With(commit CommitInfo) CommitCollection {
+func (c CommitCollection) With(commit Commit) CommitCollection {
 	result := make(CommitCollection, len(c), len(c)+1)
 	copy(result, c)
 

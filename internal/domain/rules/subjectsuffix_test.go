@@ -4,11 +4,10 @@
 package rules_test
 
 import (
-	"context"
 	"testing"
 
-	"github.com/itiquette/gommitlint/internal/config"
-	appErrors "github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain/config"
 	"github.com/itiquette/gommitlint/internal/domain/rules"
 	"github.com/itiquette/gommitlint/internal/domain/testdata"
 	"github.com/stretchr/testify/require"
@@ -20,7 +19,6 @@ func TestSubjectSuffixRule(t *testing.T) {
 		subject         string
 		invalidSuffixes string
 		expectedValid   bool
-		expectedCode    string
 	}{
 		{
 			name:            "Valid subject without invalid suffix",
@@ -33,56 +31,48 @@ func TestSubjectSuffixRule(t *testing.T) {
 			subject:         "Update documentation.",
 			invalidSuffixes: ".:;",
 			expectedValid:   false,
-			expectedCode:    string(appErrors.ErrSubjectSuffix),
 		},
 		{
 			name:            "Subject ending with invalid suffix colon",
 			subject:         "Fix bug:",
 			invalidSuffixes: ".:;",
 			expectedValid:   false,
-			expectedCode:    string(appErrors.ErrSubjectSuffix),
 		},
 		{
 			name:            "Unicode subject with invalid suffix",
 			subject:         "Fix élément.",
 			invalidSuffixes: ".:;",
 			expectedValid:   false,
-			expectedCode:    string(appErrors.ErrSubjectSuffix),
 		},
 		{
 			name:            "Unicode character as invalid suffix",
 			subject:         "Update description;",
 			invalidSuffixes: ";",
 			expectedValid:   false,
-			expectedCode:    string(appErrors.ErrSubjectSuffix),
 		},
 		{
 			name:            "Empty subject",
 			subject:         "",
 			invalidSuffixes: ".:;",
 			expectedValid:   false,
-			expectedCode:    string(appErrors.ErrMissingSubject),
 		},
 		{
 			name:            "Subject with Unicode invalid suffix",
 			subject:         "Add new emoji😊",
 			invalidSuffixes: "😊", // Keep just one emoji to simplify the test
 			expectedValid:   false,
-			expectedCode:    string(appErrors.ErrSubjectSuffix),
 		},
 		{
 			name:            "Subject with space as invalid suffix",
 			subject:         "Add feature ",
 			invalidSuffixes: " \t\n",
 			expectedValid:   false,
-			expectedCode:    string(appErrors.ErrSubjectSuffix),
 		},
 		{
 			name:            "Subject with tab as invalid suffix",
 			subject:         "Add feature\t",
 			invalidSuffixes: " \t\n",
 			expectedValid:   false,
-			expectedCode:    string(appErrors.ErrSubjectSuffix),
 		},
 		{
 			name:            "Valid Unicode subject",
@@ -95,7 +85,6 @@ func TestSubjectSuffixRule(t *testing.T) {
 			subject:         "Update feature?",
 			invalidSuffixes: ".,:;?",
 			expectedValid:   false,
-			expectedCode:    string(appErrors.ErrSubjectSuffix),
 		},
 	}
 
@@ -118,24 +107,24 @@ func TestSubjectSuffixRule(t *testing.T) {
 			baseRule := rules.NewSubjectSuffixRule(cfg)
 
 			// Create commit with the test subject
-			commit := testdata.Commit("feat: add new feature\n\nThis commit adds a new feature that enhances the user experience.")
-			commit.Subject = testCase.subject
-
-			// Create context
-			ctx := context.Background()
+			commitInfo := testdata.Commit("feat: add new feature\n\nThis commit adds a new feature that enhances the user experience.")
+			commitInfo.Subject = testCase.subject
+			commit := commitInfo
 
 			// Execute validation using the configured rule
-			errors := baseRule.Validate(ctx, commit)
+			ctx := domain.ValidationContext{
+				Commit:     commit,
+				Repository: nil,
+				Config:     &cfg,
+			}
+			failures := baseRule.Validate(ctx)
 
 			// Check results
 			if testCase.expectedValid {
-				require.Empty(t, errors, "Expected no validation errors")
+				require.Empty(t, failures, "Expected no validation failures")
 			} else {
-				require.NotEmpty(t, errors, "Expected validation errors")
-
-				if len(errors) > 0 && testCase.expectedCode != "" {
-					require.Equal(t, testCase.expectedCode, errors[0].Code, "Error code should match expected")
-				}
+				require.NotEmpty(t, failures, "Expected validation failures")
+				testdata.AssertRuleFailure(t, failures[0], "SubjectSuffix")
 			}
 
 			// Verify name
@@ -164,15 +153,23 @@ func TestSubjectSuffixOptions(t *testing.T) {
 		}
 		rule := rules.NewSubjectSuffixRule(cfg)
 
-		ctx := context.Background()
-
 		// Test valid case
-		validErrors := rule.Validate(ctx, validCommit)
-		require.Empty(t, validErrors, "Default config should accept valid subject")
+		ctx3 := domain.ValidationContext{
+			Commit:     validCommit,
+			Repository: nil,
+			Config:     &cfg,
+		}
+		validFailures := rule.Validate(ctx3)
+		require.Empty(t, validFailures, "Default config should accept valid subject")
 
 		// Test invalid case
-		invalidErrors := rule.Validate(ctx, invalidCommit)
-		require.NotEmpty(t, invalidErrors, "Default config should reject subject ending with period")
+		ctx2 := domain.ValidationContext{
+			Commit:     invalidCommit,
+			Repository: nil,
+			Config:     &cfg,
+		}
+		invalidFailures := rule.Validate(ctx2)
+		require.NotEmpty(t, invalidFailures, "Default config should reject subject ending with period")
 	})
 
 	t.Run("With custom invalid suffixes", func(t *testing.T) {
@@ -193,15 +190,23 @@ func TestSubjectSuffixOptions(t *testing.T) {
 		validCommit := testdata.Commit("feat: add new feature\n\nThis commit adds a new feature that enhances the user experience.")
 		validCommit.Subject = "This ends with period."
 
-		ctx := context.Background()
-
 		// Test invalid case
-		invalidErrors := rule.Validate(ctx, invalidCommit)
-		require.NotEmpty(t, invalidErrors, "Should reject subject with configured invalid suffix")
+		ctx := domain.ValidationContext{
+			Commit:     invalidCommit,
+			Repository: nil,
+			Config:     &cfg,
+		}
+		invalidFailures := rule.Validate(ctx)
+		require.NotEmpty(t, invalidFailures, "Should reject subject with configured invalid suffix")
 
 		// Test valid case
-		validErrors := rule.Validate(ctx, validCommit)
-		require.Empty(t, validErrors, "Should accept subject ending with period when not in invalid set")
+		ctx3 := domain.ValidationContext{
+			Commit:     validCommit,
+			Repository: nil,
+			Config:     &cfg,
+		}
+		validFailures := rule.Validate(ctx3)
+		require.Empty(t, validFailures, "Should accept subject ending with period when not in invalid set")
 	})
 
 	t.Run("Empty invalid suffixes", func(t *testing.T) {
@@ -219,11 +224,15 @@ func TestSubjectSuffixOptions(t *testing.T) {
 		commit := testdata.Commit("feat: add new feature\n\nThis commit adds a new feature that enhances the user experience.")
 		commit.Subject = "This ends with question mark?"
 
-		ctx := context.Background()
-
 		// Test invalid case
-		errors := rule.Validate(ctx, commit)
-		require.NotEmpty(t, errors, "Should reject subject with configured invalid suffix")
+		ctx := domain.ValidationContext{
+			Commit:     commit,
+			Repository: nil,
+			Config:     &cfg,
+		}
+		failures := rule.Validate(ctx)
+
+		require.NotEmpty(t, failures, "Should reject subject with configured invalid suffix")
 	})
 }
 
@@ -242,11 +251,15 @@ func TestSubjectSuffixRuleWithCustomOptions(t *testing.T) {
 	commit := testdata.Commit("feat: add new feature\n\nThis commit adds a new feature that enhances the user experience.")
 	commit.Subject = "Test with exclamation!"
 
-	ctx := context.Background()
-
 	// Test validation
-	errors := rule.Validate(ctx, commit)
-	require.NotEmpty(t, errors, "Should return errors for invalid subject")
+	ctx := domain.ValidationContext{
+		Commit:     commit,
+		Repository: nil,
+		Config:     &cfg,
+	}
+	failures := rule.Validate(ctx)
+
+	require.NotEmpty(t, failures, "Should return errors for invalid subject")
 
 	// Simple validation of rule name
 	require.Equal(t, "SubjectSuffix", rule.Name())
@@ -324,8 +337,6 @@ func TestSubjectSuffixRuleWithConfig(t *testing.T) {
 			}
 			rule := rules.NewSubjectSuffixRule(cfg)
 
-			ctx := context.Background()
-
 			// Create test commit
 			commit := testdata.Commit("feat: add new feature\n\nThis commit adds a new feature that enhances the user experience.")
 			commit.Hash = "abc123"
@@ -333,13 +344,18 @@ func TestSubjectSuffixRuleWithConfig(t *testing.T) {
 			commit.Message = testCase.subject
 
 			// Execute validation
-			errors := rule.Validate(ctx, commit)
+			ctx := domain.ValidationContext{
+				Commit:     commit,
+				Repository: nil,
+				Config:     &cfg,
+			}
+			failures := rule.Validate(ctx)
 
 			// Check results
 			if testCase.expectErrors {
-				require.NotEmpty(t, errors, "Expected validation errors")
+				require.NotEmpty(t, failures, "Expected validation failures")
 			} else {
-				require.Empty(t, errors, "Expected no validation errors")
+				require.Empty(t, failures, "Expected no validation failures")
 			}
 
 			// Check rule name

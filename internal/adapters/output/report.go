@@ -13,8 +13,15 @@ import (
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/domain"
-	"github.com/itiquette/gommitlint/internal/ports"
 )
+
+// Logger provides structured logging capabilities.
+type Logger interface {
+	Debug(msg string, keysAndValues ...interface{})
+	Info(msg string, keysAndValues ...interface{})
+	Warn(msg string, keysAndValues ...interface{})
+	Error(msg string, keysAndValues ...interface{})
+}
 
 // Format represents the output format for reports.
 type Format string
@@ -51,7 +58,7 @@ type Options struct {
 type ReportService struct {
 	options   Options
 	formatter Formatter
-	logger    ports.Logger
+	logger    Logger
 }
 
 // Options returns a copy of the generator's options.
@@ -64,7 +71,7 @@ func (g ReportService) Options() Options {
 
 // NewReportService creates a new report generator.
 // The writer must be provided in options - no default will be set.
-func NewReportService(options Options, formatter Formatter, logger ports.Logger) ReportService {
+func NewReportService(options Options, formatter Formatter, logger Logger) ReportService {
 	return ReportService{
 		options:   options,
 		formatter: formatter,

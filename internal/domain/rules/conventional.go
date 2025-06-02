@@ -4,16 +4,14 @@
 package rules
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 
-	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain/config"
 )
 
 // conventionalParts represents the parts of a conventional commit.
@@ -40,7 +38,6 @@ type conventionalParts struct {
 //
 // See https://www.conventionalcommits.org/ for more information.
 type ConventionalCommitRule struct {
-	name             string
 	allowedTypes     []string
 	allowedScopes    []string
 	requireScope     bool
@@ -66,7 +63,6 @@ func NewConventionalCommitRule(cfg config.Config) ConventionalCommitRule {
 	}
 
 	return ConventionalCommitRule{
-		name:             "ConventionalCommit",
 		allowedTypes:     allowedTypes,
 		allowedScopes:    cfg.Conventional.Scopes,
 		requireScope:     cfg.Conventional.RequireScope,
@@ -77,98 +73,62 @@ func NewConventionalCommitRule(cfg config.Config) ConventionalCommitRule {
 
 // Name returns the name of the rule.
 func (r ConventionalCommitRule) Name() string {
-	return r.name
+	return "ConventionalCommit"
 }
 
 // Validate validates a commit against the conventional commit rules.
-// This method follows functional programming principles and does not modify the rule's state.
-func (r ConventionalCommitRule) Validate(_ context.Context, commit domain.CommitInfo) []domain.ValidationError {
-	// Validate conventional commit format
-	// Parse subject from commit
-	subject := commit.Subject
-	if subject == "" && commit.Message != "" {
-		subject, _ = domain.SplitCommitMessage(commit.Message)
-	}
+func (r ConventionalCommitRule) Validate(ctx domain.ValidationContext) []domain.RuleFailure {
+	var failures []domain.RuleFailure
 
 	// Parse conventional format
-	parts, err := parseConventionalFormat(subject)
+	parts, err := parseConventionalFormat(ctx.Commit.Subject)
 	if err != nil {
-		errors := []domain.ValidationError{
-			domain.New(
-				"ConventionalCommit",
-				domain.ErrInvalidConventionalFormat,
-				"Commit message doesn't follow conventional format",
-			).WithHelp("type(scope): description (e.g., 'feat: add login')").WithContextMap(map[string]string{
-				"subject": subject,
-			}),
-		}
+		failures = append(failures, domain.RuleFailure{
+			Rule:    r.Name(),
+			Message: "Commit message doesn't follow conventional format",
+			Help:    "Use format: type(scope): description (e.g., 'feat: add login')",
+		})
 
-		return errors
+		return failures
 	}
 
 	// Validate type
 	if !isValidType(parts.Type, r.allowedTypes) {
-		errors := []domain.ValidationError{
-			domain.New(
-				"ConventionalCommit",
-				domain.ErrInvalidConventionalType,
-				fmt.Sprintf("Invalid type '%s'; allowed types: %s", parts.Type, strings.Join(r.allowedTypes, ", ")),
-			).WithHelp("Use one of: " + strings.Join(r.allowedTypes, ", ")).WithContextMap(map[string]string{
-				"type":          parts.Type,
-				"allowed_types": strings.Join(r.allowedTypes, ", "),
-			}),
-		}
-
-		return errors
+		failures = append(failures, domain.RuleFailure{
+			Rule:    r.Name(),
+			Message: fmt.Sprintf("Invalid type '%s'", parts.Type),
+			Help:    "Use one of: " + strings.Join(r.allowedTypes, ", "),
+		})
 	}
 
 	// Validate scope if required
 	if r.requireScope && parts.Scope == "" {
-		errors := []domain.ValidationError{
-			domain.New(
-				"ConventionalCommit",
-				domain.ErrMissingConventionalScope,
-				"Scope is required but not provided",
-			).WithHelp("type(scope): description"),
-		}
-
-		return errors
+		failures = append(failures, domain.RuleFailure{
+			Rule:    r.Name(),
+			Message: "Scope is required but not provided",
+			Help:    "Use format: type(scope): description",
+		})
 	}
 
 	// Validate allowed scopes if specified
 	if parts.Scope != "" && len(r.allowedScopes) > 0 && !isValidScope(parts.Scope, r.allowedScopes) {
-		errors := []domain.ValidationError{
-			domain.New(
-				"ConventionalCommit",
-				domain.ErrInvalidConventionalScope,
-				fmt.Sprintf("Invalid scope '%s'; allowed scopes: %s", parts.Scope, strings.Join(r.allowedScopes, ", ")),
-			).WithHelp("Use one of: " + strings.Join(r.allowedScopes, ", ")).WithContextMap(map[string]string{
-				"scope":          parts.Scope,
-				"allowed_scopes": strings.Join(r.allowedScopes, ", "),
-			}),
-		}
-
-		return errors
+		failures = append(failures, domain.RuleFailure{
+			Rule:    r.Name(),
+			Message: fmt.Sprintf("Invalid scope '%s'", parts.Scope),
+			Help:    "Use one of: " + strings.Join(r.allowedScopes, ", "),
+		})
 	}
 
 	// Validate description length
 	if r.maxDescLength > 0 && len(parts.Description) > r.maxDescLength {
-		errors := []domain.ValidationError{
-			domain.New(
-				"ConventionalCommit",
-				domain.ErrConventionalDescTooLong,
-				fmt.Sprintf("Description too long (%d > %d)", len(parts.Description), r.maxDescLength),
-			).WithHelp(fmt.Sprintf("Keep description under %d characters", r.maxDescLength)).WithContextMap(map[string]string{
-				"length":     strconv.Itoa(len(parts.Description)),
-				"max_length": strconv.Itoa(r.maxDescLength),
-			}),
-		}
-
-		return errors
+		failures = append(failures, domain.RuleFailure{
+			Rule:    r.Name(),
+			Message: fmt.Sprintf("Description too long (%d > %d)", len(parts.Description), r.maxDescLength),
+			Help:    fmt.Sprintf("Keep description under %d characters", r.maxDescLength),
+		})
 	}
 
-	// All validations passed
-	return []domain.ValidationError{}
+	return failures
 }
 
 // parseConventionalFormat parses a commit subject into conventional commit parts.

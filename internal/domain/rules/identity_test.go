@@ -20,41 +20,33 @@
 package rules_test
 
 import (
-	"context"
 	"testing"
 
-	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain/config"
 	"github.com/itiquette/gommitlint/internal/domain/rules"
 	"github.com/itiquette/gommitlint/internal/domain/testdata"
 	"github.com/stretchr/testify/require"
 )
 
 // createTestCommit creates a commit with the given author details and signature.
-func createTestCommit(authorName, authorEmail, signature string) domain.CommitInfo {
+func createTestCommit(authorName, authorEmail, signature string) domain.Commit {
 	commit := testdata.Commit("feat: add new feature\n\nThis commit adds a new feature that enhances the user experience.")
 	commit.Hash = "abc123"
-	commit.AuthorName = authorName
+	commit.Author = authorName
 	commit.AuthorEmail = authorEmail
 	commit.Signature = signature
 
 	return commit
 }
 
-// createIdentityContextWithConfig creates a test context with the given config modifier.
-func createIdentityContextWithConfig(_ func(config.Config) config.Config) context.Context {
-	// For now, just return a basic context - config handling should be done through rule options
-	return context.Background()
-}
-
 // TestIdentityRule_AllowedSigners tests validation of authors against the allowed signers list.
 func TestIdentityRule_AllowedSigners(t *testing.T) {
 	tests := []struct {
 		name           string
-		commit         domain.CommitInfo
+		commit         domain.Commit
 		configModifier func(config.Config) config.Config
 		expectedValid  bool
-		expectedCode   string
 	}{
 		{
 			name: "Author in allowed signers list",
@@ -87,7 +79,6 @@ func TestIdentityRule_AllowedSigners(t *testing.T) {
 				return result
 			},
 			expectedValid: false,
-			expectedCode:  string(domain.ErrInvalidSignature),
 		},
 		{
 			name: "Multiple allowed identities - first match",
@@ -163,29 +154,28 @@ func TestIdentityRule_AllowedSigners(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			// Create context with configuration
-			ctx := createIdentityContextWithConfig(testCase.configModifier)
-
 			// Get configuration to create rule with proper config
 			cfg := config.Config{}
 			if testCase.configModifier != nil {
 				cfg = testCase.configModifier(cfg)
 			}
 
-			// Create rule with proper dependencies
-			deps := domain.RuleDependencies{}
-			rule := rules.NewIdentityRule(cfg, deps)
+			// Create rule with config
+			rule := rules.NewIdentityRule(cfg)
 
 			// Execute validation
-			errors := rule.Validate(ctx, testCase.commit)
+			ctx := domain.ValidationContext{
+				Commit:     testCase.commit,
+				Repository: nil,
+				Config:     &cfg,
+			}
+			failures := rule.Validate(ctx)
 
 			// Verify results
 			if testCase.expectedValid {
-				require.Empty(t, errors, "Expected no validation errors but got: %v", errors)
+				require.Empty(t, failures, "Expected no validation errors but got: %v", failures)
 			} else {
-				require.NotEmpty(t, errors, "Expected validation errors but got none")
-				require.Equal(t, testCase.expectedCode, errors[0].Code,
-					"Error code mismatch: wanted %s, got %s", testCase.expectedCode, errors[0].Code)
+				require.NotEmpty(t, failures, "Expected validation errors but got none")
 			}
 		})
 	}
@@ -225,9 +215,6 @@ func TestIdentityRule_RuleDisabled(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			// Create context with configuration
-			ctx := createIdentityContextWithConfig(testCase.configModifier)
-
 			// Create commit with author not in allowed signers
 			commit := createTestCommit(
 				"John Doe",
@@ -241,18 +228,22 @@ func TestIdentityRule_RuleDisabled(t *testing.T) {
 				cfg = testCase.configModifier(cfg)
 			}
 
-			// Create rule with proper dependencies
-			deps := domain.RuleDependencies{}
-			rule := rules.NewIdentityRule(cfg, deps)
+			// Create rule with config
+			rule := rules.NewIdentityRule(cfg)
 
 			// Execute validation
-			errors := rule.Validate(ctx, commit)
+			ctx := domain.ValidationContext{
+				Commit:     commit,
+				Repository: nil,
+				Config:     &cfg,
+			}
+			failures := rule.Validate(ctx)
 
 			// Verify results
 			if testCase.expectedValid {
-				require.Empty(t, errors, "Expected no validation errors but got: %v", errors)
+				require.Empty(t, failures, "Expected no validation errors but got: %v", failures)
 			} else {
-				require.NotEmpty(t, errors, "Expected validation errors but got none")
+				require.NotEmpty(t, failures, "Expected validation errors but got none")
 			}
 		})
 	}
@@ -270,23 +261,18 @@ func TestIdentityRule_NoSignature(t *testing.T) {
 
 	// Create rule without key directory (signature validation is handled by crypto layer)
 	cfg := config.Config{}
-	deps := domain.RuleDependencies{}
-	rule := rules.NewIdentityRule(cfg, deps)
-
-	// Create context with configuration
-	ctx := createIdentityContextWithConfig(func(cfg config.Config) config.Config {
-		result := cfg
-		result.Rules.Enabled = append(result.Rules.Enabled, "SignedIdentity")
-
-		return result
-	})
+	rule := rules.NewIdentityRule(cfg)
 
 	// Execute validation
-	errors := rule.Validate(ctx, commit)
+	ctx := domain.ValidationContext{
+		Commit:     commit,
+		Repository: nil,
+		Config:     &cfg,
+	}
+	failures := rule.Validate(ctx)
 
 	// Should fail due to missing signature
-	require.NotEmpty(t, errors, "Expected validation errors for missing signature")
-	require.Equal(t, string(domain.ErrMissingSignature), errors[0].Code)
+	require.NotEmpty(t, failures, "Expected validation errors for missing signature")
 }
 
 // TestIdentityRule_NoKeyDirectory tests the behavior when no key directory is configured.
@@ -300,29 +286,24 @@ func TestIdentityRule_NoKeyDirectory(t *testing.T) {
 
 	// Rule without key directory (should skip signature validation)
 	cfg := config.Config{}
-	deps := domain.RuleDependencies{}
-	rule := rules.NewIdentityRule(cfg, deps) // No key directory
-
-	// Create context with configuration
-	ctx := createIdentityContextWithConfig(func(cfg config.Config) config.Config {
-		result := cfg
-		result.Rules.Enabled = append(result.Rules.Enabled, "SignedIdentity")
-		// No key directory in config
-		return result
-	})
+	rule := rules.NewIdentityRule(cfg) // No key directory
 
 	// Execute validation
-	errors := rule.Validate(ctx, commit)
+	ctx := domain.ValidationContext{
+		Commit:     commit,
+		Repository: nil,
+		Config:     &cfg,
+	}
+	failures := rule.Validate(ctx)
 
 	// Should pass since signature validation is skipped without key directory
-	require.Empty(t, errors, "Expected no validation errors when key directory is not configured")
+	require.Empty(t, failures, "Expected no validation errors when key directory is not configured")
 }
 
 // TestIdentityRule_Name tests the Name method.
 func TestIdentityRule_Name(t *testing.T) {
 	cfg := config.Config{}
-	deps := domain.RuleDependencies{}
-	rule := rules.NewIdentityRule(cfg, deps)
+	rule := rules.NewIdentityRule(cfg)
 	require.Equal(t, "SignedIdentity", rule.Name(), "Rule name should be 'SignedIdentity'")
 }
 
@@ -337,19 +318,18 @@ func TestIdentityRule_EmptyConfig(t *testing.T) {
 
 	// Create rule
 	cfg := config.Config{}
-	deps := domain.RuleDependencies{}
-	rule := rules.NewIdentityRule(cfg, deps)
-
-	// Create context with empty config
-	ctx := createIdentityContextWithConfig(func(cfg config.Config) config.Config {
-		return cfg // Return unmodified empty config
-	})
+	rule := rules.NewIdentityRule(cfg)
 
 	// Validate with empty config
-	errors := rule.Validate(ctx, commit)
+	ctx := domain.ValidationContext{
+		Commit:     commit,
+		Repository: nil,
+		Config:     &cfg,
+	}
+	failures := rule.Validate(ctx)
 
 	// Should pass because rule requires explicit opt-in with empty config
-	require.Empty(t, errors, "Should not error with empty config")
+	require.Empty(t, failures, "Should not error with empty config")
 }
 
 // TestIdentityRule_IdentityMatching tests the identity matching logic directly.

@@ -63,7 +63,7 @@ Example:
 		return r.name
 	}
 
-	func (r MyFeatureRule) Validate(ctx context.Context, commit domain.CommitInfo) []domain.ValidationError {
+	func (r MyFeatureRule) Validate(ctx context.Context, commit domain.Commit) []domain.ValidationError {
 		// Use injected configuration from constructor
 		if r.maxItems <= 0 {
 			return nil

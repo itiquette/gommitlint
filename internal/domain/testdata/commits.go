@@ -15,15 +15,15 @@ import (
 )
 
 // CommitOption configures a commit during creation.
-type CommitOption func(domain.CommitInfo) domain.CommitInfo
+type CommitOption func(domain.Commit) domain.Commit
 
 // Commit creates a test commit with the given message and options.
-func Commit(message string, opts ...CommitOption) domain.CommitInfo {
-	commit := domain.CommitInfo{
+func Commit(message string, opts ...CommitOption) domain.Commit {
+	commit := domain.Commit{
 		Hash:          "abc123def456",
 		Subject:       message,
 		Message:       message,
-		AuthorName:    "Test User",
+		Author:        "Test User",
 		AuthorEmail:   "test@example.com",
 		CommitDate:    time.Now().Format(time.RFC3339),
 		IsMergeCommit: false,
@@ -69,7 +69,7 @@ func Commit(message string, opts ...CommitOption) domain.CommitInfo {
 
 // WithSignature adds a signature to the commit.
 func WithSignature(sig string) CommitOption {
-	return func(c domain.CommitInfo) domain.CommitInfo {
+	return func(c domain.Commit) domain.Commit {
 		c.Signature = sig
 		c.Hash = "signed123def"
 
@@ -79,7 +79,7 @@ func WithSignature(sig string) CommitOption {
 
 // WithMerge marks the commit as a merge commit.
 func WithMerge() CommitOption {
-	return func(c domain.CommitInfo) domain.CommitInfo {
+	return func(c domain.Commit) domain.Commit {
 		c.IsMergeCommit = true
 		c.Hash = "merge123def"
 
@@ -89,7 +89,7 @@ func WithMerge() CommitOption {
 
 // AsInvalid creates an invalid commit that should fail validation.
 func AsInvalid() CommitOption {
-	return func(commit domain.CommitInfo) domain.CommitInfo {
+	return func(commit domain.Commit) domain.Commit {
 		commit.Hash = "def456abc123"
 		commit.Subject = "bad commit message without conventional format and way too long to pass length validation"
 		commit.Message = "bad commit message without conventional format and way too long to pass length validation"
@@ -116,6 +116,6 @@ func (r *MockRule) Name() string {
 }
 
 // Validate returns the configured errors.
-func (r *MockRule) Validate(_ context.Context, _ domain.CommitInfo) []domain.ValidationError {
+func (r *MockRule) Validate(_ context.Context, _ domain.Commit) []domain.ValidationError {
 	return r.errors
 }

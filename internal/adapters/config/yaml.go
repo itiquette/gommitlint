@@ -2,13 +2,13 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-package loader
+package config
 
 import (
 	"fmt"
 
-	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain/config"
 )
 
 // Service provides configuration management functionality.
@@ -71,7 +71,7 @@ func (s Service) UpdateConfig(transform func(config.Config) config.Config) Servi
 func (s Service) Load() (Service, error) {
 	loader := NewLoader()
 
-	config, err := loader.Load()
+	config, err := loader.LoadFromFile()
 	if err != nil {
 		return s, fmt.Errorf("failed to load config: %w", err)
 	}

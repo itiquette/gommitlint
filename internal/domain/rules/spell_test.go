@@ -4,10 +4,10 @@
 package rules_test
 
 import (
-	"context"
 	"testing"
 
-	"github.com/itiquette/gommitlint/internal/config"
+	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain/config"
 	"github.com/itiquette/gommitlint/internal/domain/rules"
 	"github.com/itiquette/gommitlint/internal/domain/testdata"
 	"github.com/stretchr/testify/require"
@@ -84,13 +84,17 @@ func TestSpellRule(t *testing.T) {
 			cfg := config.Config{}
 			rule := rules.NewSpellRule(cfg)
 
-			ctx := context.Background()
-			errors := rule.Validate(ctx, commit)
+			ctx := domain.ValidationContext{
+				Commit:     commit,
+				Repository: nil,
+				Config:     &cfg,
+			}
+			failures := rule.Validate(ctx)
 
 			// We don't assert on specific errors since spell checking results
 			// depend on the underlying misspell library behavior
 			// We mainly test that the rule runs without crashing
-			_ = errors
+			_ = failures
 
 			// Verify rule name
 			require.Equal(t, "Spell", rule.Name(), "Rule name should be 'Spell'")
@@ -145,12 +149,16 @@ func TestSpellRuleWithCustomDictionary(t *testing.T) {
 			}
 			rule := rules.NewSpellRule(cfg)
 
-			ctx := context.Background()
-			errors := rule.Validate(ctx, commit)
+			ctx := domain.ValidationContext{
+				Commit:     commit,
+				Repository: nil,
+				Config:     &cfg,
+			}
+			failures := rule.Validate(ctx)
 
 			// We don't assert on specific errors since results depend on the misspell library
 			// We test that the rule handles custom dictionaries without crashing
-			_ = errors
+			_ = failures
 
 			// Verify rule name
 			require.Equal(t, "Spell", rule.Name(), "Rule name should be 'Spell'")
@@ -215,12 +223,16 @@ func TestSpellRuleEdgeCases(t *testing.T) {
 			cfg := config.Config{}
 			rule := rules.NewSpellRule(cfg)
 
-			ctx := context.Background()
-			errors := rule.Validate(ctx, commit)
+			ctx := domain.ValidationContext{
+				Commit:     commit,
+				Repository: nil,
+				Config:     &cfg,
+			}
+			failures := rule.Validate(ctx)
 
 			// For edge cases, we mainly test that the rule doesn't crash
 			// The specific results depend on the spell checker implementation
-			_ = errors
+			_ = failures
 
 			// Verify rule name
 			require.Equal(t, "Spell", rule.Name(), "Rule name should be 'Spell'")

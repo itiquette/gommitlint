@@ -4,12 +4,11 @@
 package rules_test
 
 import (
-	"context"
 	"strings"
 	"testing"
 
-	"github.com/itiquette/gommitlint/internal/config"
-	appErrors "github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain/config"
 	"github.com/itiquette/gommitlint/internal/domain/rules"
 	"github.com/itiquette/gommitlint/internal/domain/testdata"
 	"github.com/stretchr/testify/require"
@@ -25,7 +24,6 @@ func TestSignOffRule(t *testing.T) {
 		requireSignOff bool
 		allowMultiple  bool
 		expectedValid  bool
-		expectedCode   string
 		errorContains  string
 		description    string
 	}{
@@ -64,7 +62,6 @@ This is a detailed description of the feature.`,
 			requireSignOff: true,
 			allowMultiple:  true,
 			expectedValid:  false,
-			expectedCode:   string(appErrors.ErrMissingSignoff),
 			errorContains:  "Missing sign-off",
 			description:    "Should fail when sign-off is required but missing",
 		},
@@ -83,7 +80,6 @@ This is a detailed description of the feature.`,
 			requireSignOff: true,
 			allowMultiple:  true,
 			expectedValid:  false,
-			expectedCode:   string(appErrors.ErrMissingSignoff),
 			errorContains:  "Missing sign-off",
 			description:    "Should fail with empty message when sign-off required",
 		},
@@ -93,7 +89,6 @@ This is a detailed description of the feature.`,
 			requireSignOff: true,
 			allowMultiple:  true,
 			expectedValid:  false,
-			expectedCode:   string(appErrors.ErrMissingSignoff),
 			errorContains:  "Missing sign-off",
 			description:    "Should fail with whitespace-only message when sign-off required",
 		},
@@ -162,7 +157,6 @@ Additional description after sign-off.`,
 			requireSignOff: true,
 			allowMultiple:  true,
 			expectedValid:  false,
-			expectedCode:   string(appErrors.ErrMissingSignoff),
 			description:    "Sign-off is only detected at the end of message",
 		},
 		{
@@ -172,7 +166,6 @@ signed-off-by: Developer <dev@example.com>`,
 			requireSignOff: true,
 			allowMultiple:  true,
 			expectedValid:  false,
-			expectedCode:   string(appErrors.ErrMissingSignoff),
 			description:    "Sign-off detection is case sensitive",
 		},
 		{
@@ -193,7 +186,6 @@ Signed-Off-By: Developer Three <dev3@example.com>`,
 			requireSignOff: true,
 			allowMultiple:  true,
 			expectedValid:  false,
-			expectedCode:   string(appErrors.ErrMissingSignoff),
 			description:    "Only exact case sign-offs are detected",
 		},
 		{
@@ -238,26 +230,25 @@ Signed-off-by: Developer <dev@example.com>`,
 			// Create rule with config
 			rule := rules.NewSignOffRule(cfg)
 
-			ctx := context.Background()
-			errors := rule.Validate(ctx, commit)
+			ctx := domain.ValidationContext{
+				Commit:     commit,
+				Repository: nil,
+				Config:     &cfg,
+			}
+			failures := rule.Validate(ctx)
 
 			// Check validity
 			if testCase.expectedValid {
-				require.Empty(t, errors, "Expected no validation errors for case: %s", testCase.description)
+				require.Empty(t, failures, "Expected no validation errors for case: %s", testCase.description)
 			} else {
-				require.NotEmpty(t, errors, "Expected errors but found none for case: %s", testCase.description)
-
-				// Check error code if specified
-				if testCase.expectedCode != "" {
-					testdata.AssertValidationError(t, errors[0], testCase.expectedCode, "SignOff")
-				}
+				require.NotEmpty(t, failures, "Expected errors but found none for case: %s", testCase.description)
 
 				// Check error message contains expected substring
 				if testCase.errorContains != "" {
 					found := false
 
-					for _, err := range errors {
-						if strings.Contains(err.Error(), testCase.errorContains) {
+					for _, failure := range failures {
+						if strings.Contains(failure.Message, testCase.errorContains) {
 							found = true
 
 							break
@@ -376,13 +367,17 @@ Signed-off-by: Diana <diana@example.com>`,
 
 			rule := rules.NewSignOffRule(cfg)
 
-			ctx := context.Background()
-			errors := rule.Validate(ctx, commit)
+			ctx := domain.ValidationContext{
+				Commit:     commit,
+				Repository: nil,
+				Config:     &cfg,
+			}
+			failures := rule.Validate(ctx)
 
 			if testCase.expectedValid {
-				require.Empty(t, errors, "Expected no validation errors for case: %s", testCase.description)
+				require.Empty(t, failures, "Expected no validation errors for case: %s", testCase.description)
 			} else {
-				require.NotEmpty(t, errors, "Expected validation errors but got none for case: %s", testCase.description)
+				require.NotEmpty(t, failures, "Expected validation errors but got none for case: %s", testCase.description)
 			}
 		})
 	}
@@ -469,13 +464,17 @@ Actually signed-off-by: Real Developer <real@example.com>`,
 
 			rule := rules.NewSignOffRule(cfg)
 
-			ctx := context.Background()
-			errors := rule.Validate(ctx, commit)
+			ctx := domain.ValidationContext{
+				Commit:     commit,
+				Repository: nil,
+				Config:     &cfg,
+			}
+			failures := rule.Validate(ctx)
 
 			if testCase.expectedValid {
-				require.Empty(t, errors, "Expected no validation errors for case: %s", testCase.description)
+				require.Empty(t, failures, "Expected no validation errors for case: %s", testCase.description)
 			} else {
-				require.NotEmpty(t, errors, "Expected validation errors but got none for case: %s", testCase.description)
+				require.NotEmpty(t, failures, "Expected validation errors but got none for case: %s", testCase.description)
 			}
 		})
 	}

@@ -16,9 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/itiquette/gommitlint/internal/adapters/git"
-	"github.com/itiquette/gommitlint/internal/adapters/logging"
 	"github.com/itiquette/gommitlint/internal/domain"
-	integrationTestdata "github.com/itiquette/gommitlint/internal/integrationtest/testdata"
 )
 
 // TestGetCommitRange tests the GetCommitRange functionality with various scenarios.
@@ -28,7 +26,7 @@ func TestGetCommitRange(t *testing.T) {
 		setupRepo     func(t *testing.T, repo *gogit.Repository) (from, to string)
 		expectedCount int
 		expectedError string
-		checkCommits  func(t *testing.T, commits []domain.CommitInfo)
+		checkCommits  func(t *testing.T, commits []domain.Commit)
 	}{
 		{
 			name: "Linear history - commits in range",
@@ -69,7 +67,7 @@ func TestGetCommitRange(t *testing.T) {
 				return "main", hashE.String()
 			},
 			expectedCount: 2, // Only commits D and E (not in main)
-			checkCommits: func(t *testing.T, commits []domain.CommitInfo) {
+			checkCommits: func(t *testing.T, commits []domain.Commit) {
 				t.Helper()
 				// Verify we got the feature commits
 				subjects := make([]string, len(commits))
@@ -130,8 +128,7 @@ func TestGetCommitRange(t *testing.T) {
 
 			// Create repository adapter
 			ctx := context.Background()
-			testLogger := log.NewLogger(*integrationTestdata.CreateTestLogger(t, false))
-			adapter, err := git.NewRepository(ctx, tmpDir, testLogger)
+			adapter, err := git.NewRepository(ctx, tmpDir)
 			require.NoError(t, err)
 
 			repoAdapter := adapter
@@ -213,8 +210,7 @@ func TestGetCommitRangeWithMergeCommits(t *testing.T) {
 
 	// Create repository adapter
 	ctx := context.Background()
-	testLogger := log.NewLogger(*integrationTestdata.CreateTestLogger(t, false))
-	adapter, err := git.NewRepository(ctx, tmpDir, testLogger)
+	adapter, err := git.NewRepository(ctx, tmpDir)
 	require.NoError(t, err)
 
 	repoAdapter := adapter

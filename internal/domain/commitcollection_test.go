@@ -12,18 +12,18 @@ import (
 
 func TestCommitCollection_FilterMergeCommits(t *testing.T) {
 	// Create test commits
-	normalCommit := domain.CommitInfo{
+	normalCommit := domain.Commit{
 		Hash:          "normal123",
 		Subject:       "Normal commit",
 		IsMergeCommit: false,
 	}
-	mergeCommit := domain.CommitInfo{
+	mergeCommit := domain.Commit{
 		Hash:          "merge456",
 		Subject:       "Merge branch",
 		IsMergeCommit: true,
 	}
 	// Create collection with both types
-	commits := []domain.CommitInfo{normalCommit, mergeCommit}
+	commits := []domain.Commit{normalCommit, mergeCommit}
 	collection := domain.NewCommitCollection(commits)
 	// Filter merge commits
 	filtered := collection.FilterMergeCommits()
@@ -35,10 +35,10 @@ func TestCommitCollection_FilterMergeCommits(t *testing.T) {
 
 func TestCommitCollection_Contains(t *testing.T) {
 	// Create test commits
-	commit1 := domain.CommitInfo{Hash: "abc123"}
-	commit2 := domain.CommitInfo{Hash: "def456"}
+	commit1 := domain.Commit{Hash: "abc123"}
+	commit2 := domain.Commit{Hash: "def456"}
 	// Create collection
-	collection := domain.NewCommitCollection([]domain.CommitInfo{commit1})
+	collection := domain.NewCommitCollection([]domain.Commit{commit1})
 	// Test contains
 	require.True(t, collection.Contains(commit1.Hash), "Should contain commit1")
 	require.False(t, collection.Contains(commit2.Hash), "Should not contain commit2")
@@ -47,31 +47,31 @@ func TestCommitCollection_Contains(t *testing.T) {
 
 func TestCommitCollection_FirstLast(t *testing.T) {
 	// Create test commits
-	commit1 := domain.CommitInfo{Hash: "abc123"}
-	commit2 := domain.CommitInfo{Hash: "def456"}
-	commit3 := domain.CommitInfo{Hash: "ghi789"}
+	commit1 := domain.Commit{Hash: "abc123"}
+	commit2 := domain.Commit{Hash: "def456"}
+	commit3 := domain.Commit{Hash: "ghi789"}
 	// Test with empty collection
-	emptyCollection := domain.NewCommitCollection([]domain.CommitInfo{})
-	require.Equal(t, domain.CommitInfo{}, emptyCollection.First(), "First() should return empty CommitInfo for empty collection")
-	require.Equal(t, domain.CommitInfo{}, emptyCollection.Last(), "Last() should return empty CommitInfo for empty collection")
+	emptyCollection := domain.NewCommitCollection([]domain.Commit{})
+	require.Equal(t, domain.Commit{}, emptyCollection.First(), "First() should return empty Commit for empty collection")
+	require.Equal(t, domain.Commit{}, emptyCollection.Last(), "Last() should return empty Commit for empty collection")
 	// Test with populated collection
-	collection := domain.NewCommitCollection([]domain.CommitInfo{commit1, commit2, commit3})
+	collection := domain.NewCommitCollection([]domain.Commit{commit1, commit2, commit3})
 	require.Equal(t, commit1, collection.First(), "First() should return first commit")
 	require.Equal(t, commit3, collection.Last(), "Last() should return last commit")
 }
 
 func TestCommitCollection_AddAndAddAll(t *testing.T) {
 	// Create test commits
-	commit1 := domain.CommitInfo{Hash: "abc123"}
-	commit2 := domain.CommitInfo{Hash: "def456"}
-	commit3 := domain.CommitInfo{Hash: "ghi789"}
+	commit1 := domain.Commit{Hash: "abc123"}
+	commit2 := domain.Commit{Hash: "def456"}
+	commit3 := domain.Commit{Hash: "ghi789"}
 	// Test Add
-	collection1 := domain.NewCommitCollection([]domain.CommitInfo{commit1})
+	collection1 := domain.NewCommitCollection([]domain.Commit{commit1})
 	collection1 = collection1.With(commit2)
 	require.Equal(t, 2, collection1.Count(), "Count should be 2 after adding a commit")
 	require.True(t, collection1.Contains(commit2.Hash), "Should contain added commit")
 	// Test AddAll
-	collection2 := domain.NewCommitCollection([]domain.CommitInfo{commit3})
+	collection2 := domain.NewCommitCollection([]domain.Commit{commit3})
 	collection1 = collection1.WithAll(collection2)
 	require.Equal(t, 3, collection1.Count(), "Count should be 3 after adding all commits from another collection")
 	require.True(t, collection1.Contains(commit3.Hash), "Should contain commit from added collection")
@@ -84,25 +84,25 @@ func TestCommitCollection_FilterByAuthor(t *testing.T) {
 	otherAuthorName := "Jane Smith"
 	otherAuthorEmail := "jane@example.com"
 
-	// Create test commits with authors in the CommitInfo struct
-	commit1 := domain.CommitInfo{
+	// Create test commits with authors in the Commit struct
+	commit1 := domain.Commit{
 		Hash:        "abc123",
-		AuthorName:  authorName,
+		Author:      authorName,
 		AuthorEmail: authorEmail,
 	}
-	commit2 := domain.CommitInfo{
+	commit2 := domain.Commit{
 		Hash:        "def456",
-		AuthorName:  otherAuthorName,
+		Author:      otherAuthorName,
 		AuthorEmail: otherAuthorEmail,
 	}
-	commit3 := domain.CommitInfo{
+	commit3 := domain.Commit{
 		Hash:        "ghi789",
-		AuthorName:  authorName,
+		Author:      authorName,
 		AuthorEmail: authorEmail,
 	}
 
 	// Create collection
-	collection := domain.NewCommitCollection([]domain.CommitInfo{commit1, commit2, commit3})
+	collection := domain.NewCommitCollection([]domain.Commit{commit1, commit2, commit3})
 
 	// Filter by author email
 	filtered := collection.FilterByAuthor(authorEmail)
@@ -118,10 +118,10 @@ func TestCommitCollection_FilterByAuthor(t *testing.T) {
 
 func TestCommitCollection_IsEmpty(t *testing.T) {
 	// Test empty collection
-	emptyCollection := domain.NewCommitCollection([]domain.CommitInfo{})
+	emptyCollection := domain.NewCommitCollection([]domain.Commit{})
 	require.True(t, emptyCollection.IsEmpty(), "Empty collection should be empty")
 	// Test non-empty collection
-	commit := domain.CommitInfo{Hash: "abc123"}
-	nonEmptyCollection := domain.NewCommitCollection([]domain.CommitInfo{commit})
+	commit := domain.Commit{Hash: "abc123"}
+	nonEmptyCollection := domain.NewCommitCollection([]domain.Commit{commit})
 	require.False(t, nonEmptyCollection.IsEmpty(), "Non-empty collection should not be empty")
 }

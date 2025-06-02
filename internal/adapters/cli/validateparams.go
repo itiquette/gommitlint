@@ -96,25 +96,25 @@ func (p ValidationParameters) ToReportOptions() domain.ReportOptions {
 
 // CreateFormatter creates a formatter based on the parameters.
 func (p ValidationParameters) CreateFormatter() format.Formatter {
+	var outputType format.OutputType
+
 	switch p.Format {
 	case "json":
-		return format.NewJSONFormatter()
+		outputType = format.OutputJSON
 	case "github":
-		return format.NewGitHubFormatter().
-			WithVerbose(p.Verbose).
-			WithShowHelp(p.ExtraVerbose || p.RuleHelp != "")
+		outputType = format.OutputGitHub
 	case "gitlab":
-		return format.NewGitLabFormatter().
-			WithVerbose(p.Verbose).
-			WithShowHelp(p.ExtraVerbose || p.RuleHelp != "")
+		outputType = format.OutputGitLab
 	case "text":
 		fallthrough
 	default:
-		return format.NewTextFormatter().
-			WithVerbose(p.Verbose).
-			WithShowHelp(p.ExtraVerbose || p.RuleHelp != "").
-			WithLightMode(p.LightMode)
+		outputType = format.OutputText
 	}
+
+	return format.NewUnifiedFormatter(outputType).
+		WithVerbose(p.Verbose).
+		WithShowHelp(p.ExtraVerbose || p.RuleHelp != "").
+		WithLightMode(p.LightMode)
 }
 
 // GetValidationTarget determines what to validate based on parameters.

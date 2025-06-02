@@ -13,17 +13,42 @@ import (
 	"github.com/itiquette/gommitlint/internal"
 	"github.com/itiquette/gommitlint/internal/adapters/logging"
 	format "github.com/itiquette/gommitlint/internal/adapters/output"
-	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/domain"
-	"github.com/itiquette/gommitlint/internal/ports"
+	"github.com/itiquette/gommitlint/internal/domain/config"
 	"github.com/spf13/cobra"
 )
 
+// Logger provides structured logging capabilities.
+type Logger interface {
+	Debug(msg string, keysAndValues ...interface{})
+	Info(msg string, keysAndValues ...interface{})
+	Warn(msg string, keysAndValues ...interface{})
+	Error(msg string, keysAndValues ...interface{})
+}
+
+// ValidationService provides commit validation operations.
+type ValidationService interface {
+	// ValidateCommit validates a single commit by its reference
+	ValidateCommit(ctx context.Context, ref string, skipMergeCommits bool) (domain.CommitResult, error)
+
+	// ValidateCommits validates multiple commits by their hashes
+	ValidateCommits(ctx context.Context, commitHashes []string, skipMergeCommits bool) (domain.ValidationResults, error)
+
+	// ValidateCommitRange validates commits in a range
+	ValidateCommitRange(ctx context.Context, fromHash, toHash string, skipMergeCommits bool) (domain.ValidationResults, error)
+
+	// ValidateMessage validates a commit message directly
+	ValidateMessage(ctx context.Context, message string) (domain.ValidationResults, error)
+
+	// ValidateWithOptions validates according to the provided options
+	ValidateWithOptions(ctx context.Context, opts domain.Options) (domain.ValidationResults, error)
+}
+
 // ValidationContext holds common validation dependencies.
 type ValidationContext struct {
-	Service   ports.ValidationService
+	Service   ValidationService
 	Formatter format.Formatter
-	Logger    ports.Logger
+	Logger    Logger
 	Options   domain.ReportOptions
 }
 
@@ -191,8 +216,14 @@ func validateMessage(ctx context.Context, vctx ValidationContext, message string
 
 // validateRange validates a range of commits and generates a report.
 func validateRange(ctx context.Context, vctx ValidationContext, fromHash, toHash string, skipMerge bool) (int, error) {
-	// Validate the commit range
-	results, err := vctx.Service.ValidateCommitRange(ctx, fromHash, toHash, skipMerge)
+	// Use ValidateWithOptions to ensure repository rules are checked
+	opts := domain.Options{
+		FromHash:         fromHash,
+		ToHash:           toHash,
+		SkipMergeCommits: skipMerge,
+	}
+
+	results, err := vctx.Service.ValidateWithOptions(ctx, opts)
 	if err != nil {
 		return 1, fmt.Errorf("failed to validate commit range: %w", err)
 	}
@@ -212,14 +243,16 @@ func validateRange(ctx context.Context, vctx ValidationContext, fromHash, toHash
 
 // validateCommit validates a single commit and generates a report.
 func validateCommit(ctx context.Context, vctx ValidationContext, ref string, skipMerge bool) (int, error) {
-	// Validate the commit
-	commitResult, err := vctx.Service.ValidateCommit(ctx, ref, skipMerge)
+	// Use ValidateWithOptions to ensure repository rules are checked
+	opts := domain.Options{
+		CommitHash:       ref,
+		SkipMergeCommits: skipMerge,
+	}
+
+	results, err := vctx.Service.ValidateWithOptions(ctx, opts)
 	if err != nil {
 		return 1, fmt.Errorf("failed to validate commit: %w", err)
 	}
-
-	// Create validation results
-	results := domain.NewValidationResults().AddResult(commitResult)
 
 	// Generate report
 	if err := generateReport(ctx, vctx, results); err != nil {

@@ -4,18 +4,16 @@
 package rules
 
 import (
-	"context"
 	"fmt"
 	"regexp"
 	"strings"
 
-	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain/config"
 )
 
 // ImperativeVerbRule validates that commit messages use imperative mood.
 type ImperativeVerbRule struct {
-	name                        string
 	checkConventionalCommits    bool
 	verbCategories              map[string][]string
 	conventionalDescriptionOnly bool
@@ -28,7 +26,6 @@ func NewImperativeVerbRule(cfg config.Config) ImperativeVerbRule {
 	isConventionalEnabled := domain.ShouldRunRule("conventional", cfg.Rules.Enabled, cfg.Rules.Disabled)
 
 	return ImperativeVerbRule{
-		name:                        "ImperativeVerb",
 		checkConventionalCommits:    isConventionalEnabled,
 		conventionalDescriptionOnly: isConventionalEnabled,
 		baseFormsEndingWithED:       make(map[string]bool),
@@ -51,13 +48,12 @@ func NewImperativeVerbRule(cfg config.Config) ImperativeVerbRule {
 
 // Name returns the rule name.
 func (r ImperativeVerbRule) Name() string {
-	return r.name
+	return "ImperativeVerb"
 }
 
 // Validate checks if the commit message uses imperative mood.
-func (r ImperativeVerbRule) Validate(_ context.Context, commit domain.CommitInfo) []domain.ValidationError {
-	// Validate imperative mood
-	subject := strings.TrimSpace(commit.Subject)
+func (r ImperativeVerbRule) Validate(ctx domain.ValidationContext) []domain.RuleFailure {
+	subject := strings.TrimSpace(ctx.Commit.Subject)
 	if subject == "" {
 		return nil
 	}
@@ -76,13 +72,11 @@ func (r ImperativeVerbRule) Validate(_ context.Context, commit domain.CommitInfo
 	// Extract first word from subject
 	firstWord := extractFirstWord(subject)
 	if firstWord == "" {
-		return []domain.ValidationError{
-			domain.New(
-				"ImperativeVerb",
-				domain.ErrNoFirstWord,
-				"Cannot extract first word from commit message",
-			).WithHelp("Ensure your commit message starts with a verb").WithContextMap(map[string]string{"subject": subject}),
-		}
+		return []domain.RuleFailure{{
+			Rule:    r.Name(),
+			Message: "Cannot extract first word from commit message",
+			Help:    "Ensure your commit message starts with a verb",
+		}}
 	}
 
 	firstWord = strings.ToLower(firstWord)
@@ -96,17 +90,14 @@ func (r ImperativeVerbRule) Validate(_ context.Context, commit domain.CommitInfo
 
 		switch category {
 		case "past_tense":
-			// Convert past tense to imperative
 			if strings.HasSuffix(firstWord, "ed") {
 				base := strings.TrimSuffix(firstWord, "ed")
 				base = strings.TrimSuffix(base, "d")
-
 				suggestions = []string{base}
 			} else {
 				suggestions = []string{"add", "fix", "update"}
 			}
 		case "gerund":
-			// Convert gerund to imperative
 			if strings.HasSuffix(firstWord, "ing") {
 				base := strings.TrimSuffix(firstWord, "ing")
 				if strings.HasSuffix(base, "nn") {
@@ -118,11 +109,9 @@ func (r ImperativeVerbRule) Validate(_ context.Context, commit domain.CommitInfo
 				suggestions = []string{"add", "fix", "update"}
 			}
 		case "third_person":
-			// Convert third person to imperative
 			if strings.HasSuffix(firstWord, "s") || strings.HasSuffix(firstWord, "es") {
 				base := strings.TrimSuffix(firstWord, "s")
 				base = strings.TrimSuffix(base, "e")
-
 				suggestions = []string{base}
 			} else {
 				suggestions = []string{"add", "fix", "update"}
@@ -131,36 +120,16 @@ func (r ImperativeVerbRule) Validate(_ context.Context, commit domain.CommitInfo
 			suggestions = []string{"add", "fix", "update", "remove", "improve", "implement"}
 		}
 
-		// Map category to specific error code
-		var errorCode domain.ValidationErrorCode
-
-		switch category {
-		case "past_tense":
-			errorCode = domain.ErrPastTense
-		case "gerund":
-			errorCode = domain.ErrGerund
-		case "third_person":
-			errorCode = domain.ErrThirdPerson
-		default:
-			errorCode = domain.ErrNonImperative
-		}
-
-		// Create error with specific code based on category
 		help := fmt.Sprintf("Use the imperative form of '%s'", firstWord)
 		if len(suggestions) > 0 {
 			help = "Try: " + strings.Join(suggestions, ", ")
 		}
 
-		return []domain.ValidationError{
-			domain.New(
-				"ImperativeVerb",
-				errorCode,
-				fmt.Sprintf("Word '%s' is not in imperative mood", firstWord),
-			).WithHelp(help).WithContextMap(map[string]string{
-				"word":        firstWord,
-				"suggestions": strings.Join(suggestions, ", "),
-			}),
-		}
+		return []domain.RuleFailure{{
+			Rule:    r.Name(),
+			Message: fmt.Sprintf("Word '%s' is not in imperative mood", firstWord),
+			Help:    help,
+		}}
 	}
 
 	return nil

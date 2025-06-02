@@ -4,11 +4,10 @@
 package rules_test
 
 import (
-	"context"
 	"testing"
 
-	"github.com/itiquette/gommitlint/internal/config"
-	appErrors "github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain/config"
 	"github.com/itiquette/gommitlint/internal/domain/rules"
 	"github.com/itiquette/gommitlint/internal/domain/testdata"
 	"github.com/stretchr/testify/require"
@@ -68,7 +67,7 @@ Signed-off-by: Laval Lion <laval@cavora.org>`,
 Signed-off-by: Laval Lion <laval@cavora.org>`,
 			allowSignOffOnly: false,
 			expectError:      true,
-			errorCode:        string(appErrors.ErrMissingBody),
+			errorCode:        string(domain.ErrMissingBody),
 			description:      "Sign-off only is NOT allowed when allowSignOffOnly is false",
 		},
 		{
@@ -87,7 +86,7 @@ Signed-off-by: Laval Lion <laval@cavora.org>`,
 Short description`,
 			minLines:    3,
 			expectError: true,
-			errorCode:   string(appErrors.ErrBodyTooShort),
+			errorCode:   string(domain.ErrBodyTooShort),
 			description: "Should fail when body has fewer lines than required",
 		},
 		{
@@ -108,7 +107,7 @@ and email format checks`,
 X`,
 			minLength:   10,
 			expectError: true,
-			errorCode:   string(appErrors.ErrBodyTooShort),
+			errorCode:   string(domain.ErrBodyTooShort),
 			description: "Should fail when body is shorter than minimum length",
 		},
 		{
@@ -193,7 +192,7 @@ Z`,
 			minLines:    3,
 			minLength:   20,
 			expectError: true,
-			errorCode:   string(appErrors.ErrBodyTooShort),
+			errorCode:   string(domain.ErrBodyTooShort),
 			description: "Should fail when meeting lines but not length requirement",
 		},
 		{
@@ -204,7 +203,7 @@ This is a very long single line that exceeds the minimum character requirement`,
 			minLines:    3,
 			minLength:   20,
 			expectError: true,
-			errorCode:   string(appErrors.ErrBodyTooShort),
+			errorCode:   string(domain.ErrBodyTooShort),
 			description: "Should fail when meeting length but not lines requirement",
 		},
 		// Test complex body content
@@ -251,18 +250,22 @@ Technical details:
 			}
 
 			rule := rules.NewCommitBodyRule(cfg)
-			ctx := context.Background()
-			errors := rule.Validate(ctx, commit)
+			ctx := domain.ValidationContext{
+				Commit:     commit,
+				Repository: nil,
+				Config:     &cfg,
+			}
+			failures := rule.Validate(ctx)
 
 			// Check result
 			if testCase.expectError {
-				require.NotEmpty(t, errors, "Expected error but got none for case: %s", testCase.description)
+				require.NotEmpty(t, failures, "Expected error but got none for case: %s", testCase.description)
 
 				if testCase.errorCode != "" {
-					testdata.AssertValidationError(t, errors[0], testCase.errorCode, "CommitBody")
+					testdata.AssertRuleFailure(t, failures[0], "CommitBody")
 				}
 			} else {
-				require.Empty(t, errors, "Expected no error but got: %v for case: %s", errors, testCase.description)
+				require.Empty(t, failures, "Expected no error but got: %v for case: %s", failures, testCase.description)
 			}
 
 			// Verify rule name

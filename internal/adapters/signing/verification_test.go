@@ -20,10 +20,10 @@ func TestVerifier(t *testing.T) {
 	adapter := crypto.NewVerificationAdapter(keyRepo)
 
 	// Test with a commit with no signature
-	commit := domain.CommitInfo{
+	commit := domain.Commit{
 		Hash:        "1234567890abcdef",
 		Message:     "Test commit",
-		AuthorName:  "Test Author",
+		Author:      "Test Author",
 		AuthorEmail: "author@example.com",
 		Signature:   "",
 	}

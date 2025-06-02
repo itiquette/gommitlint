@@ -5,17 +5,14 @@
 package rules
 
 import (
-	"context"
 	"fmt"
-	"strconv"
 
-	"github.com/itiquette/gommitlint/internal/config"
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain/config"
 )
 
 // SubjectLengthRule validates the length of commit subjects.
 type SubjectLengthRule struct {
-	name      string
 	maxLength int
 }
 
@@ -27,36 +24,24 @@ func NewSubjectLengthRule(cfg config.Config) SubjectLengthRule {
 	}
 
 	return SubjectLengthRule{
-		name:      "SubjectLength",
 		maxLength: maxLength,
 	}
 }
 
 // Name returns the rule name.
 func (r SubjectLengthRule) Name() string {
-	return r.name
+	return "SubjectLength"
 }
 
 // Validate performs validation against a commit.
-func (r SubjectLengthRule) Validate(_ context.Context, commit domain.CommitInfo) []domain.ValidationError {
-	// Validate the subject length
-	subject := commit.Subject
-
-	// Check if subject length exceeds maximum
-	if len(subject) <= r.maxLength {
+func (r SubjectLengthRule) Validate(ctx domain.ValidationContext) []domain.RuleFailure {
+	if len(ctx.Commit.Subject) <= r.maxLength {
 		return nil
 	}
 
-	// Create validation error with improved user message
-	err := domain.New(
-		"SubjectLength",
-		domain.ErrMaxLengthExceeded,
-		fmt.Sprintf("Commit subject is %d characters too long", len(subject)-r.maxLength),
-	).WithHelp(fmt.Sprintf("Keep subject under %d characters (currently %d)", r.maxLength, len(subject))).WithContextMap(map[string]string{
-		"actual":  strconv.Itoa(len(subject)),
-		"max":     strconv.Itoa(r.maxLength),
-		"subject": subject,
-	})
-
-	return []domain.ValidationError{err}
+	return []domain.RuleFailure{{
+		Rule:    r.Name(),
+		Message: fmt.Sprintf("subject exceeds %d characters (actual: %d)", r.maxLength, len(ctx.Commit.Subject)),
+		Help:    fmt.Sprintf("Keep subject under %d characters", r.maxLength),
+	}}
 }
