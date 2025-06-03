@@ -31,17 +31,17 @@ func NewSignOffRule(cfg config.Config) SignOffRule {
 }
 
 // Validate checks for the presence and format of a Developer Certificate of Origin sign-off.
-func (r SignOffRule) Validate(ctx domain.ValidationContext) []domain.RuleFailure {
+func (r SignOffRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.RuleFailure {
 	// Check if sign-off is required
 	if !r.requireSignOff {
 		return nil
 	}
 
 	// For signoff checking, focus on the body text
-	textToCheck := ctx.Commit.Body
-	if ctx.Commit.Body == "" {
+	textToCheck := commit.Body
+	if commit.Body == "" {
 		// If no body, check the whole subject (though sign-offs should be in body)
-		textToCheck = ctx.Commit.Subject
+		textToCheck = commit.Subject
 	}
 
 	// Handle empty message cases

@@ -177,14 +177,8 @@ func NewValidator(rules []Rule) Validator {
 func (v Validator) ValidateCommit(commit Commit, repo Repository, cfg *config.Config) ValidationResult {
 	var failures []RuleFailure
 
-	ctx := ValidationContext{
-		Commit:     commit,
-		Repository: repo,
-		Config:     cfg,
-	}
-
 	for _, rule := range v.rules {
-		if ruleFailures := rule.Validate(ctx); len(ruleFailures) > 0 {
+		if ruleFailures := rule.Validate(commit, repo, cfg); len(ruleFailures) > 0 {
 			failures = append(failures, ruleFailures...)
 		}
 	}

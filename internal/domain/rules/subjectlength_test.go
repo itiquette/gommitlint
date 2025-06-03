@@ -8,7 +8,6 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/domain/config"
 	"github.com/itiquette/gommitlint/internal/domain/rules"
 	"github.com/itiquette/gommitlint/internal/domain/testdata"
@@ -86,14 +85,7 @@ func TestSubjectLengthRule(t *testing.T) {
 			commit := testdata.Commit("feat: add new feature\n\nThis commit adds a new feature that enhances the user experience.")
 			commit.Subject = testCase.subject
 
-			// Create validation context
-			ctx := domain.ValidationContext{
-				Commit:     commit,
-				Repository: nil,
-				Config:     &cfg,
-			}
-
-			failures := rule.Validate(ctx)
+			failures := rule.Validate(commit, nil, &cfg)
 
 			if testCase.expectError {
 				require.NotEmpty(t, failures, "Expected validation failure")
@@ -140,12 +132,7 @@ func TestSubjectLengthRuleWithoutContext(t *testing.T) {
 	commit.Subject = strings.Repeat("a", 100)
 
 	// When no config is available, the rule should use default max length of 72
-	ctx := domain.ValidationContext{
-		Commit:     commit,
-		Repository: nil,
-		Config:     &cfg,
-	}
-	failures := rule.Validate(ctx)
+	failures := rule.Validate(commit, nil, &cfg)
 	require.NotEmpty(t, failures, "Should return failure when subject exceeds default max length")
 	require.Len(t, failures, 1, "Should return exactly one failure")
 	testdata.AssertRuleFailure(t, failures[0], "SubjectLength")
@@ -172,14 +159,8 @@ func TestSubjectLengthRuleUTF8(t *testing.T) {
 	commit := testdata.Commit("feat: add new feature\n\nThis commit adds a new feature that enhances the user experience.")
 	commit.Subject = subject
 
-	// Create validation context
-	ctx := domain.ValidationContext{
-		Commit:     commit,
-		Repository: nil,
-		Config:     &cfg,
-	}
-
-	failures := rule.Validate(ctx)
+	// Validate
+	failures := rule.Validate(commit, nil, &cfg)
 
 	// Should fail because byte length exceeds 72
 	require.NotEmpty(t, failures, "Expected validation failure for UTF-8 string")

@@ -26,14 +26,14 @@ func NewIdentityRule(cfg config.Config) IdentityRule {
 
 // Validate validates that commit authors are in the allowed signers list.
 // Note: Full signature verification requires crypto dependencies not available in simplified format.
-func (r IdentityRule) Validate(ctx domain.ValidationContext) []domain.RuleFailure {
+func (r IdentityRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.RuleFailure {
 	// If no allowed signers configured, allow all authors
 	if len(r.allowedSigners) == 0 {
 		return nil
 	}
 
 	// Check if commit author is in allowed signers list
-	authorString := ctx.Commit.Author + " <" + ctx.Commit.AuthorEmail + ">"
+	authorString := commit.Author + " <" + commit.AuthorEmail + ">"
 
 	for _, allowedSigner := range r.allowedSigners {
 		// Exact match for full format
@@ -41,14 +41,14 @@ func (r IdentityRule) Validate(ctx domain.ValidationContext) []domain.RuleFailur
 			return nil // Author is allowed
 		}
 		// Case-insensitive email-only match
-		if strings.EqualFold(allowedSigner, ctx.Commit.AuthorEmail) {
+		if strings.EqualFold(allowedSigner, commit.AuthorEmail) {
 			return nil // Author email is allowed
 		}
 		// Extract email from "Name <email>" format and compare case-insensitively
 		emailRegex := regexp.MustCompile(`<([^>]+)>`)
 		if matches := emailRegex.FindStringSubmatch(allowedSigner); len(matches) > 1 {
 			allowedEmail := matches[1]
-			if strings.EqualFold(allowedEmail, ctx.Commit.AuthorEmail) {
+			if strings.EqualFold(allowedEmail, commit.AuthorEmail) {
 				return nil // Email extracted from allowed signer matches
 			}
 		}

@@ -41,9 +41,9 @@ func NewSubjectSuffixRule(cfg config.Config) SubjectSuffixRule {
 }
 
 // Validate checks that the commit subject doesn't end with invalid characters.
-func (r SubjectSuffixRule) Validate(ctx domain.ValidationContext) []domain.RuleFailure {
+func (r SubjectSuffixRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.RuleFailure {
 	// Empty subject is always an error
-	if len(ctx.Commit.Subject) == 0 {
+	if len(commit.Subject) == 0 {
 		return []domain.RuleFailure{{
 			Rule:    r.Name(),
 			Message: "Commit subject is missing",
@@ -52,9 +52,9 @@ func (r SubjectSuffixRule) Validate(ctx domain.ValidationContext) []domain.RuleF
 	}
 
 	// Real validation logic - check if the subject ends with any of the invalid suffixes
-	if len(ctx.Commit.Subject) > 0 {
+	if len(commit.Subject) > 0 {
 		// Get the last character, properly handling multi-byte characters like emojis
-		subjectRunes := []rune(ctx.Commit.Subject)
+		subjectRunes := []rune(commit.Subject)
 		if len(subjectRunes) > 0 {
 			lastRune := subjectRunes[len(subjectRunes)-1]
 			lastChar := string(lastRune)

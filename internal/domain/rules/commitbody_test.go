@@ -250,12 +250,7 @@ Technical details:
 			}
 
 			rule := rules.NewCommitBodyRule(cfg)
-			ctx := domain.ValidationContext{
-				Commit:     commit,
-				Repository: nil,
-				Config:     &cfg,
-			}
-			failures := rule.Validate(ctx)
+			failures := rule.Validate(commit, nil, &cfg)
 
 			// Check result
 			if testCase.expectError {

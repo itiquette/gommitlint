@@ -30,7 +30,7 @@ func (r SpellRule) Name() string {
 }
 
 // Validate checks spelling in the commit message.
-func (r SpellRule) Validate(ctx domain.ValidationContext) []domain.RuleFailure {
+func (r SpellRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.RuleFailure {
 	// Create a map of ignored words for efficient lookup
 	ignoreWordsMap := make(map[string]bool)
 	for _, word := range r.ignoreWords {
@@ -41,7 +41,7 @@ func (r SpellRule) Validate(ctx domain.ValidationContext) []domain.RuleFailure {
 	replacer := misspell.New()
 
 	// Process commit subject and body
-	textToCheck := r.preprocessText(ctx.Commit.Subject + " " + ctx.Commit.Body)
+	textToCheck := r.preprocessText(commit.Subject + " " + commit.Body)
 
 	// Skip spell check if text is empty after preprocessing
 	if strings.TrimSpace(textToCheck) == "" {

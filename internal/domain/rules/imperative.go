@@ -52,8 +52,8 @@ func (r ImperativeVerbRule) Name() string {
 }
 
 // Validate checks if the commit message uses imperative mood.
-func (r ImperativeVerbRule) Validate(ctx domain.ValidationContext) []domain.RuleFailure {
-	subject := strings.TrimSpace(ctx.Commit.Subject)
+func (r ImperativeVerbRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.RuleFailure {
+	subject := strings.TrimSpace(commit.Subject)
 	if subject == "" {
 		return nil
 	}

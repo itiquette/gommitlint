@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/domain/config"
 	"github.com/itiquette/gommitlint/internal/domain/rules"
 	"github.com/itiquette/gommitlint/internal/domain/testdata"
@@ -230,12 +229,7 @@ Signed-off-by: Developer <dev@example.com>`,
 			// Create rule with config
 			rule := rules.NewSignOffRule(cfg)
 
-			ctx := domain.ValidationContext{
-				Commit:     commit,
-				Repository: nil,
-				Config:     &cfg,
-			}
-			failures := rule.Validate(ctx)
+			failures := rule.Validate(commit, nil, &cfg)
 
 			// Check validity
 			if testCase.expectedValid {
@@ -367,12 +361,7 @@ Signed-off-by: Diana <diana@example.com>`,
 
 			rule := rules.NewSignOffRule(cfg)
 
-			ctx := domain.ValidationContext{
-				Commit:     commit,
-				Repository: nil,
-				Config:     &cfg,
-			}
-			failures := rule.Validate(ctx)
+			failures := rule.Validate(commit, nil, &cfg)
 
 			if testCase.expectedValid {
 				require.Empty(t, failures, "Expected no validation errors for case: %s", testCase.description)
@@ -464,12 +453,7 @@ Actually signed-off-by: Real Developer <real@example.com>`,
 
 			rule := rules.NewSignOffRule(cfg)
 
-			ctx := domain.ValidationContext{
-				Commit:     commit,
-				Repository: nil,
-				Config:     &cfg,
-			}
-			failures := rule.Validate(ctx)
+			failures := rule.Validate(commit, nil, &cfg)
 
 			if testCase.expectedValid {
 				require.Empty(t, failures, "Expected no validation errors for case: %s", testCase.description)

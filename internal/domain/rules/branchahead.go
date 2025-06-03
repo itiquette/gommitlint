@@ -38,15 +38,15 @@ func NewBranchAheadRule(cfg config.Config) BranchAheadRule {
 }
 
 // Validate checks that the current branch is not too many commits ahead of the reference branch.
-// This rule requires repository access, so it checks if Repository is available in the context.
-func (r BranchAheadRule) Validate(ctx domain.ValidationContext) []domain.RuleFailure {
+// This rule requires repository access, so it checks if repository is available.
+func (r BranchAheadRule) Validate(commit domain.Commit, repo domain.Repository, _ *config.Config) []domain.RuleFailure {
 	// Skip if no repository is provided
-	if ctx.Repository == nil {
+	if repo == nil {
 		return nil
 	}
 
 	// Get the number of commits ahead
-	commitsAhead, err := ctx.Repository.GetCommitsAhead(context.Background(), r.reference)
+	commitsAhead, err := repo.GetCommitsAhead(context.Background(), r.reference)
 	if err != nil {
 		// Skip on error rather than fail - repository might not have the reference branch
 		return nil
@@ -67,9 +67,4 @@ func (r BranchAheadRule) Validate(ctx domain.ValidationContext) []domain.RuleFai
 // Name returns the rule name.
 func (r BranchAheadRule) Name() string {
 	return "BranchAhead"
-}
-
-// IsRepositoryLevel returns true since this rule operates at repository level.
-func (r BranchAheadRule) IsRepositoryLevel() bool {
-	return true
 }

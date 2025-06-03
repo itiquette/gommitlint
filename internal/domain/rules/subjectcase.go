@@ -38,14 +38,14 @@ func NewSubjectCaseRule(cfg config.Config) SubjectCaseRule {
 }
 
 // Validate checks that commit subjects follow the required case style.
-func (r SubjectCaseRule) Validate(ctx domain.ValidationContext) []domain.RuleFailure {
+func (r SubjectCaseRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.RuleFailure {
 	// Special handling for "ignore" or "any" case choice - always valid
 	if r.caseChoice == "ignore" || r.caseChoice == "any" {
 		return nil
 	}
 
 	// Extract subject
-	subject := ctx.Commit.Subject
+	subject := commit.Subject
 
 	// Check for empty subject first
 	if subject == "" {

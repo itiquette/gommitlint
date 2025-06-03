@@ -34,14 +34,14 @@ func (r SubjectLengthRule) Name() string {
 }
 
 // Validate performs validation against a commit.
-func (r SubjectLengthRule) Validate(ctx domain.ValidationContext) []domain.RuleFailure {
-	if len(ctx.Commit.Subject) <= r.maxLength {
+func (r SubjectLengthRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.RuleFailure {
+	if len(commit.Subject) <= r.maxLength {
 		return nil
 	}
 
 	return []domain.RuleFailure{{
 		Rule:    r.Name(),
-		Message: fmt.Sprintf("subject exceeds %d characters (actual: %d)", r.maxLength, len(ctx.Commit.Subject)),
+		Message: fmt.Sprintf("subject exceeds %d characters (actual: %d)", r.maxLength, len(commit.Subject)),
 		Help:    fmt.Sprintf("Keep subject under %d characters", r.maxLength),
 	}}
 }

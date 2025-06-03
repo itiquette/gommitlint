@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/domain/config"
 	"github.com/itiquette/gommitlint/internal/domain/rules"
 	"github.com/itiquette/gommitlint/internal/domain/testdata"
@@ -88,12 +87,7 @@ func TestImperativeVerbRule(t *testing.T) {
 
 			rule := rules.NewImperativeVerbRule(cfg)
 
-			ctx := domain.ValidationContext{
-				Commit:     commit,
-				Repository: nil,
-				Config:     &cfg,
-			}
-			failures := rule.Validate(ctx)
+			failures := rule.Validate(commit, nil, &cfg)
 
 			// Check errors
 			if testCase.expectedValid {
@@ -121,12 +115,7 @@ func TestImperativeVerbRuleOptions(t *testing.T) {
 		cfg := config.Config{}
 		rule := rules.NewImperativeVerbRule(cfg)
 
-		ctx := domain.ValidationContext{
-			Commit:     commit,
-			Repository: nil,
-			Config:     &cfg,
-		}
-		failures := rule.Validate(ctx)
+		failures := rule.Validate(commit, nil, &cfg)
 
 		// Should fail validation because 'added' is in the past tense list
 		require.NotEmpty(t, failures, "Should detect 'added' as past tense")
@@ -145,12 +134,7 @@ func TestImperativeVerbRuleOptions(t *testing.T) {
 		cfg := config.Config{}
 		rule := rules.NewImperativeVerbRule(cfg)
 
-		ctx := domain.ValidationContext{
-			Commit:     commit,
-			Repository: nil,
-			Config:     &cfg,
-		}
-		failures := rule.Validate(ctx)
+		failures := rule.Validate(commit, nil, &cfg)
 
 		// Should pass validation because 'embed' is not in the predefined lists
 		// The rule only checks specific known non-imperative words

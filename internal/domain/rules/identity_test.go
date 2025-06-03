@@ -164,12 +164,7 @@ func TestIdentityRule_AllowedSigners(t *testing.T) {
 			rule := rules.NewIdentityRule(cfg)
 
 			// Execute validation
-			ctx := domain.ValidationContext{
-				Commit:     testCase.commit,
-				Repository: nil,
-				Config:     &cfg,
-			}
-			failures := rule.Validate(ctx)
+			failures := rule.Validate(testCase.commit, nil, &cfg)
 
 			// Verify results
 			if testCase.expectedValid {
@@ -232,12 +227,7 @@ func TestIdentityRule_RuleDisabled(t *testing.T) {
 			rule := rules.NewIdentityRule(cfg)
 
 			// Execute validation
-			ctx := domain.ValidationContext{
-				Commit:     commit,
-				Repository: nil,
-				Config:     &cfg,
-			}
-			failures := rule.Validate(ctx)
+			failures := rule.Validate(commit, nil, &cfg)
 
 			// Verify results
 			if testCase.expectedValid {
@@ -264,12 +254,7 @@ func TestIdentityRule_NoSignature(t *testing.T) {
 	rule := rules.NewIdentityRule(cfg)
 
 	// Execute validation
-	ctx := domain.ValidationContext{
-		Commit:     commit,
-		Repository: nil,
-		Config:     &cfg,
-	}
-	failures := rule.Validate(ctx)
+	failures := rule.Validate(commit, nil, &cfg)
 
 	// Should fail due to missing signature
 	require.NotEmpty(t, failures, "Expected validation errors for missing signature")
@@ -289,12 +274,7 @@ func TestIdentityRule_NoKeyDirectory(t *testing.T) {
 	rule := rules.NewIdentityRule(cfg) // No key directory
 
 	// Execute validation
-	ctx := domain.ValidationContext{
-		Commit:     commit,
-		Repository: nil,
-		Config:     &cfg,
-	}
-	failures := rule.Validate(ctx)
+	failures := rule.Validate(commit, nil, &cfg)
 
 	// Should pass since signature validation is skipped without key directory
 	require.Empty(t, failures, "Expected no validation errors when key directory is not configured")
@@ -321,12 +301,7 @@ func TestIdentityRule_EmptyConfig(t *testing.T) {
 	rule := rules.NewIdentityRule(cfg)
 
 	// Validate with empty config
-	ctx := domain.ValidationContext{
-		Commit:     commit,
-		Repository: nil,
-		Config:     &cfg,
-	}
-	failures := rule.Validate(ctx)
+	failures := rule.Validate(commit, nil, &cfg)
 
 	// Should pass because rule requires explicit opt-in with empty config
 	require.Empty(t, failures, "Should not error with empty config")

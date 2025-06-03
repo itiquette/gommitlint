@@ -117,12 +117,7 @@ func TestJiraReferenceRule_Validate(t *testing.T) {
 			rule := rules.NewJiraReferenceRule(cfg)
 
 			// Execute
-			ctx := domain.ValidationContext{
-				Commit:     testCase.commit,
-				Repository: nil,
-				Config:     &cfg,
-			}
-			failures := rule.Validate(ctx)
+			failures := rule.Validate(testCase.commit, nil, &cfg)
 
 			// Assert
 			if testCase.wantErrors {

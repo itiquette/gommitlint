@@ -26,11 +26,11 @@ func NewSignatureRule(cfg config.Config) SignatureRule {
 }
 
 // Validate checks if a commit has the required cryptographic signature.
-func (r SignatureRule) Validate(ctx domain.ValidationContext) []domain.RuleFailure {
+func (r SignatureRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.RuleFailure {
 	// Check if signatures are required
 	if r.requireSignature {
 		// Check for any signature (GPG or SSH format)
-		signature := strings.TrimSpace(ctx.Commit.Signature)
+		signature := strings.TrimSpace(commit.Signature)
 		if signature == "" {
 			return []domain.RuleFailure{{
 				Rule:    r.Name(),

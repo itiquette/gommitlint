@@ -258,17 +258,10 @@ func (s Service) validateCommitWithRules(_ context.Context, commit Commit, rules
 	// Initialize result
 	result := NewCommitResult(commit)
 
-	// Create validation context
-	ctx := ValidationContext{
-		Commit:     commit,
-		Repository: s.repo,
-		Config:     s.config,
-	}
-
-	// Validate against each rule using new unified interface
+	// Validate against each rule
 	for _, rule := range rules {
-		// Use new unified interface - all rules now implement the same interface
-		ruleFailures := rule.Validate(ctx)
+		// Use simplified interface - pass dependencies directly
+		ruleFailures := rule.Validate(commit, s.repo, s.config)
 
 		// Convert RuleFailures to ValidationErrors
 		var errors []ValidationError
@@ -300,16 +293,11 @@ func (s Service) validateCommitsWithRules(ctx context.Context, commits []Commit)
 func (s Service) checkRepositoryRules(_ context.Context) []RuleFailure {
 	var failures []RuleFailure
 
-	// Create validation context for repository-level rules
-	validationCtx := ValidationContext{
-		Commit:     Commit{}, // Empty commit for repository-level validation
-		Repository: s.repo,
-		Config:     s.config,
-	}
+	// Run repository-level rules with empty commit
+	emptyCommit := Commit{} // Repository rules don't need commit data
 
-	// Run repository-level rules
 	for _, rule := range s.repositoryRules {
-		ruleFailures := rule.Validate(validationCtx)
+		ruleFailures := rule.Validate(emptyCommit, s.repo, s.config)
 		failures = append(failures, ruleFailures...)
 	}
 

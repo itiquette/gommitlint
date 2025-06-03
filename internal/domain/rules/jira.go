@@ -56,21 +56,21 @@ func NewJiraReferenceRule(cfg config.Config) JiraReferenceRule {
 // Helper function to check if a JIRA reference is in the scope part of a conventional commit.
 
 // Validate checks a commit for Jira reference compliance.
-func (r JiraReferenceRule) Validate(ctx domain.ValidationContext) []domain.RuleFailure {
+func (r JiraReferenceRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.RuleFailure {
 	// Check if this commit type should be excluded from JIRA validation
-	if shouldExcludeCommitType(ctx.Commit.Subject, r.excludedTypes) {
+	if shouldExcludeCommitType(commit.Subject, r.excludedTypes) {
 		return nil
 	}
 
 	// Check if JIRA is required for this commit type
-	if !isJiraRequiredForType(ctx.Commit.Subject, r.requiredForTypes) && r.checkConventionalOnly {
+	if !isJiraRequiredForType(commit.Subject, r.requiredForTypes) && r.checkConventionalOnly {
 		return nil
 	}
 
 	// Prepare the text to search
-	textToSearch := ctx.Commit.Subject
-	if r.searchInBody && ctx.Commit.Body != "" {
-		textToSearch = fmt.Sprintf("%s\n%s", ctx.Commit.Subject, ctx.Commit.Body)
+	textToSearch := commit.Subject
+	if r.searchInBody && commit.Body != "" {
+		textToSearch = fmt.Sprintf("%s\n%s", commit.Subject, commit.Body)
 	}
 
 	// Extract JIRA references
@@ -105,8 +105,8 @@ func (r JiraReferenceRule) Validate(ctx domain.ValidationContext) []domain.RuleF
 	}
 
 	// Check reference placement in conventional commits
-	if r.checkConventionalOnly && isConventionalCommit(ctx.Commit.Subject) {
-		conventionalType, _, _ := parseConventionalCommit(ctx.Commit.Subject)
+	if r.checkConventionalOnly && isConventionalCommit(commit.Subject) {
+		conventionalType, _, _ := parseConventionalCommit(commit.Subject)
 
 		// For merge commits, we're more lenient
 		if conventionalType == "merge" {
@@ -114,7 +114,7 @@ func (r JiraReferenceRule) Validate(ctx domain.ValidationContext) []domain.RuleF
 		}
 
 		// Check if JIRA is in the correct position (not in description)
-		if hasJiraInDescription(ctx.Commit.Subject, r.pattern) {
+		if hasJiraInDescription(commit.Subject, r.pattern) {
 			return []domain.RuleFailure{{
 				Rule:    r.Name(),
 				Message: "JIRA reference should be in scope, not description",

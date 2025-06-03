@@ -77,11 +77,11 @@ func (r ConventionalCommitRule) Name() string {
 }
 
 // Validate validates a commit against the conventional commit rules.
-func (r ConventionalCommitRule) Validate(ctx domain.ValidationContext) []domain.RuleFailure {
+func (r ConventionalCommitRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.RuleFailure {
 	var failures []domain.RuleFailure
 
 	// Parse conventional format
-	parts, err := parseConventionalFormat(ctx.Commit.Subject)
+	parts, err := parseConventionalFormat(commit.Subject)
 	if err != nil {
 		failures = append(failures, domain.RuleFailure{
 			Rule:    r.Name(),

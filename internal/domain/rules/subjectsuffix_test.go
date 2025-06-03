@@ -6,7 +6,6 @@ package rules_test
 import (
 	"testing"
 
-	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/domain/config"
 	"github.com/itiquette/gommitlint/internal/domain/rules"
 	"github.com/itiquette/gommitlint/internal/domain/testdata"
@@ -112,12 +111,7 @@ func TestSubjectSuffixRule(t *testing.T) {
 			commit := commitInfo
 
 			// Execute validation using the configured rule
-			ctx := domain.ValidationContext{
-				Commit:     commit,
-				Repository: nil,
-				Config:     &cfg,
-			}
-			failures := baseRule.Validate(ctx)
+			failures := baseRule.Validate(commit, nil, &cfg)
 
 			// Check results
 			if testCase.expectedValid {
@@ -154,21 +148,11 @@ func TestSubjectSuffixOptions(t *testing.T) {
 		rule := rules.NewSubjectSuffixRule(cfg)
 
 		// Test valid case
-		ctx3 := domain.ValidationContext{
-			Commit:     validCommit,
-			Repository: nil,
-			Config:     &cfg,
-		}
-		validFailures := rule.Validate(ctx3)
+		validFailures := rule.Validate(validCommit, nil, &cfg)
 		require.Empty(t, validFailures, "Default config should accept valid subject")
 
 		// Test invalid case
-		ctx2 := domain.ValidationContext{
-			Commit:     invalidCommit,
-			Repository: nil,
-			Config:     &cfg,
-		}
-		invalidFailures := rule.Validate(ctx2)
+		invalidFailures := rule.Validate(invalidCommit, nil, &cfg)
 		require.NotEmpty(t, invalidFailures, "Default config should reject subject ending with period")
 	})
 
@@ -191,21 +175,11 @@ func TestSubjectSuffixOptions(t *testing.T) {
 		validCommit.Subject = "This ends with period."
 
 		// Test invalid case
-		ctx := domain.ValidationContext{
-			Commit:     invalidCommit,
-			Repository: nil,
-			Config:     &cfg,
-		}
-		invalidFailures := rule.Validate(ctx)
+		invalidFailures := rule.Validate(invalidCommit, nil, &cfg)
 		require.NotEmpty(t, invalidFailures, "Should reject subject with configured invalid suffix")
 
 		// Test valid case
-		ctx3 := domain.ValidationContext{
-			Commit:     validCommit,
-			Repository: nil,
-			Config:     &cfg,
-		}
-		validFailures := rule.Validate(ctx3)
+		validFailures := rule.Validate(validCommit, nil, &cfg)
 		require.Empty(t, validFailures, "Should accept subject ending with period when not in invalid set")
 	})
 
@@ -225,12 +199,7 @@ func TestSubjectSuffixOptions(t *testing.T) {
 		commit.Subject = "This ends with question mark?"
 
 		// Test invalid case
-		ctx := domain.ValidationContext{
-			Commit:     commit,
-			Repository: nil,
-			Config:     &cfg,
-		}
-		failures := rule.Validate(ctx)
+		failures := rule.Validate(commit, nil, &cfg)
 
 		require.NotEmpty(t, failures, "Should reject subject with configured invalid suffix")
 	})
@@ -252,12 +221,7 @@ func TestSubjectSuffixRuleWithCustomOptions(t *testing.T) {
 	commit.Subject = "Test with exclamation!"
 
 	// Test validation
-	ctx := domain.ValidationContext{
-		Commit:     commit,
-		Repository: nil,
-		Config:     &cfg,
-	}
-	failures := rule.Validate(ctx)
+	failures := rule.Validate(commit, nil, &cfg)
 
 	require.NotEmpty(t, failures, "Should return errors for invalid subject")
 
@@ -344,12 +308,7 @@ func TestSubjectSuffixRuleWithConfig(t *testing.T) {
 			commit.Message = testCase.subject
 
 			// Execute validation
-			ctx := domain.ValidationContext{
-				Commit:     commit,
-				Repository: nil,
-				Config:     &cfg,
-			}
-			failures := rule.Validate(ctx)
+			failures := rule.Validate(commit, nil, &cfg)
 
 			// Check results
 			if testCase.expectErrors {

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/itiquette/gommitlint/internal/domain"
+	"github.com/itiquette/gommitlint/internal/domain/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,7 +22,7 @@ func (m MockRule) Name() string {
 	return m.name
 }
 
-func (m MockRule) Validate(_ domain.ValidationContext) []domain.RuleFailure {
+func (m MockRule) Validate(_ domain.Commit, _ domain.Repository, _ *config.Config) []domain.RuleFailure {
 	return m.failures
 }
 

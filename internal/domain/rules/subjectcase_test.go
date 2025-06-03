@@ -6,7 +6,6 @@ package rules_test
 import (
 	"testing"
 
-	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/domain/config"
 	"github.com/itiquette/gommitlint/internal/domain/rules"
 	"github.com/itiquette/gommitlint/internal/domain/testdata"
@@ -130,12 +129,7 @@ func TestSubjectCaseRule(t *testing.T) {
 
 			rule := rules.NewSubjectCaseRule(cfg)
 
-			ctx := domain.ValidationContext{
-				Commit:     commit,
-				Repository: nil,
-				Config:     &cfg,
-			}
-			failures := rule.Validate(ctx)
+			failures := rule.Validate(commit, nil, &cfg)
 
 			// Verify results
 			if testCase.expectValid {
@@ -231,12 +225,7 @@ func TestSubjectCaseRuleWithConfig(t *testing.T) {
 
 			rule := rules.NewSubjectCaseRule(cfg)
 
-			ctx := domain.ValidationContext{
-				Commit:     commit,
-				Repository: nil,
-				Config:     &cfg,
-			}
-			failures := rule.Validate(ctx)
+			failures := rule.Validate(commit, nil, &cfg)
 
 			// Verify results
 			if testCase.expectValid {
@@ -328,12 +317,7 @@ func TestSubjectCaseWithConventionalCommit(t *testing.T) {
 
 			rule := rules.NewSubjectCaseRule(cfg)
 
-			ctx := domain.ValidationContext{
-				Commit:     commit,
-				Repository: nil,
-				Config:     &cfg,
-			}
-			failures := rule.Validate(ctx)
+			failures := rule.Validate(commit, nil, &cfg)
 
 			// Check result
 			if testCase.expectValid {

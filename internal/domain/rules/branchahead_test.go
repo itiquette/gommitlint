@@ -111,13 +111,9 @@ func TestBranchAheadRule(t *testing.T) {
 			// Check rule name
 			require.Equal(t, "BranchAhead", rule.Name(), "Rule name should be BranchAhead")
 
-			// Validate using ValidationContext
-			ctx := domain.ValidationContext{
-				Commit:     domain.Commit{Hash: "test", Subject: "test commit"},
-				Repository: testCase.analyzer,
-				Config:     &cfg,
-			}
-			failures := rule.Validate(ctx)
+			// Validate using new signature
+			commit := domain.Commit{Hash: "test", Subject: "test commit"}
+			failures := rule.Validate(commit, testCase.analyzer, &cfg)
 
 			// Check for expected errors
 			if testCase.expectedErrors {
@@ -203,13 +199,9 @@ func TestBranchAheadRule_ReferenceBranch(t *testing.T) {
 	// Create rule with custom reference branch
 	rule := NewBranchAheadRule(cfg)
 
-	// Run validation using ValidationContext
-	ctx := domain.ValidationContext{
-		Commit:     domain.Commit{Hash: "test", Subject: "test commit"},
-		Repository: mockAnalyzer,
-		Config:     &cfg,
-	}
-	rule.Validate(ctx)
+	// Run validation using new signature
+	commit := domain.Commit{Hash: "test", Subject: "test commit"}
+	rule.Validate(commit, mockAnalyzer, &cfg)
 
 	// Check what reference branch was passed to the analyzer
 	require.Equal(t, "develop", mockAnalyzer.refBranchName,
@@ -286,13 +278,9 @@ func TestBranchAheadRule_Configuration(t *testing.T) {
 			// Create rule with configuration
 			rule := NewBranchAheadRule(cfg)
 
-			// Validate using ValidationContext
-			ctx := domain.ValidationContext{
-				Commit:     domain.Commit{Hash: "test", Subject: "test commit"},
-				Repository: analyzer,
-				Config:     &cfg,
-			}
-			failures := rule.Validate(ctx)
+			// Validate using new signature
+			commit := domain.Commit{Hash: "test", Subject: "test commit"}
+			failures := rule.Validate(commit, analyzer, &cfg)
 
 			// Check results
 			if testCase.wantError {
