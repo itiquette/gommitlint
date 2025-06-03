@@ -2,66 +2,43 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package internal provides simple factory functions for dependency injection.
-// This follows functional programming principles with explicit dependencies.
+// Package internal provides simple factory functions for the functional validation system.
 package internal
 
 import (
 	"context"
 	"fmt"
 
-	cryptofactory "github.com/itiquette/gommitlint/internal/adapters/signing"
-
 	"github.com/itiquette/gommitlint/internal/adapters/git"
-	"github.com/itiquette/gommitlint/internal/adapters/logging"
+	"github.com/itiquette/gommitlint/internal/application"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/domain/config"
-	"github.com/itiquette/gommitlint/internal/domain/rules"
 )
 
-// NewValidationService creates a validation service with direct construction.
-// Simplified dependency injection - no complex factory patterns.
-func NewValidationService(ctx context.Context, config config.Config, repoPath string, _ log.Logger) (*domain.Service, error) {
-	// Create git repository - single responsibility, direct construction
+// CreateRepository creates a git repository instance.
+// This is a simple factory function with no hidden dependencies.
+func CreateRepository(ctx context.Context, repoPath string) (domain.Repository, error) {
 	gitRepo, err := git.NewRepository(ctx, repoPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create git repository: %w", err)
 	}
 
-	// Create enabled rules with minimal dependencies
-	enabledRules := createEnabledRules(config, gitRepo)
-
-	// Create service with direct repository and rules - clean and simple
-	service := domain.NewService(gitRepo, enabledRules)
-
-	return &service, nil
+	return gitRepo, nil
 }
 
-// createEnabledRules creates enabled rules with simplified dependencies.
-// Direct construction - crypto services created only when needed.
-func createEnabledRules(config config.Config, gitRepo domain.Repository) []domain.Rule {
-	// Create minimal rule dependencies
-	var ruleDeps domain.RuleDependencies
-
-	// Always provide git repository for branchahead rule
-	ruleDeps.Repository = gitRepo
-
-	// Only create crypto services if actually needed
-	if domain.ShouldRunRule("identity", config.Rules.Enabled, config.Rules.Disabled) {
-		// Simple, direct crypto construction
-		cryptoRepo := cryptofactory.NewFileSystemKeyRepository(config.Signing.KeyDirectory)
-		gpgVerifier := cryptofactory.NewDefaultGPGVerificationService()
-		sshVerifier := cryptofactory.NewDefaultSSHVerificationService()
-		verificationSvc := cryptofactory.NewVerificationService(gpgVerifier, sshVerifier)
-		cryptoVerifier := cryptofactory.NewVerificationAdapterWithOptions(
-			cryptofactory.WithVerificationService(verificationSvc),
-			cryptofactory.WithKeyRepository(cryptoRepo),
-		)
-
-		ruleDeps.CryptoVerifier = cryptoVerifier
-		ruleDeps.CryptoRepository = cryptoRepo
+// CreateValidator creates a validator with all dependencies.
+// This is the main factory function that wires everything together.
+func CreateValidator(ctx context.Context, cfg *config.Config, repoPath string, logger domain.Logger) (domain.ValidatorWithDeps, error) {
+	repo, err := CreateRepository(ctx, repoPath)
+	if err != nil {
+		return domain.ValidatorWithDeps{}, fmt.Errorf("failed to create repository: %w", err)
 	}
 
-	// Create rules with direct construction
-	return rules.CreateEnabledRules(&config, ruleDeps)
+	return application.CreateValidator(repo, cfg, logger), nil
+}
+
+// CreateRules creates all enabled rules based on configuration.
+// This is a pure function that returns a new slice of rules.
+func CreateRules(cfg *config.Config) []domain.Rule {
+	return application.CreateEnabledRules(cfg)
 }

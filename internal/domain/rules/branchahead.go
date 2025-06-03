@@ -39,7 +39,7 @@ func NewBranchAheadRule(cfg config.Config) BranchAheadRule {
 
 // Validate checks that the current branch is not too many commits ahead of the reference branch.
 // This rule requires repository access, so it checks if repository is available.
-func (r BranchAheadRule) Validate(commit domain.Commit, repo domain.Repository, _ *config.Config) []domain.RuleFailure {
+func (r BranchAheadRule) Validate(_ domain.Commit, repo domain.Repository, _ *config.Config) []domain.RuleFailure {
 	// Skip if no repository is provided
 	if repo == nil {
 		return nil

@@ -1,0 +1,4 @@
+# SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
+# SPDX-License-Identifier: CC0-1.0
+
+This is a very long commit message subject that exceeds the maximum allowed length of 72 characters which should cause the SubjectLength rule to fail.

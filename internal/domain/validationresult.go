@@ -55,6 +55,18 @@ func NewCommitResult(commit Commit) CommitResult {
 	}
 }
 
+// NewCommitResultWithFailures creates a commit result from rule failures.
+func NewCommitResultWithFailures(commit Commit, failures []RuleFailure) CommitResult {
+	result := NewCommitResult(commit)
+
+	for _, failure := range failures {
+		err := New(failure.Rule, ErrUnknown, failure.Message)
+		result = result.AddRuleResult(failure.Rule, []ValidationError{err})
+	}
+
+	return result
+}
+
 // AddRuleResult adds a rule result to the commit result.
 // This replaces the complex WithRuleResult and WithFormattedRuleResult methods.
 func (r CommitResult) AddRuleResult(ruleName string, errs []ValidationError) CommitResult {

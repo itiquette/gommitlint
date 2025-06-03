@@ -15,9 +15,9 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/adapters/git"
 	gitTestdata "github.com/itiquette/gommitlint/internal/adapters/git/testdata"
+	"github.com/itiquette/gommitlint/internal/application"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/domain/config"
-	"github.com/itiquette/gommitlint/internal/domain/rules"
 )
 
 // ValidationResult represents the result of a validation operation.
@@ -38,25 +38,21 @@ func TestValidation(t *testing.T, repoPath string, config config.Config) Validat
 	gitRepo, err := git.NewRepository(ctx, repoPath)
 	require.NoError(t, err, "Failed to create git repository")
 
-	// Create rule dependencies
-	deps := domain.RuleDependencies{
-		Repository: gitRepo,
-	}
+	// Create validator with dependencies
+	validator := application.CreateValidator(gitRepo, &config, nil)
 
-	// Create enabled rules directly using config
-	enabledRules := rules.CreateEnabledRules(&config, deps)
-
-	// Create validation service directly
-	service := domain.NewService(gitRepo, enabledRules)
-
-	// Validate HEAD commit
-	result, err := service.ValidateCommit(ctx, "HEAD", false)
+	// Validate HEAD commit using validator
+	result, err := application.ValidateCommitWithValidator(ctx, "HEAD", validator)
 	require.NoError(t, err, "Failed to validate HEAD commit")
 
-	// Extract errors from all rule results
-	var allErrors []domain.ValidationError
-	for _, ruleResult := range result.RuleResults {
-		allErrors = append(allErrors, ruleResult.Errors...)
+	// Convert failures to validation errors
+	allErrors := make([]domain.ValidationError, 0, len(result.Failures))
+	for _, failure := range result.Failures {
+		allErrors = append(allErrors, domain.ValidationError{
+			Rule:    failure.Rule,
+			Code:    failure.Rule,
+			Message: failure.Message,
+		})
 	}
 
 	// Convert to simple result

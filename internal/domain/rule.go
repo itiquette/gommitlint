@@ -26,6 +26,7 @@ func IsRepositoryLevelRule(rule Rule) bool {
 // SeparateRules separates rules into commit-level and repository-level rules.
 func SeparateRules(rules []Rule) ([]Rule, []Rule) {
 	var commitRules []Rule
+
 	var repositoryRules []Rule
 
 	for _, rule := range rules {

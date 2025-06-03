@@ -11,7 +11,7 @@ import (
 	"os"
 
 	"github.com/itiquette/gommitlint/internal"
-	"github.com/itiquette/gommitlint/internal/adapters/logging"
+	log "github.com/itiquette/gommitlint/internal/adapters/logging"
 	format "github.com/itiquette/gommitlint/internal/adapters/output"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/domain/config"
@@ -26,27 +26,9 @@ type Logger interface {
 	Error(msg string, keysAndValues ...interface{})
 }
 
-// ValidationService provides commit validation operations.
-type ValidationService interface {
-	// ValidateCommit validates a single commit by its reference
-	ValidateCommit(ctx context.Context, ref string, skipMergeCommits bool) (domain.CommitResult, error)
-
-	// ValidateCommits validates multiple commits by their hashes
-	ValidateCommits(ctx context.Context, commitHashes []string, skipMergeCommits bool) (domain.ValidationResults, error)
-
-	// ValidateCommitRange validates commits in a range
-	ValidateCommitRange(ctx context.Context, fromHash, toHash string, skipMergeCommits bool) (domain.ValidationResults, error)
-
-	// ValidateMessage validates a commit message directly
-	ValidateMessage(ctx context.Context, message string) (domain.ValidationResults, error)
-
-	// ValidateWithOptions validates according to the provided options
-	ValidateWithOptions(ctx context.Context, opts domain.Options) (domain.ValidationResults, error)
-}
-
-// ValidationContext holds common validation dependencies.
+// ValidationContext holds validation dependencies.
 type ValidationContext struct {
-	Service   ValidationService
+	Validator domain.ValidatorWithDeps
 	Formatter format.Formatter
 	Logger    Logger
 	Options   domain.ReportOptions
@@ -140,9 +122,9 @@ func runNewValidation(ctx context.Context, cmd *cobra.Command, config config.Con
 		return 1, errors.New("logger is not the expected type")
 	}
 
-	validationService, err := internal.NewValidationService(ctx, config, repoPath, logger)
+	validator, err := internal.CreateValidator(ctx, &config, repoPath, logger)
 	if err != nil {
-		return 1, fmt.Errorf("failed to create validation service: %w", err)
+		return 1, fmt.Errorf("failed to create validator: %w", err)
 	}
 
 	// Create formatter based on parameters
@@ -159,7 +141,7 @@ func runNewValidation(ctx context.Context, cmd *cobra.Command, config config.Con
 
 	// Create validation context with common dependencies
 	validateCtx := ValidationContext{
-		Service:   validationService,
+		Validator: validator,
 		Formatter: formatter,
 		Logger:    logger,
 		Options:   reportOptions,
@@ -196,10 +178,15 @@ func runNewValidation(ctx context.Context, cmd *cobra.Command, config config.Con
 // validateMessage validates a commit message and generates a report.
 func validateMessage(ctx context.Context, vctx ValidationContext, message string) (int, error) {
 	// Validate the message
-	results, err := vctx.Service.ValidateMessage(ctx, message)
+	result, err := vctx.Validator.ValidateMessage(message)
 	if err != nil {
 		return 1, fmt.Errorf("failed to validate message: %w", err)
 	}
+
+	// Convert to results format for reporting
+	results := domain.NewValidationResults()
+	commitResult := convertValidationResult(result, vctx.Validator)
+	results = results.AddResult(commitResult)
 
 	// Generate report
 	if err := generateReport(ctx, vctx, results); err != nil {
@@ -216,16 +203,31 @@ func validateMessage(ctx context.Context, vctx ValidationContext, message string
 
 // validateRange validates a range of commits and generates a report.
 func validateRange(ctx context.Context, vctx ValidationContext, fromHash, toHash string, skipMerge bool) (int, error) {
-	// Use ValidateWithOptions to ensure repository rules are checked
-	opts := domain.Options{
-		FromHash:         fromHash,
-		ToHash:           toHash,
-		SkipMergeCommits: skipMerge,
+	// Get commits in range
+	commits, err := vctx.Validator.Deps.Repository.GetCommitRange(ctx, fromHash, toHash)
+	if err != nil {
+		return 1, fmt.Errorf("failed to get commit range: %w", err)
 	}
 
-	results, err := vctx.Service.ValidateWithOptions(ctx, opts)
-	if err != nil {
-		return 1, fmt.Errorf("failed to validate commit range: %w", err)
+	// Filter merge commits if requested
+	commits = domain.FilterMergeCommits(commits, skipMerge)
+
+	// Validate commits
+	validationResults := vctx.Validator.ValidateCommits(commits)
+
+	// Convert to results format
+	results := domain.NewValidationResults()
+
+	for _, result := range validationResults {
+		commitResult := convertValidationResult(result, vctx.Validator)
+		results = results.AddResult(commitResult)
+	}
+
+	// Add repository validation
+	repoFailures := vctx.Validator.ValidateRepository()
+	if len(repoFailures) > 0 {
+		repoResults := convertRepoFailures(repoFailures)
+		results = results.AddRepositoryResults(repoResults)
 	}
 
 	// Generate report
@@ -243,15 +245,39 @@ func validateRange(ctx context.Context, vctx ValidationContext, fromHash, toHash
 
 // validateCommit validates a single commit and generates a report.
 func validateCommit(ctx context.Context, vctx ValidationContext, ref string, skipMerge bool) (int, error) {
-	// Use ValidateWithOptions to ensure repository rules are checked
-	opts := domain.Options{
-		CommitHash:       ref,
-		SkipMergeCommits: skipMerge,
+	// Get the commit
+	commit, err := vctx.Validator.Deps.Repository.GetCommit(ctx, ref)
+	if err != nil {
+		return 1, fmt.Errorf("failed to get commit: %w", err)
 	}
 
-	results, err := vctx.Service.ValidateWithOptions(ctx, opts)
-	if err != nil {
-		return 1, fmt.Errorf("failed to validate commit: %w", err)
+	// Skip if it's a merge commit and skipMerge is true
+	if skipMerge && commit.IsMergeCommit {
+		// Create empty results for skipped merge commit
+		results := domain.NewValidationResults()
+		emptyResult := domain.NewCommitResult(commit)
+		results = results.AddResult(emptyResult)
+
+		if err := generateReport(ctx, vctx, results); err != nil {
+			return 1, err
+		}
+
+		return 0, nil
+	}
+
+	// Validate the commit
+	validationResult := vctx.Validator.ValidateCommit(commit)
+
+	// Convert to results format
+	results := domain.NewValidationResults()
+	commitResult := convertValidationResult(validationResult, vctx.Validator)
+	results = results.AddResult(commitResult)
+
+	// Add repository validation
+	repoFailures := vctx.Validator.ValidateRepository()
+	if len(repoFailures) > 0 {
+		repoResults := convertRepoFailures(repoFailures)
+		results = results.AddRepositoryResults(repoResults)
 	}
 
 	// Generate report
@@ -303,4 +329,54 @@ func convertReportOptions(options domain.ReportOptions) format.Options {
 		LightMode:      options.LightMode,
 		Writer:         options.Writer,
 	}
+}
+
+// convertValidationResult converts a domain ValidationResult to a domain CommitResult.
+// This needs access to the validator to show both passing and failing rules.
+func convertValidationResult(result domain.ValidationResult, validator domain.ValidatorWithDeps) domain.CommitResult {
+	commitResult := domain.NewCommitResult(result.Commit)
+
+	// Get all commit rules that were executed
+	allRules := domain.FilterCommitRules(validator.Validator.Rules())
+
+	// Create a map of failures for quick lookup
+	failureMap := make(map[string]domain.RuleFailure)
+	for _, failure := range result.Failures {
+		failureMap[failure.Rule] = failure
+	}
+
+	// Add result for each rule that was executed
+	for _, rule := range allRules {
+		ruleName := rule.Name()
+		if failure, exists := failureMap[ruleName]; exists {
+			// Rule failed
+			err := domain.New(failure.Rule, domain.ErrUnknown, failure.Message)
+			commitResult = commitResult.AddRuleResult(ruleName, []domain.ValidationError{err})
+		} else {
+			// Rule passed
+			commitResult = commitResult.AddRuleResult(ruleName, []domain.ValidationError{})
+		}
+	}
+
+	return commitResult
+}
+
+// convertRepoFailures converts repository rule failures to domain RuleResults.
+func convertRepoFailures(failures []domain.RuleFailure) []domain.RuleResult {
+	if len(failures) == 0 {
+		return nil
+	}
+
+	results := make([]domain.RuleResult, len(failures))
+
+	for i, failure := range failures {
+		err := domain.New(failure.Rule, domain.ErrUnknown, failure.Message)
+		results[i] = domain.RuleResult{
+			RuleName: failure.Rule,
+			Status:   domain.StatusFailed,
+			Errors:   []domain.ValidationError{err},
+		}
+	}
+
+	return results
 }

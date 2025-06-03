@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
+# SPDX-License-Identifier: CC0-1.0
+
+feat: Add new feature for testing
+
+This commit adds a comprehensive feature for testing purposes.
+
+Signed-off-by: Test User <test@example.com>

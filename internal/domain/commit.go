@@ -172,6 +172,11 @@ func NewValidator(rules []Rule) Validator {
 	return Validator{rules: rules}
 }
 
+// Rules returns the rules in this validator.
+func (v Validator) Rules() []Rule {
+	return v.rules
+}
+
 // ValidateCommit validates a single commit against all rules.
 // Repository can be nil for validation without repository context.
 func (v Validator) ValidateCommit(commit Commit, repo Repository, cfg *config.Config) ValidationResult {

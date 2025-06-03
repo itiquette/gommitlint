@@ -5,15 +5,170 @@
 package domain
 
 import (
-	"context"
 	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/domain/config"
 )
 
-// Options contains options for validation.
+// Dependencies contains all dependencies needed for validation.
+// This is a simple container that avoids complex dependency injection patterns.
+type Dependencies struct {
+	Repository Repository
+	Config     *config.Config
+	Logger     Logger
+}
+
+// ValidatorWithDeps contains validator and dependencies for functional validation.
+// This is a simple struct that follows functional programming principles.
+type ValidatorWithDeps struct {
+	Validator Validator
+	Deps      Dependencies
+}
+
+// NewValidatorWithDeps creates a validator with dependencies.
+func NewValidatorWithDeps(rules []Rule, deps Dependencies) ValidatorWithDeps {
+	return ValidatorWithDeps{
+		Validator: NewValidator(rules),
+		Deps:      deps,
+	}
+}
+
+// ValidateCommit validates a single commit using the validator's dependencies.
+func (v ValidatorWithDeps) ValidateCommit(commit Commit) ValidationResult {
+	return v.Validator.ValidateCommit(commit, v.Deps.Repository, v.Deps.Config)
+}
+
+// ValidateCommits validates multiple commits using the validator's dependencies.
+func (v ValidatorWithDeps) ValidateCommits(commits []Commit) []ValidationResult {
+	return v.Validator.ValidateCommits(commits, v.Deps.Repository, v.Deps.Config)
+}
+
+// ValidateRepository runs repository-level rules using the validator's dependencies.
+func (v ValidatorWithDeps) ValidateRepository() []RuleFailure {
+	return ValidateRepository(FilterRepositoryRules(v.Validator.Rules()), v.Deps.Repository, v.Deps.Config)
+}
+
+// ValidateMessage validates a commit message string using the validator's dependencies.
+func (v ValidatorWithDeps) ValidateMessage(message string) (ValidationResult, error) {
+	return ValidateCommitMessage(message, v.Validator.Rules(), v.Deps.Config)
+}
+
+// ValidateCommit validates a single commit against the provided rules.
+// This is a pure function that takes all dependencies as parameters.
+func ValidateCommit(commit Commit, rules []Rule, repo Repository, cfg *config.Config) ValidationResult {
+	var failures []RuleFailure
+	for _, rule := range rules {
+		failures = append(failures, rule.Validate(commit, repo, cfg)...)
+	}
+
+	return ValidationResult{Commit: commit, Failures: failures}
+}
+
+// ValidateCommits validates multiple commits against the provided rules.
+// Returns a slice of validation results, one for each commit.
+func ValidateCommits(commits []Commit, rules []Rule, repo Repository, cfg *config.Config) []ValidationResult {
+	results := make([]ValidationResult, len(commits))
+	for i, commit := range commits {
+		results[i] = ValidateCommit(commit, rules, repo, cfg)
+	}
+
+	return results
+}
+
+// ValidateRepository runs repository-level rules.
+// Repository rules receive an empty commit as they don't validate specific commits.
+func ValidateRepository(rules []Rule, repo Repository, cfg *config.Config) []RuleFailure {
+	repoRules := FilterRepositoryRules(rules)
+
+	var failures []RuleFailure
+
+	// Repository rules don't need commit data
+	emptyCommit := Commit{}
+	for _, rule := range repoRules {
+		failures = append(failures, rule.Validate(emptyCommit, repo, cfg)...)
+	}
+
+	return failures
+}
+
+// ValidateCommitMessage validates a commit message string without repository context.
+// Useful for pre-commit hooks and message file validation.
+func ValidateCommitMessage(message string, rules []Rule, cfg *config.Config) (ValidationResult, error) {
+	// Trim whitespace
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return ValidationResult{}, errors.New("empty commit message")
+	}
+
+	commit := ParseCommitMessage(message)
+	commitRules := FilterCommitRules(rules)
+
+	return ValidateCommit(commit, commitRules, nil, cfg), nil
+}
+
+// FilterMergeCommits removes merge commits from the slice if skipMerge is true.
+// This is a pure function that returns a new slice.
+func FilterMergeCommits(commits []Commit, skipMerge bool) []Commit {
+	if !skipMerge {
+		return commits
+	}
+
+	var filtered []Commit
+
+	for _, commit := range commits {
+		if !commit.IsMergeCommit {
+			filtered = append(filtered, commit)
+		}
+	}
+
+	return filtered
+}
+
+// FilterCommitRules returns only commit-level rules from the provided rules.
+func FilterCommitRules(rules []Rule) []Rule {
+	var result []Rule
+
+	for _, rule := range rules {
+		if !IsRepositoryLevelRule(rule) {
+			result = append(result, rule)
+		}
+	}
+
+	return result
+}
+
+// FilterRepositoryRules returns only repository-level rules from the provided rules.
+func FilterRepositoryRules(rules []Rule) []Rule {
+	var result []Rule
+
+	for _, rule := range rules {
+		if IsRepositoryLevelRule(rule) {
+			result = append(result, rule)
+		}
+	}
+
+	return result
+}
+
+// FullValidation represents both commit and repository validation results.
+type FullValidation struct {
+	CommitResults      []ValidationResult
+	RepositoryFailures []RuleFailure
+}
+
+// HasFailures returns true if there are any validation failures.
+func (f FullValidation) HasFailures() bool {
+	for _, result := range f.CommitResults {
+		if result.HasFailures() {
+			return true
+		}
+	}
+
+	return len(f.RepositoryFailures) > 0
+}
+
+// Options contains options for validation - used by CLI layer.
 type Options struct {
 	// CommitHash is the hash of a specific commit to validate.
 	CommitHash string
@@ -34,277 +189,7 @@ type Options struct {
 	SkipMergeCommits bool
 }
 
-// Service provides validation using the simplified domain model.
-type Service struct {
-	repo            Repository
-	validator       Validator
-	rules           []Rule
-	commitRules     []Rule         // Rules that validate individual commits
-	repositoryRules []Rule         // Rules that validate repository state
-	config          *config.Config // Configuration for rules
-}
-
-// NewService creates a new Service.
-func NewService(repo Repository, rules []Rule) Service {
-	// Separate commit-level and repository-level rules
-	commitRules, repositoryRules := SeparateRules(rules)
-
-	return Service{
-		repo:            repo,
-		validator:       NewValidator(commitRules), // Only commit rules for validator
-		rules:           rules,
-		commitRules:     commitRules,
-		repositoryRules: repositoryRules,
-		config:          nil, // Will be set by WithConfig
-	}
-}
-
-// WithConfig sets the configuration for the service.
-func (s Service) WithConfig(cfg *config.Config) Service {
-	s.config = cfg
-
-	return s
-}
-
-// ValidateCommit validates a single commit.
-func (s Service) ValidateCommit(ctx context.Context, hash string, skipMergeCommits bool) (CommitResult, error) {
-	// Get the commit from the git repository
-	commit, err := s.repo.GetCommit(ctx, hash)
-	if err != nil {
-		return CommitResult{}, fmt.Errorf("failed to get commit: %w", err)
-	}
-
-	// Skip merge commits if requested
-	if skipMergeCommits && commit.IsMergeCommit {
-		return CommitResult{
-			Commit:      commit,
-			RuleResults: []RuleResult{},
-			Passed:      true,
-		}, nil
-	}
-
-	// Validate the commit (only commit-level rules)
-	return s.validateCommitWithRules(ctx, commit, s.commitRules), nil
-}
-
-// ValidateCommits validates multiple commits by their hashes.
-func (s Service) ValidateCommits(ctx context.Context, commitHashes []string, skipMergeCommits bool) (ValidationResults, error) {
-	allResults := NewValidationResults()
-
-	for _, hash := range commitHashes {
-		result, err := s.ValidateCommit(ctx, hash, skipMergeCommits)
-		if err != nil {
-			return allResults, err
-		}
-
-		allResults = allResults.AddResult(result)
-	}
-
-	return allResults, nil
-}
-
-// ValidateHeadCommits validates the specified number of commits from HEAD.
-func (s Service) ValidateHeadCommits(ctx context.Context, count int, skipMerge bool) (ValidationResults, error) {
-	// Get the commits from the git repository
-	commits, err := s.repo.GetHeadCommits(ctx, count)
-	if err != nil {
-		return ValidationResults{}, fmt.Errorf("failed to get head commits: %w", err)
-	}
-
-	// Filter merge commits if requested
-	if skipMerge {
-		filteredCommits := make([]Commit, 0, len(commits))
-
-		for _, commit := range commits {
-			if !commit.IsMergeCommit {
-				filteredCommits = append(filteredCommits, commit)
-			}
-		}
-
-		commits = filteredCommits
-	}
-
-	// Validate the commits
-	return s.validateCommitsWithRules(ctx, commits), nil
-}
-
-// ValidateCommitRange validates all commits in the given range.
-func (s Service) ValidateCommitRange(ctx context.Context, fromHash, toHash string, skipMerge bool) (ValidationResults, error) {
-	// Get the commits from the git repository
-	commits, err := s.repo.GetCommitRange(ctx, fromHash, toHash)
-	if err != nil {
-		return ValidationResults{}, fmt.Errorf("failed to get commit range: %w", err)
-	}
-
-	// Filter merge commits if requested
-	if skipMerge {
-		filteredCommits := make([]Commit, 0, len(commits))
-
-		for _, commit := range commits {
-			if !commit.IsMergeCommit {
-				filteredCommits = append(filteredCommits, commit)
-			}
-		}
-
-		commits = filteredCommits
-	}
-
-	// Validate the commits
-	return s.validateCommitsWithRules(ctx, commits), nil
-}
-
-// ValidateMessage validates a commit message string.
-func (s Service) ValidateMessage(ctx context.Context, message string) (ValidationResults, error) {
-	// Trim whitespace
-	message = strings.TrimSpace(message)
-	if message == "" {
-		return NewValidationResults(), errors.New("empty commit message")
-	}
-
-	// Split into subject and body
-	subject, body := SplitCommitMessage(message)
-
-	// Create a commit for validation
-	commit := Commit{
-		Hash:          "0000000000000000000000000000000000000000",
-		Subject:       subject,
-		Body:          body,
-		Message:       message,
-		IsMergeCommit: false,
-	}
-
-	// Validate the commit
-	result := s.validateCommitWithRules(ctx, commit, s.commitRules)
-
-	// Create validation results using functional approach
-	return NewValidationResults().AddResult(result), nil
-}
-
-// ValidateWithOptions validates commits according to the provided options.
-func (s Service) ValidateWithOptions(ctx context.Context, opts Options) (ValidationResults, error) {
-	// Initialize results
-	var results = NewValidationResults()
-
-	// Check repository-level rules and collect them separately
-	repoFailures := s.checkRepositoryRules(ctx)
-
-	repoResults := make([]RuleResult, 0, len(repoFailures))
-
-	for _, failure := range repoFailures {
-		repoResult := RuleResult{
-			RuleName: failure.Rule,
-			Status:   StatusFailed,
-			Errors:   []ValidationError{New(failure.Rule, "RULE_FAILED", failure.Message)},
-		}
-		repoResults = append(repoResults, repoResult)
-	}
-
-	// Message file validation should be handled by the caller
-	if opts.MessageFile != "" {
-		return NewValidationResults(), errors.New("message file validation should use ValidateMessage after reading file content")
-	}
-
-	// Validate specific commit
-	if opts.CommitHash != "" {
-		result, err := s.ValidateCommit(ctx, opts.CommitHash, opts.SkipMergeCommits)
-		if err != nil {
-			return results, err
-		}
-
-		results = results.AddResult(result)
-	} else if opts.FromHash != "" || opts.ToHash != "" {
-		// Validate commit range
-		commitResults, err := s.ValidateCommitRange(ctx, opts.FromHash, opts.ToHash, opts.SkipMergeCommits)
-		if err != nil {
-			return results, err
-		}
-		// Merge commit results
-		for _, result := range commitResults.Results {
-			results = results.AddResult(result)
-		}
-	} else if opts.CommitCount > 0 {
-		// Validate head commits
-		commitResults, err := s.ValidateHeadCommits(ctx, opts.CommitCount, opts.SkipMergeCommits)
-		if err != nil {
-			return results, err
-		}
-		// Merge commit results
-		for _, result := range commitResults.Results {
-			results = results.AddResult(result)
-		}
-	} else {
-		// Default to validating the HEAD commit
-		result, err := s.ValidateCommit(ctx, "HEAD", opts.SkipMergeCommits)
-		if err != nil {
-			return results, err
-		}
-
-		results = results.AddResult(result)
-	}
-
-	// Add repository results at the end
-	results = results.AddRepositoryResults(repoResults)
-
-	return results, nil
-}
-
-// validateCommitWithRules validates a commit against a set of rules.
-func (s Service) validateCommitWithRules(_ context.Context, commit Commit, rules []Rule) CommitResult {
-	// Handle no active rules case
-	if len(rules) == 0 {
-		return NewCommitResult(commit)
-	}
-
-	// Initialize result
-	result := NewCommitResult(commit)
-
-	// Validate against each rule
-	for _, rule := range rules {
-		// Use simplified interface - pass dependencies directly
-		ruleFailures := rule.Validate(commit, s.repo, s.config)
-
-		// Convert RuleFailures to ValidationErrors
-		var errors []ValidationError
-		for _, failure := range ruleFailures {
-			errors = append(errors, New(failure.Rule, "RULE_FAILED", failure.Message))
-		}
-
-		// Add result
-		result = result.AddRuleResult(rule.Name(), errors)
-	}
-
-	return result
-}
-
-// validateCommitsWithRules validates multiple commits against all rules.
-func (s Service) validateCommitsWithRules(ctx context.Context, commits []Commit) ValidationResults {
-	// Create results
-	results := NewValidationResults()
-
-	for _, commit := range commits {
-		commitResult := s.validateCommitWithRules(ctx, commit, s.commitRules)
-		results = results.AddResult(commitResult)
-	}
-
-	return results
-}
-
-// checkRepositoryRules checks repository-level rules.
-func (s Service) checkRepositoryRules(_ context.Context) []RuleFailure {
-	var failures []RuleFailure
-
-	// Run repository-level rules with empty commit
-	emptyCommit := Commit{} // Repository rules don't need commit data
-
-	for _, rule := range s.repositoryRules {
-		ruleFailures := rule.Validate(emptyCommit, s.repo, s.config)
-		failures = append(failures, ruleFailures...)
-	}
-
-	return failures
-}
-
-// Logger provides logging capabilities needed by the validation service.
+// Logger provides logging capabilities.
 // This interface is defined here following dependency inversion principle.
 type Logger interface {
 	Debug(msg string, keysAndValues ...interface{})
