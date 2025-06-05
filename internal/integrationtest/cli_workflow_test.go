@@ -91,6 +91,7 @@ func TestCLIValidateCommand(t *testing.T) {
 gommitlint:
   subject:
     max_length: 50
+    case: ignore
   conventional:
     required: true
     types:
@@ -105,17 +106,14 @@ gommitlint:
     signoff_required: true
   rules:
     enabled:
-      - SubjectLength
       - ConventionalCommit
       - SignOff
     disabled:
       - Signature
       - CommitBody
       - JiraReference
-      - SubjectCase
       - ImperativeVerb
       - Spell
-      - SubjectSuffix
 `,
 			// Just check that it contains something reasonable in the output
 			checkOutput: func(t *testing.T, output string) {
@@ -147,11 +145,8 @@ gommitlint:
       - Signature
       - CommitBody
       - JiraReference
-      - SubjectCase
       - ImperativeVerb
       - Spell
-      - SubjectSuffix
-      - SubjectLength
 `,
 			// Check it mentions something about validation
 			checkOutput: func(t *testing.T, output string) {
@@ -187,11 +182,8 @@ gommitlint:
       - Signature
       - CommitBody
       - JiraReference
-      - SubjectCase
       - ImperativeVerb
       - Spell
-      - SubjectSuffix
-      - SubjectLength
 `,
 			// Just check that it runs and produces output
 			checkOutput: func(t *testing.T, output string) {
@@ -217,10 +209,7 @@ gommitlint:
       - Signature
       - CommitBody
       - JiraReference
-      - SubjectCase
       - Spell
-      - SubjectSuffix
-      - SubjectLength
 `,
 			checkOutput: func(t *testing.T, output string) {
 				t.Helper()

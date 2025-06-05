@@ -29,7 +29,7 @@ func TestValidationWorkflow(t *testing.T) {
 			name:      "Invalid - too long subject",
 			message:   "feat: this is a very long commit message that exceeds the maximum length allowed by our configuration",
 			wantPass:  false,
-			wantRules: []string{"SubjectLength", "ConventionalCommit"},
+			wantRules: []string{"Subject", "ConventionalCommit"},
 		},
 		{
 			name:      "Invalid - not conventional format",
@@ -117,7 +117,7 @@ func TestMessageFileValidation(t *testing.T) {
 // TestRuleSpecificValidation tests validation with specific rule configurations.
 func TestRuleSpecificValidation(t *testing.T) {
 	t.Run("Only subject length validation", func(t *testing.T) {
-		config := WithRules("SubjectLength")
+		config := WithRules("Subject")
 
 		// Valid length
 		result := TestValidateMessage(t, "feat: short message", config)

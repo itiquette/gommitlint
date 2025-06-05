@@ -52,7 +52,7 @@ func (r ImperativeVerbRule) Name() string {
 }
 
 // Validate checks if the commit message uses imperative mood.
-func (r ImperativeVerbRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.RuleFailure {
+func (r ImperativeVerbRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.ValidationError {
 	subject := strings.TrimSpace(commit.Subject)
 	if subject == "" {
 		return nil
@@ -72,11 +72,10 @@ func (r ImperativeVerbRule) Validate(commit domain.Commit, _ domain.Repository, 
 	// Extract first word from subject
 	firstWord := extractFirstWord(subject)
 	if firstWord == "" {
-		return []domain.RuleFailure{{
-			Rule:    r.Name(),
-			Message: "Cannot extract first word from commit message",
-			Help:    "Ensure your commit message starts with a verb",
-		}}
+		return []domain.ValidationError{
+			domain.New(r.Name(), domain.ErrNoFirstWord, "Cannot extract first word from commit message").
+				WithHelp("Ensure your commit message starts with a verb"),
+		}
 	}
 
 	firstWord = strings.ToLower(firstWord)
@@ -125,11 +124,11 @@ func (r ImperativeVerbRule) Validate(commit domain.Commit, _ domain.Repository, 
 			help = "Try: " + strings.Join(suggestions, ", ")
 		}
 
-		return []domain.RuleFailure{{
-			Rule:    r.Name(),
-			Message: fmt.Sprintf("Word '%s' is not in imperative mood", firstWord),
-			Help:    help,
-		}}
+		return []domain.ValidationError{
+			domain.New(r.Name(), domain.ErrNonImperative,
+				fmt.Sprintf("Word '%s' is not in imperative mood", firstWord)).
+				WithHelp(help),
+		}
 	}
 
 	return nil

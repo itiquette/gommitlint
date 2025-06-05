@@ -2,29 +2,43 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Configuration Access Pattern
+## Functional Hexagonal Architecture
 
-Configuration is passed explicitly through constructor parameters and function options throughout the codebase. This follows hexagonal architecture principles.
+Gommitlint follows a **functional hexagonal architecture** with pure functions and explicit dependencies:
 
-Example:
+### Core Architecture Principles
+
+1. **Pure Functions**: All validation logic is implemented as pure functions
+2. **Explicit Dependencies**: Dependencies are passed as function parameters, never hidden
+3. **Domain Independence**: Domain logic only depends on interfaces it defines
+4. **Adapter Implementation**: Adapters implement domain interfaces
+
+### Architecture Structure
+
 ```go
-// Rules receive configuration directly via constructors
-rule := NewSubjectLengthRule(config)
+// Domain defines business logic and interfaces
+func ValidateCommit(commit Commit, rules []Rule, repo Repository, cfg *config.Config) ValidationResult
 
-// Services receive configuration as a constructor parameter
-service := validate.NewService(config, repository, logger)
+// Domain defines required interfaces (ports)
+type Repository interface {
+    GetCommit(ctx context.Context, ref string) (Commit, error)
+    // ... other methods
+}
 
-// Access configuration values directly from the config parameter
-maxLength := config.GetInt("subject.max_length")
-isBodyRequired := config.GetBool("body.required")
-enabledRules := config.GetStringSlice("rules.enabled")
+// Adapters implement domain interfaces
+type git.Repository struct { /* implementation */ }
+var _ domain.Repository = (*git.Repository)(nil)
+
+// Pure functional composition
+rules := rules.CreateEnabledRules(config)
+result := domain.ValidateCommit(commit, rules, repo, config)
 ```
 
-This approach ensures:
-1. Explicit dependencies (no hidden configuration access)
-2. Testability (easy to provide test configurations)
-3. Clean architecture boundaries
-4. No anti-patterns (configuration in context is an anti-pattern)
+### Benefits of This Approach
+- **Simple**: No complex service objects or dependency injection frameworks
+- **Testable**: Easy to test with mock implementations
+- **Functional**: Pure functions with immutable data
+- **Clean**: Clear separation between domain and infrastructure
 
 ## Context Key Architecture
 
@@ -77,9 +91,10 @@ else:
 
 ### Default-Disabled Rules
 
-Only two rules are disabled by default:
+Only three rules are disabled by default:
 - `jirareference` - Validates JIRA ticket references (organization-specific)
 - `commitbody` - Requires commit body (not all projects need detailed bodies)
+- `spell` - Spell checking (requires additional setup)
 
 All other rules are enabled by default unless explicitly disabled.
 
@@ -123,8 +138,8 @@ All other rules are enabled by default unless explicitly disabled.
 - Imports: stdlib first, external next, internal last (with blank lines between groups)
 - Error handling:
   - Use `fmt.Errorf("context: %w", err)` pattern
-  - Custom errors: `internal.NewValidationError(err, map[string]string{"key": "value"})`
-  - Validation errors: `model.NewValidationError("RuleName", "error_code", "message")`
+  - Validation errors: `domain.New("RuleName", "error_code", "message").WithHelp("help text")`
+  - Build errors using domain error builder pattern
 - Naming: PascalCase for exported, camelCase for non-exported identifiers
 - Test-only code:
   - Test utilities are organized by domain within their respective packages
@@ -458,8 +473,10 @@ For substantial packages, place package documentation in a dedicated `doc.go` fi
 //
 // Basic usage:
 //
-// service := validation.NewService(config)
-// result, err := service.ValidateCommit("HEAD")
+// repo := git.NewRepository(ctx, ".")
+// rules := rules.CreateEnabledRules(config)
+// commit, _ := repo.GetCommit(ctx, "HEAD")
+// result := domain.ValidateCommit(commit, rules, repo, config)
 package validation
 ```
 
@@ -1164,7 +1181,7 @@ go test -tags=integration ./...
 11. **Have a one-to-one mapping between source and test files**
 12. **Use `require` over `assert` for immediate test failure**
 
-## Core Architecture Principles
+## Architecture Design Principles
 
 1. **Keep it simple**: Favor straightforward, idiomatic Go over complex abstractions
 2. **Hexagonal architecture**: Separate core domain from external concerns
@@ -1182,19 +1199,17 @@ project/
 │   └── myapp/
 │       └── main.go
 ├── internal/                # Private application code
-│   ├── domain/              # Core domain models and business logic 
-│   │   ├── commit.go
-│   │   ├── rule.go
-│   │   └── validation.go
-│   ├── application/         # Application services coordinating use cases
-│   │   ├── validate/
-│   │   └── report/
-│   ├── ports/               # Interface definitions (ports)
-│   │   └── repositories.go
-│   └── adapters/            # External implementations (adapters)
-│       ├── git/
-│       ├── config/
-│       └── http/
+│   ├── domain/              # Core domain models, interfaces, and validation logic
+│   │   ├── commit.go        # Commit type and Repository interface
+│   │   ├── rule.go          # Rule interface
+│   │   ├── validation.go    # Pure validation functions
+│   │   └── rules/           # Rule implementations
+│   ├── adapters/            # External implementations (adapters)
+│   │   ├── git/             # Repository implementation
+│   │   ├── config/          # Configuration loading
+│   │   ├── cli/             # Command-line interface
+│   │   └── output/          # Formatters and reporting
+│   └── (removed wire.go)    # Direct initialization in CLI layer
 └── pkg/                     # Public API packages
     └── validation/
 ```
@@ -1218,12 +1233,13 @@ func (f *CommitServiceFactoryImpl) CreateCommitService() CommitService {
     // Complex initialization
 }
 
-// ✅ Simple and direct
-func NewCommitService(repo Repository, config Config) *CommitService {
-    return &CommitService{
-        repo:   repo,
-        config: config,
+// ✅ Simple and direct - pure function
+func ValidateCommit(commit Commit, rules []Rule, repo Repository, config Config) ValidationResult {
+    var failures []RuleFailure
+    for _, rule := range rules {
+        failures = append(failures, rule.Validate(commit, repo, config)...)
     }
+    return ValidationResult{Commit: commit, Failures: failures}
 }
 ```
 
@@ -1292,35 +1308,29 @@ func main() {
 }
 ```
 
-## Application Services
+## Functional Composition
 
-Coordinate between domain and ports:
+Compose validation pipelines with pure functions:
 
 ```go
-// internal/application/validate/service.go
-package validate
-
-type Service struct {
-    repo      domain.CommitRepository
-    validator domain.Validator
-}
-
-func NewService(repo domain.CommitRepository, validator domain.Validator) *Service {
-    return &Service{
-        repo:      repo,
-        validator: validator,
-    }
-}
-
-func (s *Service) ValidateCommit(hash string) (*domain.ValidationResult, error) {
+// internal/adapters/cli/validatecmd.go
+func runValidation(ctx context.Context, ref string, rules []domain.Rule, 
+    repo domain.Repository, cfg *config.Config) error {
+    
     // Get commit from repository
-    commit, err := s.repo.GetCommit(hash)
+    commit, err := repo.GetCommit(ctx, ref)
     if err != nil {
-        return nil, fmt.Errorf("failed to get commit: %w", err)
+        return fmt.Errorf("failed to get commit: %w", err)
     }
     
-    // Validate using domain logic
-    return s.validator.Validate(commit), nil
+    // Validate using pure function
+    result := domain.ValidateCommit(commit, rules, repo, cfg)
+    
+    // Format output
+    output := formatters.Text(commit, result.Failures)
+    fmt.Println(output)
+    
+    return nil
 }
 ```
 

@@ -20,7 +20,7 @@ func AssertValidationError(t *testing.T, err domain.ValidationError, expectedCod
 }
 
 // AssertRuleFailure checks that a rule failure has expected properties.
-func AssertRuleFailure(t *testing.T, failure domain.RuleFailure, expectedRule string) {
+func AssertRuleFailure(t *testing.T, failure domain.ValidationError, expectedRule string) {
 	t.Helper()
 	require.Equal(t, expectedRule, failure.Rule, "rule mismatch")
 	require.NotEmpty(t, failure.Message, "failure message should not be empty")

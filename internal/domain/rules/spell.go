@@ -30,7 +30,7 @@ func (r SpellRule) Name() string {
 }
 
 // Validate checks spelling in the commit message.
-func (r SpellRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.RuleFailure {
+func (r SpellRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.ValidationError {
 	// Create a map of ignored words for efficient lookup
 	ignoreWordsMap := make(map[string]bool)
 	for _, word := range r.ignoreWords {
@@ -78,14 +78,12 @@ func (r SpellRule) Validate(commit domain.Commit, _ domain.Repository, _ *config
 	}
 
 	// Create failures
-	failures := make([]domain.RuleFailure, 0, len(validMisspellings))
+	failures := make([]domain.ValidationError, 0, len(validMisspellings))
 
 	for _, misspelling := range validMisspellings {
-		failure := domain.RuleFailure{
-			Rule:    r.Name(),
-			Message: "Misspelled word: " + misspelling.word,
-			Help:    "Check spelling or add to ignore list",
-		}
+		failure := domain.New(r.Name(), domain.ErrMisspelledWord,
+			"Misspelled word: "+misspelling.word).
+			WithHelp("Check spelling or add to ignore list")
 		failures = append(failures, failure)
 	}
 

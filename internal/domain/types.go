@@ -61,8 +61,6 @@ type ReportOptions struct {
 	ExtraVerbose bool
 	// ShowHelp indicates whether to show help for rules.
 	ShowHelp bool
-	// RuleToShowHelp specifies a specific rule to show help for.
-	RuleToShowHelp string
 	// LightMode indicates whether to use light color scheme.
 	LightMode bool
 	// Writer is the output writer.

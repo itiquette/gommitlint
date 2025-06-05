@@ -30,6 +30,11 @@ func (m *mockRepository) GetCommitsAhead(_ context.Context, refBranch string) (i
 	return m.commitsAhead, m.err
 }
 
+// GetCommitsAheadCount returns the number of commits ahead (alias for GetCommitsAhead).
+func (m *mockRepository) GetCommitsAheadCount(ctx context.Context, refBranch string) (int, error) {
+	return m.GetCommitsAhead(ctx, refBranch)
+}
+
 // Stub implementations for Repository interface (not used in branchahead tests).
 func (m *mockRepository) GetCommit(_ context.Context, _ string) (domain.Commit, error) {
 	return domain.Commit{}, nil

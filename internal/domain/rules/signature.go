@@ -26,17 +26,16 @@ func NewSignatureRule(cfg config.Config) SignatureRule {
 }
 
 // Validate checks if a commit has the required cryptographic signature.
-func (r SignatureRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.RuleFailure {
+func (r SignatureRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.ValidationError {
 	// Check if signatures are required
 	if r.requireSignature {
 		// Check for any signature (GPG or SSH format)
 		signature := strings.TrimSpace(commit.Signature)
 		if signature == "" {
-			return []domain.RuleFailure{{
-				Rule:    r.Name(),
-				Message: "Commit must be cryptographically signed",
-				Help:    "Sign your commits using 'git commit -S' for GPG or 'git commit --signoff' for DCO",
-			}}
+			return []domain.ValidationError{
+				domain.New(r.Name(), domain.ErrMissingSignature, "Commit must be cryptographically signed").
+					WithHelp("Sign your commits using 'git commit -S' for GPG or 'git commit --signoff' for DCO"),
+			}
 		}
 	}
 

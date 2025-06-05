@@ -97,9 +97,7 @@ The package provides these validation rules:
   - IdentityRule: Validates commit signatures match committer identity
   - SignOffRule: Validates Developer Certificate of Origin
   - SpellRule: Validates spelling in commit messages
-  - SubjectCaseRule: Validates subject line casing
-  - SubjectLengthRule: Validates subject line length
-  - SubjectSuffixRule: Validates subject line doesn't end with certain suffixes
+  - SubjectRule: Validates subject length, case, and suffix (consolidated rule)
 
 Each rule focuses on a specific aspect of commit message validation and can be
 independently enabled, disabled, and configured.

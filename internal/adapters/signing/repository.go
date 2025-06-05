@@ -9,8 +9,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"github.com/itiquette/gommitlint/internal/domain"
 )
 
 // FileSystemKeyRepository implements domain.CryptoKeyRepository using the local filesystem.
@@ -19,8 +17,8 @@ type FileSystemKeyRepository struct {
 	security *FileSecurityService
 }
 
-// Compile-time check to ensure FileSystemKeyRepository implements domain.CryptoKeyRepository.
-var _ domain.CryptoKeyRepository = (*FileSystemKeyRepository)(nil)
+// FileSystemKeyRepository is kept as an internal implementation detail.
+// It no longer implements any domain interface following the functional simplification.
 
 // RepositoryOption configures a FileSystemKeyRepository.
 type RepositoryOption func(*FileSystemKeyRepository)

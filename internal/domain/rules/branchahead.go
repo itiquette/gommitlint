@@ -39,14 +39,14 @@ func NewBranchAheadRule(cfg config.Config) BranchAheadRule {
 
 // Validate checks that the current branch is not too many commits ahead of the reference branch.
 // This rule requires repository access, so it checks if repository is available.
-func (r BranchAheadRule) Validate(_ domain.Commit, repo domain.Repository, _ *config.Config) []domain.RuleFailure {
+func (r BranchAheadRule) Validate(_ domain.Commit, repo domain.Repository, _ *config.Config) []domain.ValidationError {
 	// Skip if no repository is provided
 	if repo == nil {
 		return nil
 	}
 
 	// Get the number of commits ahead
-	commitsAhead, err := repo.GetCommitsAhead(context.Background(), r.reference)
+	commitsAhead, err := repo.GetCommitsAheadCount(context.Background(), r.reference)
 	if err != nil {
 		// Skip on error rather than fail - repository might not have the reference branch
 		return nil
@@ -54,11 +54,11 @@ func (r BranchAheadRule) Validate(_ domain.Commit, repo domain.Repository, _ *co
 
 	// Validate against the maximum
 	if r.maxCommitsAhead > 0 && commitsAhead > r.maxCommitsAhead {
-		return []domain.RuleFailure{{
-			Rule:    r.Name(),
-			Message: fmt.Sprintf("Branch is %d commits ahead of %s (max: %d)", commitsAhead, r.reference, r.maxCommitsAhead),
-			Help:    fmt.Sprintf("Consider rebasing or creating a pull request when ahead by more than %d commits", r.maxCommitsAhead),
-		}}
+		return []domain.ValidationError{
+			domain.New(r.Name(), domain.ErrTooManyCommits,
+				fmt.Sprintf("Branch is %d commits ahead of %s (max: %d)", commitsAhead, r.reference, r.maxCommitsAhead)).
+				WithHelp(fmt.Sprintf("Consider rebasing or creating a pull request when ahead by more than %d commits", r.maxCommitsAhead)),
+		}
 	}
 
 	return nil

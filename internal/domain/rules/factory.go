@@ -5,95 +5,104 @@
 package rules
 
 import (
+	"slices"
+	"strings"
+
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/domain/config"
 )
 
-// RuleConstructor creates a rule from configuration and dependencies.
-type RuleConstructor func(cfg *config.Config, deps domain.RuleDependencies) domain.Rule
+// CreateEnabledRules creates a slice of enabled rules based on configuration.
+// This is the main entry point for rule creation in the functional approach.
+func CreateEnabledRules(cfg *config.Config) []domain.Rule {
+	var rules []domain.Rule
 
-// RuleConstructors maps rule names to their constructor functions.
-// This provides the exported interface for rule creation.
-var RuleConstructors = map[string]RuleConstructor{
-	"subjectlength": createSubjectLengthRule,
-	"subjectcase":   createSubjectCaseRule,
-	"subjectsuffix": createSubjectSuffixRule,
-	"imperative":    createImperativeRule,
-	"conventional":  createConventionalRule,
-	"commitbody":    createCommitBodyRule,
-	"jirareference": createJiraReferenceRule,
-	"signoff":       createSignOffRule,
-	"signature":     createSignatureRule,
-	"identity":      createIdentityRule,
-	"spell":         createSpellRule,
-	"branchahead":   createBranchAheadRule,
+	// Check each rule and create if enabled
+	if shouldEnableRule("subject", cfg) {
+		rules = append(rules, NewSubjectRule(*cfg))
+	}
+
+	if shouldEnableRule("imperative", cfg) {
+		rules = append(rules, NewImperativeVerbRule(*cfg))
+	}
+
+	if shouldEnableRule("conventional", cfg) {
+		rules = append(rules, NewConventionalCommitRule(*cfg))
+	}
+
+	if shouldEnableRule("commitbody", cfg) {
+		rules = append(rules, NewCommitBodyRule(*cfg))
+	}
+
+	if shouldEnableRule("jirareference", cfg) {
+		rules = append(rules, NewJiraReferenceRule(*cfg))
+	}
+
+	if shouldEnableRule("signoff", cfg) {
+		rules = append(rules, NewSignOffRule(*cfg))
+	}
+
+	if shouldEnableRule("signature", cfg) {
+		rules = append(rules, NewSignatureRule(*cfg))
+	}
+
+	if shouldEnableRule("identity", cfg) {
+		rules = append(rules, NewIdentityRule(*cfg))
+	}
+
+	if shouldEnableRule("spell", cfg) {
+		rules = append(rules, NewSpellRule(*cfg))
+	}
+
+	if shouldEnableRule("branchahead", cfg) {
+		rules = append(rules, NewBranchAheadRule(*cfg))
+	}
+
+	return rules
 }
 
-// CreateEnabledRules creates all rules that should be enabled based on configuration.
-func CreateEnabledRules(cfg *config.Config, deps domain.RuleDependencies) []domain.Rule {
-	var enabledRules []domain.Rule
+// shouldEnableRule determines if a rule should be enabled based on configuration.
+func shouldEnableRule(ruleName string, cfg *config.Config) bool {
+	// Normalize rule name
+	ruleName = strings.ToLower(strings.TrimSpace(ruleName))
 
-	enabledList := cfg.Rules.Enabled
-	disabledList := cfg.Rules.Disabled
-
-	for name, constructor := range RuleConstructors {
-		if domain.ShouldRunRule(name, enabledList, disabledList) {
-			rule := constructor(cfg, deps)
-			if rule != nil {
-				enabledRules = append(enabledRules, rule)
-			}
+	// Check explicit enable list first
+	for _, enabled := range cfg.Rules.Enabled {
+		if strings.ToLower(strings.TrimSpace(enabled)) == ruleName {
+			return true
 		}
 	}
 
-	return enabledRules
+	// Check if explicitly disabled
+	for _, disabled := range cfg.Rules.Disabled {
+		if strings.ToLower(strings.TrimSpace(disabled)) == ruleName {
+			return false
+		}
+	}
+
+	// Check if rule is disabled by default
+	defaultDisabled := []string{"jirareference", "commitbody", "spell"}
+	if slices.Contains(defaultDisabled, ruleName) {
+		return false
+	}
+
+	// Default is enabled
+	return true
 }
 
-// Rule creation functions - each rule knows how to configure itself from config
-
-func createSubjectLengthRule(cfg *config.Config, _ domain.RuleDependencies) domain.Rule {
-	return NewSubjectLengthRule(*cfg)
-}
-
-func createSubjectCaseRule(cfg *config.Config, _ domain.RuleDependencies) domain.Rule {
-	return NewSubjectCaseRule(*cfg)
-}
-
-func createSubjectSuffixRule(cfg *config.Config, _ domain.RuleDependencies) domain.Rule {
-	return NewSubjectSuffixRule(*cfg)
-}
-
-func createImperativeRule(cfg *config.Config, _ domain.RuleDependencies) domain.Rule {
-	return NewImperativeVerbRule(*cfg)
-}
-
-func createConventionalRule(cfg *config.Config, _ domain.RuleDependencies) domain.Rule {
-	return NewConventionalCommitRule(*cfg)
-}
-
-func createCommitBodyRule(cfg *config.Config, _ domain.RuleDependencies) domain.Rule {
-	return NewCommitBodyRule(*cfg)
-}
-
-func createJiraReferenceRule(cfg *config.Config, _ domain.RuleDependencies) domain.Rule {
-	return NewJiraReferenceRule(*cfg)
-}
-
-func createSignOffRule(cfg *config.Config, _ domain.RuleDependencies) domain.Rule {
-	return NewSignOffRule(*cfg)
-}
-
-func createSignatureRule(cfg *config.Config, _ domain.RuleDependencies) domain.Rule {
-	return NewSignatureRule(*cfg)
-}
-
-func createIdentityRule(cfg *config.Config, _ domain.RuleDependencies) domain.Rule {
-	return NewIdentityRule(*cfg)
-}
-
-func createSpellRule(cfg *config.Config, _ domain.RuleDependencies) domain.Rule {
-	return NewSpellRule(*cfg)
-}
-
-func createBranchAheadRule(cfg *config.Config, _ domain.RuleDependencies) domain.Rule {
-	return NewBranchAheadRule(*cfg)
+// CreateAllRules creates all available rules regardless of configuration.
+// Useful for listing available rules or testing.
+func CreateAllRules(cfg *config.Config) []domain.Rule {
+	return []domain.Rule{
+		NewSubjectRule(*cfg),
+		NewImperativeVerbRule(*cfg),
+		NewConventionalCommitRule(*cfg),
+		NewCommitBodyRule(*cfg),
+		NewJiraReferenceRule(*cfg),
+		NewSignOffRule(*cfg),
+		NewSignatureRule(*cfg),
+		NewIdentityRule(*cfg),
+		NewSpellRule(*cfg),
+		NewBranchAheadRule(*cfg),
+	}
 }

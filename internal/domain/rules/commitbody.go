@@ -35,38 +35,33 @@ func (r CommitBodyRule) Name() string {
 }
 
 // Validate checks if a commit's body meets the required criteria.
-func (r CommitBodyRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.RuleFailure {
+func (r CommitBodyRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.ValidationError {
 	trimmedBody := strings.TrimSpace(commit.Body)
 	hasOnlySignOff := hasOnlySignOffLines(trimmedBody)
 	bodyLength := len(trimmedBody)
 
-	var failures []domain.RuleFailure
+	var failures []domain.ValidationError
 
 	// Check missing body
 	if r.minLength > 0 && trimmedBody == "" {
-		failures = append(failures, domain.RuleFailure{
-			Rule:    r.Name(),
-			Message: "commit body is missing",
-			Help:    "Add a blank line after the subject, followed by a detailed description",
-		})
+		failures = append(failures,
+			domain.New(r.Name(), domain.ErrMissingBody, "commit body is missing").
+				WithHelp("Add a blank line after the subject, followed by a detailed description"))
 	}
 
 	// Check sign-off only
 	if !r.signOffOnly && hasOnlySignOff && trimmedBody != "" {
-		failures = append(failures, domain.RuleFailure{
-			Rule:    r.Name(),
-			Message: "commit body cannot contain only sign-off line",
-			Help:    "Add a detailed description before the sign-off line",
-		})
+		failures = append(failures,
+			domain.New(r.Name(), domain.ErrInvalidBody, "commit body cannot contain only sign-off line").
+				WithHelp("Add a detailed description before the sign-off line"))
 	}
 
 	// Check minimum length
 	if r.minLength > 0 && bodyLength < r.minLength && trimmedBody != "" {
-		failures = append(failures, domain.RuleFailure{
-			Rule:    r.Name(),
-			Message: fmt.Sprintf("body too short (minimum: %d characters, actual: %d)", r.minLength, bodyLength),
-			Help:    fmt.Sprintf("Provide at least %d characters of detail", r.minLength),
-		})
+		failures = append(failures,
+			domain.New(r.Name(), domain.ErrBodyTooShort,
+				fmt.Sprintf("body too short (minimum: %d characters, actual: %d)", r.minLength, bodyLength)).
+				WithHelp(fmt.Sprintf("Provide at least %d characters of detail", r.minLength)))
 	}
 
 	// Check minimum lines
@@ -75,11 +70,10 @@ func (r CommitBodyRule) Validate(commit domain.Commit, _ domain.Repository, _ *c
 		actualLines := len(lines)
 
 		if actualLines < r.minLines {
-			failures = append(failures, domain.RuleFailure{
-				Rule:    r.Name(),
-				Message: fmt.Sprintf("body has too few lines (minimum: %d, actual: %d)", r.minLines, actualLines),
-				Help:    fmt.Sprintf("Provide at least %d lines of detail", r.minLines),
-			})
+			failures = append(failures,
+				domain.New(r.Name(), domain.ErrBodyTooShort,
+					fmt.Sprintf("body has too few lines (minimum: %d, actual: %d)", r.minLines, actualLines)).
+					WithHelp(fmt.Sprintf("Provide at least %d lines of detail", r.minLines)))
 		}
 	}
 

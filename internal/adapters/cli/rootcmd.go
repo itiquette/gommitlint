@@ -7,7 +7,7 @@ import (
 	"context"
 	"os"
 
-	"github.com/itiquette/gommitlint/internal/adapters/logging"
+	log "github.com/itiquette/gommitlint/internal/adapters/logging"
 	"github.com/itiquette/gommitlint/internal/domain/config"
 	"github.com/spf13/cobra"
 )
@@ -26,7 +26,7 @@ func Execute(ctx context.Context, version, commitSHA, buildDate string, config c
 	err := rootCmd.Execute()
 	loggerInterface := GetLogger(ctx)
 
-	if logger, ok := loggerInterface.(Logger); ok {
+	if logger, ok := loggerInterface.(log.Logger); ok {
 		HandleError(logger, err)
 	} else if err != nil {
 		// Fallback if logger is not available
@@ -77,7 +77,7 @@ func setupLogging(cmd *cobra.Command, _ []string) error {
 
 // HandleError processes errors in a consistent way across the application.
 // It logs the error with appropriate context and exits with the correct status code.
-func HandleError(logger Logger, err error) {
+func HandleError(logger log.Logger, err error) {
 	if err == nil {
 		return
 	}

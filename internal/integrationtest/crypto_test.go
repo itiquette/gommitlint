@@ -56,7 +56,14 @@ func TestSignedIdentityValidation(t *testing.T) {
 	t.Run("Identity validation enabled", func(t *testing.T) {
 		config := DefaultConfig()
 		config.Rules.Enabled = []string{"SignedIdentity"}
-		config.Rules.Disabled = []string{"SubjectLength", "ConventionalCommit"}
+		// Disable ALL other rules to ensure only SignedIdentity runs
+		config.Rules.Disabled = []string{
+			"Subject", "ConventionalCommit", "CommitBody",
+			"Signature", "SignOff", "JiraReference", "Spell",
+			"ImperativeVerb", "BranchAhead",
+		}
+		// Configure allowed signers so the rule actually validates
+		config.Signing.AllowedSigners = []string{"allowed@example.com"}
 
 		result := TestValidateMessage(t, "feat: add feature", config)
 		// Will likely fail since test commits don't have proper signatures

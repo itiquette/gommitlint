@@ -7,7 +7,6 @@ package config
 import (
 	"fmt"
 
-	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/domain/config"
 )
 
@@ -19,28 +18,17 @@ type Service struct {
 
 // NewService creates a new configuration service with default configuration.
 func NewService() (Service, error) {
-	// Start with default config
-	config := NewDefaultConfig()
+	// Use the domain's default configuration
+	cfg := config.NewDefault()
 
 	// Apply default disabled rules
-	// In hexagonal architecture, adapters should not depend on domain.
-	// The default disabled rules should be part of the configuration layer.
-	defaultDisabledRules := []string{
+	cfg.Rules.Disabled = []string{
 		"jirareference", // JIRAReference rule is disabled by default as it's organization-specific
 		"commitbody",    // CommitBody rule is disabled by default as not all projects require detailed bodies
 	}
 
-	// Merge with any existing disabled rules from the config using functional approach
-	uniqueRules := make(map[string]bool)
-	for _, rule := range append(defaultDisabledRules, config.Rules.Disabled...) {
-		uniqueRules[rule] = true
-	}
-
-	// Convert map keys back to slice using functional approach
-	config.Rules.Disabled = domain.MapKeys(uniqueRules)
-
 	return Service{
-		config: config,
+		config: cfg,
 	}, nil
 }
 
@@ -90,76 +78,4 @@ func (s Service) LoadFromPath(path string) (Service, error) {
 	}
 
 	return Service{config: config}, nil
-}
-
-// NewDefaultConfig creates a default configuration.
-func NewDefaultConfig() config.Config {
-	// Default disabled rules - defined here instead of importing from domain
-	// to maintain proper hexagonal architecture boundaries
-	disabledRules := []string{
-		"jirareference", // JIRAReference rule is disabled by default as it's organization-specific
-		"commitbody",    // CommitBody rule is disabled by default as not all projects require detailed bodies
-	}
-
-	config := config.Config{
-		Message: config.MessageConfig{
-			Subject: config.SubjectConfig{
-				Case:              "sentence",
-				MaxLength:         72,
-				RequireImperative: false,
-				ForbidEndings:     []string{"."},
-			},
-			Body: config.BodyConfig{
-				MinLength:        10,
-				MinLines:         3,
-				AllowSignoffOnly: false,
-				RequireSignoff:   false,
-			},
-		},
-		Conventional: config.ConventionalConfig{
-			RequireScope:         false,
-			Types:                []string{"feat", "fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore", "revert"},
-			AllowBreaking:        true,
-			MaxDescriptionLength: 72,
-		},
-		Rules: config.RulesConfig{
-			Enabled: []string{
-				"SubjectLength",
-				"CommitBody",
-				"Conventional",
-				"Imperative",
-				"SubjectCase",
-				"SubjectSuffix",
-			},
-			Disabled: disabledRules,
-		},
-		Signing: config.SigningConfig{
-			RequireSignature:    false,
-			RequireVerification: false,
-			RequireMultiSignoff: false,
-			KeyDirectory:        "",
-			AllowedSigners:      []string{},
-		},
-		Repo: config.RepoConfig{
-			MaxCommitsAhead:   10,
-			ReferenceBranch:   "main",
-			AllowMergeCommits: true,
-		},
-		Output: "text",
-		Spell: config.SpellConfig{
-			Locale:      "en_US",
-			IgnoreWords: []string{},
-		},
-		Jira: config.JiraConfig{
-			ProjectPrefixes:      []string{},
-			RequireInBody:        false,
-			RequireInSubject:     false,
-			IgnoreTicketPatterns: []string{},
-		},
-	}
-
-	// The disabled rules have already been set above
-	// No need to apply them again
-
-	return config
 }

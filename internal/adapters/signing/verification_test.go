@@ -13,11 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestVerifier tests the crypto verification adapter.
+// TestVerifier tests the simplified crypto verification adapter.
 func TestVerifier(t *testing.T) {
-	// Create a repository and an adapter
-	keyRepo := crypto.NewFileSystemKeyRepository("/tmp")
-	adapter := crypto.NewVerificationAdapter(keyRepo)
+	// Create a simplified adapter - no complex dependencies
+	adapter := crypto.NewVerificationAdapter()
 
 	// Test with a commit with no signature
 	commit := domain.Commit{
@@ -28,18 +27,17 @@ func TestVerifier(t *testing.T) {
 		Signature:   "",
 	}
 
-	// Create a context without config
+	// Create a context and test with explicit keyDir parameter
 	ctx := context.Background()
-	result, err := adapter.VerifyCommit(ctx, commit)
-	require.NoError(t, err)
+	keyDir := "/tmp"
+	result := adapter.VerifyCommit(ctx, commit, keyDir)
 	require.Equal(t, domain.VerificationStatusFailed, result.Status())
 	require.Equal(t, "missing_signature", result.ErrorCode())
 	require.Contains(t, result.ErrorMessage(), "no signature")
 
 	// Test with invalid GPG signature
 	commit.Signature = "-----BEGIN PGP SIGNATURE-----\nInvalid signature\n-----END PGP SIGNATURE-----"
-	result, err = adapter.VerifyCommit(ctx, commit)
-	require.NoError(t, err)
+	result = adapter.VerifyCommit(ctx, commit, keyDir)
 	// The status could be either "failed" or "no_key" depending on environment
 	require.Contains(t, []domain.VerificationStatus{
 		domain.VerificationStatusFailed,

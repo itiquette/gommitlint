@@ -77,55 +77,48 @@ func (r ConventionalCommitRule) Name() string {
 }
 
 // Validate validates a commit against the conventional commit rules.
-func (r ConventionalCommitRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.RuleFailure {
-	var failures []domain.RuleFailure
+func (r ConventionalCommitRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.ValidationError {
+	var failures []domain.ValidationError
 
 	// Parse conventional format
 	parts, err := parseConventionalFormat(commit.Subject)
 	if err != nil {
-		failures = append(failures, domain.RuleFailure{
-			Rule:    r.Name(),
-			Message: "Commit message doesn't follow conventional format",
-			Help:    "Use format: type(scope): description (e.g., 'feat: add login')",
-		})
+		failures = append(failures,
+			domain.New(r.Name(), domain.ErrInvalidConventionalFormat, "Commit message doesn't follow conventional format").
+				WithHelp("Use format: type(scope): description (e.g., 'feat: add login')"))
 
 		return failures
 	}
 
 	// Validate type
 	if !isValidType(parts.Type, r.allowedTypes) {
-		failures = append(failures, domain.RuleFailure{
-			Rule:    r.Name(),
-			Message: fmt.Sprintf("Invalid type '%s'", parts.Type),
-			Help:    "Use one of: " + strings.Join(r.allowedTypes, ", "),
-		})
+		failures = append(failures,
+			domain.New(r.Name(), domain.ErrInvalidConventionalType,
+				fmt.Sprintf("Invalid type '%s'", parts.Type)).
+				WithHelp("Use one of: "+strings.Join(r.allowedTypes, ", ")))
 	}
 
 	// Validate scope if required
 	if r.requireScope && parts.Scope == "" {
-		failures = append(failures, domain.RuleFailure{
-			Rule:    r.Name(),
-			Message: "Scope is required but not provided",
-			Help:    "Use format: type(scope): description",
-		})
+		failures = append(failures,
+			domain.New(r.Name(), domain.ErrMissingConventionalScope, "Scope is required but not provided").
+				WithHelp("Use format: type(scope): description"))
 	}
 
 	// Validate allowed scopes if specified
 	if parts.Scope != "" && len(r.allowedScopes) > 0 && !isValidScope(parts.Scope, r.allowedScopes) {
-		failures = append(failures, domain.RuleFailure{
-			Rule:    r.Name(),
-			Message: fmt.Sprintf("Invalid scope '%s'", parts.Scope),
-			Help:    "Use one of: " + strings.Join(r.allowedScopes, ", "),
-		})
+		failures = append(failures,
+			domain.New(r.Name(), domain.ErrInvalidConventionalScope,
+				fmt.Sprintf("Invalid scope '%s'", parts.Scope)).
+				WithHelp("Use one of: "+strings.Join(r.allowedScopes, ", ")))
 	}
 
 	// Validate description length
 	if r.maxDescLength > 0 && len(parts.Description) > r.maxDescLength {
-		failures = append(failures, domain.RuleFailure{
-			Rule:    r.Name(),
-			Message: fmt.Sprintf("Description too long (%d > %d)", len(parts.Description), r.maxDescLength),
-			Help:    fmt.Sprintf("Keep description under %d characters", r.maxDescLength),
-		})
+		failures = append(failures,
+			domain.New(r.Name(), domain.ErrConventionalDescTooLong,
+				fmt.Sprintf("Description too long (%d > %d)", len(parts.Description), r.maxDescLength)).
+				WithHelp(fmt.Sprintf("Keep description under %d characters", r.maxDescLength)))
 	}
 
 	return failures

@@ -37,21 +37,23 @@ func TestValidationParameters(t *testing.T) {
 	require.NoError(t, cmd.Flags().Set("rulehelp", "test-rule"))
 
 	// Create parameters
-	params := NewValidateParams(cmd)
+	params, err := NewValidateParams(cmd)
+	require.NoError(t, err)
 
 	// Verify that parameters are correctly set
-	require.Equal(t, "", params.MessageFile)
-	require.Equal(t, "", params.GitReference)
-	require.Equal(t, 1, params.CommitCount)
-	require.Equal(t, "", params.RevisionRange)
-	require.Equal(t, "", params.BaseBranch)
 	require.Equal(t, "", params.RepoPath)
-	require.True(t, params.Verbose)
-	require.False(t, params.ExtraVerbose)
-	require.True(t, params.LightMode)
-	require.Equal(t, "json", params.Format)
-	require.Equal(t, "test-rule", params.RuleHelp)
 	require.True(t, params.SkipMergeCommits)
+
+	// Verify output options
+	require.True(t, params.Output.Verbose)
+	require.False(t, params.Output.ExtraVerbose)
+	require.True(t, params.Output.LightMode)
+	require.Equal(t, "json", params.Output.Format)
+	require.Equal(t, "test-rule", params.Output.RuleHelp)
+
+	// Verify target defaults to HEAD commit
+	require.Equal(t, "commit", params.Target.Type)
+	require.Equal(t, "HEAD", params.Target.Source)
 
 	// Test getting validation target (defaults to HEAD)
 	targetType, target1, _, err := params.GetValidationTarget()
@@ -64,7 +66,6 @@ func TestValidationParameters(t *testing.T) {
 	require.Equal(t, "json", reportOpts.Format)
 	require.True(t, reportOpts.Verbose)
 	require.True(t, reportOpts.ShowHelp)
-	require.Equal(t, "test-rule", reportOpts.RuleToShowHelp)
 	require.True(t, reportOpts.LightMode)
 }
 
@@ -77,7 +78,8 @@ func TestValidationParametersScenarios(t *testing.T) {
 		err := cmdRange.Flags().Set("revision-range", "main..feature")
 		require.NoError(t, err, "Failed to set revision-range flag")
 
-		rangeParams := NewValidateParams(cmdRange)
+		rangeParams, err := NewValidateParams(cmdRange)
+		require.NoError(t, err)
 		targetType, from, to, err := rangeParams.GetValidationTarget()
 		require.NoError(t, err)
 		require.Equal(t, "range", targetType)
@@ -91,8 +93,7 @@ func TestValidationParametersScenarios(t *testing.T) {
 		err := cmdRange.Flags().Set("revision-range", "invalid-format")
 		require.NoError(t, err, "Failed to set revision-range flag")
 
-		rangeParams := NewValidateParams(cmdRange)
-		_, _, _, err = rangeParams.GetValidationTarget()
+		_, err = NewValidateParams(cmdRange)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "invalid revision range format")
 	})
@@ -103,7 +104,8 @@ func TestValidationParametersScenarios(t *testing.T) {
 		err := cmdBase.Flags().Set("base-branch", "develop")
 		require.NoError(t, err, "Failed to set base-branch flag")
 
-		baseParams := NewValidateParams(cmdBase)
+		baseParams, err := NewValidateParams(cmdBase)
+		require.NoError(t, err)
 		targetType, from, to, err := baseParams.GetValidationTarget()
 		require.NoError(t, err)
 		require.Equal(t, "range", targetType)
@@ -121,7 +123,8 @@ func TestValidationParametersScenarios(t *testing.T) {
 		require.NoError(t, cmdMulti.Flags().Set("git-reference", "abc123"))
 		require.NoError(t, cmdMulti.Flags().Set("base-branch", "main"))
 
-		multiParams := NewValidateParams(cmdMulti)
+		multiParams, err := NewValidateParams(cmdMulti)
+		require.NoError(t, err)
 
 		// Test that message-file takes precedence (highest priority)
 		targetType, target, _, err := multiParams.GetValidationTarget()
@@ -195,7 +198,9 @@ func TestFormatConversion(t *testing.T) {
 
 			require.NoError(t, cmd.Flags().Set("format", testCase.format))
 
-			params := NewValidateParams(cmd)
+			params, err := NewValidateParams(cmd)
+			require.NoError(t, err)
+
 			formatter := params.CreateFormatter()
 
 			// Check formatter type

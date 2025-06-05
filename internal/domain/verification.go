@@ -77,13 +77,3 @@ func (v VerificationResult) IsVerified() bool {
 func (v VerificationResult) HasError() bool {
 	return v.errorCode != "" || v.errorMsg != ""
 }
-
-// Verifier defines the interface for signature verification.
-type Verifier interface {
-	// CanVerify checks if this verifier can handle the given signature.
-	CanVerify(signature Signature) bool
-
-	// Verify checks if the signature is valid for the given data and returns
-	// the verification result with the associated identity.
-	Verify(signature Signature, data []byte, keyDir string) VerificationResult
-}

@@ -5,75 +5,68 @@
 package cli
 
 import (
-	"errors"
-	"fmt"
-	"io"
-	"path/filepath"
-	"regexp"
-	"strconv"
-	"strings"
-
 	format "github.com/itiquette/gommitlint/internal/adapters/output"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/spf13/cobra"
 )
 
+// ValidationParameters represents the complete set of CLI validation parameters.
+// This struct now composes focused value types for different concerns.
 type ValidationParameters struct {
-	// No context is stored directly in the struct - we'll pass it as a parameter
-	OutWriter io.Writer
+	// Validation target (what to validate)
+	Target ValidationTarget
 
-	// Validation options
-	MessageFile      string
-	GitReference     string
-	CommitCount      int
-	RevisionRange    string
-	BaseBranch       string
+	// Output options (how to format results)
+	Output OutputOptions
+
+	// Repository options
 	RepoPath         string
 	SkipMergeCommits bool
-
-	// Report options
-	Format       string
-	Verbose      bool
-	ExtraVerbose bool
-	RuleHelp     string
-	LightMode    bool
 }
 
-// Input validation constraints.
-const (
-	// MaxPathLength is the maximum allowed length for file paths.
-	MaxPathLength = 4096 // Linux PATH_MAX
-
-	// MaxRefLength is the maximum allowed length for git references.
-	MaxRefLength = 255 // Git ref name limit
-
-	// MaxCommitCount is the maximum number of commits we'll validate at once.
-	MaxCommitCount = 1000
-)
-
 // NewValidateParams creates a ValidationParameters from command flags.
-func NewValidateParams(cmd *cobra.Command) ValidationParameters {
-	params := ValidationParameters{
-		OutWriter: cmd.OutOrStdout(),
+func NewValidateParams(cmd *cobra.Command) (ValidationParameters, error) {
+	// Extract flag values
+	messageFile, _ := cmd.Flags().GetString("message-file")
+	gitReference, _ := cmd.Flags().GetString("git-reference")
+	commitCount, _ := cmd.Flags().GetInt("commit-count")
+	revisionRange, _ := cmd.Flags().GetString("revision-range")
+	baseBranch, _ := cmd.Flags().GetString("base-branch")
+	repoPath, _ := cmd.Flags().GetString("repo-path")
+	skipMergeCommits, _ := cmd.Flags().GetBool("skip-merge-commits")
+
+	format, _ := cmd.Flags().GetString("format")
+	verbose, _ := cmd.Flags().GetBool("verbose")
+	extraVerbose, _ := cmd.Flags().GetBool("extra-verbose")
+	ruleHelp, _ := cmd.Flags().GetString("rulehelp")
+	lightMode, _ := cmd.Flags().GetBool("light-mode")
+
+	// Build validation target using focused builder
+	target, err := NewValidationTargetBuilder().
+		WithMessageFile(messageFile).
+		WithGitReference(gitReference).
+		WithCommitCount(commitCount).
+		WithRevisionRange(revisionRange).
+		WithBaseBranch(baseBranch).
+		Build()
+	if err != nil {
+		return ValidationParameters{}, err
 	}
 
-	// Get flags from command - these should already have defaults from flag definitions
-	params.MessageFile, _ = cmd.Flags().GetString("message-file")
-	params.GitReference, _ = cmd.Flags().GetString("git-reference")
-	params.CommitCount, _ = cmd.Flags().GetInt("commit-count")
-	params.RevisionRange, _ = cmd.Flags().GetString("revision-range")
-	params.BaseBranch, _ = cmd.Flags().GetString("base-branch")
-	params.RepoPath, _ = cmd.Flags().GetString("repo-path")
-	params.SkipMergeCommits, _ = cmd.Flags().GetBool("skip-merge-commits")
+	// Build output options using focused value type
+	output := NewOutputOptions(cmd.OutOrStdout()).
+		WithFormat(format).
+		WithVerbose(verbose).
+		WithExtraVerbose(extraVerbose).
+		WithRuleHelp(ruleHelp).
+		WithLightMode(lightMode)
 
-	// Report options
-	params.Format, _ = cmd.Flags().GetString("format")
-	params.Verbose, _ = cmd.Flags().GetBool("verbose")
-	params.ExtraVerbose, _ = cmd.Flags().GetBool("extra-verbose")
-	params.RuleHelp, _ = cmd.Flags().GetString("rulehelp")
-	params.LightMode, _ = cmd.Flags().GetBool("light-mode")
-
-	return params
+	return ValidationParameters{
+		Target:           target,
+		Output:           output,
+		RepoPath:         repoPath,
+		SkipMergeCommits: skipMergeCommits,
+	}, nil
 }
 
 // GetRepoPath returns the repository path, with empty string indicating current directory.
@@ -83,196 +76,16 @@ func (p ValidationParameters) GetRepoPath() string {
 
 // ToReportOptions converts ValidationParameters to domain.ReportOptions.
 func (p ValidationParameters) ToReportOptions() domain.ReportOptions {
-	return domain.ReportOptions{
-		Format:         p.Format,
-		Verbose:        p.Verbose,
-		ExtraVerbose:   p.ExtraVerbose,
-		ShowHelp:       p.ExtraVerbose || p.RuleHelp != "",
-		RuleToShowHelp: p.RuleHelp,
-		LightMode:      p.LightMode,
-		Writer:         p.OutWriter,
-	}
+	return p.Output.ToReportOptions()
 }
 
 // CreateFormatter creates a formatter based on the parameters.
 func (p ValidationParameters) CreateFormatter() format.Formatter {
-	var outputType format.OutputType
-
-	switch p.Format {
-	case "json":
-		outputType = format.OutputJSON
-	case "github":
-		outputType = format.OutputGitHub
-	case "gitlab":
-		outputType = format.OutputGitLab
-	case "text":
-		fallthrough
-	default:
-		outputType = format.OutputText
-	}
-
-	return format.NewUnifiedFormatter(outputType).
-		WithVerbose(p.Verbose).
-		WithShowHelp(p.ExtraVerbose || p.RuleHelp != "").
-		WithLightMode(p.LightMode)
+	return p.Output.CreateFormatter()
 }
 
-// GetValidationTarget determines what to validate based on parameters.
-// Returns (targetType, target1, target2, error).
-// targetType can be: "commit", "range", "message", "count".
+// GetValidationTarget returns the validation target.
+// For backward compatibility with existing code.
 func (p ValidationParameters) GetValidationTarget() (string, string, string, error) {
-	// Validate all input parameters for security
-	if err := validateFilePath(p.MessageFile); err != nil {
-		return "", "", "", fmt.Errorf("invalid message file: %w", err)
-	}
-
-	if err := validateGitReference(p.GitReference); err != nil {
-		return "", "", "", fmt.Errorf("invalid git reference: %w", err)
-	}
-
-	if err := validateGitReference(p.BaseBranch); err != nil {
-		return "", "", "", fmt.Errorf("invalid base branch: %w", err)
-	}
-
-	if err := validateCommitCount(p.CommitCount); err != nil {
-		return "", "", "", fmt.Errorf("invalid commit count: %w", err)
-	}
-
-	// Apply validation source with precedence order
-	if p.MessageFile != "" {
-		// 1. Message from file (highest priority)
-		return "message", filepath.Clean(p.MessageFile), "", nil
-	} else if p.BaseBranch != "" {
-		// 2. Base branch comparison
-		return "range", p.BaseBranch, "HEAD", nil
-	} else if p.RevisionRange != "" {
-		// 3. Revision range
-		// Validate revision range
-		if err := validateParameterLength("Revision range", p.RevisionRange, MaxRefLength); err != nil {
-			return "", "", "", err
-		}
-
-		// Parse revision range (format: from..to)
-		parts := parseRevisionRange(p.RevisionRange)
-		if len(parts) == 2 {
-			// Validate both parts
-			if err := validateGitReference(parts[0]); err != nil {
-				return "", "", "", fmt.Errorf("invalid revision range start: %w", err)
-			}
-
-			if err := validateGitReference(parts[1]); err != nil {
-				return "", "", "", fmt.Errorf("invalid revision range end: %w", err)
-			}
-
-			return "range", parts[0], parts[1], nil
-		}
-
-		return "", "", "", fmt.Errorf("invalid revision range format: %s (expected format: from..to)", p.RevisionRange)
-	} else if p.GitReference != "" {
-		// 4. Single git reference
-		return "commit", p.GitReference, "", nil
-	} else if p.CommitCount > 1 {
-		// 5. Commit count (only if explicitly set to > 1)
-		return "count", strconv.Itoa(p.CommitCount), "", nil
-	}
-
-	// Default to HEAD (when commit count is 1 or no options provided)
-	return "commit", "HEAD", "", nil
-}
-
-// Validation helper functions.
-
-// validateFilePath checks if a file path is valid and safe.
-func validateFilePath(path string) error {
-	if path == "" {
-		return nil // Empty path is valid (not used)
-	}
-
-	// Check path length
-	if len(path) > MaxPathLength {
-		return errors.New("path too long")
-	}
-
-	// Check for null bytes
-	if strings.Contains(path, "\x00") {
-		return errors.New("path contains null bytes")
-	}
-
-	// Ensure it's not trying to escape using ../
-	cleaned := filepath.Clean(path)
-	if strings.Contains(cleaned, "..") {
-		return errors.New("path cannot contain '..'")
-	}
-
-	return nil
-}
-
-// validateGitReference checks if a git reference is valid.
-func validateGitReference(ref string) error {
-	if ref == "" {
-		return nil // Empty ref is valid (not used)
-	}
-
-	// Check length
-	if len(ref) > MaxRefLength {
-		return errors.New("reference too long")
-	}
-
-	// Check for null bytes
-	if strings.Contains(ref, "\x00") {
-		return errors.New("reference contains null bytes")
-	}
-
-	// Basic git ref validation
-	// Git refs cannot start with . or contain ..
-	if strings.HasPrefix(ref, ".") || strings.Contains(ref, "..") {
-		return errors.New("invalid git reference format")
-	}
-
-	// Check for shell metacharacters that could be dangerous
-	dangerous := regexp.MustCompile(`[;&|<>$` + "`" + `\\]`)
-	if dangerous.MatchString(ref) {
-		return errors.New("reference contains invalid characters")
-	}
-
-	return nil
-}
-
-// validateParameterLength checks if a parameter length is within bounds.
-func validateParameterLength(name, value string, maxLength int) error {
-	if len(value) > maxLength {
-		return fmt.Errorf("%s exceeds maximum length of %d characters", name, maxLength)
-	}
-
-	return nil
-}
-
-// validateCommitCount checks if a commit count is reasonable.
-func validateCommitCount(count int) error {
-	if count < 0 {
-		return errors.New("commit count cannot be negative")
-	}
-
-	if count > MaxCommitCount {
-		return fmt.Errorf("commit count exceeds maximum allowed value (%d)", MaxCommitCount)
-	}
-
-	return nil
-}
-
-// parseRevisionRange parses a revision range string (format: from..to).
-func parseRevisionRange(revRange string) []string {
-	// Split on .. (standard git range format)
-	parts := strings.Split(revRange, "..")
-	if len(parts) == 2 {
-		return []string{strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])}
-	}
-
-	// Try ... (symmetric difference)
-	parts = strings.Split(revRange, "...")
-	if len(parts) == 2 {
-		return []string{strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])}
-	}
-
-	return []string{revRange}
+	return p.Target.Type, p.Target.Source, p.Target.Target, nil
 }

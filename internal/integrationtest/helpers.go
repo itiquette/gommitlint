@@ -15,9 +15,9 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/adapters/git"
 	gitTestdata "github.com/itiquette/gommitlint/internal/adapters/git/testdata"
-	"github.com/itiquette/gommitlint/internal/application"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/domain/config"
+	"github.com/itiquette/gommitlint/internal/domain/rules"
 )
 
 // ValidationResult represents the result of a validation operation.
@@ -38,22 +38,18 @@ func TestValidation(t *testing.T, repoPath string, config config.Config) Validat
 	gitRepo, err := git.NewRepository(ctx, repoPath)
 	require.NoError(t, err, "Failed to create git repository")
 
-	// Create validator with dependencies
-	validator := application.CreateValidator(gitRepo, &config, nil)
+	// Create rules using functional approach
+	validationRules := rules.CreateEnabledRules(&config)
 
-	// Validate HEAD commit using validator
-	result, err := application.ValidateCommitWithValidator(ctx, "HEAD", validator)
-	require.NoError(t, err, "Failed to validate HEAD commit")
+	// Get the HEAD commit
+	commit, err := gitRepo.GetCommit(ctx, "HEAD")
+	require.NoError(t, err, "Failed to get HEAD commit")
 
-	// Convert failures to validation errors
-	allErrors := make([]domain.ValidationError, 0, len(result.Failures))
-	for _, failure := range result.Failures {
-		allErrors = append(allErrors, domain.ValidationError{
-			Rule:    failure.Rule,
-			Code:    failure.Rule,
-			Message: failure.Message,
-		})
-	}
+	// Validate using pure function
+	result := domain.ValidateCommit(commit, validationRules, gitRepo, &config)
+
+	// Use errors directly from ValidationResult
+	allErrors := result.Errors
 
 	// Convert to simple result
 	return ValidationResult{
@@ -78,7 +74,7 @@ func DefaultConfig() config.Config {
 	return config.Config{
 		Message: config.MessageConfig{
 			Subject: config.SubjectConfig{
-				Case:              "sentence",
+				Case:              "ignore", // Disable case checking by default for simplicity
 				MaxLength:         72,
 				RequireImperative: false,
 				ForbidEndings:     []string{"."},
@@ -98,7 +94,7 @@ func DefaultConfig() config.Config {
 		},
 		Rules: config.RulesConfig{
 			Enabled: []string{
-				"SubjectLength",
+				"Subject",
 				"ConventionalCommit",
 			},
 			Disabled: []string{
@@ -108,9 +104,7 @@ func DefaultConfig() config.Config {
 				"SignedIdentity",
 				"JiraReference",
 				"Spell",
-				"SubjectCase",    // Disable case checking by default for simplicity
 				"ImperativeVerb", // Disable imperative checking by default
-				"SubjectSuffix",  // Disable suffix checking by default
 			},
 		},
 		Signing: config.SigningConfig{
@@ -146,9 +140,9 @@ func WithRules(rules ...string) config.Config {
 
 	// Disable all other commonly enabled rules
 	allRules := []string{
-		"SubjectLength", "ConventionalCommit", "CommitBody", "Signature",
-		"SignOff", "SignedIdentity", "JiraReference", "Spell", "SubjectCase",
-		"ImperativeVerb", "SubjectSuffix", "BranchAhead",
+		"Subject", "ConventionalCommit", "CommitBody", "Signature",
+		"SignOff", "SignedIdentity", "JiraReference", "Spell",
+		"ImperativeVerb", "BranchAhead",
 	}
 
 	// Build disabled list from all rules except the ones we want enabled

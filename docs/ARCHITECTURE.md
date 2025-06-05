@@ -5,8 +5,8 @@ Gommitlint follows a **functional hexagonal architecture** with value semantics 
 ## Core Principles
 
 1. **Hexagonal Architecture** - Clear separation between core logic and adapters
-2. **Functional Programming** - Pure functions, immutability, and value semantics
-3. **Single Context Pattern** - Context flows from main through the entire application
+2. **Functional Programming** - Pure functions with explicit dependencies
+3. **No Service Objects** - Direct function composition instead of stateful services
 4. **Table-Driven Testing** - Consistent test patterns with `testCase` naming
 5. **Core-First Design** - Business logic is isolated from infrastructure
 
@@ -48,9 +48,9 @@ Located on the right/bottom side. The interaction is triggered by the applicatio
 │        (future: api/)                                        │
 ├───────────────────────────────────────────────────────────────┤
 │                      Ports Layer                              │
-│                    interfaces.go                              │
-│         ValidationService, Logger, Formatter,                 │
-│         ConfigProvider                                        │
+│               Domain-defined interfaces                       │
+│         Repository, Rule, Logger, Formatter                   │
+│                                                               │
 ├───────────────────────────────────────────────────────────────┤
 │                     Core Layer                                │
 │                   (Core Business Logic)                       │
@@ -113,13 +113,13 @@ The architecture uses the Configurable Dependency pattern (generalization of Dep
 
 ### Dependency Wiring
 
-Dependency wiring happens through simple factory functions in `internal/wire.go`:
+Dependency wiring happens through direct constructor calls in the CLI layer:
 
 1. Initialize the environment
-2. Create driven adapters (git, config, logger)
-3. Create validation service with dependencies
-4. Create CLI commands with the service
-5. Execute the CLI
+2. Create driven adapters (git, config, logger) directly using constructors
+3. Create rules based on configuration directly using rule factory
+4. Create CLI commands with dependencies passed as function parameters
+5. Execute validation using pure functions
 
 ### Dependency Flow
 
@@ -128,14 +128,14 @@ Dependencies always flow inward:
 ```mermaid
 graph LR
     subgraph "Dependency Direction"
-        Adapters[Adapters] --> Ports[Port Interfaces]
-        Core[Core Services] --> Ports
-        Ports --> Core
-        Wire[wire.go] --> Everything[All Components]
+        Adapters[Adapters] --> Interfaces[Domain Interfaces]
+        Functions[Pure Functions] --> Interfaces
+        CLI[CLI Layer] --> Functions
+        CLI[CLI Layer] --> Everything[All Components]
     end
     
-    style Core fill:#99ff99
-    style Ports fill:#87CEEB
+    style Functions fill:#99ff99
+    style Interfaces fill:#87CEEB
 ```
 
 ### Current Architecture
@@ -155,7 +155,7 @@ graph TB
     end
     
     subgraph "Port Interfaces"
-        Interfaces[Port Interfaces<br/>Defined locally in packages<br/>• domain/interfaces.go<br/>• adapters/*/ports.go<br/>No central ports package]
+        Interfaces[Port Interfaces<br/>Defined in domain packages<br/>• domain/commit.go (Repository)<br/>• domain/rules.go (Rule)<br/>• domain/crypto_interfaces.go<br/>No central ports package]
     end
     
     subgraph "internal/adapters"
@@ -168,102 +168,78 @@ graph TB
     end
     
     subgraph "internal/domain"
-        DomainServices[Domain Business Logic<br/>✓ Value semantics<br/>✓ Immutable data<br/>✓ Pure functions<br/>✓ No framework deps<br/>✓ Technology agnostic<br/>+ Entities<br/>+ Rules<br/>+ Validation]
+        DomainFunctions[Pure Domain Functions<br/>• validation.go: Core validation<br/>• reporting.go: Report building<br/>✓ ValidateCommit<br/>✓ ValidateCommits<br/>✓ BuildReport<br/>✓ No side effects<br/>✓ Explicit dependencies]
+        DomainTypes[Domain Types<br/>+ Commit, ValidationResult<br/>+ Rule interface<br/>+ Repository interface<br/>+ Report structures<br/>+ ValidationError]
     end
     
-    subgraph "internal/application"
-        ApplicationServices[Application Services<br/>+ Validation Service<br/>+ Orchestration<br/>+ Use Cases]
-    end
-    
-    subgraph "internal/"
-        Wire[wire.go<br/>Factory Functions]
+    subgraph "internal/adapters/cli"
+        DirectInit[Direct Initialization<br/>✓ git.NewRepository<br/>✓ rules.CreateEnabledRules]
     end
     
     CLI --> CLIAdapter
-    CLIAdapter --> Interfaces
-    Interfaces --> ApplicationServices
-    ApplicationServices --> DomainServices
-    DomainServices --> Interfaces
-    Interfaces --> GitAdapter
-    Interfaces --> ConfigAdapter
-    Interfaces --> LogAdapter
-    Interfaces --> FormatAdapter
-    Interfaces --> SigningAdapter
-    DomainServices --> Interfaces
-    Interfaces --> FormatAdapter
+    CLIAdapter --> DomainFunctions
+    CLIAdapter --> DomainTypes
+    DomainFunctions --> DomainTypes
+    GitAdapter --> DomainTypes
+    ConfigAdapter --> DomainTypes
+    LogAdapter --> DomainTypes
+    FormatAdapter --> DomainTypes
+    SigningAdapter --> DomainTypes
+    CLIAdapter --> GitAdapter
+    CLIAdapter --> FormatAdapter
     GitAdapter --> Git
     ConfigAdapter --> Config
     LogAdapter --> Logs
     FormatAdapter --> Output
     SigningAdapter --> Git
-    Wire --> CLIAdapter
-    Wire --> ApplicationServices
-    Wire --> GitAdapter
-    Wire --> ConfigAdapter
-    Wire --> LogAdapter
-    Wire --> FormatAdapter
-    Wire --> SigningAdapter
+    DirectInit --> CLIAdapter
+    DirectInit --> GitAdapter
+    DirectInit --> ConfigAdapter
     
-    style DomainServices fill:#99ff99
-    style Interfaces fill:#87CEEB
+    style DomainFunctions fill:#99ff99
+    style DomainTypes fill:#87CEEB
 ```
 
 ## Directory Structure
 
 ```plaintext
 gommitlint/
-├── cmd/                    # Application entry points
-│   └── gommitlint/        # Main CLI application
+├── main.go                 # Application entry point
 ├── internal/
 │   ├── domain/             # Core business logic (hexagon center)
-│   │   ├── commit.go       # Commit entities (value semantics)
-│   │   ├── rule.go         # Rule interfaces and types
-│   │   ├── types.go        # Core domain types
-│   │   ├── errors.go       # Domain-specific errors
-│   │   ├── identity.go     # Identity types and validation
-│   │   ├── signature.go    # Signature types and validation
-│   │   ├── verification.go # Verification logic
-│   │   ├── formatter.go    # Result formatting interfaces
-│   │   ├── formatting.go   # Result formatting logic
+│   │   ├── commit.go       # Commit types & Repository interface
+│   │   ├── rules.go        # Rule interfaces & types
+│   │   ├── validation.go   # Pure validation functions
+│   │   ├── reporting.go    # Report building functions
+│   │   ├── errors.go       # ValidationError type & builder
 │   │   ├── functional_*.go # Functional utilities
-│   │   ├── validation.go   # Validation engine
+│   │   ├── types.go        # Core domain types
+│   │   ├── crypto_interfaces.go # Crypto interfaces
+│   │   ├── verification.go # Verification logic
+│   │   ├── identity.go     # Identity validation
+│   │   ├── signature.go    # Signature types
 │   │   ├── rules/          # All validation rules
-│   │   │   └── factory.go  # Rule factory
+│   │   │   ├── factory.go  # Rule factory functions
+│   │   │   ├── *.go        # Individual rule implementations
+│   │   │   └── testdata/   # Test data for rules
+│   │   ├── config/         # Configuration types
 │   │   └── testdata/       # Test data for domain
 │   ├── adapters/           # External adapters (hexagon edges)
 │   │   ├── cli/            # CLI adapter
-│   │   │   ├── context/    # CLI context utilities
-│   │   │   └── ports.go    # CLI-specific port interfaces
+│   │   │   ├── *.go        # Command implementations
+│   │   │   └── context_keys.go # Context utilities
 │   │   ├── git/            # Git repository adapter
-│   │   │   ├── ports.go    # Git-specific port interfaces
+│   │   │   ├── repository.go    # Git implementation
 │   │   │   └── testdata/   # Test repositories
-│   │   ├── config/         # Configuration adapter
-│   │   ├── signing/        # Cryptographic signature adapters
-│   │   │   ├── gpg.go      # GPG verification
-│   │   │   ├── ssh.go      # SSH verification
-│   │   │   ├── encoding.go # Signature encoding/decoding
-│   │   │   └── testdata/   # Test keys and signatures
+│   │   ├── config/         # Configuration loading
+│   │   ├── signing/        # Cryptographic verification
+│   │   │   ├── *.go        # GPG/SSH verification
+│   │   │   └── testdata/   # Test keys/signatures
 │   │   ├── logging/        # Logging adapters
-│   │   │   └── ports.go    # Logging-specific port interfaces
 │   │   └── output/         # Output formatting adapters
-│   │       ├── report.go   # Report generation
-│   │       └── ports.go    # Output-specific port interfaces
-│   ├── config/             # Configuration types and loading
-│   │   ├── rules/          # Rule configuration extensions
-│   │   └── types/          # Configuration type definitions
-│   ├── common/             # Shared utilities
-│   │   ├── contextkeys/    # Context key definitions
-│   │   ├── contextx/       # Context utilities
-│   │   ├── fsutils/        # File system utilities
-│   │   ├── functional/     # Functional programming utilities
-│   │   ├── security/       # Security utilities
-│   │   └── slices/         # Slice utilities
-│   ├── integrationtest/    # Integration tests
-│   ├── testutils/          # Test utilities (consolidated)
-│   │   ├── builders.go     # Test data builders
-│   │   ├── git.go          # Git test helpers
-│   │   └── assertions.go   # Custom test assertions
-│   └── wire.go             # Dependency wiring
+│   │       ├── *_formatter.go # Format implementations
+│   │       └── generator.go   # Report generation
+│   └── integrationtest/    # Integration tests
 └── docs/                   # Documentation
 ```
 
@@ -315,24 +291,80 @@ func ValidateSubjectLength(commit CommitInfo, maxLength int) []Error {
 
 ### Separation of I/O and Logic
 
-I/O operations are isolated in adapters:
+I/O operations are isolated in adapters. The CLI layer handles I/O and calls pure domain functions:
 
 ```go
-// Service method handles I/O
-func (s *Service) ValidateCommit(ctx context.Context, hash string) (*Result, error) {
-    commit, err := s.repo.GetCommit(hash) // I/O
+// CLI adapter handles I/O and coordination
+func validateCommit(ctx context.Context, ref string, skipMerge bool,
+    rules []domain.Rule, repo domain.Repository, cfg *config.Config,
+    formatter format.Formatter, logger Logger, options domain.ReportOptions) (int, error) {
+    
+    // I/O operation in adapter
+    commit, err := repo.GetCommit(ctx, ref)
     if err != nil {
-        return nil, err
+        return 1, fmt.Errorf("failed to get commit: %w", err)
     }
     
-    // Call pure business logic
-    result := ValidateCommitPure(commit, s.rules)
-    return &result, nil
+    // Pure domain function call with explicit dependencies
+    validationResult := domain.ValidateCommit(commit, rules, repo, cfg)
+    
+    // Convert and format results (also pure functions)
+    results := domain.NewValidationResults()
+    commitResult := convertValidationResult(validationResult, rules)
+    results = results.AddResult(commitResult)
+    
+    // Generate report using explicit parameters
+    return generateReport(ctx, results, formatter, logger, options), nil
 }
 
-// Pure business logic
-func ValidateCommitPure(commit CommitInfo, rules []Rule) Result {
-    // Pure validation without I/O
+// Pure domain function - no I/O, just computation
+func ValidateCommit(commit CommitInfo, rules []Rule, repo Repository, cfg Config) ValidationResult {
+    // Pure validation logic with explicit dependencies
+    var failures []RuleFailure
+    for _, rule := range rules {
+        if ruleFailures := rule.Validate(commit, repo, cfg); len(ruleFailures) > 0 {
+            failures = append(failures, ruleFailures...)
+        }
+    }
+    return ValidationResult{Commit: commit, Failures: failures}
+}
+```
+
+### Functional CLI Pattern
+
+The CLI layer demonstrates pure functional composition by:
+
+1. **Explicit Parameter Passing**: All dependencies passed as function parameters
+2. **No Service Objects**: Direct function calls instead of stateful services  
+3. **Pure Function Composition**: Validation, conversion, and reporting as separate pure functions
+4. **Value Semantics**: All data structures use value semantics throughout
+
+```go
+// Example of functional composition in CLI validation
+func validateMessage(ctx context.Context, message string, rules []domain.Rule, cfg *config.Config,
+    formatter format.Formatter, logger Logger, options domain.ReportOptions) (int, error) {
+    
+    // Pure domain function call
+    result, err := domain.ValidateMessage(message, rules, cfg)
+    if err != nil {
+        return 1, fmt.Errorf("failed to validate message: %w", err)
+    }
+    
+    // Pure conversion functions
+    results := domain.NewValidationResults()
+    commitResult := convertValidationResult(result, rules)
+    results = results.AddResult(commitResult)
+    
+    // Pure report generation
+    if err := generateReport(ctx, results, formatter, logger, options); err != nil {
+        return 1, err
+    }
+    
+    // Pure result evaluation
+    if results.AllPassed() {
+        return 0, nil
+    }
+    return 2, nil
 }
 ```
 
@@ -521,7 +553,7 @@ internal/
 | Configuration | `internal/adapters/config` | Single adapter pattern |
 | Port Interfaces | Local to consumers | Interfaces defined at consumption sites |
 | Rule Factory | `internal/domain/rules/factory.go` | Rule creation logic |
-| Dependency Wiring | `internal/wire.go` | Simplified factory functions |
+| Dependency Wiring | `internal/adapters/cli` | Direct constructor calls |
 | Domain Entities | `internal/domain` | All business concepts |
 | Value Objects | `internal/domain` | Immutable domain values |
 | Report Generation | `internal/adapters/output` | Output adapter concern |
@@ -562,7 +594,7 @@ internal/
 | Core | Unit | No mocks needed | Business logic |
 | Ports | Contract | N/A | Interface contracts |
 | Adapters | Integration | Mock external | I/O behavior |
-| Wire.go | E2E | Real implementations | Full flow |
+| CLI Integration | E2E | Real implementations | Full flow |
 
 ## Best Practices
 
@@ -640,7 +672,7 @@ internal/
 4. **Testing**: Good use of table-driven tests with high coverage
 5. **Context Management**: Well-implemented single context pattern
 6. **Rule System**: Clearly defined priority system as documented
-7. **Dependency Wiring**: Simple factory functions via wire.go
+7. **Dependency Wiring**: Direct constructor calls in CLI layer
 
 ### Areas for Improvement
 

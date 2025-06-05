@@ -6,45 +6,29 @@ package crypto
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/itiquette/gommitlint/internal/domain"
 )
 
-// VerificationAdapter provides crypto verification services for the application.
+// VerificationAdapter provides crypto verification services using simplified interface.
+// It implements the domain.SignatureVerifier interface directly without complex factory patterns.
 type VerificationAdapter struct {
-	service    VerificationService
-	repository domain.CryptoKeyRepository
-	keyDir     string
+	verifier *SimpleVerifier
 }
 
-// NewVerificationAdapter creates a new adapter with the default verifiers.
-// For more flexibility, use NewVerificationAdapterWithOptions instead.
-func NewVerificationAdapter(keyRepository domain.CryptoKeyRepository) *VerificationAdapter {
-	return NewVerificationAdapterWithOptions(WithKeyRepository(keyRepository))
-}
+// Ensure VerificationAdapter implements SignatureVerifier interface.
+var _ domain.SignatureVerifier = (*VerificationAdapter)(nil)
 
-// VerifyCommit verifies the signature on a commit.
-func (a VerificationAdapter) VerifyCommit(_ context.Context, commit domain.Commit) (domain.VerificationResult, error) {
-	// Create a signature from the commit
-	signature := domain.NewSignature(commit.Signature)
-
-	// Skip if there's no signature
-	if signature.IsEmpty() {
-		return domain.NewVerificationResult(
-			domain.VerificationStatusFailed,
-			domain.NewIdentity("", ""),
-			signature,
-		).WithError("missing_signature", "Commit has no signature"), nil
+// NewVerificationAdapter creates a new simplified verification adapter.
+// No complex options or dependencies - pure functional approach.
+func NewVerificationAdapter() *VerificationAdapter {
+	return &VerificationAdapter{
+		verifier: NewSimpleVerifier(),
 	}
+}
 
-	// Prepare commit data for verification
-	// In a real implementation, this would extract the actual commit data
-	// For now, we'll just use a placeholder
-	commitData := []byte(fmt.Sprintf("commit %s by %s", commit.Hash, commit.AuthorEmail))
-
-	// Verify the signature
-	result := a.service.Verify(signature, commitData, a.keyDir)
-
-	return result, nil
+// VerifyCommit implements the domain.SignatureVerifier interface.
+// All dependencies are passed as explicit parameters following functional principles.
+func (a *VerificationAdapter) VerifyCommit(ctx context.Context, commit domain.Commit, keyDir string) domain.VerificationResult {
+	return a.verifier.VerifyCommit(ctx, commit, keyDir)
 }

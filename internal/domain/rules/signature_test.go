@@ -55,13 +55,13 @@ func createCommit(signature string) domain.Commit {
 }
 
 // assertNoErrors checks that validation produced no domain.
-func assertNoErrors(t *testing.T, failures []domain.RuleFailure) {
+func assertNoErrors(t *testing.T, failures []domain.ValidationError) {
 	t.Helper()
 	require.Empty(t, failures, "Expected no validation failures")
 }
 
 // assertErrorMatch checks that an error with the given message exists.
-func assertErrorMatch(t *testing.T, failures []domain.RuleFailure, expectedMsg string) {
+func assertErrorMatch(t *testing.T, failures []domain.ValidationError, expectedMsg string) {
 	t.Helper()
 	require.NotEmpty(t, failures, "Expected validation failures")
 

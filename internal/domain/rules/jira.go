@@ -56,7 +56,7 @@ func NewJiraReferenceRule(cfg config.Config) JiraReferenceRule {
 // Helper function to check if a JIRA reference is in the scope part of a conventional commit.
 
 // Validate checks a commit for Jira reference compliance.
-func (r JiraReferenceRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.RuleFailure {
+func (r JiraReferenceRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.ValidationError {
 	// Check if this commit type should be excluded from JIRA validation
 	if shouldExcludeCommitType(commit.Subject, r.excludedTypes) {
 		return nil
@@ -83,11 +83,10 @@ func (r JiraReferenceRule) Validate(commit domain.Commit, _ domain.Repository, _
 			expectedPattern = r.prefixes[0] + "-123"
 		}
 
-		return []domain.RuleFailure{{
-			Rule:    r.Name(),
-			Message: "JIRA reference missing",
-			Help:    "Add a JIRA reference like " + expectedPattern,
-		}}
+		return []domain.ValidationError{
+			domain.New(r.Name(), domain.ErrMissingJira, "JIRA reference missing").
+				WithHelp("Add a JIRA reference like " + expectedPattern),
+		}
 	}
 
 	// Validate projects if configured
@@ -95,11 +94,11 @@ func (r JiraReferenceRule) Validate(commit domain.Commit, _ domain.Repository, _
 		for _, ref := range references {
 			project := extractProjectFromReference(ref)
 			if !isValidProject(project, r.prefixes) {
-				return []domain.RuleFailure{{
-					Rule:    r.Name(),
-					Message: fmt.Sprintf("Invalid JIRA project '%s'", project),
-					Help:    "Use one of: " + strings.Join(r.prefixes, ", "),
-				}}
+				return []domain.ValidationError{
+					domain.New(r.Name(), domain.ErrInvalidProject,
+						fmt.Sprintf("Invalid JIRA project '%s'", project)).
+						WithHelp("Use one of: " + strings.Join(r.prefixes, ", ")),
+				}
 			}
 		}
 	}
@@ -115,11 +114,10 @@ func (r JiraReferenceRule) Validate(commit domain.Commit, _ domain.Repository, _
 
 		// Check if JIRA is in the correct position (not in description)
 		if hasJiraInDescription(commit.Subject, r.pattern) {
-			return []domain.RuleFailure{{
-				Rule:    r.Name(),
-				Message: "JIRA reference should be in scope, not description",
-				Help:    "Use format: type(JIRA-123): description",
-			}}
+			return []domain.ValidationError{
+				domain.New(r.Name(), domain.ErrMisplacedJira, "JIRA reference should be in scope, not description").
+					WithHelp("Use format: type(JIRA-123): description"),
+			}
 		}
 	}
 

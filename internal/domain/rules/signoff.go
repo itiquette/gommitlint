@@ -31,7 +31,7 @@ func NewSignOffRule(cfg config.Config) SignOffRule {
 }
 
 // Validate checks for the presence and format of a Developer Certificate of Origin sign-off.
-func (r SignOffRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.RuleFailure {
+func (r SignOffRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.ValidationError {
 	// Check if sign-off is required
 	if !r.requireSignOff {
 		return nil
@@ -46,21 +46,19 @@ func (r SignOffRule) Validate(commit domain.Commit, _ domain.Repository, _ *conf
 
 	// Handle empty message cases
 	if textToCheck == "" {
-		return []domain.RuleFailure{{
-			Rule:    r.Name(),
-			Message: "Missing sign-off",
-			Help:    "Add 'Signed-off-by: Your Name <email@example.com>'",
-		}}
+		return []domain.ValidationError{
+			domain.New(r.Name(), domain.ErrMissingSignoff, "Missing sign-off").
+				WithHelp("Add 'Signed-off-by: Your Name <email@example.com>'"),
+		}
 	}
 
 	// Check for sign-off in the text
 	hasSignOff := hasSignOffLine(textToCheck, r.acceptAltFormat)
 	if !hasSignOff {
-		return []domain.RuleFailure{{
-			Rule:    r.Name(),
-			Message: "Missing sign-off",
-			Help:    "Add 'Signed-off-by: Your Name <email@example.com>'",
-		}}
+		return []domain.ValidationError{
+			domain.New(r.Name(), domain.ErrMissingSignoff, "Missing sign-off").
+				WithHelp("Add 'Signed-off-by: Your Name <email@example.com>'"),
+		}
 	}
 
 	return nil

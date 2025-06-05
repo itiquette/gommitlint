@@ -19,6 +19,9 @@ import (
 	"github.com/itiquette/gommitlint/internal/domain"
 )
 
+// Ensure Repository implements domain.Repository interface.
+var _ domain.Repository = (*Repository)(nil)
+
 // Repository provides Git operations for the domain.
 // Simple, functional implementation with value semantics.
 type Repository struct {
@@ -124,6 +127,12 @@ func (r Repository) GetCommitsAhead(_ context.Context, ref string) (int, error) 
 	}
 
 	return countCommitsBetween(r.repo, head.Hash(), *refHash)
+}
+
+// GetCommitsAheadCount returns how many commits the current branch is ahead of the reference.
+// This is an alias for GetCommitsAhead to match the Repository interface.
+func (r Repository) GetCommitsAheadCount(ctx context.Context, referenceBranch string) (int, error) {
+	return r.GetCommitsAhead(ctx, referenceBranch)
 }
 
 // IsValid checks if this is a valid repository.
