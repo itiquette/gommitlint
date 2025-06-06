@@ -35,6 +35,7 @@ result := domain.ValidateCommit(commit, rules, repo, config)
 ```
 
 ### Benefits of This Approach
+
 - **Simple**: No complex service objects or dependency injection frameworks
 - **Testable**: Easy to test with mock implementations
 - **Functional**: Pure functions with immutable data
@@ -44,10 +45,11 @@ result := domain.ValidateCommit(commit, rules, repo, config)
 
 Gommitlint uses context only for cross-cutting concerns:
 
-- **Context keys** (`internal/adapters/cli/context_keys.go`): Used only for logging and CLI options
+- **Context keys** (`internal/adapters/cli/contextkeys.go`): Used only for logging and CLI options
 - **No configuration in context**: Configuration flows through explicit parameters
 
 This design follows hexagonal architecture principles by:
+
 - Making all dependencies explicit
 - Maintaining clear boundaries between architectural layers
 - Avoiding the anti-pattern of storing configuration in context
@@ -92,6 +94,7 @@ else:
 ### Default-Disabled Rules
 
 Only three rules are disabled by default:
+
 - `jirareference` - Validates JIRA ticket references (organization-specific)
 - `commitbody` - Requires commit body (not all projects need detailed bodies)
 - `spell` - Spell checking (requires additional setup)
@@ -103,9 +106,9 @@ All other rules are enabled by default unless explicitly disabled.
 - Build: `make build/plain`
 - Test all: `make test`
 - Single test: `go test -v -count=1 ./internal/path/to/package/file_test.go -run TestSpecificFunction`
-- Lint: `make quality/golangcilint` or `make quality` (all linters)
+- Lint: `make quality/golangcilint`
 - Format: `make quality/tidy`
-- Run with quality: `make build`
+- Quality checks: `make quality`
 
 ### Keep Conversations Focused
 
@@ -124,7 +127,6 @@ All other rules are enabled by default unless explicitly disabled.
 - Request simpler solutions first, then expand if needed
 - Prefer existing tools over custom implementations
 - Ask for small shell scripts instead of complex programs when appropriate
-- Don't worry about backward compatibility
 
 ### Code Quality
 
@@ -691,6 +693,7 @@ func ValidateCommit(hash string, skipMergeCommits bool) (ValidationResult, error
 ```
 
 Notice the format:
+
 - First line gives the overview
 - Blank line separates sections
 - Parameters and returns are documented when needed
@@ -848,6 +851,7 @@ func TestSomething(t *testing.T) {
 ```
 
 Common require functions:
+
 - `require.NoError(t, err)` - Assert no error occurred
 - `require.Error(t, err)` - Assert an error occurred
 - `require.Equal(t, expected, actual)` - Assert values are equal
@@ -1194,415 +1198,97 @@ go test -tags=integration ./...
 Organize code in layers with domain logic at the center:
 
 ```txt
-project/
-├── cmd/                     # Application entrypoints
-│   └── myapp/
-│       └── main.go
+gommitlint/
+├── main.go                  # Application entrypoint
 ├── internal/                # Private application code
 │   ├── domain/              # Core domain models, interfaces, and validation logic
 │   │   ├── commit.go        # Commit type and Repository interface
-│   │   ├── rule.go          # Rule interface
-│   │   ├── validation.go    # Pure validation functions
+│   │   ├── rules.go         # Rule interfaces
+│   │   ├── validation.go    # Validation functions
+│   │   ├── config/          # Configuration types
 │   │   └── rules/           # Rule implementations
 │   ├── adapters/            # External implementations (adapters)
-│   │   ├── git/             # Repository implementation
-│   │   ├── config/          # Configuration loading
 │   │   ├── cli/             # Command-line interface
-│   │   └── output/          # Formatters and reporting
-│   └── (removed wire.go)    # Direct initialization in CLI layer
-└── pkg/                     # Public API packages
-    └── validation/
+│   │   ├── config/          # Configuration loading
+│   │   ├── git/             # Repository implementation
+│   │   ├── logging/         # Logging adapter
+│   │   ├── output/          # Formatters and reporting
+│   │   └── signing/         # Signature verification
+│   └── integrationtest/     # Integration tests
+└── docs/                    # Documentation
+    └── ARCHITECTURE.md
 ```
 
 ## Keep it Simple
 
-Avoid unnecessary abstractions and complexity:
-
-```go
-// ❌ Over-engineered
-type CommitServiceFactory interface {
-    CreateCommitService() CommitService
-}
-
-type CommitServiceFactoryImpl struct {
-    RepositoryFactory RepositoryFactory
-    ConfigProvider ConfigProvider
-}
-
-func (f *CommitServiceFactoryImpl) CreateCommitService() CommitService {
-    // Complex initialization
-}
-
-// ✅ Simple and direct - pure function
-func ValidateCommit(commit Commit, rules []Rule, repo Repository, config Config) ValidationResult {
-    var failures []RuleFailure
-    for _, rule := range rules {
-        failures = append(failures, rule.Validate(commit, repo, config)...)
-    }
-    return ValidationResult{Commit: commit, Failures: failures}
-}
-```
+Avoid unnecessary abstractions. Use pure functions instead of complex factories.
 
 ## Dependency Injection
 
-Use explicit dependency injection rather than global state:
-
-```go
-// ❌ Implicit dependencies
-var defaultRepo Repository
-
-func NewService() *Service {
-    return &Service{
-        repo: defaultRepo,  // Hidden dependency
-    }
-}
-
-// ✅ Explicit dependencies
-func NewService(repo Repository, logger Logger) *Service {
-    return &Service{
-        repo:   repo,
-        logger: logger,
-    }
-}
-```
+Pass dependencies explicitly as function parameters, never use global state.
 
 ## Port and Adapter Pattern
 
-Define interfaces (ports) for external dependencies in the domain:
-
-```go
-// internal/domain/ports.go
-package domain
-
-// CommitRepository is a port for accessing commit data
-type CommitRepository interface {
-    GetCommit(hash string) (Commit, error)
-    GetCommits(count int) ([]Commit, error)
-}
-```
-
-Implement adapters that satisfy these interfaces:
-
-```go
-// internal/adapters/git/repository.go
-package git
-
-// Repository implements the domain.CommitRepository interface
-type Repository struct {
-    gitClient *git.Client
-}
-
-func (r *Repository) GetCommit(hash string) (domain.Commit, error) {
-    // Implementation
-}
-```
-
-Wire up at composition root (usually main.go):
-
-```go
-func main() {
-    gitRepo := git.NewRepository("/path/to/repo")
-    validator := validate.NewService(gitRepo)
-    
-    // ...
-}
-```
+Domain defines interfaces (ports). Adapters implement them. Wire together in main.go.
 
 ## Functional Composition
 
-Compose validation pipelines with pure functions:
+Build validation pipelines by composing pure functions. See `domain.ValidateCommit`.
 
-```go
-// internal/adapters/cli/validatecmd.go
-func runValidation(ctx context.Context, ref string, rules []domain.Rule, 
-    repo domain.Repository, cfg *config.Config) error {
-    
-    // Get commit from repository
-    commit, err := repo.GetCommit(ctx, ref)
-    if err != nil {
-        return fmt.Errorf("failed to get commit: %w", err)
-    }
-    
-    // Validate using pure function
-    result := domain.ValidateCommit(commit, rules, repo, cfg)
-    
-    // Format output
-    output := formatters.Text(commit, result.Failures)
-    fmt.Println(output)
-    
-    return nil
-}
-```
+## Domain-Driven Design
 
-## Domain-Driven Design Lite
+Use entities, value objects, and interfaces without ceremony. Keep domain logic pure.
 
-Use DDD concepts without the ceremony:
+## Interface Guidelines
 
-```go
-// Domain entity
-type Commit struct {
-    Hash      string
-    Message   string
-    Author    string
-    Timestamp time.Time
-}
+Create interfaces only when you need abstraction for testing or multiple implementations.
 
-// Value object
-type ValidationError struct {
-    Code    string
-    Message string
-}
+## Testing
 
-// Domain service
-type Validator interface {
-    Validate(commit Commit) []ValidationError
-}
-```
-
-## Avoid Interface Overuse
-
-Only create interfaces when needed:
-
-```go
-// ❌ Interface for everything
-type Logger interface {
-    Log(message string)
-}
-
-type LoggerImpl struct{}
-
-func (l *LoggerImpl) Log(message string) {
-    fmt.Println(message)
-}
-
-// ✅ Interface only when needed
-type Logger interface {
-    Log(message string)
-}
-
-// When no abstraction is needed, just use concrete type
-func NewHandler(logger *log.Logger) *Handler {
-    return &Handler{logger: logger}
-}
-```
-
-## Testing with Hexagonal Architecture
-
-Hexagonal architecture makes testing easier:
-
-```go
-func TestValidateService(t *testing.T) {
-    // Mock repository
-    mockRepo := &MockRepository{
-        commits: map[string]domain.Commit{
-            "abc123": {
-                Hash:    "abc123",
-                Message: "Add feature",
-            },
-        },
-    }
-    
-    // Create service with dependencies
-    service := validate.NewService(mockRepo, validator)
-    
-    // Test
-    result, err := service.ValidateCommit("abc123")
-    require.NoError(t, err)
-    require.NotNil(t, result)
-}
-```
+Mock interfaces for isolated unit tests. Use integration tests for end-to-end validation.
 
 ## Function Options Pattern
 
-Use functional options for rule configuration:
-
-```go
-type RuleOption func(Rule) Rule
-
-func WithMaxLength(length int) RuleOption {
-    return func(r Rule) Rule {
-        r.maxLength = length
-        return r
-    }
-}
-
-func WithCaseSensitivity(sensitive bool) RuleOption {
-    return func(r Rule) Rule {
-        r.caseSensitive = sensitive
-        return r
-    }
-}
-
-func NewRule(name string, options ...RuleOption) Rule {
-    r := Rule{
-        name:      name,
-        maxLength: defaultMaxLength,
-    }
-    
-    for _, option := range options {
-        r = option(r)
-    }
-    
-    return r
-}
-
-// Usage
-rule := NewRule(
-    "SubjectLength",
-    WithMaxLength(72),
-    WithCaseSensitivity(false),
-)
-```
+Use functional options for configuration. See `rules/factory.go` for examples.
 
 ## Composition over Inheritance
 
-Use composition to build complex behavior:
+Build complex behavior through composition, not inheritance.
 
-```go
-// Base validator
-type Validator struct {
-    rules []Rule
-}
+## Error Handling
 
-// Add behavior via composition
-type CommitValidator struct {
-    Validator
-    repo Repository
-}
-
-func (c *CommitValidator) ValidateCommit(hash string) (Result, error) {
-    commit, err := c.repo.GetCommit(hash)
-    if err != nil {
-        return Result{}, err
-    }
-    
-    return c.Validate(commit), nil
-}
-```
-
-## Standard Error Handling
-
-Use standard error handling patterns:
-
-```go
-// Define error types
-var (
-    ErrNotFound = errors.New("not found")
-    ErrInvalid  = errors.New("invalid input")
-)
-
-// Return errors
-func (s *Service) GetCommit(hash string) (Commit, error) {
-    commit, err := s.repo.GetCommit(hash)
-    if err != nil {
-        return Commit{}, fmt.Errorf("failed to get commit: %w", err)
-    }
-    return commit, nil
-}
-
-// Check errors
-commit, err := service.GetCommit(hash)
-if err != nil {
-    if errors.Is(err, ErrNotFound) {
-        // Handle not found
-    } else {
-        // Handle other errors
-    }
-}
-```
+Use `fmt.Errorf("context: %w", err)` for wrapping. Define domain errors in `errors.go`.
 
 ## Command-Query Separation
 
-Separate operations that modify state from those that return data:
+Separate functions that return data from those that modify state.
 
-```go
-// Query: Returns data, doesn't modify state
-func (s *Service) GetValidationErrors(hash string) ([]ValidationError, error) {
-    // Implementation
-}
+## Context Usage
 
-// Command: Modifies state, returns error only
-func (s *Service) MarkAsReviewed(hash string) error {
-    // Implementation
-}
-```
+Use context for cancellation and logging only. Never store configuration in context.
 
-## Context in APIs
+## Interface Location
 
-Pass context through the stack:
+Define interfaces where they're consumed (domain), not where they're implemented (adapters).
 
-```go
-func (s *Service) ValidateCommit(ctx context.Context, hash string) (*Result, error) {
-    // Pass context to dependencies
-    commit, err := s.repo.GetCommit(ctx, hash)
-    if err != nil {
-        return nil, err
-    }
-    
-    // Check for cancellation
-    select {
-    case <-ctx.Done():
-        return nil, ctx.Err()
-    default:
-        return s.validator.Validate(commit), nil
-    }
-}
-```
+## Complexity Guidelines
 
-## When to Use Interfaces
-
-Create interfaces at consumption site, not implementation:
-
-```go
-// Service depends on Repository interface
-type Repository interface {
-    GetCommit(hash string) (Commit, error)
-}
-
-type Service struct {
-    repo Repository
-}
-
-// Implementations live elsewhere, don't need to know about the interface
-type GitRepository struct{}
-func (r *GitRepository) GetCommit(hash string) (Commit, error) {
-    // Implementation
-}
-
-// Testing becomes simple
-type MockRepository struct{}
-func (m *MockRepository) GetCommit(hash string) (Commit, error) {
-    // Mock implementation
-}
-```
-
-## Know When to Stop
-
-Keep architecture only as complex as needed:
-
-- **Small projects**: Simple, flat structure may be sufficient
-- **Medium projects**: Basic separation of concerns with packages
-- **Large projects**: Full hexagonal architecture with clean separation
+Add architectural complexity only when needed. Start simple, evolve as required.
 
 ## Architecture Best Practices
 
-1. **Start simple**: Add complexity only when needed
-2. **Design for maintainability**: Optimize for readability and change
-3. **Respect Go idioms**: Don't force patterns from other languages
-4. **Focus on tests**: Code that's easy to test is usually well-designed
-5. **Be practical**: Consistency matters more than architectural purity
-6. **Keep dependencies explicit**: Avoid global state and hidden dependencies
-7. **Separate concerns**: Core domain logic shouldn't depend on external systems
-8. **Use standard project layout**: Follow Go conventions for project structure
-9. **Favor composition**: Build complex systems from simple components
-10. **Be concise**: Write clear, minimal code that expresses intent
-11. **Be coherent**: Maintain consistency in style and approach throughout
+1. **Start simple** - Add complexity only when needed
+2. **Be explicit** - No global state or hidden dependencies  
+3. **Follow Go idioms** - Don't force patterns from other languages
+4. **Design for testing** - Easy to test code is usually well-designed
+5. **Stay coherent** - Maintain consistency throughout
 
 ## Container Pattern
 
 The project uses an immutable container pattern for dependency injection:
 
 ### Design Principles
+
 - **Immutable state**: Container never mutates after creation  
 - **Explicit dependencies**: All dependencies passed as parameters
 - **No service locator**: No global registry lookups
@@ -1635,6 +1321,7 @@ func (c Container) createRegistry() domain.RuleRegistry {
 ```
 
 ### Benefits
+
 - **Thread-safe**: No shared mutable state
 - **Testable**: Easy to provide test implementations  
 - **Predictable**: No hidden dependencies

@@ -21,176 +21,166 @@ https://scorecard.dev/viewer/?uri=github.com/itiquette/gommitlint[image:https://
 link:LICENSE[image:https://img.shields.io/badge/License-EUPL%201.2-blue?style=for-the-badge[EUPL 1.2]]
 image:https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.reuse.software%2Fstatus%2Fgithub.com%2Fitiquette%2Fgommitlint&query=status&style=for-the-badge&label=REUSE[REUSE,link=https://api.reuse.software/info/github.com/itiquette/gommitlint]
 
-== Enforce Consistent Git Commit Messages
+== Git Commit Message Linter
 
-*Gommitlint* footnote:[Dad joke intended - Commitlint, written in Go-lang - it has to be Go-mmitlint, right] validates Git commit messages (and repository state) to help you maintain a quality project history.
-It works out-of-the-box with strict sensible (imho) defaults while being configurable.
+NOTE: STILL BETA dont use yet
 
-* **Zero Configuration** - Strict sensible defaults for good commit practices, with Conventional Commits
-* **CI/CD Ready** - Multiple output formats for automation
+**Gommitlint** validates Git commit messages to help you maintain a clean, consistent project history.
+Works out-of-the-box with zero configuration.
 
+- **Zero Configuration** - Sensible defaults following industry best practices  
+- **Conventional Commits** - Enforces standard commit message format  
+- **CI/CD Ready** - Multiple output formats for automation  
+- **Git Hooks** - Validate commits before they're made  
+- **Flexible Rules** - Enable/disable rules as needed  
 
-== Available Rules
+== Quick Start
 
-All rules are enabled by default except `jirareference` and `commitbody`.
-
-=== Message Rules
-* **subjectlength** - Limits subject line length (default: 72 chars)
-* **subjectcase** - Enforces consistent capitalization (sentence/lower/upper/title)
-* **subjectsuffix** - Prevents subjects ending with periods, commas, etc.
-* **imperative** - Requires imperative mood ("Add" not "Added")
-* **commitbody** - Validates body length and content _(disabled by default)_
-* **signoff** - Ensures Developer Certificate of Origin
-* **spell** - Checks common spelling (only for English)
-
-=== Format Rules  
-* **conventional** - Enforces https://www.conventionalcommits.org[Conventional Commits]
-* **jirareference** - Requires JIRA ticket references _(disabled by default)_
-
-=== Security Rules
-* **signature** - Verifies GPG/SSH signatures  
-* **identity** - Validates signer identity against allowed keys
-
-=== Repository Rules
-* **branchahead** - Limits branch divergence from main
-
-== Installation and Quickstart
-
-=== Alternative 1. Download Packages or Binary
-Get pre-built binaries from https://github.com/itiquette/gommitlint/releases[releases].
-
-=== Alternative 2. Use Go Install
+=== 1. Install
 [source,bash]
 ----
-go install github.com/itiquette/gommitlint/cmd/gommitlint@latest
+# Install with Go
+go install github.com/itiquette/gommitlint@latest
+
+# Or download binary from releases
+curl -L https://github.com/itiquette/gommitlint/releases/latest/download/gommitlint-linux-amd64 -o gommitlint
+chmod +x gommitlint
 ----
 
-=== Alternative 3. Run in a Container
-[source,bash]
-----
-podman run --rm -v $PWD:/src -w /src ghcr.io/itiquette/gommitlint:latest validate
-----
-
-That's it! Gommitlint is now ready to protect your commit quality.
-
-== Usage Examples
-
-=== Basic Validation
+=== 2. Validate Commits
 [source,bash]
 ----
 # Validate last commit
 gommitlint validate
 
-# Validate specific commit
-gommitlint validate --git-reference=abc123
+# Validate commit range  
+gommitlint validate --revision-range=main..HEAD
 
-# Validate commit range
-gommitlint validate --git-reference=main..HEAD
-----
-
-=== Git Hooks
-[source,bash]
-----
-# Install commit-msg hook
+# Install git hook for automatic validation
 gommitlint install-hook
-
-# Remove hook
-gommitlint remove-hook
 ----
 
-=== CI/CD Integration
+=== 3. CI/CD Integration
 [source,yaml]
 ----
-# GitHub Actions
+# GitHub Actions example
 - name: Validate commits
   run: |
-    go install github.com/itiquette/gommitlint/cmd/gommitlint@latest
-    gommitlint validate --git-reference=${{ github.event.pull_request.base.sha }}..HEAD
+    go install github.com/itiquette/gommitlint@latest
+    gommitlint validate --base-branch=origin/${{ github.base_ref }} --format=github
 ----
+
+== Available Rules
+
+**Enabled by Default:**
+[cols="2,3", options="header"]
+|===
+|Rule |Description
+
+|`subjectlength`
+|Subject line ≤ 72 characters
+
+|`conventional`  
+|https://conventionalcommits.org[Conventional Commits] format
+
+|`signoff`
+|Requires Signed-off-by line
+
+|`signature`
+|Validates GPG/SSH signatures
+
+|`identity`
+|Verifies committer identity
+
+|`branchahead`
+|Limits commits ahead of main branch
+|===
+
+**Disabled by Default:**
+[cols="2,3", options="header"]
+|===
+|Rule |Description
+
+|`commitbody`
+|Requires detailed commit body
+
+|`jirareference`
+|Requires JIRA ticket references
+
+|`spell`
+|Spell checking
+|===
 
 == Configuration
 
-Gommitlint works without configuration, having sensible defaults.
+Gommitlint works without configuration.
 To customize, create `.gommitlint.yaml`:
 
-=== Simple Configuration
-[source,yaml]
+See link:docs/usage.adoc[Usage Guide] for configuration options.
+
+== Integration Examples
+
+See link:docs/usage.adoc[Usage Guide] for CI/CD-integration options.
+
+== Output Formats
+
+=== Text (Default)
+[source,text]
 ----
-gommitlint:
-  rules:
-    enabled:
-      - jirareference    # Enable JIRA validation  
-    disabled:
-      - spell           # Disable spell checking
-  message:
-    subject:
-      max_length: 50    # Customize subject length
+✓ conventional     Valid conventional commit format
+✓ subjectlength    Subject is 43 characters (max: 72)
+✗ commitbody       Body too short (5 chars, min: 10)
+
+Validation failed: 1 error
 ----
 
-See link:docs/usage.adoc[Usage Guide] for complete configuration options.
+=== JSON
+[source,json]
+----
+{
+  "summary": {
+    "all_passed": false,
+    "failed_commits": 1
+  },
+  "commits": [{
+    "commit": {"hash": "abc123"},
+    "passed": false,
+    "rule_results": [{
+      "name": "commitbody",
+      "status": "failed",
+      "errors": [{"message": "Body too short"}]
+    }]
+  }]
+}
+----
+
+== Exit Codes
+
+* `0` - All validations passed
+* `1` - Configuration or system error  
+* `2` - Validation failures found
+
+Perfect for automation and CI/CD pipelines.
 
 == Documentation
 
-* link:docs/usage.adoc[**Usage Guide**] - Detailed usage and configuration
-* link:docs/ARCHITECTURE.md[**Architecture**] - Design principles and structure  
+* link:docs/usage.adoc[**Usage Guide**] - Complete configuration and examples
+* link:docs/ARCHITECTURE.md[**Architecture**] - Design principles (for developers)
 * link:.gommitlint-full-example.yaml[**Full Config Example**] - All available options
 
 == Contributing
 
-We welcome contributions!
-
-You can help by:
+We welcome contributions! You can help by:
 
 * Reporting bugs in our https://github.com/itiquette/gommitlint/issues[Issue Tracker]
-* Sharing ideas for improvements
+* Suggesting improvements
 * Testing and providing feedback
 
-Also, check out our link:CONTRIBUTING.md[Contribution Guide] to get started.
-
-== For Developers
-
-=== Design Philosophy
-
-Gommitlint tries to follow the following practices:
-
-* **Hexagonal Architecture** - Clean separation of concerns with simplified ports
-* **Functional Programming** - Pure functions and immutability throughout
-* **Value Semantics** - Predictable behavior without pointer receivers
-* **Simple Dependency Injection** - Direct instantiation without containers
-
-Read more in the link:docs/ARCHITECTURE.md[Architecture Documentation].
-
-=== Building from Source
-[source,bash]
-----
-# Clone
-git clone https://github.com/itiquette/gommitlint
-cd gommitlint
-
-# Build
-make build/plain
-
-# Test
-make quality
-
-# Install locally
-make install
-----
-
-== Project Status
-
-[IMPORTANT]
-====
-**Beta Candidate**: CLI-flags might may change. Configuration file format might change. Rule functionality might change.
-====
-
-See our https://github.com/itiquette/gommitlint/milestones[Milestones] for roadmap.
+Check out our link:CONTRIBUTING.md[Contribution Guide] to get started.
 
 == License
 
 * Code: EUPL 1.2 (see link:LICENSE[LICENSE])
 * Documentation: CC0 1.0
 
-== Credits
-
-Inspired by https://github.com/siderolabs/conform[Conform] by Sidero Labs.
+---

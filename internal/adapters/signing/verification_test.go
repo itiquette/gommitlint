@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-package crypto_test
+package signing_test
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 // TestVerifier tests the simplified crypto verification adapter.
 func TestVerifier(t *testing.T) {
 	// Create a simplified adapter - no complex dependencies
-	adapter := crypto.NewVerificationAdapter()
+	adapter := signing.NewVerificationAdapter()
 
 	// Test with a commit with no signature
 	commit := domain.Commit{

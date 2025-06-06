@@ -77,7 +77,7 @@ func (r ConventionalCommitRule) Name() string {
 }
 
 // Validate validates a commit against the conventional commit rules.
-func (r ConventionalCommitRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.ValidationError {
+func (r ConventionalCommitRule) Validate(commit domain.Commit, _ config.Config) []domain.ValidationError {
 	var failures []domain.ValidationError
 
 	// Parse conventional format

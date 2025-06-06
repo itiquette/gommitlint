@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-package crypto
+package signing
 
 import (
 	"errors"
@@ -120,7 +120,6 @@ func FindFilesWithExtensions(dir string, extensions []string) ([]string, error) 
 // SanitizePath sanitizes and validates a directory path with robust security checks.
 // It resolves symbolic links, ensures the path is a directory, and performs
 // several security validations to prevent common vulnerabilities.
-// This function follows value semantics - it doesn't modify the input path.
 func SanitizePath(path string) (string, error) {
 	// Normalize path to handle .. sequences properly
 	cleanPath := filepath.Clean(path)
@@ -316,35 +315,6 @@ func SafeJoin(baseDir string, elements ...string) (string, error) {
 	}
 
 	return result, nil
-}
-
-// SafeReadDirectoryContents reads directory contents using file descriptors
-// to prevent Time-of-Check/Time-of-Use (TOCTOU) race conditions.
-func SafeReadDirectoryContents(dirPath string) ([]os.FileInfo, error) {
-	// Open the directory to get a file descriptor
-	dirFile, err := os.Open(dirPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open directory: %w", err)
-	}
-	defer dirFile.Close()
-
-	// Get file info on the directory descriptor to verify it's a directory
-	fileInfo, err := dirFile.Stat()
-	if err != nil {
-		return nil, fmt.Errorf("failed to stat directory: %w", err)
-	}
-
-	if !fileInfo.IsDir() {
-		return nil, fmt.Errorf("not a directory: %s", dirPath)
-	}
-
-	// Read directory contents using the file descriptor
-	entries, err := dirFile.Readdir(-1)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read directory: %w", err)
-	}
-
-	return entries, nil
 }
 
 // ValidateGitRepoPath performs extensive validation of repository paths with additional
@@ -555,49 +525,6 @@ func verifyGitDirectory(gitDirPath string) (string, error) {
 
 	// Neither a directory nor a regular file
 	return "", errors.New("invalid git repository structure")
-}
-
-// FindGitRoot attempts to find the git repository root starting from the given path.
-// It searches up the directory tree looking for a .git directory.
-// Returns the absolute, canonical path to the repository root.
-func FindGitRoot(startPath string) (string, error) {
-	// First, make sure the start path is valid
-	absPath, err := filepath.Abs(startPath)
-	if err != nil {
-		return "", fmt.Errorf("invalid start path: %w", err)
-	}
-
-	// Search for .git directory by walking up the tree
-	currentPath := absPath
-
-	for {
-		// Check if .git exists in the current directory
-		gitPath := filepath.Join(currentPath, ".git")
-
-		// Use Lstat to avoid following symlinks directly
-		info, err := os.Lstat(gitPath)
-		if err == nil {
-			// .git exists - check if it's a directory or gitfile
-			if info.IsDir() || info.Mode().IsRegular() {
-				// Verify it's a legitimate git directory/file
-				_, err := verifyGitDirectory(gitPath)
-				if err == nil {
-					// Found valid git root - resolve path safely
-					return safeResolveSymlinks(currentPath, MaxSymlinkDepth)
-				}
-			}
-		}
-
-		// Go up one directory
-		parentPath := filepath.Dir(currentPath)
-
-		// If we've reached the top of the filesystem without finding .git
-		if parentPath == currentPath {
-			return "", fmt.Errorf("no git repository found in %s or its parent directories", absPath)
-		}
-
-		currentPath = parentPath
-	}
 }
 
 // IsValidGitHookType verifies if a hook type is valid to prevent command injection.

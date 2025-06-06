@@ -63,7 +63,6 @@ Examples:
 }
 
 // HookRemovalParameters contains all parameters needed for hook removal.
-// This structure follows functional programming principles of immutability.
 type HookRemovalParameters struct {
 	RepoPath      string
 	SkipConfirm   bool
@@ -86,7 +85,7 @@ func NewHookRemovalParameters(cmd *cobra.Command, repoPath string, skipConfirm b
 }
 
 // FindHookPath determines the hook file path based on the parameters.
-// Applies security best practices for safe path handling using crypto.
+// Applies security best practices for safe path handling using signing.
 func (p HookRemovalParameters) FindHookPath() (string, error) {
 	if p.PathValidator == nil {
 		p.PathValidator = DefaultPathValidator()
@@ -180,14 +179,13 @@ func (p HookRemovalParameters) ConfirmRemoval() (bool, error) {
 	return response == "y" || response == "yes", nil
 }
 
-// RemoveHookFile removes the hook file from the filesystem.
-func (p HookRemovalParameters) RemoveHookFile() error {
-	hookPath, err := p.FindHookPath()
-	if err != nil {
-		return err
-	}
+// GetHookPath returns the hook file path to be removed.
+func (p HookRemovalParameters) GetHookPath() (string, error) {
+	return p.FindHookPath()
+}
 
-	// Remove the hook file
+// RemoveHookFile removes the hook file from the filesystem.
+func RemoveHookFile(hookPath string) error {
 	if err := os.Remove(hookPath); err != nil {
 		return fmt.Errorf("could not remove hook file: %w", err)
 	}
@@ -219,7 +217,7 @@ func (p HookRemovalParameters) Hook(hookType string) HookRemovalParameters {
 // removeHook removes a Git hook from the specified repository.
 func removeHook(cmd *cobra.Command, repoPath string, skipConfirm bool) error {
 	// Validate and normalize the repository path using fsutils
-	validatedPath, err := crypto.ValidateGitRepoPath(repoPath)
+	validatedPath, err := signing.ValidateGitRepoPath(repoPath)
 	if err != nil {
 		return fmt.Errorf("invalid repository path: %w", err)
 	}
@@ -250,6 +248,12 @@ func removeHook(cmd *cobra.Command, repoPath string, skipConfirm bool) error {
 		}
 	}
 
-	// Remove the hook file
-	return params.RemoveHookFile()
+	// Get hook path (pure function)
+	hookPath, err := params.GetHookPath()
+	if err != nil {
+		return err
+	}
+
+	// Remove the hook file (side effect isolated)
+	return RemoveHookFile(hookPath)
 }

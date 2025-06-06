@@ -7,7 +7,7 @@ package cli
 import (
 	"io"
 
-	format "github.com/itiquette/gommitlint/internal/adapters/output"
+	"github.com/itiquette/gommitlint/internal/adapters/output"
 	"github.com/itiquette/gommitlint/internal/domain"
 )
 
@@ -74,24 +74,34 @@ func (o OutputOptions) ShowHelp() bool {
 	return o.ExtraVerbose || o.RuleHelp != ""
 }
 
-// CreateFormatter creates a formatter based on the output options.
-func (o OutputOptions) CreateFormatter() format.Formatter {
-	var formatType format.Format
-
+// FormatReport formats a domain report using the specified options (pure function).
+func (o OutputOptions) FormatReport(report domain.Report) string {
 	switch o.Format {
 	case "json":
-		formatType = format.FormatJSON
+		return output.JSON(report)
 	case "github":
-		formatType = format.FormatGitHub
+		return output.GitHub(report)
 	case "gitlab":
-		formatType = format.FormatGitLab
+		return output.GitLab(report)
 	case "text":
 		fallthrough
 	default:
-		formatType = format.FormatText
-	}
+		textOptions := output.TextOptions{
+			Verbose:   o.Verbose,
+			ShowHelp:  o.ShowHelp(),
+			LightMode: o.LightMode,
+		}
 
-	return format.NewFormatter(formatType, o.Verbose, o.ShowHelp(), o.LightMode)
+		return output.Text(report, textOptions)
+	}
+}
+
+// WriteReport formats and writes a report to the configured writer.
+func (o OutputOptions) WriteReport(report domain.Report) error {
+	content := o.FormatReport(report)
+	_, err := o.Writer.Write([]byte(content))
+
+	return err
 }
 
 // ToReportOptions converts OutputOptions to domain.ReportOptions.

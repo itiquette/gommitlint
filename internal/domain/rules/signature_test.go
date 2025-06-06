@@ -130,7 +130,7 @@ func TestSignatureRule_RequireSignature(t *testing.T) {
 			commit := createCommit(testCase.signature)
 
 			// Validate
-			failures := rule.Validate(commit, nil, &cfg)
+			failures := rule.Validate(commit, cfg)
 
 			// Check for expected validation result
 			if testCase.expectedValid {
@@ -163,7 +163,7 @@ func TestSignatureRule_NilContext(t *testing.T) {
 	commit := createCommit("")
 
 	// Validate
-	failures := rule.Validate(commit, nil, &cfg)
+	failures := rule.Validate(commit, cfg)
 
 	// Should error since signature is required by default
 	require.NotEmpty(t, failures, "Should error with nil context and no signature")
@@ -183,7 +183,7 @@ func TestSignatureRule_EmptyConfig(t *testing.T) {
 	commit := createCommit("")
 
 	// Validate with empty config
-	failures := rule.Validate(commit, nil, &cfg)
+	failures := rule.Validate(commit, cfg)
 
 	// Should error since signature is required by default
 	require.NotEmpty(t, failures, "Should error with empty config and no signature")
@@ -204,10 +204,10 @@ func TestSignatureRule_OptionsCombination(t *testing.T) {
 	noSigCommit := createCommit("")
 
 	// GPG signature should be valid
-	gpgFailures := rule.Validate(gpgCommit, nil, &cfg)
+	gpgFailures := rule.Validate(gpgCommit, cfg)
 	assertNoErrors(t, gpgFailures)
 
 	// No signature should be invalid
-	noSigFailures := rule.Validate(noSigCommit, nil, &cfg)
+	noSigFailures := rule.Validate(noSigCommit, cfg)
 	assertErrorMatch(t, noSigFailures, "must be cryptographically signed")
 }

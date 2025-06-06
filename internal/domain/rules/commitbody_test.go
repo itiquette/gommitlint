@@ -250,7 +250,7 @@ Technical details:
 			}
 
 			rule := rules.NewCommitBodyRule(cfg)
-			failures := rule.Validate(commit, nil, &cfg)
+			failures := rule.Validate(commit, cfg)
 
 			// Check result
 			if testCase.expectError {

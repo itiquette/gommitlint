@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 // Package internal contains the private application code for gommitlint.
-// This package follows hexagonal architecture principles with clear separation
-// between domain logic, adapters, and application services.
+// This package follows functional hexagonal architecture principles with
+// pure functions, value semantics, and explicit dependencies.
 //
 // # Structure
 //
@@ -12,18 +12,23 @@
 //
 //   - domain: Core business logic and entities (the hexagon center)
 //   - adapters: External integrations (hexagon edges)
-//   - config: Configuration types and loading
-//   - common: Shared utilities and helpers
-//   - integrationtest: Integration tests
-//   - testutils: Test utilities and helpers
+//   - integrationtest: End-to-end integration tests
 //
-// # Architecture
+// # Functional Hexagonal Architecture
 //
-// This package implements hexagonal architecture (ports and adapters) where:
-//   - The domain package contains pure business logic with no external dependencies
-//   - Adapters implement specific technologies (git, CLI, logging, etc.)
-//   - Port interfaces are defined where they are consumed, not in a central location
-//   - Dependencies flow inward: adapters depend on domain, never the reverse
+// This package implements functional hexagonal architecture where:
+//   - Domain logic uses pure functions with no external dependencies
+//   - All dependencies are passed as explicit function parameters
+//   - Adapters implement domain interfaces using value semantics
+//   - Configuration flows through explicit parameters, never context
+//   - No service objects or dependency injection frameworks
+//
+// # Core Principles
+//
+//   - Pure Functions: Validation logic is implemented as pure functions
+//   - Value Semantics: All data structures use value semantics for immutability
+//   - Explicit Dependencies: Dependencies passed as parameters, never hidden
+//   - Simple Composition: Complex operations built from simple function composition
 //
 // For detailed architecture documentation, see docs/ARCHITECTURE.md
 package internal

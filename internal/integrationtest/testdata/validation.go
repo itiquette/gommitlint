@@ -2,10 +2,8 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package integrationtest provides simple, functional helpers for integration testing.
-// This package follows functional programming principles with immutable configurations
-// and value semantics to provide a clean, simple testing interface.
-package integrationtest
+// Package testdata provides test fixtures and helpers for integration tests.
+package testdata
 
 import (
 	"context"
@@ -26,7 +24,7 @@ type ValidationResult struct {
 	Errors []domain.ValidationError
 }
 
-// TestValidation provides a simple, functional interface for testing validation.
+// TestValidation provides a simple interface for testing validation.
 // It creates all necessary components internally without exposing complexity.
 func TestValidation(t *testing.T, repoPath string, config config.Config) ValidationResult {
 	t.Helper()
@@ -35,18 +33,22 @@ func TestValidation(t *testing.T, repoPath string, config config.Config) Validat
 	ctx := context.Background()
 
 	// Create git repository adapter directly
-	gitRepo, err := git.NewRepository(ctx, repoPath)
+	gitRepo, err := git.NewRepository(repoPath)
 	require.NoError(t, err, "Failed to create git repository")
 
-	// Create rules using functional approach
-	validationRules := rules.CreateEnabledRules(&config)
+	// Create validation rules
+	commitRules := rules.CreateCommitRules(config)
+	repoRules := rules.CreateRepositoryRules(config)
 
-	// Get the HEAD commit
-	commit, err := gitRepo.GetCommit(ctx, "HEAD")
-	require.NoError(t, err, "Failed to get HEAD commit")
+	// Get the latest commit (HEAD)
+	commits, err := gitRepo.GetHeadCommits(ctx, 1)
+	require.NoError(t, err, "Failed to get latest commit")
+	require.Len(t, commits, 1, "Expected exactly one commit")
 
-	// Validate using pure function
-	result := domain.ValidateCommit(commit, validationRules, gitRepo, &config)
+	commit := commits[0]
+
+	// Validate commit
+	result := domain.ValidateCommit(commit, commitRules, repoRules, gitRepo, config)
 
 	// Use errors directly from ValidationResult
 	allErrors := result.Errors
@@ -104,7 +106,6 @@ func DefaultConfig() config.Config {
 				"SignedIdentity",
 				"JiraReference",
 				"Spell",
-				"ImperativeVerb", // Disable imperative checking by default
 			},
 		},
 		Signing: config.SigningConfig{
@@ -142,7 +143,7 @@ func WithRules(rules ...string) config.Config {
 	allRules := []string{
 		"Subject", "ConventionalCommit", "CommitBody", "Signature",
 		"SignOff", "SignedIdentity", "JiraReference", "Spell",
-		"ImperativeVerb", "BranchAhead",
+		"BranchAhead",
 	}
 
 	// Build disabled list from all rules except the ones we want enabled

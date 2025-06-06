@@ -147,7 +147,7 @@ func TestConventionalCommitRule_Validate(t *testing.T) {
 
 			rule := rules.NewConventionalCommitRule(cfg)
 
-			failures := rule.Validate(commit, nil, &cfg)
+			failures := rule.Validate(commit, cfg)
 
 			// Verify results
 			if testCase.wantErrors {
@@ -241,7 +241,7 @@ func TestConventionalCommitRuleWithContextConfig(t *testing.T) {
 
 			rule := rules.NewConventionalCommitRule(cfg)
 
-			failures := rule.Validate(commit, nil, &cfg)
+			failures := rule.Validate(commit, cfg)
 
 			if testCase.expectValid {
 				require.Empty(t, failures, "Expected no validation errors but got: %v for case: %s", failures, testCase.description)
@@ -293,7 +293,7 @@ func TestConventionalCommitRuleErrorMessages(t *testing.T) {
 			cfg := config.Config{}
 			rule := rules.NewConventionalCommitRule(cfg)
 
-			failures := rule.Validate(commit, nil, &cfg)
+			failures := rule.Validate(commit, cfg)
 
 			if testCase.expectedErr != "" {
 				require.NotEmpty(t, failures, "Expected validation errors for case: %s", testCase.description)
@@ -361,7 +361,7 @@ func TestConventionalCommitRuleEdgeCases(t *testing.T) {
 			cfg := config.Config{}
 			rule := rules.NewConventionalCommitRule(cfg)
 
-			failures := rule.Validate(commit, nil, &cfg)
+			failures := rule.Validate(commit, cfg)
 
 			if testCase.expectValid {
 				require.Empty(t, failures, "Expected no validation errors but got: %v for case: %s", failures, testCase.description)

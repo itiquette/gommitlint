@@ -3,24 +3,25 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 /*
-Package adapters contains the infrastructure adapters that implement the ports defined by the core domain.
+Package adapters contains the infrastructure adapters that implement domain interfaces.
 
-Following hexagonal architecture principles, this package contains:
+Following functional hexagonal architecture principles, this package contains:
 
-  - cli: Command-line interface adapter (driving adapter)
-  - git: Git repository adapter (driven adapter)
-  - loader: Configuration loading adapter (driven adapter)
-  - logging: Logging adapter (driven adapter)
-  - output: Output formatting adapter (driven adapter)
-  - signing: Cryptographic signing adapter (driven adapter)
+  - cli: Command-line interface adapter (primary/driving adapter)
+  - config: Configuration loading adapter (secondary/driven adapter)
+  - git: Git repository adapter (secondary/driven adapter)
+  - logging: Logging adapter (secondary/driven adapter)
+  - output: Output formatting adapter (secondary/driven adapter)
+  - signing: Cryptographic verification adapter (secondary/driven adapter)
 
-Adapters translate between the external world and the core domain, ensuring that
-the domain remains independent of infrastructure concerns. Each adapter implements
-one or more port interfaces, providing concrete implementations while keeping
-the core domain pure and testable.
+Adapters use value semantics and pure functions to translate between the external
+world and the core domain. Each adapter implements domain interfaces while keeping
+the domain logic completely independent of infrastructure concerns.
 
-The adapter pattern allows the application to be driven by different interfaces
-(CLI, API) and to drive different infrastructure components (Git, file system,
-crypto libraries) without coupling the business logic to these external concerns.
+All adapters follow these principles:
+  - Value receivers and immutable data structures
+  - Explicit dependencies passed as parameters
+  - No hidden global state or service locators
+  - Pure functional composition where possible
 */
 package adapters

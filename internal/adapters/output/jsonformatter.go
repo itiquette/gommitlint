@@ -2,10 +2,9 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-package format
+package output
 
 import (
-	"context"
 	"encoding/json"
 	"maps"
 	"time"
@@ -13,30 +12,19 @@ import (
 	"github.com/itiquette/gommitlint/internal/domain"
 )
 
-// JSONFormatter formats validation results as JSON.
-type JSONFormatter struct{}
-
-// Ensure JSONFormatter implements Formatter interface.
-var _ Formatter = (*JSONFormatter)(nil)
-
-// NewJSONFormatter creates a new JSON formatter.
-func NewJSONFormatter() *JSONFormatter {
-	return &JSONFormatter{}
-}
-
-// Format formats a domain report as JSON (pure function).
-func (f *JSONFormatter) Format(_ context.Context, report domain.Report) string {
+// JSON formats a domain report as JSON (pure function).
+func JSON(report domain.Report) string {
 	output := map[string]interface{}{
 		"timestamp":     report.Metadata.Timestamp.Format(time.RFC3339),
 		"allPassed":     report.Summary.AllPassed,
 		"totalCommits":  report.Summary.TotalCommits,
 		"passedCommits": report.Summary.PassedCommits,
 		"ruleSummary":   report.Summary.FailedRules,
-		"commitResults": f.convertCommitsToJSON(report.Commits),
+		"commitResults": convertCommitsToJSON(report.Commits),
 	}
 
 	if len(report.Repository.RuleResults) > 0 {
-		output["repositoryResults"] = f.convertRepositoryResultsToJSON(report.Repository.RuleResults)
+		output["repositoryResults"] = convertRepositoryResultsToJSON(report.Repository.RuleResults)
 	}
 
 	jsonBytes, err := json.MarshalIndent(output, "", "  ")
@@ -47,12 +35,7 @@ func (f *JSONFormatter) Format(_ context.Context, report domain.Report) string {
 	return string(jsonBytes)
 }
 
-// ContentType returns the MIME type for JSON output.
-func (f *JSONFormatter) ContentType() string {
-	return "application/json"
-}
-
-func (f *JSONFormatter) convertCommitsToJSON(commits []domain.CommitReport) []map[string]interface{} {
+func convertCommitsToJSON(commits []domain.CommitReport) []map[string]interface{} {
 	results := make([]map[string]interface{}, 0, len(commits))
 
 	for _, commitReport := range commits {
@@ -64,8 +47,8 @@ func (f *JSONFormatter) convertCommitsToJSON(commits []domain.CommitReport) []ma
 			"hash":         commitReport.Commit.Hash,
 			"subject":      commitReport.Commit.Subject,
 			"passed":       commitReport.Passed,
-			"ruleResults":  f.convertRulesToJSON(commitReport.RuleResults),
-			"errorCount":   f.countErrors(commitReport.RuleResults),
+			"ruleResults":  convertRulesToJSON(commitReport.RuleResults),
+			"errorCount":   countErrors(commitReport.RuleResults),
 			"warningCount": 0,
 		}
 
@@ -92,7 +75,7 @@ func (f *JSONFormatter) convertCommitsToJSON(commits []domain.CommitReport) []ma
 	return results
 }
 
-func (f *JSONFormatter) convertRulesToJSON(rules []domain.RuleReport) []map[string]interface{} {
+func convertRulesToJSON(rules []domain.RuleReport) []map[string]interface{} {
 	results := make([]map[string]interface{}, len(rules))
 
 	for i, ruleReport := range rules {
@@ -101,14 +84,14 @@ func (f *JSONFormatter) convertRulesToJSON(rules []domain.RuleReport) []map[stri
 			"name":    ruleReport.Name,
 			"status":  string(ruleReport.Status),
 			"message": ruleReport.Message,
-			"errors":  f.convertErrorsToJSON(ruleReport.Errors),
+			"errors":  convertErrorsToJSON(ruleReport.Errors),
 		}
 	}
 
 	return results
 }
 
-func (f *JSONFormatter) convertRepositoryResultsToJSON(repoResults []domain.RuleReport) []map[string]interface{} {
+func convertRepositoryResultsToJSON(repoResults []domain.RuleReport) []map[string]interface{} {
 	results := make([]map[string]interface{}, len(repoResults))
 
 	for i, ruleReport := range repoResults {
@@ -116,14 +99,14 @@ func (f *JSONFormatter) convertRepositoryResultsToJSON(repoResults []domain.Rule
 			"id":     ruleReport.Name,
 			"name":   ruleReport.Name,
 			"status": string(ruleReport.Status),
-			"errors": f.convertErrorsToJSON(ruleReport.Errors),
+			"errors": convertErrorsToJSON(ruleReport.Errors),
 		}
 	}
 
 	return results
 }
 
-func (f *JSONFormatter) convertErrorsToJSON(validationErrors []domain.ValidationError) []map[string]interface{} {
+func convertErrorsToJSON(validationErrors []domain.ValidationError) []map[string]interface{} {
 	if len(validationErrors) == 0 {
 		return nil
 	}
@@ -144,7 +127,7 @@ func (f *JSONFormatter) convertErrorsToJSON(validationErrors []domain.Validation
 	return results
 }
 
-func (f *JSONFormatter) countErrors(rules []domain.RuleReport) int {
+func countErrors(rules []domain.RuleReport) int {
 	total := 0
 
 	for _, rule := range rules {

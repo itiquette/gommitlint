@@ -39,7 +39,7 @@ func NewJiraReferenceRule(cfg config.Config) JiraReferenceRule {
 	}
 
 	// Check if conventional commit is enabled
-	isConventionalEnabled := domain.ShouldRunRule("conventional", cfg.Rules.Enabled, cfg.Rules.Disabled)
+	isConventionalEnabled := domain.IsRuleActive("conventional", cfg.Rules.Enabled, cfg.Rules.Disabled)
 
 	return JiraReferenceRule{
 		pattern:               pattern,
@@ -56,7 +56,7 @@ func NewJiraReferenceRule(cfg config.Config) JiraReferenceRule {
 // Helper function to check if a JIRA reference is in the scope part of a conventional commit.
 
 // Validate checks a commit for Jira reference compliance.
-func (r JiraReferenceRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.ValidationError {
+func (r JiraReferenceRule) Validate(commit domain.Commit, _ config.Config) []domain.ValidationError {
 	// Check if this commit type should be excluded from JIRA validation
 	if shouldExcludeCommitType(commit.Subject, r.excludedTypes) {
 		return nil

@@ -5,11 +5,11 @@
 package domain
 
 import (
+	"strings"
 	"time"
 )
 
-// Report represents a validation report as a pure value type.
-// This moves report structure from adapters to domain following hexagonal architecture.
+// Report represents a validation report.
 type Report struct {
 	Summary    ReportSummary
 	Commits    []CommitReport
@@ -53,24 +53,13 @@ type ReportMetadata struct {
 	Options   ReportOptions
 }
 
-// BuildReport creates a report from validation results using pure functions.
-// This is the main domain function for report creation.
-func BuildReport(commitResults []ValidationResult, repoErrors []ValidationError, options ReportOptions) Report {
+// BuildReport creates a report showing all executed rules (both passed and failed).
+func BuildReport(commitResults []ValidationResult, repoErrors []ValidationError,
+	commitRules []CommitRule, repoRules []RepositoryRule, options ReportOptions) Report {
 	return Report{
 		Summary:    buildSummary(commitResults, repoErrors),
-		Commits:    buildCommitReports(commitResults),
-		Repository: buildRepositoryReport(repoErrors),
-		Metadata:   buildMetadata(options),
-	}
-}
-
-// BuildReportWithRules creates a report including all executed rules (passed and failed).
-// This version shows complete rule execution results.
-func BuildReportWithRules(commitResults []ValidationResult, repoErrors []ValidationError, allRules []Rule, options ReportOptions) Report {
-	return Report{
-		Summary:    buildSummary(commitResults, repoErrors),
-		Commits:    buildCommitReportsWithRules(commitResults, allRules),
-		Repository: buildRepositoryReport(repoErrors),
+		Commits:    buildCommitReports(commitResults, commitRules),
+		Repository: buildRepositoryReport(repoErrors, repoRules),
 		Metadata:   buildMetadata(options),
 	}
 }
@@ -110,14 +99,14 @@ func buildSummary(commitResults []ValidationResult, repoErrors []ValidationError
 	}
 }
 
-// buildCommitReports creates commit reports from validation results.
-func buildCommitReports(commitResults []ValidationResult) []CommitReport {
+// buildCommitReports creates commit reports showing all executed rules.
+func buildCommitReports(commitResults []ValidationResult, commitRules []CommitRule) []CommitReport {
 	reports := make([]CommitReport, len(commitResults))
 
 	for i, result := range commitResults {
 		reports[i] = CommitReport{
 			Commit:      result.Commit,
-			RuleResults: buildRuleReportsFromValidationResult(result),
+			RuleResults: buildRuleReports(result, commitRules),
 			Passed:      !result.HasFailures(),
 		}
 	}
@@ -125,114 +114,102 @@ func buildCommitReports(commitResults []ValidationResult) []CommitReport {
 	return reports
 }
 
-// buildCommitReportsWithRules creates commit reports showing all rules (passed and failed).
-func buildCommitReportsWithRules(commitResults []ValidationResult, allRules []Rule) []CommitReport {
-	reports := make([]CommitReport, len(commitResults))
-
-	for i, result := range commitResults {
-		reports[i] = CommitReport{
-			Commit:      result.Commit,
-			RuleResults: buildRuleReportsWithAllRules(result, allRules),
-			Passed:      !result.HasFailures(),
-		}
-	}
-
-	return reports
-}
-
-// buildRepositoryReport creates repository report from repository errors.
-func buildRepositoryReport(repoErrors []ValidationError) RepositoryReport {
+// buildRepositoryReport creates repository report showing all executed rules.
+func buildRepositoryReport(repoErrors []ValidationError, repoRules []RepositoryRule) RepositoryReport {
 	return RepositoryReport{
-		RuleResults: buildRuleReportsFromErrors(repoErrors),
+		RuleResults: buildRepositoryRuleReports(repoErrors, repoRules),
 	}
 }
 
-// buildRuleReportsFromErrors creates rule reports from validation errors.
-func buildRuleReportsFromErrors(errors []ValidationError) []RuleReport {
+// buildRuleReports creates rule reports showing all executed commit rules.
+func buildRuleReports(result ValidationResult, commitRules []CommitRule) []RuleReport {
 	// Group errors by rule
-	errorsByRule := make(map[string][]ValidationError)
-	for _, err := range errors {
-		errorsByRule[err.Rule] = append(errorsByRule[err.Rule], err)
-	}
-
-	// Create rule reports
-	reports := make([]RuleReport, 0, len(errorsByRule))
-
-	for rule, errs := range errorsByRule {
-		status := StatusFailed
-
-		message := "Failed"
-		if len(errs) > 0 {
-			message = errs[0].Message // Use first error message
-		}
-
-		reports = append(reports, RuleReport{
-			Name:    rule,
-			Status:  status,
-			Errors:  errs,
-			Message: message,
-		})
-	}
-
-	return reports
-}
-
-// buildRuleReportsWithAllRules creates rule reports for all executed rules (passed and failed).
-func buildRuleReportsWithAllRules(result ValidationResult, allRules []Rule) []RuleReport {
-	// Create error map for quick lookup
 	errorsByRule := make(map[string][]ValidationError)
 	for _, err := range result.Errors {
 		errorsByRule[err.Rule] = append(errorsByRule[err.Rule], err)
 	}
 
-	// Filter to only commit-level rules (exclude repository rules for commit reports)
-	commitRules := FilterCommitRules(allRules)
+	// Create reports for all executed rules
+	reports := make([]RuleReport, 0, len(commitRules))
 
-	// Create reports for all commit rules
-	reports := make([]RuleReport, len(commitRules))
-
-	for index, rule := range commitRules {
+	for _, rule := range commitRules {
 		ruleName := rule.Name()
-		if errors, hasErrors := errorsByRule[ruleName]; hasErrors {
-			// Rule failed
-			reports[index] = RuleReport{
+		errs, hasFailed := errorsByRule[ruleName]
+
+		if hasFailed {
+			// Failed rule
+			var messageBuilder strings.Builder
+
+			for i, err := range errs {
+				if i > 0 {
+					messageBuilder.WriteString("; ")
+				}
+
+				messageBuilder.WriteString(err.Message)
+			}
+
+			reports = append(reports, RuleReport{
 				Name:    ruleName,
 				Status:  StatusFailed,
-				Errors:  errors,
-				Message: errors[0].Message, // Use first error message
-			}
+				Errors:  errs,
+				Message: messageBuilder.String(),
+			})
 		} else {
-			// Rule passed
-			reports[index] = RuleReport{
+			// Passed rule
+			reports = append(reports, RuleReport{
 				Name:    ruleName,
 				Status:  StatusPassed,
 				Errors:  nil,
-				Message: "No errors",
-			}
+				Message: "Passed",
+			})
 		}
 	}
 
 	return reports
 }
 
-// buildRuleReportsFromValidationResult creates rule reports from a validation result.
-// This is used for the legacy BuildReport function.
-func buildRuleReportsFromValidationResult(result ValidationResult) []RuleReport {
+// buildRepositoryRuleReports creates rule reports showing all executed repository rules.
+func buildRepositoryRuleReports(repoErrors []ValidationError, repoRules []RepositoryRule) []RuleReport {
 	// Group errors by rule
 	errorsByRule := make(map[string][]ValidationError)
-	for _, err := range result.Errors {
+	for _, err := range repoErrors {
 		errorsByRule[err.Rule] = append(errorsByRule[err.Rule], err)
 	}
 
-	// Create rule reports only for failed rules (legacy behavior)
-	reports := make([]RuleReport, 0, len(errorsByRule))
-	for rule, errs := range errorsByRule {
-		reports = append(reports, RuleReport{
-			Name:    rule,
-			Status:  StatusFailed,
-			Errors:  errs,
-			Message: errs[0].Message,
-		})
+	// Create reports for all executed rules
+	reports := make([]RuleReport, 0, len(repoRules))
+
+	for _, rule := range repoRules {
+		ruleName := rule.Name()
+		errs, hasFailed := errorsByRule[ruleName]
+
+		if hasFailed {
+			// Failed rule
+			var messageBuilder strings.Builder
+
+			for i, err := range errs {
+				if i > 0 {
+					messageBuilder.WriteString("; ")
+				}
+
+				messageBuilder.WriteString(err.Message)
+			}
+
+			reports = append(reports, RuleReport{
+				Name:    ruleName,
+				Status:  StatusFailed,
+				Errors:  errs,
+				Message: messageBuilder.String(),
+			})
+		} else {
+			// Passed rule
+			reports = append(reports, RuleReport{
+				Name:    ruleName,
+				Status:  StatusPassed,
+				Errors:  nil,
+				Message: "Passed",
+			})
+		}
 	}
 
 	return reports

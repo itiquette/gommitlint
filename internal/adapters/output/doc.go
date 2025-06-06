@@ -26,4 +26,4 @@ Key components:
 Each formatter implements the domain.ResultFormatter interface,
 allowing the domain to remain independent of presentation concerns.
 */
-package format
+package output

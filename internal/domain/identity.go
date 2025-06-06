@@ -10,7 +10,6 @@ import (
 )
 
 // Identity represents a committer or author identity with name and email.
-// This is an immutable value type.
 type Identity struct {
 	name  string
 	email string

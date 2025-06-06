@@ -25,8 +25,7 @@ func NewIdentityRule(cfg config.Config) IdentityRule {
 }
 
 // Validate validates that commit authors are in the allowed signers list.
-// Note: Full signature verification requires crypto dependencies not available in simplified format.
-func (r IdentityRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.ValidationError {
+func (r IdentityRule) Validate(commit domain.Commit, _ config.Config) []domain.ValidationError {
 	// If no allowed signers configured, allow all authors
 	if len(r.allowedSigners) == 0 {
 		return nil

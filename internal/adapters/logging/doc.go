@@ -3,27 +3,28 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 /*
-Package log provides logging adapters for gommitlint.
+Package logging provides a simple logging adapter for gommitlint.
 
-This package implements the outgoing port for logging operations,
-following hexagonal architecture principles. It provides:
+This package provides a logging adapter that implements the domain.Logger
+interface using zerolog.
 
-  - Structured logging with zerolog
-  - Context-based logger management
-  - CLI-specific logging configuration
-  - Domain logger adapter implementation
+Key features:
+  - Single adapter implementation (no overengineering)
+  - Consistent key-value argument handling
+  - CLI integration for configuration
 
-The package bridges the gap between the domain's logging interface
-and the concrete zerolog implementation, ensuring proper separation
-of concerns.
+Usage:
 
-Key components:
+	// Create logger from zerolog
+	logger := logging.New(zerologInstance)
 
-  - logger.go: Logger initialization and context management
-  - adapter.go: Logger implementing outgoing.Logger interface
-  - stderr.go: Standard error writer implementation
+	// Use in domain functions
+	logger.Info("Processing commit", "hash", commit.Hash)
 
-The logging adapter ensures that domain logic can log messages without
+	// Initialize from CLI context
+	ctx = logging.InitLogger(ctx, cmd, "text")
+
+The adapter ensures that domain logic can log messages without
 depending on specific logging implementations.
 */
-package log
+package logging

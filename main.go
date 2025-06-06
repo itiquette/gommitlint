@@ -11,7 +11,7 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/adapters/cli"
 	"github.com/itiquette/gommitlint/internal/adapters/config"
-	"github.com/itiquette/gommitlint/internal/adapters/logging"
+	logadapter "github.com/itiquette/gommitlint/internal/adapters/logging"
 )
 
 // These variables are set by the build process.
@@ -26,19 +26,16 @@ func main() {
 	ctx := context.Background()
 
 	// Initialize logger early in the application flow
-	ctx = log.InitLogger(ctx, nil, "text") // Basic logger setup
+	ctx = logadapter.InitLogger(ctx, nil, "text") // Basic logger setup
 
 	// Load configuration
-	cfg, err := config.Load()
+	cfg, err := config.LoadConfig()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load configuration: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Ensure logger is available in CLI context
-	zlog := log.GetLogger(ctx)
-	logger := log.NewLogger(*zlog)
-	ctx = cli.WithLogger(ctx, logger)
+	// Logger is already set up by log.InitLogger, no additional setup needed
 
 	// Pass config to CLI with logger context
 	cli.Execute(ctx, version, commit, date, cfg)

@@ -2,29 +2,17 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-package format
+package output
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/domain"
 )
 
-// GitLabFormatter formats validation results for GitLab CI.
-type GitLabFormatter struct{}
-
-// Ensure GitLabFormatter implements Formatter interface.
-var _ Formatter = (*GitLabFormatter)(nil)
-
-// NewGitLabFormatter creates a new GitLab CI formatter.
-func NewGitLabFormatter() *GitLabFormatter {
-	return &GitLabFormatter{}
-}
-
-// Format formats a domain report for GitLab CI (pure function).
-func (f *GitLabFormatter) Format(_ context.Context, report domain.Report) string {
+// GitLab formats a domain report for GitLab CI (pure function).
+func GitLab(report domain.Report) string {
 	var builder strings.Builder
 
 	// GitLab CI section for summary
@@ -44,7 +32,7 @@ func (f *GitLabFormatter) Format(_ context.Context, report domain.Report) string
 		builder.WriteString(fmt.Sprintf("Commit #%d: %s\n", idx+1, commitReport.Commit.Hash))
 		builder.WriteString(fmt.Sprintf("Subject: %s\n", commitReport.Commit.Subject))
 
-		f.writeGitLabRules(&builder, commitReport)
+		writeGitLabRules(&builder, commitReport)
 		builder.WriteString("section_end:$(date +%s):" + sectionName + "\n")
 	}
 
@@ -70,12 +58,7 @@ func (f *GitLabFormatter) Format(_ context.Context, report domain.Report) string
 	return builder.String()
 }
 
-// ContentType returns the MIME type for GitLab CI output.
-func (f *GitLabFormatter) ContentType() string {
-	return "text/plain"
-}
-
-func (f *GitLabFormatter) writeGitLabRules(builder *strings.Builder, commitReport domain.CommitReport) {
+func writeGitLabRules(builder *strings.Builder, commitReport domain.CommitReport) {
 	failedCount := 0
 
 	for _, ruleReport := range commitReport.RuleResults {

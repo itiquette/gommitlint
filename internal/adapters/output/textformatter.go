@@ -2,10 +2,9 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-package format
+package output
 
 import (
-	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -14,30 +13,18 @@ import (
 	"github.com/itiquette/gommitlint/internal/domain"
 )
 
-// TextFormatter formats validation results as plain text with colors.
-type TextFormatter struct {
-	verbose   bool
-	showHelp  bool
-	lightMode bool
+// TextOptions contains configuration for text formatting.
+type TextOptions struct {
+	Verbose   bool
+	ShowHelp  bool
+	LightMode bool
 }
 
-// Ensure TextFormatter implements Formatter interface.
-var _ Formatter = (*TextFormatter)(nil)
-
-// NewTextFormatter creates a new text formatter.
-func NewTextFormatter(verbose, showHelp, lightMode bool) *TextFormatter {
-	return &TextFormatter{
-		verbose:   verbose,
-		showHelp:  showHelp,
-		lightMode: lightMode,
-	}
-}
-
-// Format formats a domain report as plain text (pure function).
-func (f *TextFormatter) Format(_ context.Context, report domain.Report) string {
+// Text formats a domain report as plain text with colors (pure function).
+func Text(report domain.Report, options TextOptions) string {
 	var builder strings.Builder
 
-	colors := f.getColorScheme()
+	colors := getColorScheme(options.LightMode)
 
 	// Summary for multiple commits
 	if len(report.Commits) > 1 {
@@ -45,33 +32,28 @@ func (f *TextFormatter) Format(_ context.Context, report domain.Report) string {
 			builder.WriteString(colors.Success(fmt.Sprintf("SUCCESS: All %d commits passed validation\n\n", report.Summary.TotalCommits)))
 		} else {
 			builder.WriteString(colors.Warning(fmt.Sprintf("SUMMARY: %d of %d commits passed validation\n", report.Summary.PassedCommits, report.Summary.TotalCommits)))
-			f.writeFailedRulesSummary(&builder, report.Summary, colors)
+			writeFailedRulesSummary(&builder, report.Summary, colors)
 			builder.WriteString("\n")
 		}
 	}
 
 	// Format each commit
 	for i, commitReport := range report.Commits {
-		f.writeCommitHeader(&builder, commitReport, i, len(report.Commits), colors)
-		f.writeCommitRules(&builder, commitReport, colors)
+		writeCommitHeader(&builder, commitReport, i, len(report.Commits), colors)
+		writeCommitRules(&builder, commitReport, colors, options.Verbose)
 	}
 
 	// Format repository-level results at the end
 	if len(report.Repository.RuleResults) > 0 {
-		f.writeRepositoryResults(&builder, report.Repository.RuleResults, colors)
+		writeRepositoryResults(&builder, report.Repository.RuleResults, colors, options.ShowHelp)
 	}
 
 	return builder.String()
 }
 
-// ContentType returns the MIME type for text output.
-func (f *TextFormatter) ContentType() string {
-	return "text/plain"
-}
-
 // getColorScheme returns the appropriate color scheme based on light mode setting.
-func (f *TextFormatter) getColorScheme() colorScheme {
-	if f.lightMode {
+func getColorScheme(lightMode bool) colorScheme {
+	if lightMode {
 		return colorScheme{
 			Success: color.New(color.FgGreen).SprintFunc(),
 			Warning: color.New(color.FgRed).SprintFunc(),
@@ -92,7 +74,7 @@ func (f *TextFormatter) getColorScheme() colorScheme {
 	}
 }
 
-func (f *TextFormatter) writeFailedRulesSummary(builder *strings.Builder, summary domain.ReportSummary, colors colorScheme) {
+func writeFailedRulesSummary(builder *strings.Builder, summary domain.ReportSummary, colors colorScheme) {
 	if len(summary.FailedRules) == 0 {
 		return
 	}
@@ -113,7 +95,7 @@ func (f *TextFormatter) writeFailedRulesSummary(builder *strings.Builder, summar
 	}
 }
 
-func (f *TextFormatter) writeCommitHeader(builder *strings.Builder, commitReport domain.CommitReport, index, totalCommits int, colors colorScheme) {
+func writeCommitHeader(builder *strings.Builder, commitReport domain.CommitReport, index, totalCommits int, colors colorScheme) {
 	if commitReport.Commit.Hash == "" {
 		return
 	}
@@ -143,7 +125,7 @@ func (f *TextFormatter) writeCommitHeader(builder *strings.Builder, commitReport
 	builder.WriteString(colors.Header(divider) + "\n\n")
 }
 
-func (f *TextFormatter) writeCommitRules(builder *strings.Builder, commitReport domain.CommitReport, colors colorScheme) {
+func writeCommitRules(builder *strings.Builder, commitReport domain.CommitReport, colors colorScheme, verbose bool) {
 	// Sort rules alphabetically
 	sortedRules := make([]domain.RuleReport, len(commitReport.RuleResults))
 	copy(sortedRules, commitReport.RuleResults)
@@ -164,7 +146,7 @@ func (f *TextFormatter) writeCommitRules(builder *strings.Builder, commitReport 
 
 			for _, err := range ruleReport.Errors {
 				message := err.Message
-				if f.verbose && err.Code != "" {
+				if verbose && err.Code != "" {
 					message = fmt.Sprintf("[%s] %s", err.Code, message)
 				}
 
@@ -184,7 +166,7 @@ func (f *TextFormatter) writeCommitRules(builder *strings.Builder, commitReport 
 	}
 }
 
-func (f *TextFormatter) writeRepositoryResults(builder *strings.Builder, repoResults []domain.RuleReport, colors colorScheme) {
+func writeRepositoryResults(builder *strings.Builder, repoResults []domain.RuleReport, colors colorScheme, showHelp bool) {
 	builder.WriteString("\n")
 	builder.WriteString("================================================================================\n")
 	builder.WriteString("REPOSITORY VALIDATION\n")
@@ -212,7 +194,7 @@ func (f *TextFormatter) writeRepositoryResults(builder *strings.Builder, repoRes
 			builder.WriteString(ruleReport.Message + "\n")
 		}
 
-		if f.showHelp && len(ruleReport.Errors) > 0 && ruleReport.Errors[0].Help != "" {
+		if showHelp && len(ruleReport.Errors) > 0 && ruleReport.Errors[0].Help != "" {
 			builder.WriteString(fmt.Sprintf("    Help: %s\n", ruleReport.Errors[0].Help))
 		}
 

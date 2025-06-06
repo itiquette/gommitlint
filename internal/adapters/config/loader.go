@@ -8,81 +8,193 @@ import (
 	"fmt"
 	"os"
 
-	domainConfig "github.com/itiquette/gommitlint/internal/domain/config"
+	configTypes "github.com/itiquette/gommitlint/internal/domain/config"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
 )
 
-// Loader handles configuration file loading operations.
-type Loader struct {
-	// Standard configuration paths to search
-	configPaths []string
+// defaultConfigPaths defines the standard configuration file search paths.
+var defaultConfigPaths = []string{
+	".gommitlint.yaml",
+	".gommitlint.yml",
+	".config/gommitlint/config.yaml",
+	".config/gommitlint/config.yml",
 }
 
-// NewLoader creates a new configuration loader.
-func NewLoader() *Loader {
-	return &Loader{
-		configPaths: []string{
-			".gommitlint.yaml",
-			".gommitlint.yml",
-			".config/gommitlint/config.yaml",
-			".config/gommitlint/config.yml",
-		},
+// LoadConfig loads configuration from multiple sources with later configs taking precedence.
+func LoadConfig() (configTypes.Config, error) {
+	return MergeConfigs(
+		LoadDefaultConfig(),
+		LoadFileConfig(findFirstExistingConfigFile()),
+		LoadEnvConfig(),
+	)
+}
+
+// LoadConfigFromPath loads configuration from a specific path using functional composition.
+func LoadConfigFromPath(configPath string) (configTypes.Config, error) {
+	return MergeConfigs(
+		LoadDefaultConfig(),
+		LoadFileConfig(configPath),
+		LoadEnvConfig(),
+	)
+}
+
+// LoadDefaultConfig returns the default configuration with application-specific defaults.
+func LoadDefaultConfig() configTypes.Config {
+	return NewConfigWithDefaults()
+}
+
+// LoadFileConfig loads configuration from a file.
+// Returns empty config if file doesn't exist or can't be loaded.
+func LoadFileConfig(configPath string) configTypes.Config {
+	if configPath == "" {
+		return configTypes.Config{} // Empty config
 	}
-}
 
-// LoadFromFile loads configuration from default paths.
-func (l Loader) LoadFromFile() (domainConfig.Config, error) {
-	// Try to load from each standard path
-	for _, path := range l.configPaths {
-		if _, err := os.Stat(path); err == nil {
-			return l.LoadFromPath(path)
-		}
+	// Check if file exists
+	if _, err := os.Stat(configPath); err != nil {
+		return configTypes.Config{} // Empty config
 	}
 
-	// No config file found, return defaults
-	return domainConfig.NewDefault(), nil
-}
-
-// LoadFromPath loads configuration from a specific path.
-func (l Loader) LoadFromPath(configPath string) (domainConfig.Config, error) {
 	// Create koanf instance
 	koanfConfig := koanf.New(".")
 
 	// Load YAML configuration
 	if err := koanfConfig.Load(file.Provider(configPath), yaml.Parser()); err != nil {
-		return domainConfig.Config{}, fmt.Errorf("error loading config file %s: %w", configPath, err)
+		return configTypes.Config{} // Empty config on error
 	}
 
-	// Start with defaults
-	cfg := domainConfig.NewDefault()
-
-	// Store original default disabled rules to preserve
-	defaultDisabledRules := cfg.Rules.Disabled
-
-	// Unmarshal the root configuration
-	// Use yaml tag instead of json to properly load yaml files
+	// Parse into config struct
+	var cfg configTypes.Config
 	if err := koanfConfig.UnmarshalWithConf("gommitlint", &cfg, koanf.UnmarshalConf{Tag: "yaml"}); err != nil {
-		return domainConfig.Config{}, fmt.Errorf("error unmarshaling config for gommitlint namespace: %w", err)
+		return configTypes.Config{} // Empty config on error
 	}
 
-	// Merge default disabled rules with YAML disabled rules
-	if koanfConfig.Exists("gommitlint.rules.disabled") {
-		// YAML has disabled, apply priority logic
-		cfg = l.applyRulePriority(cfg)
-	} else {
-		// No disabled in YAML, apply defaults and merge
-		cfg.Rules.Disabled = l.mergeDefaultDisabledRules(cfg.Rules.Enabled, defaultDisabledRules)
+	// Apply rule priority logic
+	return applyRulePriority(cfg)
+}
+
+// LoadEnvConfig loads configuration from environment variables.
+func LoadEnvConfig() configTypes.Config {
+	return LoadFromEnv(configTypes.Config{})
+}
+
+// MergeConfigs merges multiple configurations with later configs taking precedence.
+func MergeConfigs(configs ...configTypes.Config) (configTypes.Config, error) {
+	if len(configs) == 0 {
+		return configTypes.NewDefault(), nil
 	}
 
-	return cfg, nil
+	// Start with first config
+	result := configs[0]
+
+	// Merge each subsequent config
+	for _, cfg := range configs[1:] {
+		result = mergeConfig(result, cfg)
+	}
+
+	// Validate final configuration
+	if validationErrors := result.Validate(); len(validationErrors) > 0 {
+		return configTypes.Config{}, fmt.Errorf("configuration validation failed: %v", validationErrors)
+	}
+
+	return result, nil
+}
+
+// mergeConfig merges two configurations with the second taking precedence.
+func mergeConfig(base, overlay configTypes.Config) configTypes.Config {
+	result := base
+
+	// Merge non-zero values from overlay
+	if overlay.Output != "" {
+		result.Output = overlay.Output
+	}
+
+	// Merge message config
+	if overlay.Message.Subject.MaxLength != 0 {
+		result.Message.Subject.MaxLength = overlay.Message.Subject.MaxLength
+	}
+
+	if overlay.Message.Subject.Case != "" {
+		result.Message.Subject.Case = overlay.Message.Subject.Case
+	}
+
+	if len(overlay.Message.Subject.ForbidEndings) > 0 {
+		result.Message.Subject.ForbidEndings = overlay.Message.Subject.ForbidEndings
+	}
+
+	// Merge conventional config
+	if len(overlay.Conventional.Types) > 0 {
+		result.Conventional.Types = overlay.Conventional.Types
+	}
+
+	if len(overlay.Conventional.Scopes) > 0 {
+		result.Conventional.Scopes = overlay.Conventional.Scopes
+	}
+
+	// Merge repo config
+	if overlay.Repo.ReferenceBranch != "" {
+		result.Repo.ReferenceBranch = overlay.Repo.ReferenceBranch
+	}
+
+	if overlay.Repo.MaxCommitsAhead != 0 {
+		result.Repo.MaxCommitsAhead = overlay.Repo.MaxCommitsAhead
+	}
+
+	// Merge rules config - always override if present
+	if len(overlay.Rules.Enabled) > 0 {
+		result.Rules.Enabled = overlay.Rules.Enabled
+	}
+
+	if len(overlay.Rules.Disabled) > 0 {
+		result.Rules.Disabled = overlay.Rules.Disabled
+	}
+
+	// Merge Jira config
+	if len(overlay.Jira.ProjectPrefixes) > 0 {
+		result.Jira.ProjectPrefixes = overlay.Jira.ProjectPrefixes
+	}
+
+	if len(overlay.Jira.IgnoreTicketPatterns) > 0 {
+		result.Jira.IgnoreTicketPatterns = overlay.Jira.IgnoreTicketPatterns
+	}
+
+	// Merge Spell config
+	if len(overlay.Spell.IgnoreWords) > 0 {
+		result.Spell.IgnoreWords = overlay.Spell.IgnoreWords
+	}
+
+	if overlay.Spell.Locale != "" {
+		result.Spell.Locale = overlay.Spell.Locale
+	}
+
+	// Merge Signing config
+	if overlay.Signing.KeyDirectory != "" {
+		result.Signing.KeyDirectory = overlay.Signing.KeyDirectory
+	}
+
+	if len(overlay.Signing.AllowedSigners) > 0 {
+		result.Signing.AllowedSigners = overlay.Signing.AllowedSigners
+	}
+
+	return result
+}
+
+// findFirstExistingConfigFile finds the first existing config file in default paths.
+func findFirstExistingConfigFile() string {
+	for _, path := range defaultConfigPaths {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+
+	return ""
 }
 
 // applyRulePriority ensures that rules in disabled_rules are removed from enabled_rules.
 // If a rule appears in both lists, disabled takes precedence.
-// Returns a new config with the updated rules.
-func (l Loader) applyRulePriority(config domainConfig.Config) domainConfig.Config {
+func applyRulePriority(config configTypes.Config) configTypes.Config {
 	// Create a map of disabled rules for efficient lookup
 	disabledMap := make(map[string]bool)
 	for _, rule := range config.Rules.Disabled {
@@ -103,35 +215,4 @@ func (l Loader) applyRulePriority(config domainConfig.Config) domainConfig.Confi
 	result.Rules.Enabled = filteredEnabled
 
 	return result
-}
-
-// mergeDefaultDisabledRules merges default disabled rules with the current configuration.
-// When no disabled are specified in YAML, we keep default disabled rules
-// even if they're explicitly enabled (both lists can contain the rule).
-func (l Loader) mergeDefaultDisabledRules(_ []string, defaultDisabledRules []string) []string {
-	// Just return the default disabled rules - they coexist with enabled rules
-	return defaultDisabledRules
-}
-
-// Load provides a simple entry point for loading configuration.
-// It combines file loading and environment variable overrides.
-func Load() (domainConfig.Config, error) {
-	loader := NewLoader()
-
-	// Try to load from file
-	cfg, err := loader.LoadFromFile()
-	if err != nil {
-		// If no config file found, use defaults
-		cfg = domainConfig.NewDefault()
-	}
-
-	// Apply environment variable overrides
-	cfg = LoadFromEnv(cfg)
-
-	// Validate the final configuration
-	if validationErrors := cfg.Validate(); len(validationErrors) > 0 {
-		return domainConfig.Config{}, fmt.Errorf("configuration validation failed: %v", validationErrors)
-	}
-
-	return cfg, nil
 }

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-package crypto
+package signing
 
 import (
 	"errors"
@@ -27,12 +27,10 @@ const (
 	Private
 )
 
-// FileSecurityService handles file permission security checks.
-type FileSecurityService struct{}
+// File permission security functions
 
 // IsSecurePermissions checks if a file has appropriately secure permissions.
-// Uses a file descriptor approach to prevent TOCTOU race conditions.
-func (s FileSecurityService) IsSecurePermissions(path string, level Level) (bool, error) {
+func IsSecurePermissions(path string, level Level) (bool, error) {
 	// Open file to get a file descriptor - prevents TOCTOU issues
 	file, err := os.Open(path)
 	if err != nil {
@@ -67,8 +65,7 @@ func (s FileSecurityService) IsSecurePermissions(path string, level Level) (bool
 }
 
 // VerifyOwnership checks if current user owns the file.
-// Uses a file descriptor approach to prevent TOCTOU race conditions.
-func (s FileSecurityService) VerifyOwnership(path string) (bool, error) {
+func VerifyOwnership(path string) (bool, error) {
 	// Open file to get a file descriptor - prevents TOCTOU issues
 	file, err := os.Open(path)
 	if err != nil {
@@ -103,8 +100,7 @@ func (s FileSecurityService) VerifyOwnership(path string) (bool, error) {
 }
 
 // SetSecurePermissions sets appropriate permissions for a file based on security level.
-// Takes a file path and a security level, then applies the correct permissions.
-func (s FileSecurityService) SetSecurePermissions(path string, level Level) error {
+func SetSecurePermissions(path string, level Level) error {
 	var mode os.FileMode
 
 	switch level {
@@ -134,8 +130,7 @@ func (s FileSecurityService) SetSecurePermissions(path string, level Level) erro
 }
 
 // SecureVerifyFileExists checks if a file exists and has appropriate permissions.
-// Uses a file descriptor approach to prevent TOCTOU race conditions.
-func (s FileSecurityService) SecureVerifyFileExists(path string, level Level) (bool, error) {
+func SecureVerifyFileExists(path string, level Level) (bool, error) {
 	// Try to open the file directly - prevents TOCTOU issues
 	file, err := os.Open(path)
 	if err != nil {
@@ -148,7 +143,7 @@ func (s FileSecurityService) SecureVerifyFileExists(path string, level Level) (b
 	defer file.Close()
 
 	// File exists, now check permissions
-	isSecure, err := s.IsSecurePermissions(path, level)
+	isSecure, err := IsSecurePermissions(path, level)
 	if err != nil {
 		return false, err
 	}
@@ -156,8 +151,7 @@ func (s FileSecurityService) SecureVerifyFileExists(path string, level Level) (b
 	return isSecure, nil
 }
 
-// GetSecurityLevelForFile determines the appropriate security level for a file
-// based on its extension and name.
+// GetSecurityLevelForFile determines the appropriate security level for a file based on its extension and name.
 func GetSecurityLevelForFile(path string) Level {
 	ext := filepath.Ext(path)
 	base := filepath.Base(path)
@@ -190,8 +184,7 @@ func GetSecurityLevelForFile(path string) Level {
 }
 
 // IsPathWritable securely checks if a path is writable by the current user.
-// Uses a file descriptor approach to prevent TOCTOU race conditions.
-func (s FileSecurityService) IsPathWritable(path string) (bool, error) {
+func IsPathWritable(path string) (bool, error) {
 	// Check if directory exists
 	fileInfo, err := os.Stat(path)
 	if err != nil {
@@ -199,7 +192,7 @@ func (s FileSecurityService) IsPathWritable(path string) (bool, error) {
 			// If directory doesn't exist, check if parent is writable
 			parent := filepath.Dir(path)
 
-			return s.IsPathWritable(parent)
+			return IsPathWritable(parent)
 		}
 
 		return false, fmt.Errorf("error checking path: %w", err)

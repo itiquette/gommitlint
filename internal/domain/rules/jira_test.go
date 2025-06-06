@@ -117,7 +117,7 @@ func TestJiraReferenceRule_Validate(t *testing.T) {
 			rule := rules.NewJiraReferenceRule(cfg)
 
 			// Execute
-			failures := rule.Validate(testCase.commit, nil, &cfg)
+			failures := rule.Validate(testCase.commit, cfg)
 
 			// Assert
 			if testCase.wantErrors {

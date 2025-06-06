@@ -51,7 +51,6 @@ type RuleMetadata struct {
 }
 
 // ReportOptions defines options for report generation.
-// This is a port-level type to avoid adapters depending on application types.
 type ReportOptions struct {
 	// Format specifies the output format (text, json, github, gitlab).
 	Format string

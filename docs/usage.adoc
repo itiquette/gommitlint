@@ -4,27 +4,45 @@
 
 = Gommitlint Usage Guide
 
-== Basic Usage
+Gommitlint validates Git commit messages using configurable rules. It follows functional architecture principles with explicit configuration and deterministic validation.
 
-=== Validate Commits
+== Installation
 
 [source,bash]
 ----
-# Validate last commit
+# Install latest version
+go install github.com/itiquette/gommitlint@latest
+
+# Or download from releases
+curl -L https://github.com/itiquette/gommitlint/releases/latest/download/gommitlint-linux-amd64 -o gommitlint
+chmod +x gommitlint
+----
+
+== Basic Commands
+
+=== Validation
+[source,bash]
+----
+# Validate last commit (default)
 gommitlint validate
 
 # Validate specific commit
 gommitlint validate --git-reference=abc123
 
 # Validate commit range
-gommitlint validate --git-reference=main..HEAD
+gommitlint validate --revision-range=main..HEAD
 
-# Validate with verbose output
-gommitlint validate -v
+# Validate from base branch
+gommitlint validate --base-branch=main
+
+# Validate message from file
+gommitlint validate --message-file=commit-msg.txt
+
+# Multiple commits from HEAD
+gommitlint validate --commit-count=5
 ----
 
 === Git Hooks
-
 [source,bash]
 ----
 # Install commit-msg hook
@@ -34,195 +52,252 @@ gommitlint install-hook
 gommitlint remove-hook
 ----
 
+=== Output Formats
+[source,bash]
+----
+# Default text output
+gommitlint validate
+
+# JSON output for automation
+gommitlint validate --format=json
+
+# GitHub Actions annotations
+gommitlint validate --format=github
+
+# GitLab CI annotations  
+gommitlint validate --format=gitlab
+
+# Verbose output
+gommitlint validate -v
+
+# Extra verbose for debugging
+gommitlint validate --extra-verbose
+----
+
 == Configuration
 
 === Default Behavior
+Without configuration, gommitlint validates with sensible defaults:
 
-Gommitlint works without configuration. By default:
+* **Enabled by default**: Most rules (subject length, conventional format, signoff, signature, identity)
+* **Disabled by default**: `jirareference`, `commitbody`, `spell` (require explicit opt-in)
 
-* Most rules are **enabled** (like subject length, imperative mood)
-* `jirareference` and `commitbody` are **disabled by default**
-* Configuration file is optional. If you don't like the defaults, configure it to your liking.
-
-=== Simple Configuration
-
-Create `.gommitlint.yaml` to customize behavior:
+=== Configuration File
+Create `.gommitlint.yaml` in your repository root:
 
 [source,yaml]
 ----
 gommitlint:
+  # Rule activation
   rules:
     enabled:
       - jirareference    # Enable JIRA validation
+      - commitbody       # Require commit body
     disabled:
-      - imperative       # Disable imperative mood check
-----
+      - subjectlength    # Disable subject length check
 
-=== Rule Priority System
-
-1. **Explicitly enabled** rules always run (highest priority)
-2. **Explicitly disabled** rules are skipped
-3. **Default behavior** applies if not specified
-
-[source,yaml]
-----
-gommitlint:
-  rules:
-    enabled:
-      - commitbody      # Force commitbody check to run
-      - jirareference   # Override default-disabled
-    disabled:
-      - subjectlength   # Disable even though default-enabled
-----
-
-=== Full Configuration Example
-
-[source,yaml]
-----
-gommitlint:
-  # Message format rules
+  # Message format
   message:
     subject:
-      max_length: 72           # Maximum subject length
-      case: "sentence"         # sentence|lower|upper|title
-      forbid_endings: ["."]    # No period at end
+      max_length: 72
+      case: "sentence"        # sentence|lower|upper|title
+      forbid_endings: ["."]
     body:
-      min_length: 10          # Minimum body length
-      require_signoff: true   # Require Signed-off-by
+      min_length: 10
+      require_signoff: true
 
   # Conventional commits
   conventional:
-    require_scope: false      # Make scope optional
-    types:                    # Allowed types
-      - feat
-      - fix
-      - docs
-      - style
-      - refactor
-      - perf
-      - test
-      - build
-      - ci
-      - chore
-      - revert
+    require_scope: false
+    types: [feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert]
 
-  # Organization-specific
+  # JIRA integration
   jira:
-    projects: ["PROJ", "TEAM"]  # Required JIRA prefixes
+    project_prefixes: ["PROJ", "TEAM"]
 
-  # Repository rules  
+  # Repository rules
   repo:
-    branch: main               # Target branch
-    max_commits_ahead: 10      # Max commits ahead
+    reference_branch: main
+    max_commits_ahead: 10
 
-  # Output format
-  output: text                 # text|json|github|gitlab
+  # Cryptographic signatures
+  signing:
+    require_signature: true
+    require_verification: true
+    key_directory: "/path/to/keys"
+    allowed_signers: ["user@example.com"]
+
+  # Output format (overrides --format flag)
+  output: text
+----
+
+=== Rule Priority System
+Rules follow explicit priority order:
+
+1. **Explicitly enabled** → Always run (highest priority)
+2. **Explicitly disabled** → Never run  
+3. **Default disabled** → Skip unless enabled (`jirareference`, `commitbody`, `spell`)
+4. **Default enabled** → Run unless disabled (all others)
+
+[source,yaml]
+----
+rules:
+  enabled:
+    - commitbody      # Override default-disabled
+  disabled:
+    - conventional    # Override default-enabled
 ----
 
 == Available Rules
 
-[cols="1,3,1", options="header"]
+[cols="2,3,1", options="header"]
 |===
-|Rule Name |Description |Default
+|Rule |Description |Default
 
 |`subjectlength`
-|Validates subject line length
-|✓ Enabled
+|Subject line length validation
+|✓
 
-|`subjectcase`
-|Validates subject line casing
-|✓ Enabled
-
-|`subjectsuffix`
-|Forbids certain endings (like periods)
-|✓ Enabled
-
-|`imperative`
-|Requires imperative mood
-|✓ Enabled
-
-|`commitbody`
-|Validates commit body requirements
-|✗ Disabled
-
-|`conventional`
-|Enforces conventional commit format
-|✓ Enabled
-
-|`jirareference`
-|Requires JIRA ticket reference
-|✗ Disabled
+|`conventional`  
+|Conventional commit format
+|✓
 
 |`signoff`
-|Requires Signed-off-by line
-|✓ Enabled
+|Signed-off-by requirement
+|✓
 
 |`signature`
-|Validates GPG/SSH signatures
-|✓ Enabled
+|GPG/SSH signature validation
+|✓
 
 |`identity`
-|Validates committer identity
-|✓ Enabled
-
-|`spell`
-|Spell-checks commit messages
-|✓ Enabled
+|Committer identity validation
+|✓
 
 |`branchahead`
-|Checks commits ahead of target branch
-|✓ Enabled
+|Commits ahead count limit
+|✓
+
+|`commitbody`
+|Commit body requirements
+|✗
+
+|`jirareference`
+|JIRA ticket reference requirement
+|✗
+
+|`spell`
+|Spell checking (requires dictionary)
+|✗
 |===
 
-== Output Formats Examples
+== Output Examples
 
-=== Text (Default)
-[source,bash]
+=== Text Format (Default)
+[source,text]
 ----
-$ gommitlint validate
-✓ SubjectLength     Subject is 43 characters (max: 72)
-✓ Imperative        Starts with imperative verb
-✓ SubjectCase       Sentence case format
-✗ CommitBody        Body too short (5 chars, min: 10)
+Validating commit abc123...
+
+✓ conventional     Valid conventional commit format
+✓ subjectlength    Subject is 43 characters (max: 72)
+✓ signoff          Signed-off-by present
+✗ commitbody       Body too short (5 chars, min: 10)
+
+Validation failed: 1 error
 ----
 
-=== JSON
-[source,bash]
+=== JSON Format
+[source,json]
 ----
-$ gommitlint validate --output=json
 {
-  "commit": "abc123",
-  "valid": false,
-  "errors": [{
-    "rule": "commitbody",
-    "code": "body_too_short",
-    "message": "Body too short (5 chars, min: 10)"
+  "summary": {
+    "total_commits": 1,
+    "passed_commits": 0,
+    "failed_commits": 1,
+    "all_passed": false
+  },
+  "commits": [{
+    "commit": {
+      "hash": "abc123",
+      "subject": "feat: add new feature"
+    },
+    "rule_results": [{
+      "name": "commitbody",
+      "status": "failed",
+      "errors": [{
+        "rule": "commitbody",
+        "code": "body_too_short",
+        "message": "Body too short (5 chars, min: 10)"
+      }]
+    }],
+    "passed": false
   }]
 }
 ----
 
-=== GitHub Actions Output
-[source,bash]
+=== GitHub Actions Format
+[source,text]
 ----
-$ gommitlint validate --output=github
-::error file=commit.txt,line=3::Body too short (5 chars, min: 10)
+::error file=commit,line=1,title=CommitBody::Body too short (5 chars, min: 10)
 ----
 
-== Common Workflows
+== Exit Codes
 
-=== CI/CD Integration
+* `0` - All validations passed
+* `1` - Configuration or system error
+* `2` - Validation failures found
 
+== CI/CD Integration
+
+=== GitHub Actions
 [source,yaml]
 ----
-# GitHub Actions
-- name: Validate commits
-  run: |
-    go install github.com/itiquette/gommitlint/cmd/gommitlint@latest
-    gommitlint validate --git-reference=${{ github.event.pull_request.base.sha }}..HEAD
+name: Validate Commits
+on: [pull_request]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Install gommitlint
+      run: go install github.com/itiquette/gommitlint@latest
+
+    - name: Validate commits
+      run: gommitlint validate --base-branch=origin/${{ github.base_ref }} --format=github
 ----
 
-=== Pre-commit Hook
+=== GitLab CI
+[source,yaml]
+----
+validate_commits:
+  stage: validate
+  image: golang:alpine
+  before_script:
+    - go install github.com/itiquette/gommitlint@latest
+  script:
+    - gommitlint validate --base-branch=origin/main --format=gitlab
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+----
 
+== Pre-commit Integration
+
+=== Native Git Hook
+[source,bash]
+----
+# Install hook
+gommitlint install-hook
+
+# Manual hook setup (.git/hooks/commit-msg)
+#!/bin/sh
+gommitlint validate --message-file="$1"
+----
+
+=== Pre-commit Framework
 [source,yaml]
 ----
 # .pre-commit-config.yaml
@@ -233,78 +308,89 @@ repos:
         name: Validate commit message
         entry: gommitlint validate --git-reference=HEAD
         language: system
+        stages: [commit-msg]
         always_run: true
         pass_filenames: false
 ----
 
-=== Validate Specific Rules Only
-
-[source,bash]
-----
-# Only run specific rules
-$ gommitlint validate --rules=subjectlength,imperative
-
-# Skip specific rules  
-$ gommitlint validate --skip-rules=spell,jirareference
-----
-
 == Troubleshooting
 
-=== Debug Output
+=== Debug Information
 [source,bash]
 ----
-# Show detailed debug information
-$ gommitlint validate -v --debug
+# Show which rules are active
+gommitlint validate -v
+
+# Show detailed rule execution
+gommitlint validate --extra-verbose
+
+# Show specific rule help
+gommitlint validate --rulehelp=conventional
 ----
 
-=== Common Issues
+== Configuration Examples
 
-**Rule not running?**
-Check if it's in the default-disabled list (`jirareference`, `commitbody`) and explicitly enable it.
-
-**Configuration not loading?**
-Gommitlint looks for `.gommitlint.yaml` or `.gommitlint.yml` in the current directory.
-
-**Unexpected validation results?**
-Use `-v` flag to see which rules are active and why they pass/fail.
-
-== Examples
-
-=== Good Commit Message
-----
-feat(auth): add OAuth2 authentication support
-
-Implemented OAuth2 flow for third-party authentication providers.
-This allows users to sign in using GitHub, Google, or GitLab accounts.
-
-Closes #123
-
-Signed-off-by: Jane Doe <jane@example.com>
-----
-
-=== Configuration for Open Source Projects
+=== Example 1
 [source,yaml]
 ----
 gommitlint:
   message:
     subject:
-      max_length: 50    # GitHub's recommendation
+      max_length: 50    # GitHub recommendation
   rules:
     enabled:
       - commitbody      # Require detailed explanations
     disabled:
-      - jirareference   # No JIRA in open source
+      - jirareference   # No JIRA tracking
+      - signature       # No required signing
 ----
 
-=== Configuration for Corporate Projects  
+=== Example 2
 [source,yaml]
 ----
 gommitlint:
   rules:
     enabled:
       - jirareference   # Require ticket references
+      - commitbody      # Require explanations
   jira:
-    projects: ["CORP", "TEAM"]
+    project_prefixes: ["CORP", "TEAM", "PROJ"]
   signing:
     require_signature: true
+    require_verification: true
+    allowed_signers: ["@company.com"]
+----
+
+== Advanced Usage
+
+=== Rule-Specific Configuration
+Each rule accepts specific configuration options. See `--rulehelp=<rule>` for details.
+
+=== Custom Validation Workflows
+[source,bash]
+----
+# Validate only conventional commit format
+gommitlint validate --extra-verbose | grep conventional
+
+# Check specific commit without full validation
+git show --format="%s" abc123 | gommitlint validate --message-file=-
+
+# Validate commits in CI with custom output
+gommitlint validate --base-branch=origin/main --format=json | jq '.summary.all_passed'
+----
+
+== Rule Details
+
+For detailed rule documentation and configuration options:
+[source,bash]
+----
+gommitlint validate --rulehelp=<rule_name>
+----
+
+Example rule help:
+[source,bash]
+----
+gommitlint validate --rulehelp=conventional
+gommitlint validate --rulehelp=subjectlength
+gommitlint validate --rulehelp=jirareference
 ----

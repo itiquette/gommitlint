@@ -4,7 +4,7 @@
 
 // This file provides CLI-specific context management.
 // This consolidates context keys and utilities used only by the CLI layer,
-// following hexagonal architecture by keeping context concerns within the CLI adapter.
+// by keeping context concerns within the CLI adapter.
 package cli
 
 import (
@@ -18,9 +18,6 @@ type ContextKey string
 
 // Predefined context keys for CLI concerns.
 const (
-	// LoggerKey is the context key for the logger.
-	LoggerKey ContextKey = "logger"
-
 	// CLIOptionsKey is the context key for CLI options.
 	CLIOptionsKey ContextKey = "cli_options"
 )
@@ -42,21 +39,4 @@ func Value[T any](ctx stdcontext.Context, key ContextKey) (T, bool) {
 	result, ok := value.(T)
 
 	return result, ok
-}
-
-// GetLogger retrieves the logger from the context.
-// The logger is stored as interface{} to avoid coupling to specific logger types.
-func GetLogger(ctx stdcontext.Context) interface{} {
-	logger := ctx.Value(LoggerKey)
-	if logger == nil {
-		panic("logger not found in context - logger must be set early in application flow")
-	}
-
-	return logger
-}
-
-// WithLogger adds a logger to the context.
-// The logger is stored as interface{} to allow different logger implementations.
-func WithLogger(ctx stdcontext.Context, log interface{}) stdcontext.Context {
-	return stdcontext.WithValue(ctx, LoggerKey, log)
 }

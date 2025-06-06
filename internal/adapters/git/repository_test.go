@@ -127,8 +127,7 @@ func TestGetCommitRange(t *testing.T) {
 			fromRef, toRef := testCase.setupRepo(t, repo)
 
 			// Create repository adapter
-			ctx := context.Background()
-			adapter, err := git.NewRepository(ctx, tmpDir)
+			adapter, err := git.NewRepository(tmpDir)
 			require.NoError(t, err)
 
 			repoAdapter := adapter
@@ -209,8 +208,7 @@ func TestGetCommitRangeWithMergeCommits(t *testing.T) {
 	hashE := createCommit(t, repo, "Post-merge commit", []plumbing.Hash{hashD})
 
 	// Create repository adapter
-	ctx := context.Background()
-	adapter, err := git.NewRepository(ctx, tmpDir)
+	adapter, err := git.NewRepository(tmpDir)
 	require.NoError(t, err)
 
 	repoAdapter := adapter

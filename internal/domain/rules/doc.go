@@ -33,7 +33,7 @@ All rules share these common patterns:
     Configuration is passed as a parameter, not retrieved from context.
 
  4. Validation Interface:
-    All rules implement the Validate method that returns []errors.ValidationError.
+    All rules implement the Validate method that returns []domain.RuleFailure.
 
 # Adding New Rules
 
@@ -63,13 +63,13 @@ Example:
 		return r.name
 	}
 
-	func (r MyFeatureRule) Validate(ctx context.Context, commit domain.Commit) []domain.ValidationError {
+	func (r MyFeatureRule) Validate(commit domain.Commit, repo domain.Repository, cfg config.Config) []domain.RuleFailure {
 		// Use injected configuration from constructor
 		if r.maxItems <= 0 {
 			return nil
 		}
 		// Validation logic using r.maxItems and r.checkBody
-		return errors
+		return failures
 	}
 
 # Configuration
@@ -78,8 +78,8 @@ Rules receive configuration directly through their constructors.
 The rule factory is responsible for creating rules with appropriate configuration:
 
 	// In domain/rules/factory.go
-	func createSubjectLengthRule(cfg *config.Config, _ domain.RuleDependencies) domain.Rule {
-		return NewSubjectLengthRule(*cfg)
+	func createSubjectRule(cfg config.Config) domain.Rule {
+		return NewSubjectRule(cfg)
 	}
 
 This ensures explicit dependencies and maintains separation of concerns.
@@ -91,13 +91,12 @@ The package provides these validation rules:
   - CommitBodyRule: Validates commit body requirements
   - BranchAheadRule: Validates the number of commits ahead of reference branch
   - ConventionalCommitRule: Validates Conventional Commits format
-  - ImperativeVerbRule: Validates imperative mood in subject
   - JiraReferenceRule: Validates JIRA ticket references
   - SignatureRule: Validates commit signatures (GPG/SSH)
   - IdentityRule: Validates commit signatures match committer identity
   - SignOffRule: Validates Developer Certificate of Origin
   - SpellRule: Validates spelling in commit messages
-  - SubjectRule: Validates subject length, case, and suffix (consolidated rule)
+  - SubjectRule: Validates subject length, case, suffix, and imperative mood (consolidated rule)
 
 Each rule focuses on a specific aspect of commit message validation and can be
 independently enabled, disabled, and configured.

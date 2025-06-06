@@ -6,12 +6,15 @@ package cli
 
 import (
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
+
+	"github.com/itiquette/gommitlint/internal/domain"
 )
 
-// TestValidationParameters tests the functional parameters type.
+// TestValidationParameters tests the ValidationParameters type.
 func TestValidationParameters(t *testing.T) {
 	// Create a command for testing
 	cmd := &cobra.Command{}
@@ -55,12 +58,6 @@ func TestValidationParameters(t *testing.T) {
 	require.Equal(t, "commit", params.Target.Type)
 	require.Equal(t, "HEAD", params.Target.Source)
 
-	// Test getting validation target (defaults to HEAD)
-	targetType, target1, _, err := params.GetValidationTarget()
-	require.NoError(t, err)
-	require.Equal(t, "commit", targetType)
-	require.Equal(t, "HEAD", target1)
-
 	// Test conversion to report options
 	reportOpts := params.ToReportOptions()
 	require.Equal(t, "json", reportOpts.Format)
@@ -80,11 +77,9 @@ func TestValidationParametersScenarios(t *testing.T) {
 
 		rangeParams, err := NewValidateParams(cmdRange)
 		require.NoError(t, err)
-		targetType, from, to, err := rangeParams.GetValidationTarget()
-		require.NoError(t, err)
-		require.Equal(t, "range", targetType)
-		require.Equal(t, "main", from)
-		require.Equal(t, "feature", to)
+		require.Equal(t, "range", rangeParams.Target.Type)
+		require.Equal(t, "main", rangeParams.Target.Source)
+		require.Equal(t, "feature", rangeParams.Target.Target)
 	})
 
 	t.Run("invalid revision range", func(t *testing.T) {
@@ -106,11 +101,9 @@ func TestValidationParametersScenarios(t *testing.T) {
 
 		baseParams, err := NewValidateParams(cmdBase)
 		require.NoError(t, err)
-		targetType, from, to, err := baseParams.GetValidationTarget()
-		require.NoError(t, err)
-		require.Equal(t, "range", targetType)
-		require.Equal(t, "develop", from)
-		require.Equal(t, "HEAD", to)
+		require.Equal(t, "range", baseParams.Target.Type)
+		require.Equal(t, "develop", baseParams.Target.Source)
+		require.Equal(t, "HEAD", baseParams.Target.Target)
 	})
 
 	t.Run("message file takes precedence", func(t *testing.T) {
@@ -127,10 +120,8 @@ func TestValidationParametersScenarios(t *testing.T) {
 		require.NoError(t, err)
 
 		// Test that message-file takes precedence (highest priority)
-		targetType, target, _, err := multiParams.GetValidationTarget()
-		require.NoError(t, err)
-		require.Equal(t, "message", targetType)
-		require.Equal(t, "msg.txt", target)
+		require.Equal(t, "message", multiParams.Target.Type)
+		require.Equal(t, "msg.txt", multiParams.Target.Source)
 	})
 }
 
@@ -201,10 +192,30 @@ func TestFormatConversion(t *testing.T) {
 			params, err := NewValidateParams(cmd)
 			require.NoError(t, err)
 
-			formatter := params.CreateFormatter()
+			// Test that the format functionality works
+			mockReport := domain.Report{
+				Metadata: domain.ReportMetadata{
+					Timestamp: time.Now(),
+				},
+				Summary: domain.ReportSummary{
+					TotalCommits:  1,
+					PassedCommits: 1,
+					AllPassed:     true,
+				},
+				Commits: []domain.CommitReport{
+					{
+						Commit: domain.Commit{
+							Hash:    "abc123",
+							Subject: "Test commit",
+						},
+						Passed:      true,
+						RuleResults: []domain.RuleReport{},
+					},
+				},
+			}
 
-			// Check formatter type
-			require.NotNil(t, formatter)
+			output := params.Output.FormatReport(mockReport)
+			require.NotEmpty(t, output)
 		})
 	}
 }

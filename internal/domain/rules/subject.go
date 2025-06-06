@@ -14,13 +14,16 @@ import (
 	"github.com/itiquette/gommitlint/internal/domain/config"
 )
 
-// SubjectRule validates commit subject length, case, and suffix.
+// SubjectRule validates commit subject length, case, suffix, and imperative mood.
 type SubjectRule struct {
-	maxLength       int
-	caseChoice      string
-	invalidSuffixes string
-	checkCommit     bool
-	allowNonAlpha   bool
+	maxLength             int
+	caseChoice            string
+	invalidSuffixes       string
+	checkCommit           bool
+	allowNonAlpha         bool
+	requireImperative     bool
+	verbCategories        map[string][]string
+	baseFormsEndingWithED map[string]bool // Words ending with 'ed' that are already base forms
 }
 
 // NewSubjectRule creates a new SubjectRule from config.
@@ -48,14 +51,30 @@ func NewSubjectRule(cfg config.Config) SubjectRule {
 		}
 	}
 
-	isConventionalEnabled := domain.ShouldRunRule("ConventionalCommit", cfg.Rules.Enabled, cfg.Rules.Disabled)
+	isConventionalEnabled := domain.IsRuleActive("ConventionalCommit", cfg.Rules.Enabled, cfg.Rules.Disabled)
 
 	return SubjectRule{
-		maxLength:       maxLength,
-		caseChoice:      caseChoice,
-		invalidSuffixes: invalidSuffixes,
-		checkCommit:     isConventionalEnabled,
-		allowNonAlpha:   cfg.Message.Subject.RequireImperative,
+		maxLength:             maxLength,
+		caseChoice:            caseChoice,
+		invalidSuffixes:       invalidSuffixes,
+		checkCommit:           isConventionalEnabled,
+		allowNonAlpha:         false, // Fixed: this should not be tied to imperative setting
+		requireImperative:     cfg.Message.Subject.RequireImperative,
+		baseFormsEndingWithED: make(map[string]bool), // Added missing functionality
+		verbCategories: map[string][]string{
+			"past_tense": {
+				"added", "fixed", "changed", "updated", "removed", "refactored",
+				"improved", "implemented", "enhanced", "resolved", "corrected",
+			},
+			"gerund": {
+				"adding", "fixing", "changing", "updating", "removing", "refactoring",
+				"improving", "implementing", "enhancing", "resolving", "correcting",
+			},
+			"third_person": {
+				"adds", "fixes", "changes", "updates", "removes", "refactors",
+				"improves", "implements", "enhances", "resolves", "corrects",
+			},
+		},
 	}
 }
 
@@ -64,8 +83,8 @@ func (r SubjectRule) Name() string {
 	return "Subject"
 }
 
-// Validate performs validation against a commit.
-func (r SubjectRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.ValidationError {
+// Validate performs pure commit validation.
+func (r SubjectRule) Validate(commit domain.Commit, _ config.Config) []domain.ValidationError {
 	var errors []domain.ValidationError
 
 	// Length validation
@@ -84,6 +103,11 @@ func (r SubjectRule) Validate(commit domain.Commit, _ domain.Repository, _ *conf
 	// Suffix validation
 	if suffixErrors := r.validateSuffix(commit.Subject); len(suffixErrors) > 0 {
 		errors = append(errors, suffixErrors...)
+	}
+
+	// Imperative validation
+	if imperativeErrors := r.validateImperative(commit.Subject); len(imperativeErrors) > 0 {
+		errors = append(errors, imperativeErrors...)
 	}
 
 	return errors
@@ -319,4 +343,120 @@ func checkCase(word string, requiredCase string) (string, bool) {
 	}
 
 	return actualCase, isValid
+}
+
+// validateImperative validates that the subject uses imperative mood.
+func (r SubjectRule) validateImperative(subject string) []domain.ValidationError {
+	if !r.requireImperative {
+		return nil
+	}
+
+	subject = strings.TrimSpace(subject)
+	if subject == "" {
+		return nil
+	}
+
+	// Handle conventional commits if needed
+	if r.checkCommit {
+		// Extract description from conventional commit format
+		re := regexp.MustCompile(`^[a-z]+(?:\([a-zA-Z0-9/-]+\))?!?:\s*(.*)$`)
+
+		matches := re.FindStringSubmatch(subject)
+		if len(matches) > 1 {
+			subject = matches[1]
+		}
+	}
+
+	// Extract first word from subject
+	firstWord := r.extractFirstWord(subject)
+	if firstWord == "" {
+		return []domain.ValidationError{
+			domain.New(r.Name(), domain.ErrNoFirstWord, "Cannot extract first word from commit message").
+				WithHelp("Ensure your commit message starts with a verb"),
+		}
+	}
+
+	firstWord = strings.ToLower(firstWord)
+
+	// Check for imperative mood violations
+	category, isViolation := r.categorizeVerb(firstWord)
+
+	if isViolation {
+		// Build suggestions based on category
+		var suggestions []string
+
+		switch category {
+		case "past_tense":
+			if strings.HasSuffix(firstWord, "ed") {
+				base := strings.TrimSuffix(firstWord, "ed")
+				base = strings.TrimSuffix(base, "d")
+				suggestions = []string{base}
+			} else {
+				suggestions = []string{"add", "fix", "update"}
+			}
+		case "gerund":
+			if strings.HasSuffix(firstWord, "ing") {
+				base := strings.TrimSuffix(firstWord, "ing")
+				if strings.HasSuffix(base, "nn") {
+					base = strings.TrimSuffix(base, "n") // running -> run
+				}
+
+				suggestions = []string{base}
+			} else {
+				suggestions = []string{"add", "fix", "update"}
+			}
+		case "third_person":
+			if strings.HasSuffix(firstWord, "s") || strings.HasSuffix(firstWord, "es") {
+				base := strings.TrimSuffix(firstWord, "s")
+				base = strings.TrimSuffix(base, "e")
+				suggestions = []string{base}
+			} else {
+				suggestions = []string{"add", "fix", "update"}
+			}
+		default:
+			suggestions = []string{"add", "fix", "update", "remove", "improve", "implement"}
+		}
+
+		help := fmt.Sprintf("Use the imperative form of '%s'", firstWord)
+		if len(suggestions) > 0 {
+			help = "Try: " + strings.Join(suggestions, ", ")
+		}
+
+		return []domain.ValidationError{
+			domain.New(r.Name(), domain.ErrNonImperative,
+				fmt.Sprintf("Word '%s' is not in imperative mood", firstWord)).
+				WithHelp(help),
+		}
+	}
+
+	return nil
+}
+
+// extractFirstWord extracts the first word from a subject.
+func (r SubjectRule) extractFirstWord(subject string) string {
+	parts := strings.Fields(subject)
+	if len(parts) == 0 {
+		return ""
+	}
+
+	return parts[0]
+}
+
+// categorizeVerb determines if a verb is in a non-imperative category.
+func (r SubjectRule) categorizeVerb(word string) (string, bool) {
+	// Check if it ends with "ed" but is a valid base form (like "need", "seed")
+	if strings.HasSuffix(word, "ed") && r.baseFormsEndingWithED[word] {
+		return "", false
+	}
+
+	// Check all categories
+	for category, words := range r.verbCategories {
+		for _, nonImperativeWord := range words {
+			if word == strings.ToLower(nonImperativeWord) {
+				return category, true
+			}
+		}
+	}
+
+	return "", false
 }

@@ -30,7 +30,7 @@ func (r SpellRule) Name() string {
 }
 
 // Validate checks spelling in the commit message.
-func (r SpellRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.ValidationError {
+func (r SpellRule) Validate(commit domain.Commit, _ config.Config) []domain.ValidationError {
 	// Create a map of ignored words for efficient lookup
 	ignoreWordsMap := make(map[string]bool)
 	for _, word := range r.ignoreWords {

@@ -141,7 +141,7 @@ build/gorelease: clean
 ## test: run all tests
 .PHONY: test
 test:
-	go test -v -count=1 -race -buildvcs=false $$(go list './...' | grep -v generated) || true
+	go test -v -count=1 -race -buildvcs=false $$(go list './...' | grep -v generated)
 
 ## test/coverage: run all tests and display coverage
 .PHONY: test/coverage

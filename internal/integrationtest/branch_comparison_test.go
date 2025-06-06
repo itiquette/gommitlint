@@ -88,7 +88,7 @@ func TestBranchComparisonGetCommitRange(t *testing.T) {
 
 			// Create repository adapter
 			ctx := context.Background()
-			adapter, err := git.NewRepository(ctx, tmpDir)
+			adapter, err := git.NewRepository(tmpDir)
 			require.NoError(t, err)
 
 			commitRepo := adapter

@@ -3,25 +3,27 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 /*
-Package crypto provides core cryptographic verification implementations.
+Package signing provides cryptographic signature verification adapters.
 
-This package contains the core logic for verifying commit signatures,
-organized by signature type:
+This package implements domain interfaces for verifying commit signatures,
+isolating cryptographic complexity from the core domain logic.
 
-  - gpg: GPG/OpenPGP signature verification
-  - ssh: SSH signature verification
-  - common: Shared cryptographic utilities
+Key components:
 
-Each implementation handles the specific details of its signature format
-while providing a consistent interface for signature verification. The
-implementations validate:
+  - verification.go: Main verification logic and domain interface implementation
+  - gpg.go: GPG/OpenPGP signature verification
+  - ssh.go: SSH signature verification
+  - files.go: Secure file operations for key management
+  - repository.go: Key repository abstraction
 
-  - Signature authenticity
+The package validates:
+
+  - Signature authenticity and integrity
   - Key strength and algorithm security
   - Key expiration and revocation status
-  - Identity binding
+  - Identity binding between signatures and committers
 
-All cryptographic operations follow security best practices with
-appropriate key strength requirements and algorithm validation.
+All cryptographic operations follow security best practices with appropriate
+key strength requirements and algorithm validation.
 */
-package crypto
+package signing

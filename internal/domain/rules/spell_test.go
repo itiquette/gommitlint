@@ -83,7 +83,7 @@ func TestSpellRule(t *testing.T) {
 			cfg := config.Config{}
 			rule := rules.NewSpellRule(cfg)
 
-			failures := rule.Validate(commit, nil, &cfg)
+			failures := rule.Validate(commit, cfg)
 
 			// We don't assert on specific errors since spell checking results
 			// depend on the underlying misspell library behavior
@@ -143,7 +143,7 @@ func TestSpellRuleWithCustomDictionary(t *testing.T) {
 			}
 			rule := rules.NewSpellRule(cfg)
 
-			failures := rule.Validate(commit, nil, &cfg)
+			failures := rule.Validate(commit, cfg)
 
 			// We don't assert on specific errors since results depend on the misspell library
 			// We test that the rule handles custom dictionaries without crashing
@@ -212,7 +212,7 @@ func TestSpellRuleEdgeCases(t *testing.T) {
 			cfg := config.Config{}
 			rule := rules.NewSpellRule(cfg)
 
-			failures := rule.Validate(commit, nil, &cfg)
+			failures := rule.Validate(commit, cfg)
 
 			// For edge cases, we mainly test that the rule doesn't crash
 			// The specific results depend on the spell checker implementation

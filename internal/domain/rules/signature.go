@@ -26,7 +26,7 @@ func NewSignatureRule(cfg config.Config) SignatureRule {
 }
 
 // Validate checks if a commit has the required cryptographic signature.
-func (r SignatureRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.ValidationError {
+func (r SignatureRule) Validate(commit domain.Commit, _ config.Config) []domain.ValidationError {
 	// Check if signatures are required
 	if r.requireSignature {
 		// Check for any signature (GPG or SSH format)

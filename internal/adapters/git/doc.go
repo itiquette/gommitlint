@@ -5,13 +5,11 @@
 /*
 Package git provides Git repository adapters for gommitlint.
 
-This package implements the outgoing port for Git operations, following
-hexagonal architecture principles. It provides:
+This package implements Git repository operations for commit validation. It provides:
 
   - Repository access abstraction
   - Commit retrieval and analysis
   - Branch comparison operations
-  - Value-semantic repository adapter
 
 The package uses go-git library internally but exposes only domain
 interfaces, ensuring the domain remains independent of Git implementation
@@ -20,7 +18,6 @@ details.
 Key components:
 
   - repository.go: Main repository adapter implementing domain interfaces
-  - repository_helpers.go: Helper functions for repository operations
 
 The adapter implements multiple domain interfaces:
   - CommitRepository: For basic commit access

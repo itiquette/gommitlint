@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-package crypto
+package signing
 
 import (
 	"context"
@@ -10,25 +10,19 @@ import (
 	"github.com/itiquette/gommitlint/internal/domain"
 )
 
-// VerificationAdapter provides crypto verification services using simplified interface.
-// It implements the domain.SignatureVerifier interface directly without complex factory patterns.
-type VerificationAdapter struct {
-	verifier *SimpleVerifier
-}
+// VerificationAdapter provides crypto verification services.
+// It implements the domain.SignatureVerifier interface directly without complex patterns.
+type VerificationAdapter struct{}
 
 // Ensure VerificationAdapter implements SignatureVerifier interface.
 var _ domain.SignatureVerifier = (*VerificationAdapter)(nil)
 
-// NewVerificationAdapter creates a new simplified verification adapter.
-// No complex options or dependencies - pure functional approach.
+// NewVerificationAdapter creates a new verification adapter.
 func NewVerificationAdapter() *VerificationAdapter {
-	return &VerificationAdapter{
-		verifier: NewSimpleVerifier(),
-	}
+	return &VerificationAdapter{}
 }
 
 // VerifyCommit implements the domain.SignatureVerifier interface.
-// All dependencies are passed as explicit parameters following functional principles.
 func (a *VerificationAdapter) VerifyCommit(ctx context.Context, commit domain.Commit, keyDir string) domain.VerificationResult {
-	return a.verifier.VerifyCommit(ctx, commit, keyDir)
+	return VerifyCommit(ctx, commit, keyDir)
 }

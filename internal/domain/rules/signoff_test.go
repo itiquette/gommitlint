@@ -229,7 +229,7 @@ Signed-off-by: Developer <dev@example.com>`,
 			// Create rule with config
 			rule := rules.NewSignOffRule(cfg)
 
-			failures := rule.Validate(commit, nil, &cfg)
+			failures := rule.Validate(commit, cfg)
 
 			// Check validity
 			if testCase.expectedValid {
@@ -361,7 +361,7 @@ Signed-off-by: Diana <diana@example.com>`,
 
 			rule := rules.NewSignOffRule(cfg)
 
-			failures := rule.Validate(commit, nil, &cfg)
+			failures := rule.Validate(commit, cfg)
 
 			if testCase.expectedValid {
 				require.Empty(t, failures, "Expected no validation errors for case: %s", testCase.description)
@@ -453,7 +453,7 @@ Actually signed-off-by: Real Developer <real@example.com>`,
 
 			rule := rules.NewSignOffRule(cfg)
 
-			failures := rule.Validate(commit, nil, &cfg)
+			failures := rule.Validate(commit, cfg)
 
 			if testCase.expectedValid {
 				require.Empty(t, failures, "Expected no validation errors for case: %s", testCase.description)

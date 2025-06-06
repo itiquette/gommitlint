@@ -2,229 +2,244 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package git provides Git repository adapters for the domain model.
 package git
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"os"
-	"path/filepath"
 
-	"github.com/go-git/go-git/v5"
+	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/itiquette/gommitlint/internal/domain"
 )
 
-// Ensure Repository implements domain.Repository interface.
-var _ domain.Repository = (*Repository)(nil)
-
-// Repository provides Git operations for the domain.
-// Simple, functional implementation with value semantics.
+// Repository implements the CommitRepository port.
 type Repository struct {
-	repo *git.Repository // Only pointer because go-git requires it
-	path string
+	repo *gogit.Repository
 }
 
-// NewRepository opens a Git repository at the given path.
-// Returns a value, not a pointer, following functional principles.
-func NewRepository(_ context.Context, path string) (Repository, error) {
-	if path == "" {
-		var err error
-
-		path, err = os.Getwd()
-		if err != nil {
-			return Repository{}, fmt.Errorf("get current directory: %w", err)
-		}
-	}
-
-	// Find git directory by walking up the tree
-	gitPath := findGitDir(path)
-	if gitPath == "" {
-		return Repository{}, fmt.Errorf("not a git repository: %s", path)
-	}
-
-	repo, err := git.PlainOpen(gitPath)
+// NewRepository opens a git repository at the given path.
+func NewRepository(path string) (*Repository, error) {
+	repo, err := gogit.PlainOpen(path)
 	if err != nil {
-		return Repository{}, fmt.Errorf("open repository: %w", err)
+		return nil, fmt.Errorf("open repository: %w", err)
 	}
 
-	return Repository{repo: repo, path: gitPath}, nil
+	return &Repository{repo: repo}, nil
 }
 
 // GetCommit retrieves a single commit by hash or reference.
-func (r Repository) GetCommit(_ context.Context, ref string) (domain.Commit, error) {
-	hash, err := r.repo.ResolveRevision(plumbing.Revision(ref))
+func (r *Repository) GetCommit(_ context.Context, ref string) (domain.Commit, error) {
+	// Try to resolve as a reference first (handles HEAD, branch names, etc.)
+	hash, err := r.resolveReference(ref)
 	if err != nil {
-		return domain.Commit{}, fmt.Errorf("resolve reference %s: %w", ref, err)
+		// If reference resolution fails, try as a direct hash
+		hash = plumbing.NewHash(ref)
 	}
 
-	commit, err := r.repo.CommitObject(*hash)
+	commit, err := r.repo.CommitObject(hash)
 	if err != nil {
 		return domain.Commit{}, fmt.Errorf("get commit: %w", err)
 	}
 
-	return convertCommit(commit), nil
+	return r.convertCommit(commit), nil
 }
 
-// GetCommits retrieves the last n commits from HEAD.
-func (r Repository) GetCommits(_ context.Context, count int) ([]domain.Commit, error) {
-	head, err := r.repo.Head()
-	if err != nil {
-		return nil, fmt.Errorf("get HEAD: %w", err)
-	}
-
-	return getCommitsFrom(r.repo, head.Hash(), count)
-}
-
-// GetCommitRange retrieves commits between two references (inclusive).
-func (r Repository) GetCommitRange(_ context.Context, from, toRef string) ([]domain.Commit, error) {
-	fromHash, err := r.repo.ResolveRevision(plumbing.Revision(from))
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve 'from' reference '%s': %w", from, err)
-	}
-
-	toHash, err := r.repo.ResolveRevision(plumbing.Revision(toRef))
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve 'to' reference '%s': %w", toRef, err)
-	}
-
-	return getCommitsBetween(r.repo, *fromHash, *toHash)
-}
-
-// GetHeadCommits retrieves n commits from HEAD.
-func (r Repository) GetHeadCommits(ctx context.Context, count int) ([]domain.Commit, error) {
-	return r.GetCommits(ctx, count)
-}
-
-// GetCurrentBranch returns the current branch name.
-func (r Repository) GetCurrentBranch(_ context.Context) (string, error) {
-	head, err := r.repo.Head()
-	if err != nil {
-		return "", fmt.Errorf("get HEAD: %w", err)
-	}
-
-	if !head.Name().IsBranch() {
-		return "", errors.New("HEAD is detached")
-	}
-
-	return head.Name().Short(), nil
-}
-
-// GetCommitsAhead counts commits ahead of a reference.
-func (r Repository) GetCommitsAhead(_ context.Context, ref string) (int, error) {
-	head, err := r.repo.Head()
-	if err != nil {
-		return 0, fmt.Errorf("get HEAD: %w", err)
-	}
-
-	refHash, err := r.repo.ResolveRevision(plumbing.Revision(ref))
-	if err != nil {
-		return 0, fmt.Errorf("resolve reference: %w", err)
-	}
-
-	return countCommitsBetween(r.repo, head.Hash(), *refHash)
-}
-
-// GetCommitsAheadCount returns how many commits the current branch is ahead of the reference.
-// This is an alias for GetCommitsAhead to match the Repository interface.
-func (r Repository) GetCommitsAheadCount(ctx context.Context, referenceBranch string) (int, error) {
-	return r.GetCommitsAhead(ctx, referenceBranch)
-}
-
-// IsValid checks if this is a valid repository.
-func (r Repository) IsValid(_ context.Context) (bool, error) {
-	_, err := r.repo.Head()
-
-	return err == nil, nil
-}
-
-// GetRepositoryName returns the repository name.
-func (r Repository) GetRepositoryName(_ context.Context) string {
-	return filepath.Base(r.path)
-}
-
-// Pure helper functions - no receivers, functional style
-
-func findGitDir(path string) string {
-	for {
-		gitPath := filepath.Join(path, ".git")
-		if info, err := os.Stat(gitPath); err == nil && info.IsDir() {
-			return path
+// resolveReference resolves a reference (like HEAD, branch name) to a commit hash.
+func (r *Repository) resolveReference(ref string) (plumbing.Hash, error) {
+	// Handle HEAD specially
+	if ref == "HEAD" {
+		headRef, err := r.repo.Head()
+		if err != nil {
+			return plumbing.ZeroHash, err
 		}
 
-		parent := filepath.Dir(path)
-		if parent == path {
-			return ""
+		return headRef.Hash(), nil
+	}
+
+	// Try common reference formats
+	refFormats := []string{
+		ref,                          // Direct reference name
+		"refs/heads/" + ref,          // Branch reference
+		"refs/remotes/origin/" + ref, // Remote branch reference
+		"refs/tags/" + ref,           // Tag reference
+	}
+
+	for _, refName := range refFormats {
+		resolvedRef, err := r.repo.Reference(plumbing.ReferenceName(refName), true)
+		if err == nil {
+			return resolvedRef.Hash(), nil
 		}
-
-		path = parent
 	}
+
+	return plumbing.ZeroHash, fmt.Errorf("reference not found: %s", ref)
 }
 
-func getCommitsFrom(repo *git.Repository, start plumbing.Hash, limit int) ([]domain.Commit, error) {
-	iter, err := repo.Log(&git.LogOptions{From: start})
+// GetCommitRange retrieves commits in a range (from..to).
+// Returns all commits reachable from 'to' but not reachable from 'from'.
+func (r *Repository) GetCommitRange(_ context.Context, fromRef, toRef string) ([]domain.Commit, error) {
+	// Resolve references to hashes
+	fromHash, err := r.resolveReference(fromRef)
 	if err != nil {
-		return nil, fmt.Errorf("create iterator: %w", err)
-	}
-	defer iter.Close()
-
-	return collectCommits(iter, limit)
-}
-
-func getCommitsBetween(repo *git.Repository, from, toHash plumbing.Hash) ([]domain.Commit, error) {
-	// If from and to are the same, return empty (no commits between)
-	if from == toHash {
-		return []domain.Commit{}, nil
+		// If reference resolution fails, try as a direct hash
+		fromHash = plumbing.NewHash(fromRef)
 	}
 
-	// For all cases (linear and non-linear), use the approach of finding
-	// commits reachable from 'to' but not from 'from'
-	// This properly handles merge commits and complex histories
-	return getCommitsInBranchNotInBase(repo, from, toHash)
-}
-
-func countCommitsBetween(repo *git.Repository, from, toHash plumbing.Hash) (int, error) {
-	iter, err := repo.Log(&git.LogOptions{From: from})
+	toHash, err := r.resolveReference(toRef)
 	if err != nil {
-		return 0, fmt.Errorf("create iterator: %w", err)
+		// If reference resolution fails, try as a direct hash
+		toHash = plumbing.NewHash(toRef)
 	}
-	defer iter.Close()
 
-	return countUntil(iter, toHash)
-}
+	// Validate that both commits exist
+	_, err = r.repo.CommitObject(fromHash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve 'from' reference: %w", err)
+	}
 
-// Pure collection functions - functional style
+	_, err = r.repo.CommitObject(toHash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve 'to' reference: %w", err)
+	}
 
-func collectCommits(iter object.CommitIter, limit int) ([]domain.Commit, error) {
-	commits := make([]domain.Commit, 0, limit)
+	// Get all commits reachable from 'to'
+	reachableFromTo := make(map[plumbing.Hash]bool)
 
-	err := iter.ForEach(func(c *object.Commit) error {
-		if limit > 0 && len(commits) >= limit {
-			return io.EOF
+	err = r.collectReachableCommits(toHash, reachableFromTo)
+	if err != nil {
+		return nil, fmt.Errorf("collect commits reachable from 'to': %w", err)
+	}
+
+	// Get all commits reachable from 'from'
+	reachableFromFrom := make(map[plumbing.Hash]bool)
+
+	err = r.collectReachableCommits(fromHash, reachableFromFrom)
+	if err != nil {
+		return nil, fmt.Errorf("collect commits reachable from 'from': %w", err)
+	}
+
+	// Find commits in range: reachable from 'to' but not from 'from'
+	var commits []domain.Commit
+
+	for hash := range reachableFromTo {
+		if !reachableFromFrom[hash] {
+			commit, err := r.repo.CommitObject(hash)
+			if err != nil {
+				return nil, fmt.Errorf("get commit object: %w", err)
+			}
+
+			commits = append(commits, r.convertCommit(commit))
 		}
-
-		commits = append(commits, convertCommit(c))
-
-		return nil
-	})
-
-	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, err
 	}
 
 	return commits, nil
 }
 
-func countUntil(iter object.CommitIter, stop plumbing.Hash) (int, error) {
+// collectReachableCommits recursively collects all commits reachable from the given hash.
+func (r *Repository) collectReachableCommits(hash plumbing.Hash, reachable map[plumbing.Hash]bool) error {
+	// Avoid cycles
+	if reachable[hash] {
+		return nil
+	}
+
+	reachable[hash] = true
+
+	commit, err := r.repo.CommitObject(hash)
+	if err != nil {
+		return err
+	}
+
+	// Recursively collect from all parents
+	for _, parentHash := range commit.ParentHashes {
+		err = r.collectReachableCommits(parentHash, reachable)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// GetHeadCommits retrieves the latest N commits from HEAD.
+func (r *Repository) GetHeadCommits(_ context.Context, count int) ([]domain.Commit, error) {
+	ref, err := r.repo.Head()
+	if err != nil {
+		return nil, fmt.Errorf("get HEAD: %w", err)
+	}
+
+	iter, err := r.repo.Log(&gogit.LogOptions{From: ref.Hash()})
+	if err != nil {
+		return nil, fmt.Errorf("create iterator: %w", err)
+	}
+
+	commits := make([]domain.Commit, 0, count)
+	collected := 0
+
+	err = iter.ForEach(func(c *object.Commit) error {
+		if collected >= count {
+			return object.ErrCanceled
+		}
+
+		commits = append(commits, r.convertCommit(c))
+		collected++
+
+		return nil
+	})
+
+	if err != nil && !errors.Is(err, object.ErrCanceled) {
+		return nil, fmt.Errorf("iterate commits: %w", err)
+	}
+
+	return commits, nil
+}
+
+// GetCommitsAheadCount returns how many commits the current branch is ahead of the reference.
+func (r *Repository) GetCommitsAheadCount(_ context.Context, referenceBranch string) (int, error) {
+	head, err := r.repo.Head()
+	if err != nil {
+		return 0, fmt.Errorf("get HEAD: %w", err)
+	}
+
+	// Try different reference formats to find the target branch
+	refFormats := []string{
+		"refs/remotes/origin/" + referenceBranch, // Remote branch
+		"refs/heads/" + referenceBranch,          // Local branch
+		"refs/remotes/" + referenceBranch,        // Legacy format
+	}
+
+	var refHash plumbing.Hash
+
+	found := false
+
+	for _, refName := range refFormats {
+		refCommit, err := r.repo.Reference(plumbing.ReferenceName(refName), true)
+		if err == nil {
+			refHash = refCommit.Hash()
+			found = true
+
+			break
+		}
+	}
+
+	if !found {
+		// Reference doesn't exist, return 0 (not ahead)
+		return 0, nil
+	}
+
+	// Count commits between reference and HEAD
+	iter, err := r.repo.Log(&gogit.LogOptions{From: head.Hash()})
+	if err != nil {
+		return 0, fmt.Errorf("get log: %w", err)
+	}
+	defer iter.Close()
+
 	count := 0
 
-	err := iter.ForEach(func(c *object.Commit) error {
-		if c.Hash == stop {
-			return io.EOF
+	err = iter.ForEach(func(commit *object.Commit) error {
+		if commit.Hash == refHash {
+			return errors.New("found reference") // Stop iteration
 		}
 
 		count++
@@ -232,15 +247,15 @@ func countUntil(iter object.CommitIter, stop plumbing.Hash) (int, error) {
 		return nil
 	})
 
-	if err != nil && !errors.Is(err, io.EOF) {
-		return 0, err
+	if err != nil && err.Error() != "found reference" {
+		return 0, fmt.Errorf("count commits: %w", err)
 	}
 
 	return count, nil
 }
 
-// Pure conversion function.
-func convertCommit(commit *object.Commit) domain.Commit {
+// convertCommit converts go-git commit to domain commit.
+func (r *Repository) convertCommit(commit *object.Commit) domain.Commit {
 	return domain.NewCommit(
 		commit.Hash.String(),
 		commit.Message,
@@ -250,51 +265,4 @@ func convertCommit(commit *object.Commit) domain.Commit {
 		commit.PGPSignature,
 		len(commit.ParentHashes) > 1,
 	)
-}
-
-// Helper functions for commit range logic
-
-func getCommitsInBranchNotInBase(repo *git.Repository, base, branch plumbing.Hash) ([]domain.Commit, error) {
-	// Get all commits from branch
-	branchIter, err := repo.Log(&git.LogOptions{From: branch})
-	if err != nil {
-		return nil, fmt.Errorf("create branch iterator: %w", err)
-	}
-	defer branchIter.Close()
-
-	// Get all commits from base
-	baseCommits := make(map[plumbing.Hash]bool)
-
-	baseIter, err := repo.Log(&git.LogOptions{From: base})
-	if err != nil {
-		return nil, fmt.Errorf("create base iterator: %w", err)
-	}
-
-	defer baseIter.Close()
-
-	// Collect all base commits
-	err = baseIter.ForEach(func(c *object.Commit) error {
-		baseCommits[c.Hash] = true
-
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("collect base commits: %w", err)
-	}
-
-	// Collect branch commits not in base
-	var commits []domain.Commit
-
-	err = branchIter.ForEach(func(c *object.Commit) error {
-		if !baseCommits[c.Hash] {
-			commits = append(commits, convertCommit(c))
-		}
-
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("collect branch commits: %w", err)
-	}
-
-	return commits, nil
 }

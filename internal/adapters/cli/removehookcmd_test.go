@@ -15,7 +15,7 @@ import (
 	gitTestdata "github.com/itiquette/gommitlint/internal/adapters/git/testdata"
 )
 
-// TestHookRemovalParameters tests the functional parameters type.
+// TestHookRemovalParameters tests the HookRemovalParameters type.
 func TestHookRemovalParameters(t *testing.T) {
 	// Create a test Git repository
 	tmpDir, cleanup := gitTestdata.GitRepo(t, "Initial commit")
@@ -32,7 +32,7 @@ func TestHookRemovalParameters(t *testing.T) {
 	require.NotNil(t, params.Output)
 	require.NotNil(t, params.Input)
 
-	// Test immutability with functional methods
+	// Test immutability with methods
 	skipParams := params.WithSkipConfirm()
 	require.False(t, params.SkipConfirm, "Original should be unchanged")
 	require.True(t, skipParams.SkipConfirm, "New instance should have updated value")
@@ -45,7 +45,7 @@ func TestHookRemovalParameters(t *testing.T) {
 	require.Equal(t, "commit-msg", params.HookType, "Original should be unchanged")
 	require.Equal(t, "custom-hook", customHookParams.HookType, "New instance should have updated value")
 
-	// Test the functional methods - first create a hook
+	// Test the methods - first create a hook
 	hooksDir := filepath.Join(tmpDir, ".git", "hooks")
 	err := os.MkdirAll(hooksDir, 0755)
 	require.NoError(t, err)
@@ -76,8 +76,12 @@ func TestHookRemovalParameters(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, isOurs)
 
-	// Test RemoveHookFile
-	err = params.RemoveHookFile()
+	// Test RemoveHookFile (separated side effect)
+	hookPathToRemove, err := params.GetHookPath()
+	require.NoError(t, err)
+	require.Equal(t, hookPath, hookPathToRemove)
+
+	err = RemoveHookFile(hookPathToRemove)
 	require.NoError(t, err)
 
 	_, err = os.Stat(hookPath)

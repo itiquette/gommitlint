@@ -5,13 +5,11 @@
 package cli
 
 import (
-	format "github.com/itiquette/gommitlint/internal/adapters/output"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/spf13/cobra"
 )
 
 // ValidationParameters represents the complete set of CLI validation parameters.
-// This struct now composes focused value types for different concerns.
 type ValidationParameters struct {
 	// Validation target (what to validate)
 	Target ValidationTarget
@@ -41,14 +39,8 @@ func NewValidateParams(cmd *cobra.Command) (ValidationParameters, error) {
 	ruleHelp, _ := cmd.Flags().GetString("rulehelp")
 	lightMode, _ := cmd.Flags().GetBool("light-mode")
 
-	// Build validation target using focused builder
-	target, err := NewValidationTargetBuilder().
-		WithMessageFile(messageFile).
-		WithGitReference(gitReference).
-		WithCommitCount(commitCount).
-		WithRevisionRange(revisionRange).
-		WithBaseBranch(baseBranch).
-		Build()
+	// Build validation target using pure function
+	target, err := NewValidationTarget(messageFile, gitReference, revisionRange, baseBranch, commitCount)
 	if err != nil {
 		return ValidationParameters{}, err
 	}
@@ -79,13 +71,7 @@ func (p ValidationParameters) ToReportOptions() domain.ReportOptions {
 	return p.Output.ToReportOptions()
 }
 
-// CreateFormatter creates a formatter based on the parameters.
-func (p ValidationParameters) CreateFormatter() format.Formatter {
-	return p.Output.CreateFormatter()
-}
-
-// GetValidationTarget returns the validation target.
-// For backward compatibility with existing code.
-func (p ValidationParameters) GetValidationTarget() (string, string, string, error) {
-	return p.Target.Type, p.Target.Source, p.Target.Target, nil
+// WriteReport writes a formatted report using the configured output options.
+func (p ValidationParameters) WriteReport(report domain.Report) error {
+	return p.Output.WriteReport(report)
 }

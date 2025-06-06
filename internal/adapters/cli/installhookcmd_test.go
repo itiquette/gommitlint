@@ -11,10 +11,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/itiquette/gommitlint/internal/adapters/cli/testdata"
 	gitTestdata "github.com/itiquette/gommitlint/internal/adapters/git/testdata"
 )
 
-// TestHookInstallationParameters tests the functional parameters type.
+// TestHookInstallationParameters tests the HookInstallationParameters type.
 func TestHookInstallationParameters(t *testing.T) {
 	// Create a test Git repository
 	tmpDir, cleanup := gitTestdata.GitRepo(t, "Initial commit")
@@ -22,12 +23,12 @@ func TestHookInstallationParameters(t *testing.T) {
 
 	// Test the basic parameters
 	params := NewHookInstallationParameters(false, tmpDir)
-	params.PathValidator = SimplePathValidator{} // Use simple validator for tests
+	params.PathValidator = testdata.SimplePathValidator{} // Use simple validator for tests
 	require.False(t, params.Force)
 	require.Equal(t, tmpDir, params.RepoPath)
 	require.Equal(t, "commit-msg", params.HookType)
 
-	// Test immutability with functional methods
+	// Test immutability with methods
 	forceParams := params.WithForce()
 	require.False(t, params.Force, "Original should be unchanged")
 	require.True(t, forceParams.Force, "New instance should have updated value")
@@ -44,7 +45,7 @@ func TestHookInstallationParameters(t *testing.T) {
 	require.Equal(t, tmpDir, params.RepoPath, "Original should be unchanged")
 	require.Equal(t, "/custom/path", customRepoParams.RepoPath, "New instance should have updated value")
 
-	// Test the functional methods
+	// Test the methods
 	hookPath, err := params.FindHookPath()
 	require.NoError(t, err)
 	require.Contains(t, hookPath, ".git/hooks/commit-msg")

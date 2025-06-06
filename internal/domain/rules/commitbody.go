@@ -35,7 +35,7 @@ func (r CommitBodyRule) Name() string {
 }
 
 // Validate checks if a commit's body meets the required criteria.
-func (r CommitBodyRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.ValidationError {
+func (r CommitBodyRule) Validate(commit domain.Commit, _ config.Config) []domain.ValidationError {
 	trimmedBody := strings.TrimSpace(commit.Body)
 	hasOnlySignOff := hasOnlySignOffLines(trimmedBody)
 	bodyLength := len(trimmedBody)

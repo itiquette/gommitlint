@@ -4,19 +4,34 @@
 
 package domain
 
-// VerificationStatus represents the outcome of a signature verification.
-type VerificationStatus string
-
-// Verification status constants.
-const (
-	VerificationStatusVerified    VerificationStatus = "verified"
-	VerificationStatusFailed      VerificationStatus = "failed"
-	VerificationStatusNoKey       VerificationStatus = "no_key"
-	VerificationStatusUnsupported VerificationStatus = "unsupported"
+import (
+	"context"
 )
 
-// VerificationResult represents the result of a signature verification.
-// This is an immutable value type.
+// SignatureVerifier defines the interface for signature verification.
+type SignatureVerifier interface {
+	// VerifyCommit verifies a commit's signature and returns verification result.
+	VerifyCommit(ctx context.Context, commit Commit, keyDir string) VerificationResult
+}
+
+// VerificationStatus represents the status of signature verification.
+type VerificationStatus string
+
+const (
+	// VerificationStatusVerified indicates the signature was successfully verified.
+	VerificationStatusVerified VerificationStatus = "verified"
+
+	// VerificationStatusFailed indicates the signature verification failed.
+	VerificationStatusFailed VerificationStatus = "failed"
+
+	// VerificationStatusUnsupported indicates the signature type is not supported.
+	VerificationStatusUnsupported VerificationStatus = "unsupported"
+
+	// VerificationStatusNoKey indicates no key was found for verification.
+	VerificationStatusNoKey VerificationStatus = "no_key"
+)
+
+// VerificationResult represents the result of signature verification.
 type VerificationResult struct {
 	status    VerificationStatus
 	identity  Identity
@@ -34,46 +49,46 @@ func NewVerificationResult(status VerificationStatus, identity Identity, signatu
 	}
 }
 
-// WithError adds error information to a verification result and returns a new instance.
-func (v VerificationResult) WithError(code, message string) VerificationResult {
-	result := v
+// Status returns the verification status.
+func (r VerificationResult) Status() VerificationStatus {
+	return r.status
+}
+
+// Identity returns the verified identity.
+func (r VerificationResult) Identity() Identity {
+	return r.identity
+}
+
+// Signature returns the signature that was verified.
+func (r VerificationResult) Signature() Signature {
+	return r.signature
+}
+
+// IsVerified returns true if the signature was successfully verified.
+func (r VerificationResult) IsVerified() bool {
+	return r.status == VerificationStatusVerified
+}
+
+// HasError returns true if there was an error during verification.
+func (r VerificationResult) HasError() bool {
+	return r.errorCode != ""
+}
+
+// ErrorCode returns the error code if there was an error.
+func (r VerificationResult) ErrorCode() string {
+	return r.errorCode
+}
+
+// ErrorMessage returns the error message if there was an error.
+func (r VerificationResult) ErrorMessage() string {
+	return r.errorMsg
+}
+
+// WithError returns a new VerificationResult with error information.
+func (r VerificationResult) WithError(code, message string) VerificationResult {
+	result := r // Copy
 	result.errorCode = code
 	result.errorMsg = message
 
 	return result
-}
-
-// Status returns the verification status.
-func (v VerificationResult) Status() VerificationStatus {
-	return v.status
-}
-
-// Identity returns the verified identity.
-func (v VerificationResult) Identity() Identity {
-	return v.identity
-}
-
-// Signature returns the signature that was verified.
-func (v VerificationResult) Signature() Signature {
-	return v.signature
-}
-
-// ErrorCode returns the error code, if any.
-func (v VerificationResult) ErrorCode() string {
-	return v.errorCode
-}
-
-// ErrorMessage returns the error message, if any.
-func (v VerificationResult) ErrorMessage() string {
-	return v.errorMsg
-}
-
-// IsVerified returns true if the signature was successfully verified.
-func (v VerificationResult) IsVerified() bool {
-	return v.status == VerificationStatusVerified
-}
-
-// HasError returns true if there is an error code or message.
-func (v VerificationResult) HasError() bool {
-	return v.errorCode != "" || v.errorMsg != ""
 }

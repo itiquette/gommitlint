@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 // Package crypto provides adapters for cryptographic operations.
-package crypto
+package signing
 
 import (
 	"fmt"
@@ -13,8 +13,7 @@ import (
 
 // FileSystemKeyRepository implements domain.CryptoKeyRepository using the local filesystem.
 type FileSystemKeyRepository struct {
-	keyDir   string
-	security *FileSecurityService
+	keyDir string
 }
 
 // FileSystemKeyRepository is kept as an internal implementation detail.
@@ -22,14 +21,6 @@ type FileSystemKeyRepository struct {
 
 // RepositoryOption configures a FileSystemKeyRepository.
 type RepositoryOption func(*FileSystemKeyRepository)
-
-// WithSecurityService sets a custom security service.
-// This allows for test configurations with relaxed security.
-func WithSecurityService(service *FileSecurityService) RepositoryOption {
-	return func(r *FileSystemKeyRepository) {
-		r.security = service
-	}
-}
 
 // NewFileSystemKeyRepository creates a new repository for accessing keys from a directory.
 func NewFileSystemKeyRepository(keyDir string) *FileSystemKeyRepository {
@@ -39,10 +30,9 @@ func NewFileSystemKeyRepository(keyDir string) *FileSystemKeyRepository {
 // NewFileSystemKeyRepositoryWithOptions creates a new repository with options.
 // This allows for creating test repositories with different security settings.
 func NewFileSystemKeyRepositoryWithOptions(keyDir string, options ...RepositoryOption) *FileSystemKeyRepository {
-	// Create with default security checker
+	// Create repository
 	repo := &FileSystemKeyRepository{
-		keyDir:   keyDir,
-		security: &FileSecurityService{},
+		keyDir: keyDir,
 	}
 
 	// Apply options
@@ -60,7 +50,6 @@ func (r FileSystemKeyRepository) GetKeyDirectory() string {
 
 // FindKeyFiles finds key files matching the given extensions.
 // Implements improved path security by using safe directory access and path validation.
-// Follows functional programming principles by not mutating state.
 func (r FileSystemKeyRepository) FindKeyFiles(extensions []string) ([]string, error) {
 	// Use the safer directory reading function to prevent TOCTOU race conditions
 	entries, err := r.readDirSafely()
@@ -103,7 +92,7 @@ func (r FileSystemKeyRepository) ReadKeyFile(path string) ([]byte, error) {
 	level := GetSecurityLevelForFile(path)
 
 	// Check permissions
-	secure, err := r.security.IsSecurePermissions(path, level)
+	secure, err := IsSecurePermissions(path, level)
 	if err != nil {
 		return nil, fmt.Errorf("security check failed for %s: %w", path, err)
 	}
@@ -115,7 +104,7 @@ func (r FileSystemKeyRepository) ReadKeyFile(path string) ([]byte, error) {
 
 	// For private key files, also verify ownership
 	if level == Private {
-		owned, err := r.security.VerifyOwnership(path)
+		owned, err := VerifyOwnership(path)
 		if err != nil {
 			return nil, fmt.Errorf("ownership check failed: %w", err)
 		}

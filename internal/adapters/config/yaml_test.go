@@ -13,33 +13,55 @@ import (
 	configTypes "github.com/itiquette/gommitlint/internal/domain/config"
 )
 
-func TestService_Creation(t *testing.T) {
-	// Test creating a new service
-	service, err := config.NewService()
-	require.NoError(t, err)
-	require.NotNil(t, service)
-
-	// Verify default config is loaded
-	cfg := service.GetConfig()
+func TestConfigWithDefaults_Creation(t *testing.T) {
+	// Test creating config with application defaults
+	cfg := config.NewConfigWithDefaults()
 	require.NotNil(t, cfg)
 	require.Equal(t, "sentence", cfg.Message.Subject.Case)
 	require.Equal(t, 72, cfg.Message.Subject.MaxLength)
+
+	// Verify application-specific defaults
+	expectedDisabled := []string{"jirareference", "commitbody", "spell"}
+	require.Equal(t, expectedDisabled, cfg.Rules.Disabled)
 }
 
-func TestService_UpdateConfig(t *testing.T) {
-	// Create service
-	service, err := config.NewService()
+func TestLoadConfig_Integration(t *testing.T) {
+	// Test loading configuration using pure function
+	cfg, err := config.LoadConfig()
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+
+	// Verify default values are loaded
+	require.Equal(t, "sentence", cfg.Message.Subject.Case)
+	require.Equal(t, 72, cfg.Message.Subject.MaxLength)
+	require.Equal(t, "text", cfg.Output)
+}
+
+func TestMergeConfigs_Functionality(t *testing.T) {
+	// Test configuration merging
+	base := config.NewConfigWithDefaults()
+
+	// Create overlay with different values
+	overlay := configTypes.Config{
+		Message: configTypes.MessageConfig{
+			Subject: configTypes.SubjectConfig{
+				MaxLength: 100,
+			},
+		},
+		Output: "json",
+	}
+
+	// Merge configurations
+	result, err := config.MergeConfigs(base, overlay)
 	require.NoError(t, err)
 
-	// Update config
-	newService := service.UpdateConfig(func(cfg configTypes.Config) configTypes.Config {
-		cfg.Message.Subject.MaxLength = 100
+	// Verify overlay values took precedence
+	require.Equal(t, 100, result.Message.Subject.MaxLength)
+	require.Equal(t, "json", result.Output)
 
-		return cfg
-	})
+	// Verify base values remain for unspecified fields
+	require.Equal(t, "sentence", result.Message.Subject.Case)
 
-	// Verify the update
-	require.Equal(t, 100, newService.GetConfig().Message.Subject.MaxLength)
-	// Verify immutability
-	require.Equal(t, 72, service.GetConfig().Message.Subject.MaxLength)
+	// Verify immutability - base config unchanged
+	require.Equal(t, 72, base.Message.Subject.MaxLength)
 }

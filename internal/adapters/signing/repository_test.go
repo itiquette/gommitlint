@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-package crypto_test
+package signing_test
 
 import (
 	"os"
@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/itiquette/gommitlint/internal/adapters/signing"
-	cryptoTestdata "github.com/itiquette/gommitlint/internal/adapters/signing/testdata"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -46,7 +45,7 @@ func TestFileSystemKeyRepository(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create the repository
-	repo := crypto.NewFileSystemKeyRepository(tempDir)
+	repo := signing.NewFileSystemKeyRepository(tempDir)
 
 	// Test GetKeyDirectory
 	require.Equal(t, tempDir, repo.GetKeyDirectory())
@@ -97,10 +96,8 @@ func TestReadKeyFile(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tempDir)
 
-	// Create the repository with a test security service that bypasses permission checks
-	testService := cryptoTestdata.NewTestSecurityService()
-	repo := crypto.NewFileSystemKeyRepositoryWithOptions(tempDir,
-		crypto.WithSecurityService(testService))
+	// Create the repository
+	repo := signing.NewFileSystemKeyRepository(tempDir)
 
 	// Create test files with different permissions and types
 	tests := []struct {

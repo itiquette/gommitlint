@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-package crypto
+package signing
 
 import (
 	"crypto/rsa"
@@ -31,30 +31,13 @@ func DefaultSSHSecuritySettings() SSHSecuritySettings {
 	}
 }
 
-// SSHVerificationService implements the domain.Verifier interface for SSH signatures.
-type SSHVerificationService struct {
-	settings SSHSecuritySettings
-}
-
-// NewSSHVerificationService creates a new SSH verification service with the given security settings.
-func NewSSHVerificationService(settings SSHSecuritySettings) SSHVerificationService {
-	return SSHVerificationService{
-		settings: settings,
-	}
-}
-
-// NewDefaultSSHVerificationService creates a new SSH verification service with default security settings.
-func NewDefaultSSHVerificationService() SSHVerificationService {
-	return NewSSHVerificationService(DefaultSSHSecuritySettings())
-}
-
-// CanVerify checks if this verifier can handle the given signature.
-func (v SSHVerificationService) CanVerify(signature domain.Signature) bool {
+// CanVerifySSH checks if a signature is an SSH signature.
+func CanVerifySSH(signature domain.Signature) bool {
 	return signature.Type() == domain.SignatureTypeSSH
 }
 
-// Verify checks if the SSH signature is valid for the given data.
-func (v SSHVerificationService) Verify(signature domain.Signature, data []byte, keyDir string) domain.VerificationResult {
+// VerifySSHSignature checks if the SSH signature is valid for the given data.
+func VerifySSHSignature(signature domain.Signature, data []byte, keyDir string, settings SSHSecuritySettings) domain.VerificationResult {
 	if signature.IsEmpty() {
 		return domain.NewVerificationResult(
 			domain.VerificationStatusFailed,
@@ -115,7 +98,7 @@ func (v SSHVerificationService) Verify(signature domain.Signature, data []byte, 
 		}
 
 		// Check if key meets minimum strength requirements
-		if !hasMinimumSSHKeyStrength(pubKey, v.settings) {
+		if !hasMinimumSSHKeyStrength(pubKey, settings) {
 			continue // Skip weak keys
 		}
 

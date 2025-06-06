@@ -2,8 +2,6 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package crypto provides domain models for cryptographic signatures
-// and identity verification used in commit validation.
 package domain
 
 import (
@@ -22,7 +20,6 @@ const (
 )
 
 // Signature represents a cryptographic signature with its format and data.
-// This is an immutable value type.
 type Signature struct {
 	sigType SignatureType
 	data    string

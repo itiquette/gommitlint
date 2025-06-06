@@ -11,38 +11,36 @@ import (
 	"github.com/itiquette/gommitlint/internal/domain/config"
 )
 
-// ValidateCommit validates a single commit against the provided rules.
-// This is a pure function that takes all dependencies as parameters.
-func ValidateCommit(commit Commit, rules []Rule, repo Repository, cfg *config.Config) ValidationResult {
+// ValidateCommit validates a single commit against both commit and repository rules.
+func ValidateCommit(commit Commit, commitRules []CommitRule, repoRules []RepositoryRule, repo Repository, cfg config.Config) ValidationResult {
 	var errors []ValidationError
-	for _, rule := range rules {
-		errors = append(errors, rule.Validate(commit, repo, cfg)...)
-	}
+
+	// Validate commit-only rules
+	errors = append(errors, ValidateCommitRules(commit, commitRules, cfg)...)
+
+	// Validate repository-dependent rules
+	errors = append(errors, ValidateRepositoryRules(commit, repoRules, repo, cfg)...)
 
 	return ValidationResult{Commit: commit, Errors: errors}
 }
 
-// ValidateCommits validates multiple commits against the provided rules.
-// Returns a slice of validation results, one for each commit.
-func ValidateCommits(commits []Commit, rules []Rule, repo Repository, cfg *config.Config) []ValidationResult {
+// ValidateCommits validates multiple commits against both rule types.
+func ValidateCommits(commits []Commit, commitRules []CommitRule, repoRules []RepositoryRule, repo Repository, cfg config.Config) []ValidationResult {
 	results := make([]ValidationResult, len(commits))
 	for i, commit := range commits {
-		results[i] = ValidateCommit(commit, rules, repo, cfg)
+		results[i] = ValidateCommit(commit, commitRules, repoRules, repo, cfg)
 	}
 
 	return results
 }
 
 // ValidateRepository runs repository-level rules.
-// Repository rules receive an empty commit as they don't validate specific commits.
-func ValidateRepository(rules []Rule, repo Repository, cfg *config.Config) []ValidationError {
-	repoRules := FilterRepositoryRules(rules)
-
+func ValidateRepository(rules []RepositoryRule, repo Repository, cfg config.Config) []ValidationError {
 	var errors []ValidationError
 
 	// Repository rules don't need commit data
 	emptyCommit := Commit{}
-	for _, rule := range repoRules {
+	for _, rule := range rules {
 		errors = append(errors, rule.Validate(emptyCommit, repo, cfg)...)
 	}
 
@@ -50,8 +48,7 @@ func ValidateRepository(rules []Rule, repo Repository, cfg *config.Config) []Val
 }
 
 // ValidateMessage validates a commit message string without repository context.
-// Useful for pre-commit hooks and message file validation.
-func ValidateMessage(message string, rules []Rule, cfg *config.Config) (ValidationResult, error) {
+func ValidateMessage(message string, rules []CommitRule, cfg config.Config) (ValidationResult, error) {
 	// Trim whitespace
 	message = strings.TrimSpace(message)
 	if message == "" {
@@ -59,35 +56,9 @@ func ValidateMessage(message string, rules []Rule, cfg *config.Config) (Validati
 	}
 
 	commit := ParseCommitMessage(message)
-	commitRules := FilterCommitRules(rules)
+	errors := ValidateCommitRules(commit, rules, cfg)
 
-	return ValidateCommit(commit, commitRules, nil, cfg), nil
-}
-
-// FilterCommitRules returns only commit-level rules from the provided rules.
-func FilterCommitRules(rules []Rule) []Rule {
-	var result []Rule
-
-	for _, rule := range rules {
-		if !IsRepositoryLevelRule(rule) {
-			result = append(result, rule)
-		}
-	}
-
-	return result
-}
-
-// FilterRepositoryRules returns only repository-level rules from the provided rules.
-func FilterRepositoryRules(rules []Rule) []Rule {
-	var result []Rule
-
-	for _, rule := range rules {
-		if IsRepositoryLevelRule(rule) {
-			result = append(result, rule)
-		}
-	}
-
-	return result
+	return ValidationResult{Commit: commit, Errors: errors}, nil
 }
 
 // FullValidation represents both commit and repository validation results.

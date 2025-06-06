@@ -21,84 +21,36 @@ type ValidationTarget struct {
 	Target string // end ref for ranges, empty otherwise
 }
 
-// ValidationTargetBuilder helps construct ValidationTarget from CLI parameters.
-type ValidationTargetBuilder struct {
-	messageFile   string
-	gitReference  string
-	commitCount   int
-	revisionRange string
-	baseBranch    string
-}
-
-// NewValidationTargetBuilder creates a new builder.
-func NewValidationTargetBuilder() *ValidationTargetBuilder {
-	return &ValidationTargetBuilder{}
-}
-
-// WithMessageFile sets the message file source.
-func (b *ValidationTargetBuilder) WithMessageFile(file string) *ValidationTargetBuilder {
-	b.messageFile = file
-
-	return b
-}
-
-// WithGitReference sets the git reference.
-func (b *ValidationTargetBuilder) WithGitReference(ref string) *ValidationTargetBuilder {
-	b.gitReference = ref
-
-	return b
-}
-
-// WithCommitCount sets the commit count.
-func (b *ValidationTargetBuilder) WithCommitCount(count int) *ValidationTargetBuilder {
-	b.commitCount = count
-
-	return b
-}
-
-// WithRevisionRange sets the revision range.
-func (b *ValidationTargetBuilder) WithRevisionRange(revRange string) *ValidationTargetBuilder {
-	b.revisionRange = revRange
-
-	return b
-}
-
-// WithBaseBranch sets the base branch.
-func (b *ValidationTargetBuilder) WithBaseBranch(branch string) *ValidationTargetBuilder {
-	b.baseBranch = branch
-
-	return b
-}
-
-// Build creates the ValidationTarget with precedence-based logic.
-func (b *ValidationTargetBuilder) Build() (ValidationTarget, error) {
+// NewValidationTarget creates a ValidationTarget from CLI parameters.
+// It uses precedence-based logic to determine validation target.
+func NewValidationTarget(messageFile, gitReference, revisionRange, baseBranch string, commitCount int) (ValidationTarget, error) {
 	// Validate all inputs first
-	if err := b.validateInputs(); err != nil {
+	if err := validateInputs(messageFile, gitReference, revisionRange, baseBranch, commitCount); err != nil {
 		return ValidationTarget{}, err
 	}
 
 	// Apply validation source with precedence order
-	if b.messageFile != "" {
+	if messageFile != "" {
 		// 1. Message from file (highest priority)
 		return ValidationTarget{
 			Type:   "message",
-			Source: filepath.Clean(b.messageFile),
+			Source: filepath.Clean(messageFile),
 			Target: "",
 		}, nil
 	}
 
-	if b.baseBranch != "" {
+	if baseBranch != "" {
 		// 2. Base branch comparison
 		return ValidationTarget{
 			Type:   "range",
-			Source: b.baseBranch,
+			Source: baseBranch,
 			Target: "HEAD",
 		}, nil
 	}
 
-	if b.revisionRange != "" {
+	if revisionRange != "" {
 		// 3. Revision range
-		parts := parseRevisionRange(b.revisionRange)
+		parts := parseRevisionRange(revisionRange)
 		if len(parts) == 2 {
 			return ValidationTarget{
 				Type:   "range",
@@ -107,23 +59,23 @@ func (b *ValidationTargetBuilder) Build() (ValidationTarget, error) {
 			}, nil
 		}
 
-		return ValidationTarget{}, fmt.Errorf("invalid revision range format: %s (expected format: from..to)", b.revisionRange)
+		return ValidationTarget{}, fmt.Errorf("invalid revision range format: %s (expected format: from..to)", revisionRange)
 	}
 
-	if b.gitReference != "" {
+	if gitReference != "" {
 		// 4. Single git reference
 		return ValidationTarget{
 			Type:   "commit",
-			Source: b.gitReference,
+			Source: gitReference,
 			Target: "",
 		}, nil
 	}
 
-	if b.commitCount > 1 {
+	if commitCount > 1 {
 		// 5. Commit count (only if explicitly set to > 1)
 		return ValidationTarget{
 			Type:   "count",
-			Source: strconv.Itoa(b.commitCount),
+			Source: strconv.Itoa(commitCount),
 			Target: "",
 		}, nil
 	}
@@ -136,31 +88,31 @@ func (b *ValidationTargetBuilder) Build() (ValidationTarget, error) {
 	}, nil
 }
 
-// validateInputs validates all builder inputs.
-func (b *ValidationTargetBuilder) validateInputs() error {
-	if err := validateFilePath(b.messageFile); err != nil {
+// validateInputs validates all inputs.
+func validateInputs(messageFile, gitReference, revisionRange, baseBranch string, commitCount int) error {
+	if err := validateFilePath(messageFile); err != nil {
 		return fmt.Errorf("invalid message file: %w", err)
 	}
 
-	if err := validateGitReference(b.gitReference); err != nil {
+	if err := validateGitReference(gitReference); err != nil {
 		return fmt.Errorf("invalid git reference: %w", err)
 	}
 
-	if err := validateGitReference(b.baseBranch); err != nil {
+	if err := validateGitReference(baseBranch); err != nil {
 		return fmt.Errorf("invalid base branch: %w", err)
 	}
 
-	if err := validateCommitCount(b.commitCount); err != nil {
+	if err := validateCommitCount(commitCount); err != nil {
 		return fmt.Errorf("invalid commit count: %w", err)
 	}
 
-	if b.revisionRange != "" {
-		if err := validateParameterLength("Revision range", b.revisionRange, MaxRefLength); err != nil {
+	if revisionRange != "" {
+		if err := validateParameterLength("Revision range", revisionRange, MaxRefLength); err != nil {
 			return err
 		}
 
 		// Parse and validate range parts
-		parts := parseRevisionRange(b.revisionRange)
+		parts := parseRevisionRange(revisionRange)
 		if len(parts) == 2 {
 			if err := validateGitReference(parts[0]); err != nil {
 				return fmt.Errorf("invalid revision range start: %w", err)

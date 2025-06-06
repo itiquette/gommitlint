@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-package crypto
+package signing
 
 import (
 	"fmt"
@@ -29,30 +29,13 @@ func DefaultGPGSecuritySettings() GPGSecuritySettings {
 	}
 }
 
-// GPGVerificationService implements the domain.Verifier interface for GPG signatures.
-type GPGVerificationService struct {
-	settings GPGSecuritySettings
-}
-
-// NewGPGVerificationService creates a new GPG verification service with the given security settings.
-func NewGPGVerificationService(settings GPGSecuritySettings) GPGVerificationService {
-	return GPGVerificationService{
-		settings: settings,
-	}
-}
-
-// NewDefaultGPGVerificationService creates a new GPG verification service with default security settings.
-func NewDefaultGPGVerificationService() GPGVerificationService {
-	return NewGPGVerificationService(DefaultGPGSecuritySettings())
-}
-
-// CanVerify checks if this verifier can handle the given signature.
-func (v GPGVerificationService) CanVerify(signature domain.Signature) bool {
+// CanVerifyGPG checks if a signature is a GPG signature.
+func CanVerifyGPG(signature domain.Signature) bool {
 	return signature.Type() == domain.SignatureTypeGPG
 }
 
-// Verify checks if the GPG signature is valid for the given data.
-func (v GPGVerificationService) Verify(signature domain.Signature, data []byte, keyDir string) domain.VerificationResult {
+// VerifyGPGSignature checks if the GPG signature is valid for the given data.
+func VerifyGPGSignature(signature domain.Signature, data []byte, keyDir string, settings GPGSecuritySettings) domain.VerificationResult {
 	if signature.IsEmpty() {
 		return domain.NewVerificationResult(
 			domain.VerificationStatusFailed,
@@ -99,7 +82,7 @@ func (v GPGVerificationService) Verify(signature domain.Signature, data []byte, 
 		// Try each key in the file
 		for _, entity := range entities {
 			// Skip invalid keys
-			if isKeyRevoked(entity) || isKeyExpired(entity, time.Now()) || !hasMinimumGPGKeyStrength(entity, v.settings) {
+			if isKeyRevoked(entity) || isKeyExpired(entity, time.Now()) || !hasMinimumGPGKeyStrength(entity, settings) {
 				continue
 			}
 

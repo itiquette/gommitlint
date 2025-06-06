@@ -2,29 +2,17 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-package format
+package output
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/domain"
 )
 
-// GitHubFormatter formats validation results for GitHub Actions.
-type GitHubFormatter struct{}
-
-// Ensure GitHubFormatter implements Formatter interface.
-var _ Formatter = (*GitHubFormatter)(nil)
-
-// NewGitHubFormatter creates a new GitHub Actions formatter.
-func NewGitHubFormatter() *GitHubFormatter {
-	return &GitHubFormatter{}
-}
-
-// Format formats a domain report for GitHub Actions (pure function).
-func (f *GitHubFormatter) Format(_ context.Context, report domain.Report) string {
+// GitHub formats a domain report for GitHub Actions (pure function).
+func GitHub(report domain.Report) string {
 	var builder strings.Builder
 
 	// GitHub Actions group for summary
@@ -42,7 +30,7 @@ func (f *GitHubFormatter) Format(_ context.Context, report domain.Report) string
 		builder.WriteString(fmt.Sprintf("::group::Commit #%d: %s\n", i+1, commitReport.Commit.Hash))
 		builder.WriteString(fmt.Sprintf("Subject: %s\n", commitReport.Commit.Subject))
 
-		f.writeGitHubRules(&builder, commitReport)
+		writeGitHubRules(&builder, commitReport)
 		builder.WriteString("::endgroup::\n")
 	}
 
@@ -72,12 +60,7 @@ func (f *GitHubFormatter) Format(_ context.Context, report domain.Report) string
 	return builder.String()
 }
 
-// ContentType returns the MIME type for GitHub Actions output.
-func (f *GitHubFormatter) ContentType() string {
-	return "text/plain"
-}
-
-func (f *GitHubFormatter) writeGitHubRules(builder *strings.Builder, commitReport domain.CommitReport) {
+func writeGitHubRules(builder *strings.Builder, commitReport domain.CommitReport) {
 	failedCount := 0
 
 	for _, ruleReport := range commitReport.RuleResults {

@@ -68,19 +68,17 @@ gommitlint:
   # Rule configuration
   rules:
     enabled: # Rules to enable (takes priority over disabled)
-      - "Subject"         # Consolidated rule: validates length, case, and suffix
+      - "Subject" # Consolidated rule: validates length, case, suffix, and imperative
       - "ConventionalCommit"
-      - "ImperativeVerb"
       - "CommitBody"
       - "SignOff"
       - "Signature"
       - "JiraReference"
       - "Spell"
-      - "SignedIdentity"   # Updated name from "Identity"
+      - "SignedIdentity" # Updated name from "Identity"
       - "BranchAhead"
 
     disabled: # Rules to disable
-      # - "ImperativeVerb"
       # - "JiraReference"
 
   # Output configuration

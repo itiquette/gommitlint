@@ -11,6 +11,7 @@ import (
 
 	gitTestdata "github.com/itiquette/gommitlint/internal/adapters/git/testdata"
 	"github.com/itiquette/gommitlint/internal/domain/config"
+	"github.com/itiquette/gommitlint/internal/integrationtest/testdata"
 )
 
 // TestConfigurationWorkflow tests different configuration scenarios.
@@ -25,7 +26,7 @@ func TestConfigurationWorkflow(t *testing.T) {
 			name:    "Valid commit with custom length",
 			message: "feat: add feature",
 			config: func() config.Config {
-				cfg := DefaultConfig()
+				cfg := testdata.DefaultConfig()
 				cfg.Message.Subject.MaxLength = 50
 
 				return cfg
@@ -36,7 +37,7 @@ func TestConfigurationWorkflow(t *testing.T) {
 			name:    "Invalid - exceeds custom length",
 			message: "feat: this is a very long commit message that exceeds our custom limit",
 			config: func() config.Config {
-				cfg := DefaultConfig()
+				cfg := testdata.DefaultConfig()
 				cfg.Message.Subject.MaxLength = 50
 
 				return cfg
@@ -47,7 +48,7 @@ func TestConfigurationWorkflow(t *testing.T) {
 			name:    "Valid with custom conventional types",
 			message: "custom: add special feature",
 			config: func() config.Config {
-				cfg := DefaultConfig()
+				cfg := testdata.DefaultConfig()
 				cfg.Conventional.Types = []string{"custom", "special"}
 
 				return cfg
@@ -58,7 +59,7 @@ func TestConfigurationWorkflow(t *testing.T) {
 			name:    "Invalid - wrong conventional type",
 			message: "invalid: not allowed type",
 			config: func() config.Config {
-				cfg := DefaultConfig()
+				cfg := testdata.DefaultConfig()
 				cfg.Conventional.Types = []string{"feat", "fix"}
 
 				return cfg
@@ -69,7 +70,7 @@ func TestConfigurationWorkflow(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			result := TestValidateMessage(t, testCase.message, testCase.config)
+			result := testdata.TestValidateMessage(t, testCase.message, testCase.config)
 
 			if testCase.wantPass {
 				require.True(t, result.Valid, "Expected validation to pass")
@@ -106,7 +107,7 @@ func TestMessageFileWorkflow(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			result := TestValidateMessage(t, testCase.message, DefaultConfig())
+			result := testdata.TestValidateMessage(t, testCase.message, testdata.DefaultConfig())
 
 			if testCase.wantPass {
 				require.True(t, result.Valid, "Expected validation to pass")
@@ -123,7 +124,7 @@ func TestRepositoryWorkflow(t *testing.T) {
 		repoPath, cleanup := gitTestdata.GitRepo(t, "feat: add feature\n\nDetailed description")
 		defer cleanup()
 
-		result := TestValidation(t, repoPath, DefaultConfig())
+		result := testdata.TestValidation(t, repoPath, testdata.DefaultConfig())
 		require.True(t, result.Valid)
 	})
 
@@ -131,27 +132,7 @@ func TestRepositoryWorkflow(t *testing.T) {
 		repoPath, cleanup := gitTestdata.GitRepo(t, "bad commit message")
 		defer cleanup()
 
-		result := TestValidation(t, repoPath, DefaultConfig())
+		result := testdata.TestValidation(t, repoPath, testdata.DefaultConfig())
 		require.False(t, result.Valid)
 	})
-}
-
-// TestConfigImmutability verifies that configuration helpers maintain immutability.
-func TestConfigImmutability(t *testing.T) {
-	original := DefaultConfig()
-	originalLength := original.Message.Subject.MaxLength
-
-	// Create modified config
-	modified := WithSubjectMaxLength(100)
-
-	// Original should be unchanged
-	require.Equal(t, originalLength, original.Message.Subject.MaxLength)
-	require.Equal(t, 100, modified.Message.Subject.MaxLength)
-
-	// Multiple modifications should not affect each other
-	config1 := WithSubjectMaxLength(50)
-	config2 := WithSubjectMaxLength(80)
-
-	require.Equal(t, 50, config1.Message.Subject.MaxLength)
-	require.Equal(t, 80, config2.Message.Subject.MaxLength)
 }

@@ -7,7 +7,6 @@
 package config
 
 // Config represents the complete configuration for gommitlint.
-// It uses value semantics for immutability.
 type Config struct {
 	Message      MessageConfig      `json:"message"      yaml:"message"`
 	Conventional ConventionalConfig `json:"conventional" yaml:"conventional"`

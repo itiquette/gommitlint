@@ -118,7 +118,7 @@ func TestBranchAheadRule(t *testing.T) {
 
 			// Validate using new signature
 			commit := domain.Commit{Hash: "test", Subject: "test commit"}
-			failures := rule.Validate(commit, testCase.analyzer, &cfg)
+			failures := rule.Validate(commit, testCase.analyzer, cfg)
 
 			// Check for expected errors
 			if testCase.expectedErrors {
@@ -206,7 +206,7 @@ func TestBranchAheadRule_ReferenceBranch(t *testing.T) {
 
 	// Run validation using new signature
 	commit := domain.Commit{Hash: "test", Subject: "test commit"}
-	rule.Validate(commit, mockAnalyzer, &cfg)
+	rule.Validate(commit, mockAnalyzer, cfg)
 
 	// Check what reference branch was passed to the analyzer
 	require.Equal(t, "develop", mockAnalyzer.refBranchName,
@@ -285,7 +285,7 @@ func TestBranchAheadRule_Configuration(t *testing.T) {
 
 			// Validate using new signature
 			commit := domain.Commit{Hash: "test", Subject: "test commit"}
-			failures := rule.Validate(commit, analyzer, &cfg)
+			failures := rule.Validate(commit, analyzer, cfg)
 
 			// Check results
 			if testCase.wantError {

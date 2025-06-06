@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/itiquette/gommitlint/internal/adapters/signing"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,14 +36,6 @@ func NewCryptoCommit(hash, message, author, email, signature, key string) Crypto
 	}
 }
 
-// NewTestSecurityService creates a new test security service that allows all operations.
-// This returns a real FileSecurityService, not a mock, because the crypto repository
-// expects that specific type.
-func NewTestSecurityService() *crypto.FileSecurityService {
-	// Return a real security service - in tests it's safe to use the real implementation
-	// since we control the test environment
-	return &crypto.FileSecurityService{}
-}
 
 // CreateTempKeyDir creates a temporary directory for test keys.
 func CreateTempKeyDir(t *testing.T) string {

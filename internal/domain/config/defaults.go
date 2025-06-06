@@ -11,7 +11,7 @@ func NewDefault() Config {
 			Subject: SubjectConfig{
 				MaxLength:         72,
 				Case:              "sentence",
-				RequireImperative: true,
+				RequireImperative: false,
 				ForbidEndings:     []string{".", "!", "?"},
 			},
 			Body: BodyConfig{

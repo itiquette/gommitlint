@@ -112,7 +112,6 @@ gommitlint:
       - Signature
       - CommitBody
       - JiraReference
-      - ImperativeVerb
       - Spell
 `,
 			// Just check that it contains something reasonable in the output
@@ -145,7 +144,6 @@ gommitlint:
       - Signature
       - CommitBody
       - JiraReference
-      - ImperativeVerb
       - Spell
 `,
 			// Check it mentions something about validation
@@ -182,7 +180,6 @@ gommitlint:
       - Signature
       - CommitBody
       - JiraReference
-      - ImperativeVerb
       - Spell
 `,
 			// Just check that it runs and produces output
@@ -203,7 +200,6 @@ gommitlint:
   rules:
     enabled:
       - ConventionalCommit
-      - ImperativeVerb
     disabled:
       - SignOff
       - Signature

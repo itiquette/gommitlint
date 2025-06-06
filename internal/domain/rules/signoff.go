@@ -31,7 +31,7 @@ func NewSignOffRule(cfg config.Config) SignOffRule {
 }
 
 // Validate checks for the presence and format of a Developer Certificate of Origin sign-off.
-func (r SignOffRule) Validate(commit domain.Commit, _ domain.Repository, _ *config.Config) []domain.ValidationError {
+func (r SignOffRule) Validate(commit domain.Commit, _ config.Config) []domain.ValidationError {
 	// Check if sign-off is required
 	if !r.requireSignOff {
 		return nil

@@ -60,7 +60,7 @@ Examples:
 }
 
 // HookInstallationParameters contains all parameters needed for hook installation.
-// This structure follows the functional patterns of immutability and value semantics.
+// This structure supports safe operations.
 type HookInstallationParameters struct {
 	Force         bool
 	RepoPath      string
@@ -158,10 +158,10 @@ func (p HookInstallationParameters) Repo(repoPath string) HookInstallationParame
 }
 
 // installHook installs a Git commit-msg hook in the specified repository.
-// Uses atomic file operations and proper permission management to ensure security.
+// It uses atomic file operations and proper permission management to ensure security.
 func installHook(force bool, repoPath string) error {
 	// Validate and normalize the repository path using fsutils
-	validatedPath, err := crypto.ValidateGitRepoPath(repoPath)
+	validatedPath, err := signing.ValidateGitRepoPath(repoPath)
 	if err != nil {
 		return fmt.Errorf("invalid repository path: %w", err)
 	}
@@ -191,7 +191,7 @@ func installHook(force bool, repoPath string) error {
 	// Write the hook file using our secure file writing function
 	// This handles creating a temporary file, setting permissions, and atomically
 	// renaming it to the final destination to prevent TOCTOU vulnerabilities
-	if err := crypto.SafeWriteFile(hookPath, []byte(hookContent), 0700); err != nil {
+	if err := signing.SafeWriteFile(hookPath, []byte(hookContent), 0700); err != nil {
 		return fmt.Errorf("could not write hook file: %w", err)
 	}
 
@@ -204,7 +204,7 @@ func generateCommitMsgHook() string {
 }
 
 // createDefaultHookScript creates a shell script for the commit-msg hook.
-// Used internally by generateCommitMsgHook.
+// It is used internally by generateCommitMsgHook.
 func createDefaultHookScript() string {
 	return `#!/bin/sh
 #

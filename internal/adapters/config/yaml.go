@@ -5,77 +5,31 @@
 package config
 
 import (
-	"fmt"
-
 	"github.com/itiquette/gommitlint/internal/domain/config"
 )
 
-// Service provides configuration management functionality.
-// It handles loading, storing, and providing access to configuration.
-type Service struct {
-	config config.Config
-}
-
-// NewService creates a new configuration service with default configuration.
-func NewService() (Service, error) {
-	// Use the domain's default configuration
+// NewConfigWithDefaults creates configuration with application-specific defaults.
+func NewConfigWithDefaults() config.Config {
 	cfg := config.NewDefault()
 
-	// Apply default disabled rules
+	// Apply default disabled rules for this application
 	cfg.Rules.Disabled = []string{
 		"jirareference", // JIRAReference rule is disabled by default as it's organization-specific
 		"commitbody",    // CommitBody rule is disabled by default as not all projects require detailed bodies
+		"spell",         // Spell checking disabled by default (requires additional setup)
 	}
 
-	return Service{
-		config: cfg,
-	}, nil
+	return cfg
 }
 
-// NewServiceWithConfig creates a new service with the provided configuration.
-func NewServiceWithConfig(config config.Config) Service {
-	return Service{
-		config: config,
-	}
-}
+// WithDefaults applies application-specific defaults to a configuration.
+func WithDefaults(cfg config.Config) config.Config {
+	defaults := NewConfigWithDefaults()
 
-// GetConfig returns the current configuration.
-func (s Service) GetConfig() config.Config {
-	return s.config
-}
-
-// UpdateConfig applies a transformation to the current configuration.
-// It returns a new Service instance to maintain immutability.
-func (s Service) UpdateConfig(transform func(config.Config) config.Config) Service {
-	newConfig := transform(s.config)
-
-	return Service{
-		config: newConfig,
-	}
-}
-
-// Load loads configuration from default paths using the loader.
-// Returns a new Service with the loaded configuration.
-func (s Service) Load() (Service, error) {
-	loader := NewLoader()
-
-	config, err := loader.LoadFromFile()
-	if err != nil {
-		return s, fmt.Errorf("failed to load config: %w", err)
+	// If no disabled rules are specified, use defaults
+	if len(cfg.Rules.Disabled) == 0 {
+		cfg.Rules.Disabled = defaults.Rules.Disabled
 	}
 
-	return Service{config: config}, nil
-}
-
-// LoadFromPath loads configuration from a specific path.
-// Returns a new Service with the loaded configuration.
-func (s Service) LoadFromPath(path string) (Service, error) {
-	loader := NewLoader()
-
-	config, err := loader.LoadFromPath(path)
-	if err != nil {
-		return s, fmt.Errorf("failed to load config from %s: %w", path, err)
-	}
-
-	return Service{config: config}, nil
+	return cfg
 }
