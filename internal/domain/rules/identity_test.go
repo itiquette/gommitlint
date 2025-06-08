@@ -21,21 +21,27 @@ package rules_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/domain/config"
 	"github.com/itiquette/gommitlint/internal/domain/rules"
-	"github.com/itiquette/gommitlint/internal/domain/testdata"
 	"github.com/stretchr/testify/require"
 )
 
-// createTestCommit creates a commit with the given author details and signature.
-func createTestCommit(authorName, authorEmail, signature string) domain.Commit {
-	commit := testdata.Commit("feat: add new feature\n\nThis commit adds a new feature that enhances the user experience.")
-	commit.Hash = "abc123"
-	commit.Author = authorName
-	commit.AuthorEmail = authorEmail
-	commit.Signature = signature
+// createIdentityTestCommit creates a commit with the given author details and signature.
+func createIdentityTestCommit(authorName, authorEmail, signature string) domain.Commit {
+	commit := domain.Commit{
+		Hash:          "abc123",
+		Subject:       "feat: add new feature",
+		Message:       "feat: add new feature\n\nThis commit adds a new feature that enhances the user experience.",
+		Body:          "This commit adds a new feature that enhances the user experience.",
+		Author:        authorName,
+		AuthorEmail:   authorEmail,
+		CommitDate:    time.Now().Format(time.RFC3339),
+		IsMergeCommit: false,
+		Signature:     signature,
+	}
 
 	return commit
 }
@@ -50,15 +56,15 @@ func TestIdentityRule_AllowedSigners(t *testing.T) {
 	}{
 		{
 			name: "Author in allowed signers list",
-			commit: createTestCommit(
+			commit: createIdentityTestCommit(
 				"John Doe",
 				"john@example.com",
 				"dummy-signature",
 			),
 			configModifier: func(cfg config.Config) config.Config {
 				result := cfg
-				result.Signing.AllowedSigners = []string{"John Doe <john@example.com>"}
-				result.Rules.Enabled = append(result.Rules.Enabled, "SignedIdentity")
+				result.Identity.AllowedAuthors = []string{"John Doe <john@example.com>"}
+				result.Rules.Enabled = append(result.Rules.Enabled, "Identity")
 
 				return result
 			},
@@ -66,15 +72,15 @@ func TestIdentityRule_AllowedSigners(t *testing.T) {
 		},
 		{
 			name: "Author not in allowed signers list",
-			commit: createTestCommit(
+			commit: createIdentityTestCommit(
 				"Jane Doe",
 				"jane@example.com",
 				"dummy-signature",
 			),
 			configModifier: func(cfg config.Config) config.Config {
 				result := cfg
-				result.Signing.AllowedSigners = []string{"John Doe <john@example.com>"}
-				result.Rules.Enabled = append(result.Rules.Enabled, "SignedIdentity")
+				result.Identity.AllowedAuthors = []string{"John Doe <john@example.com>"}
+				result.Rules.Enabled = append(result.Rules.Enabled, "Identity")
 
 				return result
 			},
@@ -82,18 +88,18 @@ func TestIdentityRule_AllowedSigners(t *testing.T) {
 		},
 		{
 			name: "Multiple allowed identities - first match",
-			commit: createTestCommit(
+			commit: createIdentityTestCommit(
 				"John Doe",
 				"john@example.com",
 				"dummy-signature",
 			),
 			configModifier: func(cfg config.Config) config.Config {
 				result := cfg
-				result.Signing.AllowedSigners = []string{
+				result.Identity.AllowedAuthors = []string{
 					"John Doe <john@example.com>",
 					"Jane Doe <jane@example.com>",
 				}
-				result.Rules.Enabled = append(result.Rules.Enabled, "SignedIdentity")
+				result.Rules.Enabled = append(result.Rules.Enabled, "Identity")
 
 				return result
 			},
@@ -101,18 +107,18 @@ func TestIdentityRule_AllowedSigners(t *testing.T) {
 		},
 		{
 			name: "Multiple allowed identities - second match",
-			commit: createTestCommit(
+			commit: createIdentityTestCommit(
 				"Jane Doe",
 				"jane@example.com",
 				"dummy-signature",
 			),
 			configModifier: func(cfg config.Config) config.Config {
 				result := cfg
-				result.Signing.AllowedSigners = []string{
+				result.Identity.AllowedAuthors = []string{
 					"John Doe <john@example.com>",
 					"Jane Doe <jane@example.com>",
 				}
-				result.Rules.Enabled = append(result.Rules.Enabled, "SignedIdentity")
+				result.Rules.Enabled = append(result.Rules.Enabled, "Identity")
 
 				return result
 			},
@@ -120,15 +126,15 @@ func TestIdentityRule_AllowedSigners(t *testing.T) {
 		},
 		{
 			name: "Email only in allowed signers",
-			commit: createTestCommit(
+			commit: createIdentityTestCommit(
 				"Different Name",
 				"john@example.com", // Email matches allowed signer
 				"dummy-signature",
 			),
 			configModifier: func(cfg config.Config) config.Config {
 				result := cfg
-				result.Signing.AllowedSigners = []string{"John Doe <john@example.com>"}
-				result.Rules.Enabled = append(result.Rules.Enabled, "SignedIdentity")
+				result.Identity.AllowedAuthors = []string{"John Doe <john@example.com>"}
+				result.Rules.Enabled = append(result.Rules.Enabled, "Identity")
 
 				return result
 			},
@@ -136,15 +142,15 @@ func TestIdentityRule_AllowedSigners(t *testing.T) {
 		},
 		{
 			name: "Case-insensitive email matching",
-			commit: createTestCommit(
+			commit: createIdentityTestCommit(
 				"John Doe",
 				"John@Example.COM", // Different case
 				"dummy-signature",
 			),
 			configModifier: func(cfg config.Config) config.Config {
 				result := cfg
-				result.Signing.AllowedSigners = []string{"John Doe <john@example.com>"}
-				result.Rules.Enabled = append(result.Rules.Enabled, "SignedIdentity")
+				result.Identity.AllowedAuthors = []string{"John Doe <john@example.com>"}
+				result.Rules.Enabled = append(result.Rules.Enabled, "Identity")
 
 				return result
 			},
@@ -189,7 +195,7 @@ func TestIdentityRule_RuleDisabled(t *testing.T) {
 			configModifier: func(cfg config.Config) config.Config {
 				result := cfg
 				// Add author to allowed signers
-				result.Signing.AllowedSigners = []string{"John Doe <john@example.com>"}
+				result.Identity.AllowedAuthors = []string{"John Doe <john@example.com>"}
 
 				return result
 			},
@@ -200,7 +206,7 @@ func TestIdentityRule_RuleDisabled(t *testing.T) {
 			configModifier: func(cfg config.Config) config.Config {
 				result := cfg
 				// Non-matching author
-				result.Signing.AllowedSigners = []string{"Jane Doe <jane@example.com>"}
+				result.Identity.AllowedAuthors = []string{"Jane Doe <jane@example.com>"}
 
 				return result
 			},
@@ -211,7 +217,7 @@ func TestIdentityRule_RuleDisabled(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			// Create commit with author not in allowed signers
-			commit := createTestCommit(
+			commit := createIdentityTestCommit(
 				"John Doe",
 				"john@example.com",
 				"dummy-signature",
@@ -243,7 +249,7 @@ func TestIdentityRule_RuleDisabled(t *testing.T) {
 func TestIdentityRule_NoSignature(t *testing.T) {
 	t.Skip("Skipping test that requires crypto dependencies - covered by integration tests")
 	// Create a commit with no signature
-	commit := createTestCommit(
+	commit := createIdentityTestCommit(
 		"John Doe",
 		"john@example.com",
 		"", // No signature
@@ -263,7 +269,7 @@ func TestIdentityRule_NoSignature(t *testing.T) {
 // TestIdentityRule_NoKeyDirectory tests the behavior when no key directory is configured.
 func TestIdentityRule_NoKeyDirectory(t *testing.T) {
 	// Create a commit with signature but no key directory configured
-	commit := createTestCommit(
+	commit := createIdentityTestCommit(
 		"John Doe",
 		"john@example.com",
 		"dummy-signature",
@@ -284,13 +290,13 @@ func TestIdentityRule_NoKeyDirectory(t *testing.T) {
 func TestIdentityRule_Name(t *testing.T) {
 	cfg := config.Config{}
 	rule := rules.NewIdentityRule(cfg)
-	require.Equal(t, "SignedIdentity", rule.Name(), "Rule name should be 'SignedIdentity'")
+	require.Equal(t, "Identity", rule.Name(), "Rule name should be 'Identity'")
 }
 
 // TestIdentityRule_EmptyConfig tests behavior with empty configuration.
 func TestIdentityRule_EmptyConfig(t *testing.T) {
 	// Create commit
-	commit := createTestCommit(
+	commit := createIdentityTestCommit(
 		"John Doe",
 		"john@example.com",
 		"dummy-signature",

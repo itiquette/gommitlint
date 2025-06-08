@@ -55,24 +55,27 @@ func (c Commit) IsSigned() bool {
 	return c.Signature != ""
 }
 
-// SplitCommitMessage splits a commit message into subject and body.
+// SplitCommitMessage splits a commit message into subject and body following Git conventions.
+// Git convention: subject + blank line + body. Without blank line, everything is subject.
 func SplitCommitMessage(message string) (string, string) {
-	var subject, body string
-	// Trim whitespace from the entire message
-	message = strings.TrimSpace(message)
-
-	// Split the message by newline
-	parts := strings.SplitN(message, "\n", 2)
-
-	// The first line is the subject
-	subject = strings.TrimSpace(parts[0])
-
-	// The rest is the body (if it exists)
-	if len(parts) > 1 {
-		body = strings.TrimSpace(parts[1])
+	lines := strings.Split(message, "\n")
+	if len(lines) == 0 {
+		return "", ""
 	}
 
-	return subject, body
+	subject := strings.TrimSpace(lines[0])
+
+	// Check for proper Git structure: subject + blank line + body
+	if len(lines) >= 3 && strings.TrimSpace(lines[1]) == "" {
+		// Valid structure: join lines 2+ as body
+		bodyLines := lines[2:]
+		body := strings.TrimSpace(strings.Join(bodyLines, "\n"))
+
+		return subject, body
+	}
+
+	// No proper structure: only subject, no body
+	return subject, ""
 }
 
 // NewCommit creates a Commit from its components.
@@ -98,11 +101,7 @@ func ParseCommitMessage(message string) Commit {
 }
 
 // FilterMergeCommits returns a new slice with merge commits filtered out.
-func FilterMergeCommits(commits []Commit, skipMerge bool) []Commit {
-	if !skipMerge {
-		return commits
-	}
-
+func FilterMergeCommits(commits []Commit) []Commit {
 	result := make([]Commit, 0)
 
 	for _, commit := range commits {

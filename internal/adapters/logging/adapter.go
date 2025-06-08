@@ -13,7 +13,6 @@ import (
 
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/rs/zerolog"
-	"github.com/spf13/cobra"
 )
 
 // Logger implements domain.Logger interface using zerolog.
@@ -91,11 +90,29 @@ func (l Logger) getLogEvent(level string) *zerolog.Event {
 
 // Initialization functions for CLI integration
 
-// InitLogger creates a configured zerolog instance from CLI flags.
-func InitLogger(ctx context.Context, cmd *cobra.Command, outputFormat string) context.Context {
-	level := getLogLevel(cmd)
+// parseLogLevel converts string log level to zerolog.Level (pure function).
+func parseLogLevel(level string) zerolog.Level {
+	switch level {
+	case "error":
+		return zerolog.ErrorLevel // Only errors
+	case "warn":
+		return zerolog.WarnLevel // Warnings and above
+	case "info":
+		return zerolog.InfoLevel // Info and above (default)
+	case "debug":
+		return zerolog.DebugLevel // Debug and above
+	case "trace":
+		return zerolog.TraceLevel // All levels including trace
+	default:
+		return zerolog.InfoLevel // Safe fallback to info
+	}
+}
+
+// InitLogger creates a configured zerolog instance.
+func InitLogger(ctx context.Context, outputFormat string, debug bool, logLevel string) context.Context {
+	level := parseLogLevel(logLevel)
 	writer := createWriter(outputFormat)
-	logger := createZerologger(writer, level, cmd)
+	logger := createZerologger(writer, level, debug)
 
 	return logger.WithContext(ctx)
 }
@@ -126,49 +143,23 @@ func createWriter(outputFormat string) io.Writer {
 }
 
 // createZerologger creates configured zerolog instance.
-func createZerologger(writer io.Writer, level zerolog.Level, cmd *cobra.Command) zerolog.Logger {
+func createZerologger(writer io.Writer, level zerolog.Level, withCaller bool) zerolog.Logger {
 	loggerContext := zerolog.New(writer).Level(level).With().Timestamp()
 
 	// Add caller info if requested
-	if cmd != nil {
-		if caller, _ := cmd.Flags().GetBool("caller"); caller {
-			loggerContext = loggerContext.Caller()
-		}
+	if withCaller {
+		loggerContext = loggerContext.Caller()
 	}
 
 	return loggerContext.Logger()
-}
-
-// getLogLevel determines log level from CLI flags.
-func getLogLevel(cmd *cobra.Command) zerolog.Level {
-	if cmd == nil {
-		return zerolog.InfoLevel
-	}
-
-	quiet, _ := cmd.Flags().GetBool("quiet")
-	if quiet {
-		return zerolog.ErrorLevel
-	}
-
-	level, _ := cmd.Flags().GetString("verbosity")
-	switch level {
-	case "quiet":
-		return zerolog.ErrorLevel
-	case "trace":
-		return zerolog.TraceLevel
-	case "brief":
-		return zerolog.InfoLevel
-	default:
-		return zerolog.InfoLevel
-	}
 }
 
 // formatLevel formats log level with colors.
 func formatLevel(levelVal interface{}) string {
 	if levelStr, ok := levelVal.(string); ok {
 		switch levelStr {
-		case "trace":
-			return "\x1b[90mTRC\x1b[0m"
+		case "debug":
+			return "\x1b[90mDBG\x1b[0m"
 		case "info":
 			return "\x1b[34mINF\x1b[0m"
 		case "warn":

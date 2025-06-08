@@ -25,18 +25,25 @@ const (
 	ErrSpacing       ValidationErrorCode = "spacing_error"
 
 	// Subject errors.
-	ErrSubjectTooLong ValidationErrorCode = "subject_too_long"
-	ErrSubjectLength  ValidationErrorCode = "subject_length"
-	ErrSubjectCase    ValidationErrorCode = "invalid_case"
-	ErrSubjectSuffix  ValidationErrorCode = "invalid_suffix"
-	ErrMissingSubject ValidationErrorCode = "missing_subject"
-	ErrNoFirstWord    ValidationErrorCode = "no_first_word"
-	ErrEmptyMessage   ValidationErrorCode = "empty_message"
+	ErrSubjectTooLong             ValidationErrorCode = "subject_too_long"
+	ErrSubjectLength              ValidationErrorCode = "subject_length"
+	ErrSubjectCase                ValidationErrorCode = "invalid_case"
+	ErrSubjectSuffix              ValidationErrorCode = "invalid_suffix"
+	ErrMissingSubject             ValidationErrorCode = "missing_subject"
+	ErrNoFirstWord                ValidationErrorCode = "no_first_word"
+	ErrEmptyMessage               ValidationErrorCode = "empty_message"
+	ErrEmptySubject               ValidationErrorCode = "empty_subject"
+	ErrInvalidUTF8                ValidationErrorCode = "invalid_utf8"
+	ErrMissingConventionalSubject ValidationErrorCode = "missing_conventional_subject"
+	ErrWrongCaseUpper             ValidationErrorCode = "wrong_case_upper"
+	ErrWrongCaseLower             ValidationErrorCode = "wrong_case_lower"
 
 	// Body errors.
-	ErrInvalidBody  ValidationErrorCode = "invalid_body"
-	ErrMissingBody  ValidationErrorCode = "missing_body"
-	ErrBodyTooShort ValidationErrorCode = "body_too_short"
+	ErrInvalidBody      ValidationErrorCode = "invalid_body"
+	ErrMissingBody      ValidationErrorCode = "missing_body"
+	ErrBodyTooShort     ValidationErrorCode = "body_too_short"
+	ErrMissingBlankLine ValidationErrorCode = "missing_blank_line"
+	ErrInvalidStructure ValidationErrorCode = "invalid_structure"
 
 	// Conventional commit errors.
 	ErrInvalidType               ValidationErrorCode = "invalid_type"
@@ -48,11 +55,27 @@ const (
 	ErrMissingConventionalScope  ValidationErrorCode = "missing_conventional_scope"
 	ErrInvalidConventionalScope  ValidationErrorCode = "invalid_conventional_scope"
 	ErrConventionalDescTooLong   ValidationErrorCode = "conventional_desc_too_long"
+	ErrInvalidMultiScope         ValidationErrorCode = "invalid_multi_scope"
+	ErrInvalidSpacing            ValidationErrorCode = "invalid_spacing"
+	ErrEmptyConventionalDesc     ValidationErrorCode = "empty_conventional_desc"
 
 	// Jira errors.
-	ErrMissingJira    ValidationErrorCode = "missing_jira"
-	ErrMisplacedJira  ValidationErrorCode = "misplaced_jira"
-	ErrInvalidProject ValidationErrorCode = "invalid_project"
+	ErrMissingJira           ValidationErrorCode = "missing_jira"
+	ErrMissingJiraInSubject  ValidationErrorCode = "missing_jira_subject"
+	ErrMissingJiraInBody     ValidationErrorCode = "missing_jira_body"
+	ErrMisplacedJira         ValidationErrorCode = "misplaced_jira"
+	ErrInvalidProject        ValidationErrorCode = "invalid_project"
+	ErrInvalidJiraFormat     ValidationErrorCode = "invalid_jira_format"
+	ErrIgnoredJiraPattern    ValidationErrorCode = "ignored_jira_pattern"
+	ErrConventionalPlacement ValidationErrorCode = "conventional_placement"
+
+	// Enhanced JIRA errors (restored from original implementation).
+	ErrMissingJiraKeySubject ValidationErrorCode = "missing_jira_key_subject"
+	ErrMissingJiraKeyBody    ValidationErrorCode = "missing_jira_key_body"
+	ErrJiraKeyNotAtEnd       ValidationErrorCode = "jira_key_not_at_end"
+	ErrInvalidRefsFormat     ValidationErrorCode = "invalid_refs_format"
+	ErrInvalidKeyFormat      ValidationErrorCode = "invalid_key_format"
+	ErrRefsAfterSignoff      ValidationErrorCode = "refs_after_signoff"
 
 	// Imperative mood errors.
 	ErrNonImperative ValidationErrorCode = "non_imperative"
@@ -80,7 +103,10 @@ const (
 	ErrInvalidCommit          ValidationErrorCode = "invalid_commit"
 
 	// Signoff errors.
-	ErrMissingSignoff ValidationErrorCode = "missing_signoff"
+	ErrMissingSignoff       ValidationErrorCode = "missing_signoff"
+	ErrInvalidSignoffFormat ValidationErrorCode = "invalid_signoff_format"
+	ErrMisplacedSignoff     ValidationErrorCode = "misplaced_signoff"
+	ErrInsufficientSignoffs ValidationErrorCode = "insufficient_signoffs"
 
 	// Spelling errors.
 	ErrSpelling         ValidationErrorCode = "spelling_error"

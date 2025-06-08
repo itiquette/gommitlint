@@ -7,6 +7,7 @@ package rules
 import (
 	"strings"
 
+	"github.com/itiquette/gommitlint/internal/adapters/spell"
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/domain/config"
 )
@@ -22,13 +23,29 @@ func CreateCommitRules(cfg config.Config) []domain.CommitRule {
 		"signoff":       func(c config.Config) domain.CommitRule { return NewSignOffRule(c) },
 		"signature":     func(c config.Config) domain.CommitRule { return NewSignatureRule(c) },
 		"identity":      func(c config.Config) domain.CommitRule { return NewIdentityRule(c) },
-		"spell":         func(c config.Config) domain.CommitRule { return NewSpellRule(c) },
+		"spell": func(c config.Config) domain.CommitRule {
+			checker := spell.NewMisspellAdapter(c.Spell.Locale)
+
+			return NewSpellRule(checker, c)
+		},
 	}
 
 	// Default enabled rules - explicit list, no magic strings scattered
-	defaultEnabled := []string{"subject", "conventional", "signoff", "signature", "identity"}
+	defaultEnabled := []string{"subject", "conventional", "signoff", "signature", "spell"}
 
-	return buildRules(ruleConstructors, defaultEnabled, cfg)
+	var rules []domain.CommitRule
+
+	// Determine which rules to create
+	enabledRules := determineEnabledRules(defaultEnabled, cfg.Rules)
+
+	// Create only enabled rules
+	for _, ruleName := range enabledRules {
+		if constructor, exists := ruleConstructors[ruleName]; exists {
+			rules = append(rules, constructor(cfg))
+		}
+	}
+
+	return rules
 }
 
 // CreateRepositoryRules creates repository rules based on configuration.
@@ -44,9 +61,9 @@ func CreateRepositoryRules(cfg config.Config) []domain.RepositoryRule {
 	return buildRepositoryRules(ruleConstructors, defaultEnabled, cfg)
 }
 
-// buildRules creates rules based on constructor map and configuration.
-func buildRules[T any](constructors map[string]func(config.Config) T, defaultEnabled []string, cfg config.Config) []T {
-	var rules []T
+// buildRepositoryRules creates repository rules based on constructor map and configuration.
+func buildRepositoryRules(constructors map[string]func(config.Config) domain.RepositoryRule, defaultEnabled []string, cfg config.Config) []domain.RepositoryRule {
+	var rules []domain.RepositoryRule
 
 	// Determine which rules to create
 	enabledRules := determineEnabledRules(defaultEnabled, cfg.Rules)
@@ -61,22 +78,21 @@ func buildRules[T any](constructors map[string]func(config.Config) T, defaultEna
 	return rules
 }
 
-// buildRepositoryRules specializes buildRules for repository rules.
-func buildRepositoryRules(constructors map[string]func(config.Config) domain.RepositoryRule, defaultEnabled []string, cfg config.Config) []domain.RepositoryRule {
-	return buildRules(constructors, defaultEnabled, cfg)
-}
-
 // determineEnabledRules applies priority logic to determine which rules should be enabled.
 func determineEnabledRules(defaultEnabled []string, rulesConfig config.RulesConfig) []string {
 	// Start with explicitly enabled rules (highest priority)
 	enabledSet := make(map[string]bool)
-	for _, rule := range normalizeRuleNames(rulesConfig.Enabled) {
+
+	for _, name := range rulesConfig.Enabled {
+		rule := strings.ToLower(strings.TrimSpace(name))
 		enabledSet[rule] = true
 	}
 
 	// Remove explicitly disabled rules
 	disabledSet := make(map[string]bool)
-	for _, rule := range normalizeRuleNames(rulesConfig.Disabled) {
+
+	for _, name := range rulesConfig.Disabled {
+		rule := strings.ToLower(strings.TrimSpace(name))
 		disabledSet[rule] = true
 	}
 
@@ -91,16 +107,6 @@ func determineEnabledRules(defaultEnabled []string, rulesConfig config.RulesConf
 	result := make([]string, 0, len(enabledSet))
 	for rule := range enabledSet {
 		result = append(result, rule)
-	}
-
-	return result
-}
-
-// normalizeRuleNames normalizes rule names.
-func normalizeRuleNames(names []string) []string {
-	result := make([]string, len(names))
-	for i, name := range names {
-		result[i] = strings.ToLower(strings.TrimSpace(name))
 	}
 
 	return result

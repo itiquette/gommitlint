@@ -9,9 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	gitTestdata "github.com/itiquette/gommitlint/internal/adapters/git/testdata"
 	"github.com/itiquette/gommitlint/internal/domain/config"
-	"github.com/itiquette/gommitlint/internal/integrationtest/testdata"
 )
 
 // TestConfigurationWorkflow tests different configuration scenarios.
@@ -26,7 +24,7 @@ func TestConfigurationWorkflow(t *testing.T) {
 			name:    "Valid commit with custom length",
 			message: "feat: add feature",
 			config: func() config.Config {
-				cfg := testdata.DefaultConfig()
+				cfg := DefaultConfig()
 				cfg.Message.Subject.MaxLength = 50
 
 				return cfg
@@ -37,7 +35,7 @@ func TestConfigurationWorkflow(t *testing.T) {
 			name:    "Invalid - exceeds custom length",
 			message: "feat: this is a very long commit message that exceeds our custom limit",
 			config: func() config.Config {
-				cfg := testdata.DefaultConfig()
+				cfg := DefaultConfig()
 				cfg.Message.Subject.MaxLength = 50
 
 				return cfg
@@ -48,7 +46,7 @@ func TestConfigurationWorkflow(t *testing.T) {
 			name:    "Valid with custom conventional types",
 			message: "custom: add special feature",
 			config: func() config.Config {
-				cfg := testdata.DefaultConfig()
+				cfg := DefaultConfig()
 				cfg.Conventional.Types = []string{"custom", "special"}
 
 				return cfg
@@ -59,7 +57,7 @@ func TestConfigurationWorkflow(t *testing.T) {
 			name:    "Invalid - wrong conventional type",
 			message: "invalid: not allowed type",
 			config: func() config.Config {
-				cfg := testdata.DefaultConfig()
+				cfg := DefaultConfig()
 				cfg.Conventional.Types = []string{"feat", "fix"}
 
 				return cfg
@@ -70,7 +68,7 @@ func TestConfigurationWorkflow(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			result := testdata.TestValidateMessage(t, testCase.message, testCase.config)
+			result := TestValidateMessage(t, testCase.message, testCase.config)
 
 			if testCase.wantPass {
 				require.True(t, result.Valid, "Expected validation to pass")
@@ -107,7 +105,7 @@ func TestMessageFileWorkflow(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			result := testdata.TestValidateMessage(t, testCase.message, testdata.DefaultConfig())
+			result := TestValidateMessage(t, testCase.message, DefaultConfig())
 
 			if testCase.wantPass {
 				require.True(t, result.Valid, "Expected validation to pass")
@@ -121,18 +119,18 @@ func TestMessageFileWorkflow(t *testing.T) {
 // TestRepositoryWorkflow tests validation against actual git repositories.
 func TestRepositoryWorkflow(t *testing.T) {
 	t.Run("Valid repository commit", func(t *testing.T) {
-		repoPath, cleanup := gitTestdata.GitRepo(t, "feat: add feature\n\nDetailed description")
+		repoPath, cleanup := GitRepo(t, "feat: add feature\n\nDetailed description")
 		defer cleanup()
 
-		result := testdata.TestValidation(t, repoPath, testdata.DefaultConfig())
+		result := TestValidation(t, repoPath, DefaultConfig())
 		require.True(t, result.Valid)
 	})
 
 	t.Run("Invalid repository commit", func(t *testing.T) {
-		repoPath, cleanup := gitTestdata.GitRepo(t, "bad commit message")
+		repoPath, cleanup := GitRepo(t, "bad commit message")
 		defer cleanup()
 
-		result := testdata.TestValidation(t, repoPath, testdata.DefaultConfig())
+		result := TestValidation(t, repoPath, DefaultConfig())
 		require.False(t, result.Valid)
 	})
 }

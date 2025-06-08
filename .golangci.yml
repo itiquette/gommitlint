@@ -12,6 +12,10 @@ issues:
   uniq-by-line: true
   exclude-dirs:
     - generated
+  exclude-rules:
+    - path: "_test\\.go"
+      linters:
+        - dupl
 linters:
   # Disable all linters.
   # Default: false

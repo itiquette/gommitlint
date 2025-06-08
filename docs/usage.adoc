@@ -27,10 +27,10 @@ chmod +x gommitlint
 gommitlint validate
 
 # Validate specific commit
-gommitlint validate --git-reference=abc123
+gommitlint validate --ref=abc123
 
 # Validate commit range
-gommitlint validate --revision-range=main..HEAD
+gommitlint validate --range=main..HEAD
 
 # Validate from base branch
 gommitlint validate --base-branch=main
@@ -39,7 +39,7 @@ gommitlint validate --base-branch=main
 gommitlint validate --message-file=commit-msg.txt
 
 # Multiple commits from HEAD
-gommitlint validate --commit-count=5
+gommitlint validate --count=5
 ----
 
 === Git Hooks
@@ -70,11 +70,39 @@ gommitlint validate --format=gitlab
 # Verbose output
 gommitlint validate -v
 
-# Extra verbose for debugging
-gommitlint validate --extra-verbose
+# Extra verbose for debugging  
+gommitlint validate -vv
 ----
 
 == Configuration
+
+=== Configuration Locations
+
+Gommitlint searches for configuration files in this priority order:
+
+[source,bash]
+----
+# Current behavior (no legacy):
+# 1. --config <path>           (explicit file)
+# 2. .gommitlint.yaml          (current dir)  
+# 3. .gommitlint.yml           (current dir)
+# 4. $XDG_CONFIG_HOME/gommitlint/config.yaml  (if XDG_CONFIG_HOME set & dir exists)
+# 5. $XDG_CONFIG_HOME/gommitlint/config.yml   (if XDG_CONFIG_HOME set & dir exists)
+# 6. defaults only             (if no config found)
+----
+
+Configuration flags:
+[source,bash]
+----
+# Use specific config file
+gommitlint --config /path/to/config.yaml validate
+
+# Ignore all config files (use defaults only)
+gommitlint --ignore-config validate
+
+# Use default search behavior
+gommitlint validate
+----
 
 === Default Behavior
 Without configuration, gommitlint validates with sensible defaults:
@@ -94,7 +122,7 @@ gommitlint:
       - jirareference    # Enable JIRA validation
       - commitbody       # Require commit body
     disabled:
-      - subjectlength    # Disable subject length check
+      - subject          # Disable subject length check
 
   # Message format
   message:
@@ -103,8 +131,9 @@ gommitlint:
       case: "sentence"        # sentence|lower|upper|title
       forbid_endings: ["."]
     body:
-      min_length: 10
-      require_signoff: true
+      required: true         # Require commit body
+      min_length: 10         # When required
+      allow_signoff_only: false
 
   # Conventional commits
   conventional:
@@ -154,7 +183,7 @@ rules:
 |===
 |Rule |Description |Default
 
-|`subjectlength`
+|`subject`
 |Subject line length validation
 |✓
 
@@ -247,6 +276,52 @@ Validation failed: 1 error
 * `1` - Configuration or system error
 * `2` - Validation failures found
 
+== Global Options
+
+=== Output Format
+[source,bash]
+----
+# Output formats
+gommitlint validate --format=text     # Default: colored text output
+gommitlint validate --format=json     # JSON format for scripting
+gommitlint validate --format=github   # GitHub Actions format
+gommitlint validate --format=gitlab   # GitLab CI format
+----
+
+=== Color Output
+Gommitlint supports colored output for better readability. Color output follows the https://no-color.org[NO_COLOR standard].
+
+[source,bash]
+----
+# Color options
+gommitlint validate --color=auto      # Default: auto-detect terminal
+gommitlint validate --color=always    # Force color output
+gommitlint validate --color=never     # Disable color output
+
+# Environment variable support
+NO_COLOR=1 gommitlint validate        # Disable color (overrides --color)
+export NO_COLOR=1                     # Persistent color disable
+----
+
+**Color Precedence (highest to lowest):**
+
+1. `NO_COLOR` environment variable (any value disables color)
+2. `--color` flag setting
+3. Auto-detection (color only if output is a terminal)
+
+**Examples:**
+[source,bash]
+----
+# Force color in pipes/redirects
+gommitlint validate --color=always | less -R
+
+# Disable color for CI/scripts
+NO_COLOR=1 gommitlint validate --format=text
+
+# Auto-detect (default)
+gommitlint validate  # Color if terminal, no color if piped
+----
+
 == CI/CD Integration
 
 === GitHub Actions
@@ -306,7 +381,7 @@ repos:
     hooks:
       - id: gommitlint
         name: Validate commit message
-        entry: gommitlint validate --git-reference=HEAD
+        entry: gommitlint validate --ref=HEAD
         language: system
         stages: [commit-msg]
         always_run: true
@@ -322,24 +397,27 @@ repos:
 gommitlint validate -v
 
 # Show detailed rule execution
-gommitlint validate --extra-verbose
+gommitlint validate -vv
 
 # Show specific rule help
-gommitlint validate --rulehelp=conventional
+gommitlint validate --rule-help=conventional
 ----
 
 == Configuration Examples
 
-=== Example 1
+=== Example 1: Basic Setup
 [source,yaml]
 ----
 gommitlint:
   message:
     subject:
       max_length: 50    # GitHub recommendation
+    body:
+      required: true    # Require commit body
+      min_length: 20    # Minimum explanation length
   rules:
     enabled:
-      - commitbody      # Require detailed explanations
+      - commitbody      # Enable body validation
     disabled:
       - jirareference   # No JIRA tracking
       - signature       # No required signing
@@ -349,10 +427,15 @@ gommitlint:
 [source,yaml]
 ----
 gommitlint:
+  message:
+    body:
+      required: true              # Require explanations
+      min_length: 30              # Detailed descriptions
+      allow_signoff_only: true    # Allow DCO-only bodies
   rules:
     enabled:
-      - jirareference   # Require ticket references
-      - commitbody      # Require explanations
+      - jirareference             # Require ticket references
+      - commitbody                # Enable body validation
   jira:
     project_prefixes: ["CORP", "TEAM", "PROJ"]
   signing:
@@ -370,7 +453,7 @@ Each rule accepts specific configuration options. See `--rulehelp=<rule>` for de
 [source,bash]
 ----
 # Validate only conventional commit format
-gommitlint validate --extra-verbose | grep conventional
+gommitlint validate -vv | grep conventional
 
 # Check specific commit without full validation
 git show --format="%s" abc123 | gommitlint validate --message-file=-
@@ -384,13 +467,13 @@ gommitlint validate --base-branch=origin/main --format=json | jq '.summary.all_p
 For detailed rule documentation and configuration options:
 [source,bash]
 ----
-gommitlint validate --rulehelp=<rule_name>
+gommitlint validate --rule-help=<rule_name>
 ----
 
 Example rule help:
 [source,bash]
 ----
-gommitlint validate --rulehelp=conventional
-gommitlint validate --rulehelp=subjectlength
-gommitlint validate --rulehelp=jirareference
+gommitlint validate --rule-help=conventional
+gommitlint validate --rule-help=subject
+gommitlint validate --rule-help=jirareference
 ----

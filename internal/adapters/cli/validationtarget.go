@@ -23,9 +23,9 @@ type ValidationTarget struct {
 
 // NewValidationTarget creates a ValidationTarget from CLI parameters.
 // It uses precedence-based logic to determine validation target.
-func NewValidationTarget(messageFile, gitReference, revisionRange, baseBranch string, commitCount int) (ValidationTarget, error) {
+func NewValidationTarget(messageFile, gitReference, commitRange, baseBranch string, commitCount int) (ValidationTarget, error) {
 	// Validate all inputs first
-	if err := validateInputs(messageFile, gitReference, revisionRange, baseBranch, commitCount); err != nil {
+	if err := validateInputs(messageFile, gitReference, commitRange, baseBranch, commitCount); err != nil {
 		return ValidationTarget{}, err
 	}
 
@@ -40,7 +40,7 @@ func NewValidationTarget(messageFile, gitReference, revisionRange, baseBranch st
 	}
 
 	if baseBranch != "" {
-		// 2. Base branch comparison
+		// 2. Base branch comparison (convenience wrapper: <base-branch>..HEAD)
 		return ValidationTarget{
 			Type:   "range",
 			Source: baseBranch,
@@ -48,9 +48,9 @@ func NewValidationTarget(messageFile, gitReference, revisionRange, baseBranch st
 		}, nil
 	}
 
-	if revisionRange != "" {
-		// 3. Revision range
-		parts := parseRevisionRange(revisionRange)
+	if commitRange != "" {
+		// 3. Explicit range (full control)
+		parts := parseRevisionRange(commitRange)
 		if len(parts) == 2 {
 			return ValidationTarget{
 				Type:   "range",
@@ -59,7 +59,7 @@ func NewValidationTarget(messageFile, gitReference, revisionRange, baseBranch st
 			}, nil
 		}
 
-		return ValidationTarget{}, fmt.Errorf("invalid revision range format: %s (expected format: from..to)", revisionRange)
+		return ValidationTarget{}, fmt.Errorf("invalid range format: %s (expected format: from..to)", commitRange)
 	}
 
 	if gitReference != "" {
@@ -89,7 +89,7 @@ func NewValidationTarget(messageFile, gitReference, revisionRange, baseBranch st
 }
 
 // validateInputs validates all inputs.
-func validateInputs(messageFile, gitReference, revisionRange, baseBranch string, commitCount int) error {
+func validateInputs(messageFile, gitReference, commitRange, baseBranch string, commitCount int) error {
 	if err := validateFilePath(messageFile); err != nil {
 		return fmt.Errorf("invalid message file: %w", err)
 	}
@@ -106,20 +106,24 @@ func validateInputs(messageFile, gitReference, revisionRange, baseBranch string,
 		return fmt.Errorf("invalid commit count: %w", err)
 	}
 
-	if revisionRange != "" {
-		if err := validateParameterLength("Revision range", revisionRange, MaxRefLength); err != nil {
+	if commitRange != "" {
+		if err := validateParameterLength("Range", commitRange, MaxRefLength); err != nil {
 			return err
 		}
 
 		// Parse and validate range parts
-		parts := parseRevisionRange(revisionRange)
+		parts := parseRevisionRange(commitRange)
+		if parts == nil {
+			return errors.New("invalid commit range format")
+		}
+
 		if len(parts) == 2 {
 			if err := validateGitReference(parts[0]); err != nil {
-				return fmt.Errorf("invalid revision range start: %w", err)
+				return fmt.Errorf("invalid range start: %w", err)
 			}
 
 			if err := validateGitReference(parts[1]); err != nil {
-				return fmt.Errorf("invalid revision range end: %w", err)
+				return fmt.Errorf("invalid range end: %w", err)
 			}
 		}
 	}
@@ -159,12 +163,15 @@ const (
 	MaxCommitCount = 1000
 )
 
-// Validation helper functions (moved from validateparams.go).
-
 // validateFilePath checks if a file path is valid and safe.
 func validateFilePath(path string) error {
 	if path == "" {
 		return nil // Empty path is valid (not used)
+	}
+
+	// Special case: "-" means stdin
+	if path == "-" {
+		return nil
 	}
 
 	// Check path length
@@ -178,8 +185,7 @@ func validateFilePath(path string) error {
 	}
 
 	// Ensure it's not trying to escape using ../
-	cleaned := filepath.Clean(path)
-	if strings.Contains(cleaned, "..") {
+	if strings.Contains(path, "..") {
 		return errors.New("path cannot contain '..'")
 	}
 
@@ -239,18 +245,33 @@ func validateCommitCount(count int) error {
 	return nil
 }
 
-// parseRevisionRange parses a revision range string (format: from..to).
+// parseRevisionRange parses a commit range string (format: from..to).
+// Returns nil if the range format is invalid.
 func parseRevisionRange(revRange string) []string {
-	// Split on .. (standard git range format)
-	parts := strings.Split(revRange, "..")
+	// Reject ranges with invalid format patterns
+	if strings.HasPrefix(revRange, "..") || strings.HasSuffix(revRange, "..") {
+		return nil // Invalid format
+	}
+
+	if strings.Contains(revRange, "....") { // 4 or more consecutive dots
+		return nil // Invalid format
+	}
+
+	// Try ... (symmetric difference) first to avoid false matches with ..
+	parts := strings.Split(revRange, "...")
 	if len(parts) == 2 {
 		return []string{strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])}
 	}
 
-	// Try ... (symmetric difference)
-	parts = strings.Split(revRange, "...")
+	// Split on .. (standard git range format)
+	parts = strings.Split(revRange, "..")
 	if len(parts) == 2 {
 		return []string{strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])}
+	}
+
+	// Reject malformed ranges with multiple separators
+	if len(parts) > 2 {
+		return nil // Invalid format
 	}
 
 	return []string{revRange}

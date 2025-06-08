@@ -29,7 +29,17 @@ func JSON(report domain.Report) string {
 
 	jsonBytes, err := json.MarshalIndent(output, "", "  ")
 	if err != nil {
-		return `{"error": "failed to marshal JSON"}`
+		// Return properly formatted JSON error
+		errorOutput := map[string]interface{}{
+			"error":     "failed to marshal JSON",
+			"timestamp": time.Now().Format(time.RFC3339),
+			"details":   err.Error(),
+		}
+		if errorBytes, marshalErr := json.MarshalIndent(errorOutput, "", "  "); marshalErr == nil {
+			return string(errorBytes)
+		}
+		// Final fallback if even error marshaling fails
+		return `{"error": "failed to marshal JSON", "details": "unknown error"}`
 	}
 
 	return string(jsonBytes)

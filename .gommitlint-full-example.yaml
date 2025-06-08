@@ -2,64 +2,82 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-# Complete gommitlint configuration file with all possible fields
+# Complete gommitlint configuration file with all available options
 # This file shows every configuration option available in gommitlint
 
 gommitlint:
   # Message configuration (subject and body)
   message:
     subject:
-      max_length: 72 # Maximum allowed length for subject line
-      imperative: false # Require imperative mood (e.g., "Add" not "Added")
-      case: "sentence" # Case style: "sentence", "lower", "upper", "title"
-      forbid_endings: # List of forbidden subject line endings
+      max_length: 72 # Maximum allowed length for subject line (default: 72)
+      require_imperative: false # Require imperative mood (e.g., "Add" not "Added")
+      case: "lower" # Case style: "lower", "upper", "ignore" (default maps to lower)
+      forbid_endings: # List of forbidden subject line endings (default: [".", "!", "?"])
         - "."
         - "!"
+        - "?"
 
     body:
-      min_length: 10 # Minimum number of characters in body
-      min_lines: 3 # Minimum number of lines in body
+      required: true # Require commit body
+      min_length: 10 # Minimum number of characters in body (when required)
       allow_signoff_only: false # Allow commits with only sign-off lines in body
-      require_sign_off: false # Require sign-off line in commits
+      min_signoff_count: 0 # Minimum number of sign-off lines required (0 = none)
 
   # Conventional commits configuration
   conventional:
     require_scope: false # Require scope in conventional format (e.g., "feat(scope):")
-    types: # Allowed conventional commit types
+    types: # Allowed conventional commit types (default includes all standard types)
       - "feat"
       - "fix"
       - "docs"
       - "style"
       - "refactor"
+      - "perf"
       - "test"
+      - "build"
+      - "ci"
       - "chore"
+      - "revert"
     scopes: # Allowed scopes (empty means all scopes allowed)
-      # - "core"
-      # - "cli"
-      # - "api"
-    max_description_length: 72 # Maximum length for conventional description
+      - "core"
+      - "cli"
+      - "api"
+      - "docs"
+    allow_breaking: true # Allow breaking change marker (!) (default: true)
+    max_description_length: 72 # Maximum length for conventional description (default: 72)
 
-  # Signing and security configuration
-  signing:
-    require_gpg: false # Require GPG signatures
-    allow_multiple_signoffs: false # Allow multiple sign-off lines
+  # Cryptographic signature validation (git commit -S)
+  signature:
+    required: false # Require cryptographic signatures (GPG/SSH)
+    verify_format: false # Validate signature format (proper BEGIN/END markers)
+    key_directory: "" # Directory containing signing keys (for adapters)
+    allowed_signers: [] # List of allowed signer identities (emails from signatures)
+
+  # Commit author identity validation
+  identity:
+    allowed_authors: [] # List of allowed commit authors (git config user.email)
 
   # Repository configuration
   repo:
     max_commits_ahead: 10 # Maximum commits ahead of reference branch
-    branch: "origin/main" # Reference branch for ahead check
+    reference_branch: "origin/main" # Reference branch for ahead check
+    allow_merge_commits: false # Allow merge commits to pass validation
 
-  # Jira configuration
+  # JIRA configuration (only used if jirareference rule is enabled)
   jira:
-    pattern: "([A-Z]+-\\d+)" # Regex pattern for Jira ticket references
-    projects: # Allowed project keys in Jira references
+    project_prefixes: # Allowed project keys in JIRA references (required if rule enabled)
+      - "PROJ"
+      - "TEAM"
       - "EXAMPLE"
-      - "DEMO"
-    check_body: true # Also check commit body for references
+    require_in_body: true # Also check commit body for references (default: false)
+    require_in_subject: false # Require JIRA reference in subject line (default: false)
+    ignore_ticket_patterns: # Patterns to ignore when checking for tickets
+      - "WIP-.*" # Work in progress tickets
+      - "DRAFT-.*" # Draft tickets
 
   # Spell check configuration
   spell:
-    language: "en_US" # Language for spell checking
+    locale: "us" # Language for spell checking ("us", "uk", "en-us", "en-gb")
     ignore_words: # Words to ignore during spell check
       - "gommitlint"
       - "config"
@@ -67,19 +85,19 @@ gommitlint:
 
   # Rule configuration
   rules:
-    enabled: # Rules to enable (takes priority over disabled)
-      - "Subject" # Consolidated rule: validates length, case, suffix, and imperative
-      - "ConventionalCommit"
-      - "CommitBody"
-      - "SignOff"
-      - "Signature"
-      - "JiraReference"
-      - "Spell"
-      - "SignedIdentity" # Updated name from "Identity"
-      - "BranchAhead"
+    enabled: # Rules to explicitly enable (takes priority over disabled and defaults)
+      - "commitbody" # Body validation (DISABLED by default - enabling here)
+      - "jirareference" # JIRA reference validation (DISABLED by default - enabling here)
+      - "identity" # Identity validation (DISABLED by default - enabling here)
 
-    disabled: # Rules to disable
-      # - "JiraReference"
+    disabled:
+      [] # Rules to explicitly disable
+      # - "conventional" # Disable conventional commit validation
+      # - "subject"      # Disable subject validation
+      # - "spell"        # Disable spell checking
+
+    # Default enabled rules: subject, conventional, signoff, signature, spell, branchahead
+    # Default disabled rules: identity, commitbody, jirareference
 
   # Output configuration
   output: "text" # Output format: "text", "json", "github", "gitlab"

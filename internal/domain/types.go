@@ -56,12 +56,17 @@ type ReportOptions struct {
 	Format string
 	// Verbose indicates whether to include detailed information.
 	Verbose bool
-	// ExtraVerbose indicates whether to include extra detailed information.
-	ExtraVerbose bool
 	// ShowHelp indicates whether to show help for rules.
 	ShowHelp bool
-	// LightMode indicates whether to use light color scheme.
-	LightMode bool
+	// UseColor indicates whether to use colors in output.
+	UseColor bool
 	// Writer is the output writer.
 	Writer io.Writer
+}
+
+// Misspelling represents a detected spelling error.
+type Misspelling struct {
+	Word       string
+	Position   int
+	Suggestion string
 }

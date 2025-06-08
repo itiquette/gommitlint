@@ -7,27 +7,80 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	configTypes "github.com/itiquette/gommitlint/internal/domain/config"
+	"github.com/knadh/koanf/parsers/toml"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
 )
 
-// defaultConfigPaths defines the standard configuration file search paths.
-var defaultConfigPaths = []string{
-	".gommitlint.yaml",
-	".gommitlint.yml",
-	".config/gommitlint/config.yaml",
-	".config/gommitlint/config.yml",
+// getConfigSearchPaths returns the search paths for configuration files.
+// Supports YAML and TOML formats with priority: local files first, then XDG config.
+func getConfigSearchPaths() []string {
+	return getConfigSearchPathsForRepo("")
+}
+
+// getConfigSearchPathsForRepo returns config search paths for a specific repository directory.
+// If repoPath is empty, searches in current directory. Otherwise searches in repository directory.
+func getConfigSearchPathsForRepo(repoPath string) []string {
+	var paths []string
+
+	// Determine base directory for config files with security validation
+	baseDir := "."
+
+	if repoPath != "" {
+		// Validate the repo path for security (but allow non-git directories for config search)
+		cleanPath := filepath.Clean(repoPath)
+		absPath, err := filepath.Abs(cleanPath)
+
+		if err != nil || strings.Contains(cleanPath, "..") {
+			// Fall back to current directory if path is suspicious
+			baseDir = "."
+		} else {
+			baseDir = absPath
+		}
+	}
+
+	// Add local config files (in repository or current directory)
+	paths = []string{
+		filepath.Join(baseDir, ".gommitlint.yaml"),
+		filepath.Join(baseDir, ".gommitlint.yml"),
+		filepath.Join(baseDir, ".gommitlint.toml"),
+	}
+
+	// Add XDG config paths if XDG_CONFIG_HOME is set and directory exists
+	if xdgConfigHome := os.Getenv("XDG_CONFIG_HOME"); xdgConfigHome != "" {
+		// Validate XDG_CONFIG_HOME path for security
+		cleanXDG := filepath.Clean(xdgConfigHome)
+		if filepath.IsAbs(cleanXDG) && !strings.Contains(cleanXDG, "..") {
+			gommitlintDir := filepath.Join(cleanXDG, "gommitlint")
+			if _, err := os.Stat(gommitlintDir); err == nil {
+				paths = append(paths,
+					filepath.Join(gommitlintDir, "config.yaml"),
+					filepath.Join(gommitlintDir, "config.yml"),
+					filepath.Join(gommitlintDir, "config.toml"),
+				)
+			}
+		}
+	}
+
+	return paths
 }
 
 // LoadConfig loads configuration from multiple sources with later configs taking precedence.
 func LoadConfig() (configTypes.Config, error) {
+	return LoadConfigWithRepoPath("")
+}
+
+// LoadConfigWithRepoPath loads configuration with repository path for config file discovery.
+// If repoPath is provided, searches for config files in that directory first.
+func LoadConfigWithRepoPath(repoPath string) (configTypes.Config, error) {
 	return MergeConfigs(
 		LoadDefaultConfig(),
-		LoadFileConfig(findFirstExistingConfigFile()),
-		LoadEnvConfig(),
+		LoadFileConfig(findFirstExistingConfigFileInRepo(repoPath)),
 	)
 }
 
@@ -36,7 +89,6 @@ func LoadConfigFromPath(configPath string) (configTypes.Config, error) {
 	return MergeConfigs(
 		LoadDefaultConfig(),
 		LoadFileConfig(configPath),
-		LoadEnvConfig(),
 	)
 }
 
@@ -46,6 +98,7 @@ func LoadDefaultConfig() configTypes.Config {
 }
 
 // LoadFileConfig loads configuration from a file.
+// Supports both YAML and TOML formats based on file extension.
 // Returns empty config if file doesn't exist or can't be loaded.
 func LoadFileConfig(configPath string) configTypes.Config {
 	if configPath == "" {
@@ -60,24 +113,40 @@ func LoadFileConfig(configPath string) configTypes.Config {
 	// Create koanf instance
 	koanfConfig := koanf.New(".")
 
-	// Load YAML configuration
-	if err := koanfConfig.Load(file.Provider(configPath), yaml.Parser()); err != nil {
+	// Determine parser based on file extension
+	var parser koanf.Parser
+
+	var tagName string
+
+	ext := strings.ToLower(filepath.Ext(configPath))
+	switch ext {
+	case ".toml":
+		parser = toml.Parser()
+		tagName = "toml"
+	case ".yaml", ".yml":
+		parser = yaml.Parser()
+		tagName = "yaml"
+	default:
+		// Default to YAML for unknown extensions
+		parser = yaml.Parser()
+		tagName = "yaml"
+	}
+
+	// Load configuration using appropriate parser
+	if err := koanfConfig.Load(file.Provider(configPath), parser); err != nil {
 		return configTypes.Config{} // Empty config on error
 	}
 
 	// Parse into config struct
 	var cfg configTypes.Config
-	if err := koanfConfig.UnmarshalWithConf("gommitlint", &cfg, koanf.UnmarshalConf{Tag: "yaml"}); err != nil {
+	if err := koanfConfig.UnmarshalWithConf("gommitlint", &cfg, koanf.UnmarshalConf{Tag: tagName}); err != nil {
 		return configTypes.Config{} // Empty config on error
 	}
 
 	// Apply rule priority logic
-	return applyRulePriority(cfg)
-}
+	cfg = applyRulePriority(cfg)
 
-// LoadEnvConfig loads configuration from environment variables.
-func LoadEnvConfig() configTypes.Config {
-	return LoadFromEnv(configTypes.Config{})
+	return cfg
 }
 
 // MergeConfigs merges multiple configurations with later configs taking precedence.
@@ -120,8 +189,31 @@ func mergeConfig(base, overlay configTypes.Config) configTypes.Config {
 		result.Message.Subject.Case = overlay.Message.Subject.Case
 	}
 
+	// Note: RequireImperative is a bool, so we need to check if it's explicitly set
+	// For bool fields, we merge if the overlay has a different value than the default
+	if overlay.Message.Subject.RequireImperative != base.Message.Subject.RequireImperative {
+		result.Message.Subject.RequireImperative = overlay.Message.Subject.RequireImperative
+	}
+
 	if len(overlay.Message.Subject.ForbidEndings) > 0 {
 		result.Message.Subject.ForbidEndings = overlay.Message.Subject.ForbidEndings
+	}
+
+	// Merge body config
+	if overlay.Message.Body.Required != base.Message.Body.Required {
+		result.Message.Body.Required = overlay.Message.Body.Required
+	}
+
+	if overlay.Message.Body.MinLength != 0 {
+		result.Message.Body.MinLength = overlay.Message.Body.MinLength
+	}
+
+	if overlay.Message.Body.AllowSignoffOnly != base.Message.Body.AllowSignoffOnly {
+		result.Message.Body.AllowSignoffOnly = overlay.Message.Body.AllowSignoffOnly
+	}
+
+	if overlay.Message.Body.MinSignoffCount != 0 {
+		result.Message.Body.MinSignoffCount = overlay.Message.Body.MinSignoffCount
 	}
 
 	// Merge conventional config
@@ -169,21 +261,39 @@ func mergeConfig(base, overlay configTypes.Config) configTypes.Config {
 		result.Spell.Locale = overlay.Spell.Locale
 	}
 
-	// Merge Signing config
-	if overlay.Signing.KeyDirectory != "" {
-		result.Signing.KeyDirectory = overlay.Signing.KeyDirectory
+	// Merge Signature config
+	if overlay.Signature.KeyDirectory != "" {
+		result.Signature.KeyDirectory = overlay.Signature.KeyDirectory
 	}
 
-	if len(overlay.Signing.AllowedSigners) > 0 {
-		result.Signing.AllowedSigners = overlay.Signing.AllowedSigners
+	if len(overlay.Signature.AllowedSigners) > 0 {
+		result.Signature.AllowedSigners = overlay.Signature.AllowedSigners
+	}
+
+	if overlay.Signature.Required != result.Signature.Required {
+		result.Signature.Required = overlay.Signature.Required
+	}
+
+	if overlay.Signature.VerifyFormat != result.Signature.VerifyFormat {
+		result.Signature.VerifyFormat = overlay.Signature.VerifyFormat
+	}
+
+	// Merge Identity config
+	if len(overlay.Identity.AllowedAuthors) > 0 {
+		result.Identity.AllowedAuthors = overlay.Identity.AllowedAuthors
 	}
 
 	return result
 }
 
-// findFirstExistingConfigFile finds the first existing config file in default paths.
+// findFirstExistingConfigFile finds the first existing config file in search paths.
 func findFirstExistingConfigFile() string {
-	for _, path := range defaultConfigPaths {
+	return findFirstExistingConfigFileInRepo("")
+}
+
+// findFirstExistingConfigFileInRepo finds the first existing config file in repository-specific search paths.
+func findFirstExistingConfigFileInRepo(repoPath string) string {
+	for _, path := range getConfigSearchPathsForRepo(repoPath) {
 		if _, err := os.Stat(path); err == nil {
 			return path
 		}

@@ -15,10 +15,10 @@ func NewDefault() Config {
 				ForbidEndings:     []string{".", "!", "?"},
 			},
 			Body: BodyConfig{
+				Required:         false,
 				MinLength:        0,
-				MinLines:         0,
-				AllowSignoffOnly: true,
-				RequireSignoff:   false,
+				AllowSignoffOnly: false,
+				MinSignoffCount:  0,
 			},
 		},
 		Conventional: ConventionalConfig{
@@ -28,12 +28,14 @@ func NewDefault() Config {
 			AllowBreaking:        true,
 			MaxDescriptionLength: 72,
 		},
-		Signing: SigningConfig{
-			RequireSignature:    false,
-			RequireVerification: false,
-			RequireMultiSignoff: false,
-			KeyDirectory:        "",
-			AllowedSigners:      []string{},
+		Signature: SignatureConfig{
+			Required:       false,
+			VerifyFormat:   false,
+			KeyDirectory:   "",
+			AllowedSigners: []string{},
+		},
+		Identity: IdentityConfig{
+			AllowedAuthors: []string{},
 		},
 		Repo: RepoConfig{
 			MaxCommitsAhead:   0, // 0 means disabled

@@ -1,270 +1,510 @@
 // SPDX-FileCopyrightText: 2025 itiquette/gommitlint <https://github.com/itiquette/gommitlint>
 //
 // SPDX-License-Identifier: EUPL-1.2
-package rules_test
+
+package rules
 
 import (
+	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/domain/config"
-	"github.com/itiquette/gommitlint/internal/domain/rules"
-	"github.com/itiquette/gommitlint/internal/domain/testdata"
-	"github.com/stretchr/testify/require"
 )
 
-func TestCommitBodyRule(t *testing.T) {
+func TestCommitBodyRule_BlankLineValidation(t *testing.T) {
 	tests := []struct {
-		name             string
-		message          string
-		minLines         int
-		minLength        int
-		allowSignOffOnly bool
-		expectError      bool
-		errorCode        string
-		description      string
+		name            string
+		message         string
+		expectError     bool
+		expectedErrCode string
 	}{
 		{
-			name: "valid commit with body",
-			message: `Add new validation rules
-
-This commit adds new validation rules for:
-- Password complexity
-- Email format
-- Username requirements`,
+			name:        "Valid structure with blank line",
+			message:     "feat: add feature\n\nThis is the body explaining the feature",
 			expectError: false,
-			description: "Valid commit with proper body content",
 		},
 		{
-			name: "valid commit with body and sign-off",
-			message: `Update documentation
-
-Improve the getting started guide
-Add more examples
-
-Signed-off-by: Laval Lion <laval@cavora.org>`,
-			minLines:    0,
+			name:            "Missing blank line",
+			message:         "feat: add feature\nThis is the body without blank line",
+			expectError:     true,
+			expectedErrCode: "missing_blank_line",
+		},
+		{
+			name:        "Subject only - no error",
+			message:     "feat: add feature",
 			expectError: false,
-			description: "Valid commit with body and sign-off",
 		},
 		{
-			name:        "commit without body is allowed by default",
-			message:     "Add new feature",
+			name:        "Multiple blank lines - still valid",
+			message:     "feat: add feature\n\n\nThis is the body with multiple blank lines",
 			expectError: false,
-			description: "Body is not required by default",
 		},
 		{
-			name:        "commit without body when not required",
-			message:     "Minor fix",
-			minLength:   0,
+			name:        "Merge commit - skip validation",
+			message:     "Merge branch 'feature'\nSome content",
 			expectError: false,
-			description: "Should pass when body is not required",
-		},
-		{
-			name: "commit with only sign-off is allowed by default",
-			message: `Update configuration
-
-Signed-off-by: Laval Lion <laval@cavora.org>`,
-			allowSignOffOnly: false,
-			expectError:      true,
-			errorCode:        string(domain.ErrMissingBody),
-			description:      "Sign-off only is NOT allowed when allowSignOffOnly is false",
-		},
-		{
-			name: "commit with only sign-off when allowed",
-			message: `Fix typo
-
-Signed-off-by: Laval Lion <laval@cavora.org>`,
-			allowSignOffOnly: true,
-			expectError:      false,
-			description:      "Should pass when only sign-off is present and allowed",
-		},
-		{
-			name: "commit with too few lines",
-			message: `Add feature
-
-Short description`,
-			minLines:    3,
-			expectError: true,
-			errorCode:   string(domain.ErrBodyTooShort),
-			description: "Should fail when body has fewer lines than required",
-		},
-		{
-			name: "commit with minimum lines",
-			message: `Add new rules
-
-This adds validation rules
-for password complexity
-and email format checks`,
-			minLines:    3,
-			expectError: false,
-			description: "Should pass when body meets minimum line requirement",
-		},
-		{
-			name: "commit body too short in length",
-			message: `Fix bug
-
-X`,
-			minLength:   10,
-			expectError: true,
-			errorCode:   string(domain.ErrBodyTooShort),
-			description: "Should fail when body is shorter than minimum length",
-		},
-		{
-			name: "commit body meets minimum length",
-			message: `Fix bug
-
-This is a longer description that meets the minimum character requirement`,
-			minLength:   10,
-			expectError: false,
-			description: "Should pass when body meets minimum length requirement",
-		},
-		// Additional test cases for edge scenarios
-		{
-			name: "empty body with blank lines is allowed",
-			message: `Fix issue
-
-
-`,
-			expectError: false,
-			description: "Empty body with blank lines is allowed by default",
-		},
-		{
-			name: "body with trailing whitespace",
-			message: `Update feature
-
-This description has trailing spaces   
-And some content here`,
-			expectError: false,
-			description: "Should pass with trailing whitespace",
-		},
-		{
-			name: "body with multiple sign-offs",
-			message: `Implement new feature
-
-Add comprehensive validation logic
-
-Signed-off-by: Developer One <dev1@example.com>
-Signed-off-by: Developer Two <dev2@example.com>`,
-			expectError: false,
-			description: "Should pass with multiple sign-offs",
-		},
-		{
-			name: "body exactly at minimum lines",
-			message: `Add feature
-
-Line one
-Line two
-Line three`,
-			minLines:    3,
-			expectError: false,
-			description: "Should pass when exactly at minimum lines",
-		},
-		{
-			name: "body exactly at minimum length",
-			message: `Fix bug
-
-1234567890`,
-			minLength:   10,
-			expectError: false,
-			description: "Should pass when exactly at minimum length",
-		},
-		// Test combination of constraints
-		{
-			name: "body meets both line and length requirements",
-			message: `Major update
-
-This is line one with sufficient length
-This is line two with sufficient length  
-This is line three with sufficient length`,
-			minLines:    3,
-			minLength:   20,
-			expectError: false,
-			description: "Should pass when meeting both line and length requirements",
-		},
-		{
-			name: "body meets lines but not length",
-			message: `Update
-
-X
-Y
-Z`,
-			minLines:    3,
-			minLength:   20,
-			expectError: true,
-			errorCode:   string(domain.ErrBodyTooShort),
-			description: "Should fail when meeting lines but not length requirement",
-		},
-		{
-			name: "body meets length but not lines",
-			message: `Update
-
-This is a very long single line that exceeds the minimum character requirement`,
-			minLines:    3,
-			minLength:   20,
-			expectError: true,
-			errorCode:   string(domain.ErrBodyTooShort),
-			description: "Should fail when meeting length but not lines requirement",
-		},
-		// Test complex body content
-		{
-			name:        "body with code blocks and formatting",
-			message:     "Add new API endpoint\n\nThis commit adds a new REST API endpoint:\n\n```go\nfunc (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {\n    // Implementation here\n}\n```\n\nThe endpoint supports:\n- User creation\n- Input validation\n- Error handling",
-			minLines:    5,
-			expectError: false,
-			description: "Should handle body with code blocks and formatting",
-		},
-		{
-			name: "body with bullets and lists",
-			message: `Refactor authentication system
-
-Changes include:
-• Updated password hashing
-• Improved session management  
-• Added multi-factor authentication
-
-Technical details:
-1. Migrated from MD5 to bcrypt
-2. Extended session timeout
-3. Integrated TOTP support`,
-			minLines:    7,
-			expectError: false,
-			description: "Should handle body with bullets and numbered lists",
 		},
 	}
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			// Create commit using factory
-			commit := testdata.Commit(testCase.message)
+			rule := NewCommitBodyRule(config.Config{})
+			commit := domain.ParseCommitMessage(testCase.message)
 
-			// Create config with options
-			cfg := config.Config{
-				Message: config.MessageConfig{
-					Body: config.BodyConfig{
-						MinLines:         testCase.minLines,
-						MinLength:        testCase.minLength,
-						AllowSignoffOnly: testCase.allowSignOffOnly,
-					},
-				},
+			// Mark as merge commit for the merge test case
+			if strings.Contains(testCase.name, "Merge") {
+				commit.IsMergeCommit = true
 			}
 
-			rule := rules.NewCommitBodyRule(cfg)
-			failures := rule.Validate(commit, cfg)
+			errors := rule.Validate(commit, config.Config{})
 
-			// Check result
 			if testCase.expectError {
-				require.NotEmpty(t, failures, "Expected error but got none for case: %s", testCase.description)
+				require.NotEmpty(t, errors, "expected validation error")
 
-				if testCase.errorCode != "" {
-					testdata.AssertRuleFailure(t, failures[0], "CommitBody")
+				found := false
+
+				for _, err := range errors {
+					if err.Code == testCase.expectedErrCode {
+						found = true
+
+						break
+					}
 				}
-			} else {
-				require.Empty(t, failures, "Expected no error but got: %v for case: %s", failures, testCase.description)
-			}
 
-			// Verify rule name
-			require.Equal(t, "CommitBody", rule.Name(), "Rule name should be 'CommitBody'")
+				require.True(t, found, "expected error code %s not found", testCase.expectedErrCode)
+			} else {
+				require.Empty(t, errors, "expected no validation errors")
+			}
 		})
 	}
+}
+
+func TestCommitBodyRule_StructureValidation(t *testing.T) {
+	tests := []struct {
+		name            string
+		config          config.Config
+		message         string
+		expectError     bool
+		expectedErrCode string
+	}{
+		{
+			name: "Valid three-part structure when required",
+			config: config.Config{
+				Message: config.MessageConfig{
+					Body: config.BodyConfig{
+						Required:  true,
+						MinLength: 10,
+					},
+				},
+			},
+			message:     "feat: add feature\n\nDetailed explanation of the feature",
+			expectError: false,
+		},
+		{
+			name: "Invalid structure when body required",
+			config: config.Config{
+				Message: config.MessageConfig{
+					Body: config.BodyConfig{
+						Required:  true,
+						MinLength: 10,
+					},
+				},
+			},
+			message:         "feat: add feature",
+			expectError:     true,
+			expectedErrCode: "invalid_structure",
+		},
+		{
+			name: "No structure requirement when body not required",
+			config: config.Config{
+				Message: config.MessageConfig{
+					Body: config.BodyConfig{
+						Required: false,
+					},
+				},
+			},
+			message:     "feat: add feature",
+			expectError: false,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			rule := NewCommitBodyRule(testCase.config)
+			commit := domain.ParseCommitMessage(testCase.message)
+
+			errors := rule.Validate(commit, config.Config{})
+
+			if testCase.expectError {
+				require.NotEmpty(t, errors, "expected validation error")
+
+				found := false
+
+				for _, err := range errors {
+					if err.Code == testCase.expectedErrCode {
+						found = true
+
+						break
+					}
+				}
+
+				require.True(t, found, "expected error code %s not found", testCase.expectedErrCode)
+			} else {
+				require.Empty(t, errors, "expected no validation errors")
+			}
+		})
+	}
+}
+
+func TestCommitBodyRule_SignOffPositioning(t *testing.T) {
+	tests := []struct {
+		name            string
+		message         string
+		expectError     bool
+		expectedErrCode string
+	}{
+		{
+			name: "Valid sign-off at end",
+			message: `feat: add feature
+
+This is a detailed explanation of the feature.
+
+Signed-off-by: John Doe <john@example.com>`,
+			expectError: false,
+		},
+		{
+			name: "Multiple sign-offs at end",
+			message: `feat: add feature
+
+This is a detailed explanation.
+
+Signed-off-by: John Doe <john@example.com>
+Co-authored-by: Jane Smith <jane@example.com>`,
+			expectError: false,
+		},
+		{
+			name: "Co-authored-by after sign-off (valid trailer)",
+			message: `feat: add feature
+
+This is a detailed explanation.
+
+Signed-off-by: John Doe <john@example.com>
+Co-authored-by: Jane Smith <jane@example.com>
+Reviewed-by: Bob Wilson <bob@example.com>`,
+			expectError: false,
+		},
+		{
+			name: "All supported trailers after sign-off",
+			message: `feat: add feature
+
+This fixes a critical bug in the authentication system.
+
+Signed-off-by: John Doe <john@example.com>
+Co-authored-by: Jane Smith <jane@example.com>
+Reviewed-by: Bob Wilson <bob@example.com>
+Tested-by: Alice Cooper <alice@example.com>
+Reported-by: Charlie Brown <charlie@example.com>
+Fixes: #123
+Closes: https://github.com/org/repo/issues/456`,
+			expectError: false,
+		},
+		{
+			name: "Content after sign-off",
+			message: `feat: add feature
+
+This is a detailed explanation.
+
+Signed-off-by: John Doe <john@example.com>
+
+Additional content after sign-off`,
+			expectError:     true,
+			expectedErrCode: "misplaced_signoff",
+		},
+		{
+			name: "Sign-off in middle",
+			message: `feat: add feature
+
+This is a detailed explanation.
+
+Signed-off-by: John Doe <john@example.com>
+
+More explanation here`,
+			expectError:     true,
+			expectedErrCode: "misplaced_signoff",
+		},
+		{
+			name: "No sign-offs - no error",
+			message: `feat: add feature
+
+This is a detailed explanation without any sign-offs.`,
+			expectError: false,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			rule := NewCommitBodyRule(config.Config{})
+			commit := domain.ParseCommitMessage(testCase.message)
+
+			errors := rule.Validate(commit, config.Config{})
+
+			if testCase.expectError {
+				require.NotEmpty(t, errors, "expected validation error")
+
+				found := false
+
+				for _, err := range errors {
+					if err.Code == testCase.expectedErrCode {
+						found = true
+
+						break
+					}
+				}
+
+				require.True(t, found, "expected error code %s not found", testCase.expectedErrCode)
+			} else {
+				require.Empty(t, errors, "expected no validation errors")
+			}
+		})
+	}
+}
+
+func TestCommitBodyRule_EnhancedBodyValidation(t *testing.T) {
+	tests := []struct {
+		name            string
+		config          config.Config
+		message         string
+		expectError     bool
+		expectedErrCode string
+	}{
+		{
+			name: "Minimum length validation",
+			config: config.Config{
+				Message: config.MessageConfig{
+					Body: config.BodyConfig{
+						Required:  true,
+						MinLength: 20,
+					},
+				},
+			},
+			message:         "feat: add feature\n\nShort body",
+			expectError:     true,
+			expectedErrCode: "body_too_short",
+		},
+		{
+			name: "Sign-off only when not allowed",
+			config: config.Config{
+				Message: config.MessageConfig{
+					Body: config.BodyConfig{
+						Required:         true,
+						AllowSignoffOnly: false,
+					},
+				},
+			},
+			message:         "feat: add feature\n\nSigned-off-by: John Doe <john@example.com>",
+			expectError:     true,
+			expectedErrCode: "invalid_body",
+		},
+		{
+			name: "Sign-off only when allowed",
+			config: config.Config{
+				Message: config.MessageConfig{
+					Body: config.BodyConfig{
+						Required:         true,
+						AllowSignoffOnly: true,
+					},
+				},
+			},
+			message:     "feat: add feature\n\nSigned-off-by: John Doe <john@example.com>",
+			expectError: false,
+		},
+		{
+			name: "Missing body when required",
+			config: config.Config{
+				Message: config.MessageConfig{
+					Body: config.BodyConfig{
+						Required:  true,
+						MinLength: 10,
+					},
+				},
+			},
+			message:         "feat: add feature",
+			expectError:     true,
+			expectedErrCode: "invalid_structure",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			rule := NewCommitBodyRule(testCase.config)
+			commit := domain.ParseCommitMessage(testCase.message)
+
+			errors := rule.Validate(commit, config.Config{})
+
+			if testCase.expectError {
+				require.NotEmpty(t, errors, "expected validation error")
+
+				found := false
+
+				for _, err := range errors {
+					if err.Code == testCase.expectedErrCode {
+						found = true
+
+						break
+					}
+				}
+
+				require.True(t, found, "expected error code %s not found", testCase.expectedErrCode)
+			} else {
+				require.Empty(t, errors, "expected no validation errors")
+			}
+		})
+	}
+}
+
+func TestCommitBodyRule_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name            string
+		config          config.Config
+		message         string
+		expectError     bool
+		expectedErrCode string
+	}{
+		{
+			name: "Empty body when required",
+			config: config.Config{
+				Message: config.MessageConfig{
+					Body: config.BodyConfig{Required: true},
+				},
+			},
+			message:         "feat: add feature",
+			expectError:     true,
+			expectedErrCode: "invalid_structure",
+		},
+		{
+			name: "RequireSignoff true but no signoff",
+			config: config.Config{
+				Message: config.MessageConfig{
+					Body: config.BodyConfig{
+						Required:        true,
+						MinSignoffCount: 1,
+					},
+				},
+			},
+			message:     "feat: add feature\n\nThis is a detailed body without signoff",
+			expectError: false, // SignOff rule handles this, not CommitBody
+		},
+		{
+			name:   "Mixed trailers after signoff",
+			config: config.Config{},
+			message: `feat: add feature
+
+This is the body content.
+
+Signed-off-by: John Doe <john@example.com>
+Co-authored-by: Jane Smith <jane@example.com>
+Fixes: #123`,
+			expectError: false,
+		},
+		{
+			name: "Zero minLength when required",
+			config: config.Config{
+				Message: config.MessageConfig{
+					Body: config.BodyConfig{
+						Required:  true,
+						MinLength: 0,
+					},
+				},
+			},
+			message:     "feat: add feature\n\nX",
+			expectError: false,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			rule := NewCommitBodyRule(testCase.config)
+			commit := domain.ParseCommitMessage(testCase.message)
+
+			errors := rule.Validate(commit, config.Config{})
+
+			if testCase.expectError {
+				require.NotEmpty(t, errors, "expected validation error")
+
+				found := false
+
+				for _, err := range errors {
+					if err.Code == testCase.expectedErrCode {
+						found = true
+
+						break
+					}
+				}
+
+				require.True(t, found, "expected error code %s not found", testCase.expectedErrCode)
+			} else {
+				require.Empty(t, errors, "expected no validation errors")
+			}
+		})
+	}
+}
+
+func TestCommitBodyRule_IntegrationTest(t *testing.T) {
+	// Test complete functionality integration
+	t.Run("Complex commit with all validations", func(t *testing.T) {
+		config := config.Config{
+			Message: config.MessageConfig{
+				Body: config.BodyConfig{
+					Required:         true,
+					MinLength:        20,
+					AllowSignoffOnly: false,
+				},
+			},
+		}
+
+		rule := NewCommitBodyRule(config)
+
+		// Valid complex commit
+		validMessage := `feat: implement user authentication
+
+This commit implements a comprehensive user authentication system
+with support for JWT tokens and refresh token rotation.
+
+The implementation includes proper error handling and security
+measures to prevent common attack vectors.
+
+Signed-off-by: John Doe <john@example.com>`
+
+		commit := domain.ParseCommitMessage(validMessage)
+		errors := rule.Validate(commit, config)
+		require.Empty(t, errors, "valid complex commit should pass all validations")
+
+		// Invalid complex commit - missing body when required (no blank line after subject)
+		invalidMessage := `feat: implement user authentication
+This commit implements authentication without blank line.
+
+Signed-off-by: John Doe <john@example.com>
+
+Additional content after sign-off`
+
+		commit = domain.ParseCommitMessage(invalidMessage)
+		errors = rule.Validate(commit, config)
+		require.NotEmpty(t, errors, "invalid commit should have validation errors")
+
+		// Should have invalid structure error (no proper subject + blank line + body)
+		foundStructureError := false
+
+		for _, err := range errors {
+			if err.Code == "invalid_structure" {
+				foundStructureError = true
+
+				break
+			}
+		}
+
+		require.True(t, foundStructureError, "should detect invalid structure (missing blank line)")
+	})
 }

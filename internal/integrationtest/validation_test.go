@@ -8,9 +8,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
-	gitTestdata "github.com/itiquette/gommitlint/internal/adapters/git/testdata"
-	"github.com/itiquette/gommitlint/internal/integrationtest/testdata"
 )
 
 // TestValidationWorkflow tests the complete validation workflow.
@@ -47,7 +44,7 @@ func TestValidationWorkflow(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			result := testdata.TestValidateMessage(t, testCase.message, testdata.DefaultConfig())
+			result := TestValidateMessage(t, testCase.message, DefaultConfig())
 
 			if testCase.wantPass {
 				require.True(t, result.Valid, "Expected validation to pass")
@@ -104,7 +101,7 @@ func TestMessageFileValidation(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			result := testdata.TestValidateMessage(t, testCase.message, testdata.DefaultConfig())
+			result := TestValidateMessage(t, testCase.message, DefaultConfig())
 
 			if testCase.wantPass {
 				require.True(t, result.Valid, "Expected validation to pass")
@@ -118,39 +115,39 @@ func TestMessageFileValidation(t *testing.T) {
 // TestRuleSpecificValidation tests validation with specific rule configurations.
 func TestRuleSpecificValidation(t *testing.T) {
 	t.Run("Only subject length validation", func(t *testing.T) {
-		config := testdata.WithRules("Subject")
+		config := WithRules("Subject")
 
 		// Valid length
-		result := testdata.TestValidateMessage(t, "feat: short message", config)
+		result := TestValidateMessage(t, "feat: short message", config)
 		require.True(t, result.Valid)
 
 		// Invalid length
 		longMessage := "feat: " + string(make([]byte, 100)) // Very long message
-		result = testdata.TestValidateMessage(t, longMessage, config)
+		result = TestValidateMessage(t, longMessage, config)
 		require.False(t, result.Valid)
 	})
 
 	t.Run("Only conventional commit validation", func(t *testing.T) {
-		config := testdata.WithRules("ConventionalCommit")
+		config := WithRules("ConventionalCommit")
 
 		// Valid conventional
-		result := testdata.TestValidateMessage(t, "feat: add feature", config)
+		result := TestValidateMessage(t, "feat: add feature", config)
 		require.True(t, result.Valid)
 
 		// Invalid conventional
-		result = testdata.TestValidateMessage(t, "Add feature", config)
+		result = TestValidateMessage(t, "Add feature", config)
 		require.False(t, result.Valid)
 	})
 
 	t.Run("Custom subject length", func(t *testing.T) {
-		config := testdata.WithSubjectMaxLength(20)
+		config := WithSubjectMaxLength(20)
 
 		// Valid short message
-		result := testdata.TestValidateMessage(t, "feat: short", config)
+		result := TestValidateMessage(t, "feat: short", config)
 		require.True(t, result.Valid)
 
 		// Invalid long message
-		result = testdata.TestValidateMessage(t, "feat: this is too long", config)
+		result = TestValidateMessage(t, "feat: this is too long", config)
 		require.False(t, result.Valid)
 	})
 }
@@ -158,27 +155,27 @@ func TestRuleSpecificValidation(t *testing.T) {
 // TestRepositoryValidation tests validation against git repositories.
 func TestRepositoryValidation(t *testing.T) {
 	t.Run("Valid repository commit", func(t *testing.T) {
-		repoPath, cleanup := gitTestdata.GitRepo(t, "feat: add authentication\n\nAdds JWT auth")
+		repoPath, cleanup := GitRepo(t, "feat: add authentication\n\nAdds JWT auth")
 		defer cleanup()
 
-		result := testdata.TestValidation(t, repoPath, testdata.DefaultConfig())
+		result := TestValidation(t, repoPath, DefaultConfig())
 		require.True(t, result.Valid)
 	})
 
 	t.Run("Invalid repository commit", func(t *testing.T) {
-		repoPath, cleanup := gitTestdata.GitRepo(t, "bad commit message format")
+		repoPath, cleanup := GitRepo(t, "bad commit message format")
 		defer cleanup()
 
-		result := testdata.TestValidation(t, repoPath, testdata.DefaultConfig())
+		result := TestValidation(t, repoPath, DefaultConfig())
 		require.False(t, result.Valid)
 	})
 
 	t.Run("Repository with custom config", func(t *testing.T) {
-		repoPath, cleanup := gitTestdata.GitRepo(t, "feat: this message is longer than 30 chars")
+		repoPath, cleanup := GitRepo(t, "feat: this message is longer than 30 chars")
 		defer cleanup()
 
-		config := testdata.WithSubjectMaxLength(30)
-		result := testdata.TestValidation(t, repoPath, config)
+		config := WithSubjectMaxLength(30)
+		result := TestValidation(t, repoPath, config)
 		require.False(t, result.Valid)
 	})
 }
@@ -187,16 +184,16 @@ func TestRepositoryValidation(t *testing.T) {
 func TestFunctionalConfigComposition(t *testing.T) {
 	t.Run("Combine multiple config changes", func(t *testing.T) {
 		// Start with default and apply multiple changes
-		config := testdata.DefaultConfig()
+		config := DefaultConfig()
 		config.Message.Subject.MaxLength = 30
 		config.Conventional.Types = []string{"custom", "special"}
 
 		// Valid with custom type and short length
-		result := testdata.TestValidateMessage(t, "custom: short", config)
+		result := TestValidateMessage(t, "custom: short", config)
 		require.True(t, result.Valid)
 
 		// Invalid with custom type but long length
-		result = testdata.TestValidateMessage(t, "custom: this is way too long for our limit", config)
+		result = TestValidateMessage(t, "custom: this is way too long for our limit", config)
 		require.False(t, result.Valid)
 	})
 }

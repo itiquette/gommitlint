@@ -5,6 +5,7 @@
 package domain
 
 import (
+	"sort"
 	"strings"
 	"time"
 )
@@ -101,9 +102,18 @@ func buildSummary(commitResults []ValidationResult, repoErrors []ValidationError
 
 // buildCommitReports creates commit reports showing all executed rules.
 func buildCommitReports(commitResults []ValidationResult, commitRules []CommitRule) []CommitReport {
-	reports := make([]CommitReport, len(commitResults))
+	// Sort commits by date (oldest first)
+	sortedResults := make([]ValidationResult, len(commitResults))
+	copy(sortedResults, commitResults)
 
-	for i, result := range commitResults {
+	sort.Slice(sortedResults, func(i, j int) bool {
+		// Compare commit dates - oldest first (ascending order)
+		return sortedResults[i].Commit.CommitDate < sortedResults[j].Commit.CommitDate
+	})
+
+	reports := make([]CommitReport, len(sortedResults))
+
+	for i, result := range sortedResults {
 		reports[i] = CommitReport{
 			Commit:      result.Commit,
 			RuleResults: buildRuleReports(result, commitRules),
