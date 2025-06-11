@@ -84,7 +84,11 @@ func (r ConventionalCommitRule) Validate(commit domain.Commit, _ config.Config) 
 	parts, err := parseConventionalFormat(commit.Subject)
 	if err != nil {
 		failures = append(failures,
-			domain.New(r.Name(), domain.ErrInvalidConventionalFormat, "Commit message doesn't follow conventional format").
+			domain.New(r.Name(), domain.ErrInvalidConventionalFormat, "Must follow format: type(scope): description").
+				WithContextMap(map[string]string{
+					"expected": "type(scope): description",
+					"found":    fmt.Sprintf("%q", commit.Subject),
+				}).
 				WithHelp("Use format: type(scope): description (e.g., 'feat: add login')"))
 
 		return failures
@@ -95,6 +99,10 @@ func (r ConventionalCommitRule) Validate(commit domain.Commit, _ config.Config) 
 		failures = append(failures,
 			domain.New(r.Name(), domain.ErrInvalidConventionalType,
 				fmt.Sprintf("Invalid type '%s'", parts.Type)).
+				WithContextMap(map[string]string{
+					"found":   parts.Type,
+					"allowed": strings.Join(r.allowedTypes, ", "),
+				}).
 				WithHelp("Use one of: "+strings.Join(r.allowedTypes, ", ")))
 	}
 
@@ -102,6 +110,10 @@ func (r ConventionalCommitRule) Validate(commit domain.Commit, _ config.Config) 
 	if r.requireScope && parts.Scope == "" {
 		failures = append(failures,
 			domain.New(r.Name(), domain.ErrMissingConventionalScope, "Scope is required but not provided").
+				WithContextMap(map[string]string{
+					"current":  fmt.Sprintf("%s: %s", parts.Type, parts.Description),
+					"required": fmt.Sprintf("%s(scope): %s", parts.Type, parts.Description),
+				}).
 				WithHelp("Use format: type(scope): description"))
 	}
 

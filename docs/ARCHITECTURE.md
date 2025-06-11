@@ -34,7 +34,7 @@ Gommitlint implements **functional hexagonal architecture** with value semantics
 
 ## Architecture Overview
 
-```
+```txt
 ┌─────────────────────────────────────────────────┐
 │                 Adapters                        │
 │  cli/ → config/ → git/ → logging/ → signing/    │
@@ -51,7 +51,7 @@ Gommitlint implements **functional hexagonal architecture** with value semantics
 
 ## Directory Structure
 
-```
+```txt
 gommitlint/
 ├── main.go                    # Composition root
 ├── internal/
@@ -137,7 +137,7 @@ func RunValidation(ctx context.Context, ref string, rules []Rule,
 
 ### Rule Priority System
 1. **Explicitly enabled** (highest priority)
-2. **Explicitly disabled** 
+2. **Explicitly disabled**
 3. **Default disabled** (`jirareference`, `commitbody`, `spell`)
 4. **Default enabled** (all others)
 

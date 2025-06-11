@@ -7,6 +7,7 @@ package rules
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -91,8 +92,13 @@ func (r SubjectRule) Validate(commit domain.Commit, _ config.Config) []domain.Va
 	if len(commit.Subject) > r.maxLength {
 		errors = append(errors,
 			domain.New(r.Name(), domain.ErrSubjectTooLong,
-				fmt.Sprintf("subject exceeds %d characters (actual: %d)", r.maxLength, len(commit.Subject))).
-				WithHelp(fmt.Sprintf("Keep subject under %d characters", r.maxLength)))
+				fmt.Sprintf("Too long (%d/%d characters)", len(commit.Subject), r.maxLength)).
+				WithContextMap(map[string]string{
+					"current_length": strconv.Itoa(len(commit.Subject)),
+					"max_length":     strconv.Itoa(r.maxLength),
+					"subject":        commit.Subject,
+				}).
+				WithHelp(fmt.Sprintf("Keep subject under %d characters for better readability", r.maxLength)))
 	}
 
 	// Case validation
@@ -175,10 +181,18 @@ func (r SubjectRule) validateCase(subject string) []domain.ValidationError {
 	_, isValid := checkCase(firstWord, r.caseChoice)
 
 	if !isValid {
+		// Get expected case format
+		expectedWord := getExpectedCase(firstWord, r.caseChoice)
+
 		return []domain.ValidationError{
 			domain.New(r.Name(), domain.ErrSubjectCase,
-				fmt.Sprintf("First word '%s' should be in %s case", firstWord, r.caseChoice)).
-				WithHelp(fmt.Sprintf("Change '%s' to %s case", firstWord, r.caseChoice)),
+				fmt.Sprintf("Should start with %s case (not '%s')", r.caseChoice, firstWord)).
+				WithContextMap(map[string]string{
+					"current_word":  firstWord,
+					"expected_case": r.caseChoice,
+					"expected_word": expectedWord,
+				}).
+				WithHelp(fmt.Sprintf("Change '%s' to %s case following conventional style", firstWord, r.caseChoice)),
 		}
 	}
 
@@ -214,10 +228,18 @@ func (r SubjectRule) validateSuffix(subject string) []domain.ValidationError {
 			}
 
 			if suffixContainsLastChar {
+				// Get subject without the suffix
+				cleanSubject := strings.TrimSuffix(subject, lastChar)
+
 				return []domain.ValidationError{
 					domain.New(r.Name(), domain.ErrSubjectSuffix,
-						fmt.Sprintf("Subject ends with invalid character '%s'", lastChar)).
-						WithHelp(fmt.Sprintf("Remove the trailing '%s' from your commit subject", lastChar)),
+						fmt.Sprintf("Should not end with '%s'", lastChar)).
+						WithContextMap(map[string]string{
+							"invalid_suffix": lastChar,
+							"current":        subject,
+							"suggested":      cleanSubject,
+						}).
+						WithHelp("Remove trailing punctuation like periods or exclamation marks"),
 				}
 			}
 		}
@@ -440,6 +462,31 @@ func (r SubjectRule) extractFirstWord(subject string) string {
 	}
 
 	return parts[0]
+}
+
+// getExpectedCase converts a word to the expected case format.
+func getExpectedCase(word, expectedCase string) string {
+	switch expectedCase {
+	case "upper":
+		return strings.ToUpper(word)
+	case "lower":
+		return strings.ToLower(word)
+	case "sentence":
+		if len(word) == 0 {
+			return word
+		}
+
+		return strings.ToUpper(string(word[0])) + strings.ToLower(word[1:])
+	case "title":
+		// Title case - capitalize first letter
+		if len(word) == 0 {
+			return word
+		}
+
+		return strings.ToUpper(string(word[0])) + word[1:]
+	default:
+		return word
+	}
 }
 
 // categorizeVerb determines if a verb is in a non-imperative category.

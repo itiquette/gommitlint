@@ -50,7 +50,7 @@ func TestSubjectRule_Validate(t *testing.T) {
 			},
 			wantErrCount:   1,
 			wantErrCodes:   []string{string(domain.ErrSubjectTooLong)},
-			wantErrMessage: "subject exceeds 50 characters",
+			wantErrMessage: "Too long",
 		},
 		{
 			name:    "wrong case",
@@ -65,7 +65,7 @@ func TestSubjectRule_Validate(t *testing.T) {
 			},
 			wantErrCount:   1,
 			wantErrCodes:   []string{string(domain.ErrSubjectCase)},
-			wantErrMessage: "should be in sentence case",
+			wantErrMessage: "Should start with sentence case",
 		},
 		{
 			name:    "invalid suffix",
@@ -81,7 +81,7 @@ func TestSubjectRule_Validate(t *testing.T) {
 			},
 			wantErrCount:   1,
 			wantErrCodes:   []string{string(domain.ErrSubjectSuffix)},
-			wantErrMessage: "ends with invalid character",
+			wantErrMessage: "Should not end with",
 		},
 		{
 			name:    "multiple errors - length and case",
@@ -129,7 +129,7 @@ func TestSubjectRule_Validate(t *testing.T) {
 			},
 			wantErrCount:   1,
 			wantErrCodes:   []string{string(domain.ErrSubjectCase)},
-			wantErrMessage: "should be in sentence case",
+			wantErrMessage: "Should start with sentence case",
 		},
 		{
 			name:    "empty subject",

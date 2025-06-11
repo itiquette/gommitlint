@@ -6,6 +6,7 @@ package rules
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/itiquette/gommitlint/internal/domain"
 	"github.com/itiquette/gommitlint/internal/domain/config"
@@ -56,7 +57,13 @@ func (r BranchAheadRule) Validate(_ domain.Commit, repo domain.Repository, _ con
 	if r.maxCommitsAhead > 0 && commitsAhead > r.maxCommitsAhead {
 		return []domain.ValidationError{
 			domain.New(r.Name(), domain.ErrTooManyCommits,
-				fmt.Sprintf("Branch is %d commits ahead of %s (max: %d)", commitsAhead, r.reference, r.maxCommitsAhead)).
+				fmt.Sprintf("Too many commits ahead (%d/%d max)", commitsAhead, r.maxCommitsAhead)).
+				WithContextMap(map[string]string{
+					"current_ahead":    strconv.Itoa(commitsAhead),
+					"max_allowed":      strconv.Itoa(r.maxCommitsAhead),
+					"reference_branch": r.reference,
+					"excess":           strconv.Itoa(commitsAhead - r.maxCommitsAhead),
+				}).
 				WithHelp(fmt.Sprintf("Consider rebasing or creating a pull request when ahead by more than %d commits", r.maxCommitsAhead)),
 		}
 	}

@@ -5,6 +5,7 @@
 package rules
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/client9/misspell"
@@ -51,11 +52,14 @@ func (r SpellRule) Validate(commit domain.Commit, _ config.Config) []domain.Vali
 	// Check spelling
 	_, diffs := replacer.Replace(textToCheck)
 
-	// Convert diffs to misspellings
-	validMisspellings := []struct {
-		word     string
-		position int
-	}{}
+	// Convert diffs to misspellings with suggestions
+	type misspellingInfo struct {
+		word       string
+		position   int
+		suggestion string
+	}
+
+	validMisspellings := []misspellingInfo{}
 
 	for _, diff := range diffs {
 		word := diff.Original
@@ -68,12 +72,10 @@ func (r SpellRule) Validate(commit domain.Commit, _ config.Config) []domain.Vali
 			continue
 		}
 
-		validMisspellings = append(validMisspellings, struct {
-			word     string
-			position int
-		}{
-			word:     word,
-			position: diff.Column,
+		validMisspellings = append(validMisspellings, misspellingInfo{
+			word:       word,
+			position:   diff.Column,
+			suggestion: diff.Corrected,
 		})
 	}
 
@@ -82,8 +84,14 @@ func (r SpellRule) Validate(commit domain.Commit, _ config.Config) []domain.Vali
 
 	for _, misspelling := range validMisspellings {
 		failure := domain.New(r.Name(), domain.ErrMisspelledWord,
-			"Misspelled word: "+misspelling.word).
-			WithHelp("Check spelling or add to ignore list")
+			"Misspelled: "+misspelling.word).
+			WithContextMap(map[string]string{
+				"misspelled_word":      misspelling.word,
+				"suggested_correction": misspelling.suggestion,
+				"position":             fmt.Sprintf("column %d", misspelling.position),
+				"ignore_option":        fmt.Sprintf("Add '%s' to ignore list if it's a technical term", misspelling.word),
+			}).
+			WithHelp("Check spelling or add '" + misspelling.word + "' to ignore list if it's a technical term")
 		failures = append(failures, failure)
 	}
 

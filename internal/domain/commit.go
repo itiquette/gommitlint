@@ -98,11 +98,7 @@ func ParseCommitMessage(message string) Commit {
 }
 
 // FilterMergeCommits returns a new slice with merge commits filtered out.
-func FilterMergeCommits(commits []Commit, skipMerge bool) []Commit {
-	if !skipMerge {
-		return commits
-	}
-
+func FilterMergeCommits(commits []Commit) []Commit {
 	result := make([]Commit, 0)
 
 	for _, commit := range commits {

@@ -47,8 +47,13 @@ func (r SignOffRule) Validate(commit domain.Commit, _ config.Config) []domain.Va
 	// Handle empty message cases
 	if textToCheck == "" {
 		return []domain.ValidationError{
-			domain.New(r.Name(), domain.ErrMissingSignoff, "Missing sign-off").
-				WithHelp("Add 'Signed-off-by: Your Name <email@example.com>'"),
+			domain.New(r.Name(), domain.ErrMissingSignoff, "Missing required sign-off").
+				WithContextMap(map[string]string{
+					"required_format": "Signed-off-by: Your Name <email@example.com>",
+					"current_state":   "No sign-off present",
+					"location":        getSignOffLocation(commit.Body),
+				}).
+				WithHelp("Add 'Signed-off-by: Your Name <email@example.com>' to comply with DCO"),
 		}
 	}
 
@@ -56,8 +61,13 @@ func (r SignOffRule) Validate(commit domain.Commit, _ config.Config) []domain.Va
 	hasSignOff := hasSignOffLine(textToCheck, r.acceptAltFormat)
 	if !hasSignOff {
 		return []domain.ValidationError{
-			domain.New(r.Name(), domain.ErrMissingSignoff, "Missing sign-off").
-				WithHelp("Add 'Signed-off-by: Your Name <email@example.com>'"),
+			domain.New(r.Name(), domain.ErrMissingSignoff, "Missing required sign-off").
+				WithContextMap(map[string]string{
+					"required_format": "Signed-off-by: Your Name <email@example.com>",
+					"current_state":   "No sign-off present",
+					"location":        getSignOffLocation(commit.Body),
+				}).
+				WithHelp("Add 'Signed-off-by: Your Name <email@example.com>' to comply with DCO"),
 		}
 	}
 
@@ -151,4 +161,13 @@ func CountBodyLines(body string) int {
 	}
 
 	return count
+}
+
+// getSignOffLocation returns a description of where sign-off should be placed.
+func getSignOffLocation(body string) string {
+	if body == "" {
+		return "body required"
+	}
+
+	return "end of body"
 }

@@ -84,7 +84,11 @@ func (r JiraReferenceRule) Validate(commit domain.Commit, _ config.Config) []dom
 		}
 
 		return []domain.ValidationError{
-			domain.New(r.Name(), domain.ErrMissingJira, "JIRA reference missing").
+			domain.New(r.Name(), domain.ErrMissingJira, "Missing JIRA reference (e.g., "+expectedPattern+")").
+				WithContextMap(map[string]string{
+					"expected_format": expectedPattern,
+					"searched_in":     getSearchLocationText(r.searchInBody),
+				}).
 				WithHelp("Add a JIRA reference like " + expectedPattern),
 		}
 	}
@@ -96,8 +100,8 @@ func (r JiraReferenceRule) Validate(commit domain.Commit, _ config.Config) []dom
 			if !isValidProject(project, r.prefixes) {
 				return []domain.ValidationError{
 					domain.New(r.Name(), domain.ErrInvalidProject,
-						fmt.Sprintf("Invalid JIRA project '%s'", project)).
-						WithHelp("Use one of: " + strings.Join(r.prefixes, ", ")),
+						fmt.Sprintf("Invalid project '%s'", project)).
+						WithHelp("Use one of these projects: " + strings.Join(r.prefixes, ", ")),
 				}
 			}
 		}
@@ -115,7 +119,7 @@ func (r JiraReferenceRule) Validate(commit domain.Commit, _ config.Config) []dom
 		// Check if JIRA is in the correct position (not in description)
 		if hasJiraInDescription(commit.Subject, r.pattern) {
 			return []domain.ValidationError{
-				domain.New(r.Name(), domain.ErrMisplacedJira, "JIRA reference should be in scope, not description").
+				domain.New(r.Name(), domain.ErrMisplacedJira, "JIRA reference in wrong location").
 					WithHelp("Use format: type(JIRA-123): description"),
 			}
 		}
@@ -134,6 +138,15 @@ func (r JiraReferenceRule) Validate(commit domain.Commit, _ config.Config) []dom
 
 // SetErrors is no longer used since we don't have baseRule.
 // Validation errors are returned directly from the Validate method.
+
+// getSearchLocationText returns a description of where JIRA references are searched.
+func getSearchLocationText(searchInBody bool) string {
+	if searchInBody {
+		return "subject and body"
+	}
+
+	return "subject only"
+}
 
 // shouldExcludeCommitType checks if a commit type should be excluded from JIRA validation.
 func shouldExcludeCommitType(subject string, excludedTypes []string) bool {

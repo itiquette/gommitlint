@@ -5,6 +5,7 @@
 package rules
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/domain"
@@ -33,8 +34,28 @@ func (r SignatureRule) Validate(commit domain.Commit, _ config.Config) []domain.
 		signature := strings.TrimSpace(commit.Signature)
 		if signature == "" {
 			return []domain.ValidationError{
-				domain.New(r.Name(), domain.ErrMissingSignature, "Commit must be cryptographically signed").
-					WithHelp("Sign your commits using 'git commit -S' for GPG or 'git commit --signoff' for DCO"),
+				domain.New(r.Name(), domain.ErrMissingSignature, "Missing cryptographic signature").
+					WithContextMap(map[string]string{
+						"current_state":    "No signature present",
+						"supported_types":  "GPG, SSH",
+						"signing_commands": "git commit -S (GPG) or configure SSH signing",
+					}).
+					WithHelp("Sign your commits using 'git commit -S' for GPG or configure SSH signing"),
+			}
+		}
+
+		// Check signature format and provide context if verbose
+		if r.requireSigningKey && signature != "" {
+			signatureType := detectSignatureType(signature)
+			if signatureType == "unknown" {
+				return []domain.ValidationError{
+					domain.New(r.Name(), domain.ErrInvalidSignatureFormat, "Invalid signature format").
+						WithContextMap(map[string]string{
+							"current_signature": fmt.Sprintf("%.50s...", signature),
+							"supported_formats": "GPG: -----BEGIN PGP SIGNATURE-----, SSH: -----BEGIN SSH SIGNATURE-----",
+						}).
+						WithHelp("Ensure your signing key is properly configured"),
+				}
 			}
 		}
 	}
@@ -45,4 +66,17 @@ func (r SignatureRule) Validate(commit domain.Commit, _ config.Config) []domain.
 // Name returns the rule name.
 func (r SignatureRule) Name() string {
 	return "Signature"
+}
+
+// detectSignatureType detects the type of signature (GPG, SSH, or unknown).
+func detectSignatureType(signature string) string {
+	if strings.Contains(signature, "-----BEGIN PGP SIGNATURE-----") {
+		return "GPG"
+	}
+
+	if strings.Contains(signature, "-----BEGIN SSH SIGNATURE-----") {
+		return "SSH"
+	}
+
+	return "unknown"
 }

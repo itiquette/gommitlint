@@ -6,6 +6,7 @@ package rules
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/domain"
@@ -54,7 +55,12 @@ func (r IdentityRule) Validate(commit domain.Commit, _ config.Config) []domain.V
 	}
 
 	return []domain.ValidationError{
-		domain.New(r.Name(), domain.ErrKeyNotTrusted, "Author not in allowed signers list").
+		domain.New(r.Name(), domain.ErrKeyNotTrusted, "Author '"+commit.AuthorEmail+"' not authorized").
+			WithContextMap(map[string]string{
+				"author":           authorString,
+				"email":            commit.AuthorEmail,
+				"authorized_count": strconv.Itoa(len(r.allowedSigners)),
+			}).
 			WithHelp("Use an authorized identity or add this author to the allowed signers list"),
 	}
 }

@@ -7,6 +7,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	configTypes "github.com/itiquette/gommitlint/internal/domain/config"
 	"github.com/knadh/koanf/parsers/yaml"
@@ -14,12 +15,25 @@ import (
 	"github.com/knadh/koanf/v2"
 )
 
-// defaultConfigPaths defines the standard configuration file search paths.
-var defaultConfigPaths = []string{
-	".gommitlint.yaml",
-	".gommitlint.yml",
-	".config/gommitlint/config.yaml",
-	".config/gommitlint/config.yml",
+// 2. XDG_CONFIG_HOME/gommitlint/config.yaml, XDG_CONFIG_HOME/gommitlint/config.yml (if XDG_CONFIG_HOME exists).
+func getConfigSearchPaths() []string {
+	paths := []string{
+		".gommitlint.yaml",
+		".gommitlint.yml",
+	}
+
+	// Add XDG config paths if XDG_CONFIG_HOME is set and directory exists
+	if xdgConfigHome := os.Getenv("XDG_CONFIG_HOME"); xdgConfigHome != "" {
+		gommitlintDir := filepath.Join(xdgConfigHome, "gommitlint")
+		if _, err := os.Stat(gommitlintDir); err == nil {
+			paths = append(paths,
+				filepath.Join(gommitlintDir, "config.yaml"),
+				filepath.Join(gommitlintDir, "config.yml"),
+			)
+		}
+	}
+
+	return paths
 }
 
 // LoadConfig loads configuration from multiple sources with later configs taking precedence.
@@ -181,9 +195,9 @@ func mergeConfig(base, overlay configTypes.Config) configTypes.Config {
 	return result
 }
 
-// findFirstExistingConfigFile finds the first existing config file in default paths.
+// findFirstExistingConfigFile finds the first existing config file in search paths.
 func findFirstExistingConfigFile() string {
-	for _, path := range defaultConfigPaths {
+	for _, path := range getConfigSearchPaths() {
 		if _, err := os.Stat(path); err == nil {
 			return path
 		}

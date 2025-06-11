@@ -7,6 +7,7 @@ package rules
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/itiquette/gommitlint/internal/domain"
@@ -45,14 +46,18 @@ func (r CommitBodyRule) Validate(commit domain.Commit, _ config.Config) []domain
 	// Check missing body
 	if r.minLength > 0 && trimmedBody == "" {
 		failures = append(failures,
-			domain.New(r.Name(), domain.ErrMissingBody, "commit body is missing").
+			domain.New(r.Name(), domain.ErrMissingBody, fmt.Sprintf("Missing body (requires %d+ characters)", r.minLength)).
+				WithContextMap(map[string]string{
+					"required_length": strconv.Itoa(r.minLength),
+					"current_state":   "No body present",
+				}).
 				WithHelp("Add a blank line after the subject, followed by a detailed description"))
 	}
 
 	// Check sign-off only
 	if !r.signOffOnly && hasOnlySignOff && trimmedBody != "" {
 		failures = append(failures,
-			domain.New(r.Name(), domain.ErrInvalidBody, "commit body cannot contain only sign-off line").
+			domain.New(r.Name(), domain.ErrInvalidBody, "Cannot have only sign-off lines").
 				WithHelp("Add a detailed description before the sign-off line"))
 	}
 
@@ -60,8 +65,13 @@ func (r CommitBodyRule) Validate(commit domain.Commit, _ config.Config) []domain
 	if r.minLength > 0 && bodyLength < r.minLength && trimmedBody != "" {
 		failures = append(failures,
 			domain.New(r.Name(), domain.ErrBodyTooShort,
-				fmt.Sprintf("body too short (minimum: %d characters, actual: %d)", r.minLength, bodyLength)).
-				WithHelp(fmt.Sprintf("Provide at least %d characters of detail", r.minLength)))
+				fmt.Sprintf("Too short (%d/%d characters)", bodyLength, r.minLength)).
+				WithContextMap(map[string]string{
+					"current_length":  strconv.Itoa(bodyLength),
+					"required_length": strconv.Itoa(r.minLength),
+					"deficit":         strconv.Itoa(r.minLength - bodyLength),
+				}).
+				WithHelp(fmt.Sprintf("Provide at least %d characters of detail explaining the change", r.minLength)))
 	}
 
 	// Check minimum lines
@@ -72,8 +82,8 @@ func (r CommitBodyRule) Validate(commit domain.Commit, _ config.Config) []domain
 		if actualLines < r.minLines {
 			failures = append(failures,
 				domain.New(r.Name(), domain.ErrBodyTooShort,
-					fmt.Sprintf("body has too few lines (minimum: %d, actual: %d)", r.minLines, actualLines)).
-					WithHelp(fmt.Sprintf("Provide at least %d lines of detail", r.minLines)))
+					fmt.Sprintf("Too few lines (%d/%d required)", actualLines, r.minLines)).
+					WithHelp(fmt.Sprintf("Provide at least %d lines of detailed explanation", r.minLines)))
 		}
 	}
 

@@ -24,7 +24,7 @@ gommitlint:
 
   # Conventional commits configuration
   conventional:
-    required: true # Require conventional commit format
+    require_scope: false # Require scope in conventional commits
     types: # Allowed conventional commit types
       - "feat"
       - "fix"
@@ -60,16 +60,16 @@ gommitlint:
 
   # Jira configuration
   jira:
-    projects: # Allowed project keys in Jira references
+    project_prefixes: # Allowed project keys in Jira references
       - "EXAMPLE"
       - "DEMO"
-    check_body_references: true # Also check commit body for references
-    required: false # Require JIRA reference in commits
+    require_in_body: true # Also check commit body for references
+    require_in_subject: false # Require JIRA reference in commits
 
   # Spell check configuration
   spell:
-    language: "en_US" # Language for spell checking
-    custom_dictionary:
+    locale: "en_US" # Language for spell checking
+    ignore_words:
       [] # Additional allowed words
       # - "gommitlint"
       # - "config"
@@ -78,23 +78,17 @@ gommitlint:
   rules:
     # Rules to explicitly enable (highest priority)
     enabled:
-      # - "Subject"           # Validates subject length, case, and suffix (consolidated rule)
-      # - "ConventionalCommit"
-      # - "Spell"             # Disabled by default, enable if needed
+      []
+      # - "subject"           # Validates subject length, case, and suffix
+      # - "conventional"      # Validates conventional commit format
+      # - "spell"             # Disabled by default, enable if needed
 
     # Rules to explicitly disable
     disabled:
-      # - "CommitBody"       # Disabled by default
-      # - "JiraReference"    # Disabled by default (organization-specific)
-      # - "Spell"           # Disabled by default (requires dictionary setup)
-
-    # Default enabled rules (if not in disabled list):
-    # - Subject            # Consolidated: length, case, suffix, and imperative validation
-    # - ConventionalCommit # Validates conventional commit format
-    # - SignOff            # Validates Developer Certificate of Origin
-    # - Signature          # Validates commit signatures
-    # - SignedIdentity     # Validates signer identity matches author
-    # - BranchAhead       # Validates commits ahead of reference branch
+      - "conventional" # Disable conventional commit validation for testing
+      # - "commitbody"       # Disabled by default
+      # - "jirareference"    # Disabled by default (organization-specific)
+      # - "spell"           # Disabled by default (requires dictionary setup)
 
     # Default disabled rules (must be explicitly enabled):
     # - JiraReference      # Organization-specific
@@ -102,6 +96,4 @@ gommitlint:
     # - Spell              # Requires additional setup
 
   # Output configuration
-  output:
-    format: "text" # Output format: "text", "json", "github", "gitlab"
-    verbose: false # Show detailed output
+  output: "text" # Output format: "text", "json", "github", "gitlab"

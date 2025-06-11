@@ -10,8 +10,8 @@ import (
 
 // Options represents the command-line options for the application.
 type Options struct {
-	// Verbosity represents the log level (trace, debug, brief, quiet)
-	Verbosity string
+	// LogLevel represents the log level (debug, info, warn, error)
+	LogLevel string
 
 	// Quiet indicates whether quiet mode is enabled (errors only)
 	Quiet bool
@@ -51,7 +51,7 @@ func OptionsFromContext(ctx context.Context) Options {
 // DefaultOptions returns the default CLI options.
 func DefaultOptions() Options {
 	return Options{
-		Verbosity:           "brief",
+		LogLevel:            "info",
 		Quiet:               false,
 		VerbosityWithCaller: false,
 		OutputFormat:        "text",

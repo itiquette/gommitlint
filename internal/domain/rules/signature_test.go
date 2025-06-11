@@ -104,7 +104,7 @@ func TestSignatureRule_RequireSignature(t *testing.T) {
 			signature:     "",
 			required:      true,
 			expectedValid: false,
-			expectedMsg:   "must be cryptographically signed",
+			expectedMsg:   "Missing cryptographic signature",
 		},
 		{
 			name:          "Missing signature when not required",
@@ -209,5 +209,5 @@ func TestSignatureRule_OptionsCombination(t *testing.T) {
 
 	// No signature should be invalid
 	noSigFailures := rule.Validate(noSigCommit, cfg)
-	assertErrorMatch(t, noSigFailures, "must be cryptographically signed")
+	assertErrorMatch(t, noSigFailures, "Missing cryptographic signature")
 }

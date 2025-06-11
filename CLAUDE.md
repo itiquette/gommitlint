@@ -1255,7 +1255,7 @@ Use functional options for configuration. See `rules/factory.go` for examples.
 
 Build complex behavior through composition, not inheritance.
 
-## Error Handling
+## Domain Error Handling
 
 Use `fmt.Errorf("context: %w", err)` for wrapping. Define domain errors in `errors.go`.
 
