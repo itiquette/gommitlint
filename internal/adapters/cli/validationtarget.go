@@ -159,8 +159,6 @@ const (
 	MaxCommitCount = 1000
 )
 
-// Validation helper functions (moved from validateparams.go).
-
 // validateFilePath checks if a file path is valid and safe.
 func validateFilePath(path string) error {
 	if path == "" {

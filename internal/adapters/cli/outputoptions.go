@@ -10,6 +10,8 @@ import (
 	"os"
 	"strings"
 
+	"golang.org/x/term"
+
 	"github.com/itiquette/gommitlint/internal/adapters/output"
 	"github.com/itiquette/gommitlint/internal/domain"
 )
@@ -189,9 +191,21 @@ func (o OutputOptions) GetRuleHelp() string {
 	return o.RuleHelp
 }
 
-// shouldUseColor determines whether to use color based on the color setting and output type.
-func (o OutputOptions) shouldUseColor() bool {
-	switch o.Color {
+// ShouldUseColor determines whether to use color based on the color setting and output type.
+// Respects NO_COLOR environment variable as per https://no-color.org specification.
+func (o OutputOptions) ShouldUseColor() bool {
+	return shouldUseColorWithEnv(o.Color, o.Writer, getEnv)
+}
+
+// shouldUseColorWithEnv determines color usage with explicit environment function (pure function).
+func shouldUseColorWithEnv(colorSetting string, writer io.Writer, envFunc func(string) string) bool {
+	// NO_COLOR environment variable takes precedence over all flags
+	// https://no-color.org - when set (any value), disable color output
+	if envFunc("NO_COLOR") != "" {
+		return false
+	}
+
+	switch colorSetting {
 	case "always":
 		return true
 	case "never":
@@ -199,14 +213,19 @@ func (o OutputOptions) shouldUseColor() bool {
 	case "auto":
 		fallthrough
 	default:
-		return isTerminal(o.Writer)
+		return isTerminal(writer)
 	}
 }
 
-// isTerminal checks if the writer is a terminal.
+// getEnv is a wrapper around os.Getenv for dependency injection in tests.
+func getEnv(key string) string {
+	return os.Getenv(key)
+}
+
+// isTerminal checks if the writer is a terminal using proper TTY detection.
 func isTerminal(w io.Writer) bool {
 	if f, ok := w.(*os.File); ok {
-		return f.Fd() == 1 || f.Fd() == 2 // stdout or stderr
+		return term.IsTerminal(int(f.Fd()))
 	}
 
 	return false
@@ -229,7 +248,7 @@ func (o OutputOptions) FormatReport(report domain.Report) string {
 			ShowHelp:     o.ShouldShowHelp(),
 			ShowRuleHelp: o.ShowRuleHelp(),
 			RuleHelpName: o.GetNormalizedRuleHelp(),
-			UseColor:     o.shouldUseColor(),
+			UseColor:     o.ShouldUseColor(),
 		}
 
 		return output.Text(report, textOptions)
@@ -250,7 +269,7 @@ func (o OutputOptions) ToReportOptions() domain.ReportOptions {
 		Format:   o.Format,
 		Verbose:  o.Verbose,
 		ShowHelp: o.ShouldShowHelp(),
-		UseColor: o.shouldUseColor(),
+		UseColor: o.ShouldUseColor(),
 		Writer:   o.Writer,
 	}
 }

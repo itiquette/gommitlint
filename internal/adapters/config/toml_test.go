@@ -12,128 +12,110 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//nolint:dupl // Intentional duplication with toml_test.go for symmetric test coverage
-func TestLoadFileConfig_YAML(t *testing.T) {
+//nolint:dupl // Intentional duplication with yaml_test.go for symmetric test coverage
+func TestLoadFileConfig_TOML(t *testing.T) {
 	tests := []struct {
 		name        string
-		yamlContent string
+		tomlContent string
 		expectError bool
 		validate    func(*testing.T, *require.Assertions, interface{})
 		description string
 	}{
 		{
-			name: "valid YAML config with rules",
-			yamlContent: `gommitlint:
-  rules:
-    enabled:
-      - subject
-      - conventional
-    disabled:
-      - spell
-      - jirareference`,
+			name: "valid TOML config with rules",
+			tomlContent: `[gommitlint.rules]
+enabled = ["subject", "conventional"]
+disabled = ["spell", "jirareference"]`,
+			expectError: false,
+			validate: func(_ *testing.T, req *require.Assertions, result interface{}) {
+				// Type assertion would be done in actual test
+				req.NotNil(result)
+			},
+			description: "should load basic TOML config with rules",
+		},
+		{
+			name: "comprehensive TOML config",
+			tomlContent: `[gommitlint]
+output = "json"
+
+[gommitlint.message.subject]
+max_length = 80
+case = "lower"
+require_imperative = true
+forbid_endings = [".", "!"]
+
+[gommitlint.message.body]
+min_length = 10
+min_lines = 2
+allow_signoff_only = false
+require_signoff = true
+
+[gommitlint.conventional]
+require_scope = true
+types = ["feat", "fix", "docs", "test"]
+scopes = ["api", "ui", "core"]
+allow_breaking = true
+max_description_length = 100
+
+[gommitlint.signing]
+require_signature = true
+require_verification = false
+require_multi_signoff = false
+key_directory = "/path/to/keys"
+allowed_signers = ["alice@example.com", "bob@example.com"]
+
+[gommitlint.repo]
+max_commits_ahead = 5
+reference_branch = "main"
+allow_merge_commits = false
+
+[gommitlint.jira]
+project_prefixes = ["PROJ", "TEST"]
+require_in_body = true
+require_in_subject = false
+ignore_ticket_patterns = ["IGNORE-.*"]
+
+[gommitlint.spell]
+ignore_words = ["gommitlint", "refactor"]
+locale = "en_US"
+
+[gommitlint.rules]
+enabled = ["subject", "conventional", "signing"]
+disabled = ["spell"]`,
 			expectError: false,
 			validate: func(_ *testing.T, req *require.Assertions, result interface{}) {
 				req.NotNil(result)
 			},
-			description: "should load basic YAML config with rules",
+			description: "should load comprehensive TOML config with all sections",
 		},
 		{
-			name: "comprehensive YAML config",
-			yamlContent: `gommitlint:
-  output: json
-  message:
-    subject:
-      max_length: 80
-      case: lower
-      require_imperative: true
-      forbid_endings:
-        - "."
-        - "!"
-    body:
-      min_length: 10
-      min_lines: 2
-      allow_signoff_only: false
-      require_signoff: true
-  conventional:
-    require_scope: true
-    types:
-      - feat
-      - fix
-      - docs
-      - test
-    scopes:
-      - api
-      - ui
-      - core
-    allow_breaking: true
-    max_description_length: 100
-  signing:
-    require_signature: true
-    require_verification: false
-    require_multi_signoff: false
-    key_directory: "/path/to/keys"
-    allowed_signers:
-      - alice@example.com
-      - bob@example.com
-  repo:
-    max_commits_ahead: 5
-    reference_branch: main
-    allow_merge_commits: false
-  jira:
-    project_prefixes:
-      - PROJ
-      - TEST
-    require_in_body: true
-    require_in_subject: false
-    ignore_ticket_patterns:
-      - "IGNORE-.*"
-  spell:
-    ignore_words:
-      - gommitlint
-      - refactor
-    locale: en_US
-  rules:
-    enabled:
-      - subject
-      - conventional
-      - signing
-    disabled:
-      - spell`,
-			expectError: false,
-			validate: func(_ *testing.T, req *require.Assertions, result interface{}) {
-				req.NotNil(result)
-			},
-			description: "should load comprehensive YAML config with all sections",
-		},
-		{
-			name: "invalid YAML syntax",
-			yamlContent: `gommitlint:
-  rules:
-    - invalid: yaml: structure`,
+			name: "invalid TOML syntax",
+			tomlContent: `[gommitlint
+missing_bracket = true`,
 			expectError: true,
 			validate: func(_ *testing.T, _ *require.Assertions, _ interface{}) {
 				// Should return empty config on parse error
 			},
-			description: "should handle invalid YAML syntax gracefully",
+			description: "should handle invalid TOML syntax gracefully",
 		},
 		{
-			name:        "empty YAML file",
-			yamlContent: ``,
+			name:        "empty TOML file",
+			tomlContent: ``,
 			expectError: true,
 			validate: func(_ *testing.T, _ *require.Assertions, _ interface{}) {
 				// Should return empty config for empty file
 			},
-			description: "should handle empty YAML file",
+			description: "should handle empty TOML file",
 		},
 		{
-			name: "YAML with only gommitlint section",
-			yamlContent: `gommitlint:
-  output: text`,
+			name: "TOML with only gommitlint section",
+			tomlContent: `[gommitlint]
+output = "text"`,
 			expectError: false,
 			validate: func(_ *testing.T, req *require.Assertions, result interface{}) {
 				req.NotNil(result)
 			},
-			description: "should load minimal YAML config",
+			description: "should load minimal TOML config",
 		},
 	}
 
@@ -141,10 +123,10 @@ func TestLoadFileConfig_YAML(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			req := require.New(t)
 
-			// Create temporary YAML file
+			// Create temporary TOML file
 			tmpDir := t.TempDir()
-			configFile := filepath.Join(tmpDir, "test.yaml")
-			err := os.WriteFile(configFile, []byte(testCase.yamlContent), 0600)
+			configFile := filepath.Join(tmpDir, "test.toml")
+			err := os.WriteFile(configFile, []byte(testCase.tomlContent), 0600)
 			req.NoError(err)
 
 			// Load config
@@ -159,8 +141,8 @@ func TestLoadFileConfig_YAML(t *testing.T) {
 	}
 }
 
-func TestConfigSearchPaths_YAML(t *testing.T) {
-	t.Run("includes YAML files in search paths", func(t *testing.T) {
+func TestConfigSearchPaths_TOML(t *testing.T) {
+	t.Run("includes TOML files in search paths", func(t *testing.T) {
 		// Save original XDG_CONFIG_HOME
 		originalXDG := os.Getenv("XDG_CONFIG_HOME")
 		defer func() {
@@ -176,12 +158,12 @@ func TestConfigSearchPaths_YAML(t *testing.T) {
 
 		paths := getConfigSearchPaths()
 
-		// Should include YAML extensions
+		// Should include .toml extension
+		require.Contains(t, paths, ".gommitlint.toml")
+
+		// Should still include YAML files
 		require.Contains(t, paths, ".gommitlint.yaml")
 		require.Contains(t, paths, ".gommitlint.yml")
-
-		// Should still include TOML files
-		require.Contains(t, paths, ".gommitlint.toml")
 
 		// Verify order: YAML files first, then TOML
 		require.Equal(t, []string{
@@ -191,7 +173,7 @@ func TestConfigSearchPaths_YAML(t *testing.T) {
 		}, paths)
 	})
 
-	t.Run("includes YAML in XDG config paths", func(t *testing.T) {
+	t.Run("includes TOML in XDG config paths", func(t *testing.T) {
 		// Save original XDG_CONFIG_HOME
 		originalXDG := os.Getenv("XDG_CONFIG_HOME")
 		defer func() {
@@ -212,16 +194,13 @@ func TestConfigSearchPaths_YAML(t *testing.T) {
 
 		paths := getConfigSearchPaths()
 
-		// Should include YAML in XDG paths
-		expectedYAMLPath := filepath.Join(gommitlintDir, "config.yaml")
-		require.Contains(t, paths, expectedYAMLPath)
-
-		expectedYMLPath := filepath.Join(gommitlintDir, "config.yml")
-		require.Contains(t, paths, expectedYMLPath)
+		// Should include TOML in XDG paths
+		expectedTOMLPath := filepath.Join(gommitlintDir, "config.toml")
+		require.Contains(t, paths, expectedTOMLPath)
 	})
 }
 
-func TestFindFirstExistingConfigFile_YAML(t *testing.T) {
+func TestFindFirstExistingConfigFile_TOML(t *testing.T) {
 	// Save original XDG_CONFIG_HOME
 	originalXDG := os.Getenv("XDG_CONFIG_HOME")
 	defer func() {
@@ -232,15 +211,13 @@ func TestFindFirstExistingConfigFile_YAML(t *testing.T) {
 		}
 	}()
 
-	t.Run("finds YAML config file", func(t *testing.T) {
-		// Create temp directory with YAML config
+	t.Run("finds TOML config file", func(t *testing.T) {
+		// Create temp directory with TOML config
 		tmpDir := t.TempDir()
-		configFile := filepath.Join(tmpDir, ".gommitlint.yaml")
-		yamlContent := `gommitlint:
-  rules:
-    enabled:
-      - subject`
-		err := os.WriteFile(configFile, []byte(yamlContent), 0600)
+		configFile := filepath.Join(tmpDir, ".gommitlint.toml")
+		tomlContent := `[gommitlint.rules]
+enabled = ["subject"]`
+		err := os.WriteFile(configFile, []byte(tomlContent), 0600)
 		require.NoError(t, err)
 
 		originalWd, _ := os.Getwd()
@@ -250,48 +227,7 @@ func TestFindFirstExistingConfigFile_YAML(t *testing.T) {
 		os.Unsetenv("XDG_CONFIG_HOME")
 
 		result := findFirstExistingConfigFile()
-		require.Equal(t, ".gommitlint.yaml", result)
-	})
-
-	t.Run("prioritizes .yaml over .yml", func(t *testing.T) {
-		// Create temp directory with both .yaml and .yml configs
-		tmpDir := t.TempDir()
-
-		yamlFile := filepath.Join(tmpDir, ".gommitlint.yaml")
-		err := os.WriteFile(yamlFile, []byte("gommitlint:\n  output: yaml"), 0600)
-		require.NoError(t, err)
-
-		ymlFile := filepath.Join(tmpDir, ".gommitlint.yml")
-		err = os.WriteFile(ymlFile, []byte("gommitlint:\n  output: yml"), 0600)
-		require.NoError(t, err)
-
-		originalWd, _ := os.Getwd()
-		defer func() { _ = os.Chdir(originalWd) }()
-
-		_ = os.Chdir(tmpDir)
-		os.Unsetenv("XDG_CONFIG_HOME")
-
-		result := findFirstExistingConfigFile()
-		// Should find .yaml first due to search order
-		require.Equal(t, ".gommitlint.yaml", result)
-	})
-
-	t.Run("finds .yml when no .yaml exists", func(t *testing.T) {
-		// Create temp directory with only .yml config
-		tmpDir := t.TempDir()
-
-		ymlFile := filepath.Join(tmpDir, ".gommitlint.yml")
-		err := os.WriteFile(ymlFile, []byte("gommitlint:\n  output: yml"), 0600)
-		require.NoError(t, err)
-
-		originalWd, _ := os.Getwd()
-		defer func() { _ = os.Chdir(originalWd) }()
-
-		_ = os.Chdir(tmpDir)
-		os.Unsetenv("XDG_CONFIG_HOME")
-
-		result := findFirstExistingConfigFile()
-		require.Equal(t, ".gommitlint.yml", result)
+		require.Equal(t, ".gommitlint.toml", result)
 	})
 
 	t.Run("prioritizes YAML over TOML", func(t *testing.T) {
@@ -316,25 +252,39 @@ func TestFindFirstExistingConfigFile_YAML(t *testing.T) {
 		// Should find YAML first due to search order
 		require.Equal(t, ".gommitlint.yaml", result)
 	})
+
+	t.Run("falls back to TOML when no YAML exists", func(t *testing.T) {
+		// Create temp directory with only TOML config
+		tmpDir := t.TempDir()
+
+		tomlFile := filepath.Join(tmpDir, ".gommitlint.toml")
+		err := os.WriteFile(tomlFile, []byte("[gommitlint]\noutput = \"toml\""), 0600)
+		require.NoError(t, err)
+
+		originalWd, _ := os.Getwd()
+		defer func() { _ = os.Chdir(originalWd) }()
+
+		_ = os.Chdir(tmpDir)
+		os.Unsetenv("XDG_CONFIG_HOME")
+
+		result := findFirstExistingConfigFile()
+		require.Equal(t, ".gommitlint.toml", result)
+	})
 }
 
-func TestLoadConfigFromPath_YAML(t *testing.T) {
-	t.Run("loads YAML config from specific path", func(t *testing.T) {
+func TestLoadConfigFromPath_TOML(t *testing.T) {
+	t.Run("loads TOML config from specific path", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		configFile := filepath.Join(tmpDir, "custom-config.yaml")
+		configFile := filepath.Join(tmpDir, "custom-config.toml")
 
-		yamlContent := `gommitlint:
-  rules:
-    enabled:
-      - subject
-      - conventional
-    disabled:
-      - spell
-  message:
-    subject:
-      max_length: 72`
+		tomlContent := `[gommitlint.rules]
+enabled = ["subject", "conventional"]
+disabled = ["spell"]
 
-		err := os.WriteFile(configFile, []byte(yamlContent), 0600)
+[gommitlint.message.subject]
+max_length = 72`
+
+		err := os.WriteFile(configFile, []byte(tomlContent), 0600)
 		require.NoError(t, err)
 
 		cfg, err := LoadConfigFromPath(configFile)
@@ -351,9 +301,9 @@ func TestLoadConfigFromPath_YAML(t *testing.T) {
 	})
 }
 
-//nolint:dupl // Intentional duplication with toml_test.go for cross-format compatibility testing
-func TestYAMLCompatibilityWithTOML(t *testing.T) {
-	t.Run("YAML and TOML produce equivalent configs", func(t *testing.T) {
+//nolint:dupl // Intentional duplication with yaml_test.go for cross-format compatibility testing
+func TestTOMLCompatibilityWithYAML(t *testing.T) {
+	t.Run("TOML and YAML produce equivalent configs", func(t *testing.T) {
 		tmpDir := t.TempDir()
 
 		// Create equivalent YAML config

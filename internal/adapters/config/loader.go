@@ -8,18 +8,37 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	configTypes "github.com/itiquette/gommitlint/internal/domain/config"
+	"github.com/knadh/koanf/parsers/toml"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
 )
 
-// 2. XDG_CONFIG_HOME/gommitlint/config.yaml, XDG_CONFIG_HOME/gommitlint/config.yml (if XDG_CONFIG_HOME exists).
+// getConfigSearchPaths returns the search paths for configuration files.
+// Supports YAML and TOML formats with priority: local files first, then XDG config.
 func getConfigSearchPaths() []string {
-	paths := []string{
-		".gommitlint.yaml",
-		".gommitlint.yml",
+	return getConfigSearchPathsForRepo("")
+}
+
+// getConfigSearchPathsForRepo returns config search paths for a specific repository directory.
+// If repoPath is empty, searches in current directory. Otherwise searches in repository directory.
+func getConfigSearchPathsForRepo(repoPath string) []string {
+	var paths []string
+
+	// Determine base directory for config files
+	baseDir := "."
+	if repoPath != "" {
+		baseDir = repoPath
+	}
+
+	// Add local config files (in repository or current directory)
+	paths = []string{
+		filepath.Join(baseDir, ".gommitlint.yaml"),
+		filepath.Join(baseDir, ".gommitlint.yml"),
+		filepath.Join(baseDir, ".gommitlint.toml"),
 	}
 
 	// Add XDG config paths if XDG_CONFIG_HOME is set and directory exists
@@ -29,6 +48,7 @@ func getConfigSearchPaths() []string {
 			paths = append(paths,
 				filepath.Join(gommitlintDir, "config.yaml"),
 				filepath.Join(gommitlintDir, "config.yml"),
+				filepath.Join(gommitlintDir, "config.toml"),
 			)
 		}
 	}
@@ -38,10 +58,15 @@ func getConfigSearchPaths() []string {
 
 // LoadConfig loads configuration from multiple sources with later configs taking precedence.
 func LoadConfig() (configTypes.Config, error) {
+	return LoadConfigWithRepoPath("")
+}
+
+// LoadConfigWithRepoPath loads configuration with repository path for config file discovery.
+// If repoPath is provided, searches for config files in that directory first.
+func LoadConfigWithRepoPath(repoPath string) (configTypes.Config, error) {
 	return MergeConfigs(
 		LoadDefaultConfig(),
-		LoadFileConfig(findFirstExistingConfigFile()),
-		LoadEnvConfig(),
+		LoadFileConfig(findFirstExistingConfigFileInRepo(repoPath)),
 	)
 }
 
@@ -50,7 +75,6 @@ func LoadConfigFromPath(configPath string) (configTypes.Config, error) {
 	return MergeConfigs(
 		LoadDefaultConfig(),
 		LoadFileConfig(configPath),
-		LoadEnvConfig(),
 	)
 }
 
@@ -60,6 +84,7 @@ func LoadDefaultConfig() configTypes.Config {
 }
 
 // LoadFileConfig loads configuration from a file.
+// Supports both YAML and TOML formats based on file extension.
 // Returns empty config if file doesn't exist or can't be loaded.
 func LoadFileConfig(configPath string) configTypes.Config {
 	if configPath == "" {
@@ -74,24 +99,38 @@ func LoadFileConfig(configPath string) configTypes.Config {
 	// Create koanf instance
 	koanfConfig := koanf.New(".")
 
-	// Load YAML configuration
-	if err := koanfConfig.Load(file.Provider(configPath), yaml.Parser()); err != nil {
+	// Determine parser based on file extension
+	var parser koanf.Parser
+
+	var tagName string
+
+	ext := strings.ToLower(filepath.Ext(configPath))
+	switch ext {
+	case ".toml":
+		parser = toml.Parser()
+		tagName = "toml"
+	case ".yaml", ".yml":
+		parser = yaml.Parser()
+		tagName = "yaml"
+	default:
+		// Default to YAML for unknown extensions
+		parser = yaml.Parser()
+		tagName = "yaml"
+	}
+
+	// Load configuration using appropriate parser
+	if err := koanfConfig.Load(file.Provider(configPath), parser); err != nil {
 		return configTypes.Config{} // Empty config on error
 	}
 
 	// Parse into config struct
 	var cfg configTypes.Config
-	if err := koanfConfig.UnmarshalWithConf("gommitlint", &cfg, koanf.UnmarshalConf{Tag: "yaml"}); err != nil {
+	if err := koanfConfig.UnmarshalWithConf("gommitlint", &cfg, koanf.UnmarshalConf{Tag: tagName}); err != nil {
 		return configTypes.Config{} // Empty config on error
 	}
 
 	// Apply rule priority logic
 	return applyRulePriority(cfg)
-}
-
-// LoadEnvConfig loads configuration from environment variables.
-func LoadEnvConfig() configTypes.Config {
-	return LoadFromEnv(configTypes.Config{})
 }
 
 // MergeConfigs merges multiple configurations with later configs taking precedence.
@@ -197,7 +236,12 @@ func mergeConfig(base, overlay configTypes.Config) configTypes.Config {
 
 // findFirstExistingConfigFile finds the first existing config file in search paths.
 func findFirstExistingConfigFile() string {
-	for _, path := range getConfigSearchPaths() {
+	return findFirstExistingConfigFileInRepo("")
+}
+
+// findFirstExistingConfigFileInRepo finds the first existing config file in repository-specific search paths.
+func findFirstExistingConfigFileInRepo(repoPath string) string {
+	for _, path := range getConfigSearchPathsForRepo(repoPath) {
 		if _, err := os.Stat(path); err == nil {
 			return path
 		}

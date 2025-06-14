@@ -275,6 +275,52 @@ Validation failed: 1 error
 * `1` - Configuration or system error
 * `2` - Validation failures found
 
+== Global Options
+
+=== Output Format
+[source,bash]
+----
+# Output formats
+gommitlint validate --format=text     # Default: colored text output
+gommitlint validate --format=json     # JSON format for scripting
+gommitlint validate --format=github   # GitHub Actions format
+gommitlint validate --format=gitlab   # GitLab CI format
+----
+
+=== Color Output
+Gommitlint supports colored output for better readability. Color output follows the https://no-color.org[NO_COLOR standard].
+
+[source,bash]
+----
+# Color options
+gommitlint validate --color=auto      # Default: auto-detect terminal
+gommitlint validate --color=always    # Force color output
+gommitlint validate --color=never     # Disable color output
+
+# Environment variable support
+NO_COLOR=1 gommitlint validate        # Disable color (overrides --color)
+export NO_COLOR=1                     # Persistent color disable
+----
+
+**Color Precedence (highest to lowest):**
+
+1. `NO_COLOR` environment variable (any value disables color)
+2. `--color` flag setting
+3. Auto-detection (color only if output is a terminal)
+
+**Examples:**
+[source,bash]
+----
+# Force color in pipes/redirects
+gommitlint validate --color=always | less -R
+
+# Disable color for CI/scripts
+NO_COLOR=1 gommitlint validate --format=text
+
+# Auto-detect (default)
+gommitlint validate  # Color if terminal, no color if piped
+----
+
 == CI/CD Integration
 
 === GitHub Actions
