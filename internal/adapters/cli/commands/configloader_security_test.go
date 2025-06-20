@@ -166,6 +166,10 @@ func TestGommitConfigFilePermissions(t *testing.T) {
 			err := os.WriteFile(configFile, []byte(configContent), testCase.fileMode)
 			require.NoError(t, err)
 
+			// Explicitly set the file mode to override umask effects
+			err = os.Chmod(configFile, testCase.fileMode)
+			require.NoError(t, err)
+
 			// Create CLI app context
 			app := &cli.Command{
 				Flags: []cli.Flag{

@@ -112,6 +112,12 @@ func TestValidateConfigPath(t *testing.T) {
 }
 
 func TestValidateConfigFilePermissions(t *testing.T) {
+	// Skip permission tests when running as root or in environments where
+	// permission validation might not work reliably (e.g., some CI environments)
+	if os.Getuid() == 0 {
+		t.Skip("Skipping permission tests when running as root")
+	}
+
 	tmpDir := t.TempDir()
 
 	tests := []struct {
@@ -172,6 +178,10 @@ func TestValidateConfigFilePermissions(t *testing.T) {
 			err := os.WriteFile(testFile, []byte(content), testCase.fileMode)
 			require.NoError(t, err)
 
+			// Explicitly set the file mode to override umask effects
+			err = os.Chmod(testFile, testCase.fileMode)
+			require.NoError(t, err)
+
 			// Test permission validation
 			err = validateConfigFilePermissions(testFile)
 
@@ -189,6 +199,12 @@ func TestValidateConfigFilePermissions(t *testing.T) {
 }
 
 func TestSecureConfigPathValidation(t *testing.T) {
+	// Skip permission tests when running as root or in environments where
+	// permission validation might not work reliably (e.g., some CI environments)
+	if os.Getuid() == 0 {
+		t.Skip("Skipping permission tests when running as root")
+	}
+
 	tmpDir := t.TempDir()
 
 	// Change to tmpDir so relative paths work correctly
@@ -209,6 +225,10 @@ func TestSecureConfigPathValidation(t *testing.T) {
 	// Create an insecure config file
 	insecureConfigFile := "insecure-config.yaml"
 	err = os.WriteFile(insecureConfigFile, []byte(configContent), 0666) //nolint:gosec // Intentionally insecure for testing
+	require.NoError(t, err)
+
+	// Explicitly set the file mode to override umask effects
+	err = os.Chmod(insecureConfigFile, 0666)
 	require.NoError(t, err)
 
 	tests := []struct {
