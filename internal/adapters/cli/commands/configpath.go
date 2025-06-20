@@ -100,9 +100,20 @@ func validateConfigPath(configPath string) (string, error) {
 
 // validateConfigFilePermissions validates that a config file has secure permissions.
 func validateConfigFilePermissions(configPath string) error {
-	info, err := os.Stat(configPath)
+	// Open file to get a file descriptor - prevents TOCTOU issues
+	file, err := os.Open(configPath)
 	if err != nil {
-		return err // File doesn't exist or other stat error
+		return err // File doesn't exist or other access error
+	}
+	defer file.Close()
+
+	// Get file info directly from the file descriptor
+	info, err := file.Stat()
+	if err != nil {
+		return ConfigPathValidationError{
+			Path:   configPath,
+			Reason: fmt.Sprintf("cannot stat file: %v", err),
+		}
 	}
 
 	mode := info.Mode()
